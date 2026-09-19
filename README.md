@@ -2,6 +2,8 @@
 
 个人使用、单进程、SQLite 的美股行情服务。当前交付数据层和只读 HTTP 接口，尚未实现看盘网页、Alert 策略或通知渠道。
 
+维护入口：[AGENTS.md](AGENTS.md) · [Data 模块手册与文件地图](docs/data/README.md) · [需求规格](Longbridge-Data-Service-Design.md) · [盘中模拟器](simulator/README.md) · [历史实测报告](VALIDATION-REPORT.md)
+
 ## 启动
 
 Python 3.11+，macOS / Linux：
@@ -31,6 +33,16 @@ python3 -m venv .venv
 ```
 
 `--workspace`、`--credentials`、`--runtime` 可指定路径；`--port` 可改端口；前端跨域访问时可设 `--cors-origin http://localhost:3000`。同一 runtime 只允许一个实例，避免重复订阅。退出码 0 表示本次所有 ticker 均有完整或降级历史可用，且 FULL_READY；2 表示同步完成或测试结束但存在未通过验证的数据；1 表示启动错误。
+
+## 盘中模拟数据（一键启动）
+
+macOS 双击 `simulator/start.command`，或运行：
+
+```bash
+./simulator/start.command
+```
+
+连接 `ws://127.0.0.1:18766` 即可接收 focus/wait ticker 的盘中随机 Quote，每个 ticker 每秒一条，字段使用 Longbridge Quote JSON 格式。首次启动自动安装独立依赖。它只向下游吐数据，不接入正式 data 的验证和历史流程，不需要 token 或修改系统时间。详见 [模拟器说明](simulator/README.md)。
 
 ## 数据接口
 

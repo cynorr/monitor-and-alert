@@ -1,5 +1,9 @@
 # Longbridge Data Service 开发规格
 
+维护更新：2026-09-19。本文定义已确认的数据需求；当前文件地图、实现状态与限制见 [Data 模块维护手册](docs/data/README.md)，工作入口见 [AGENTS.md](AGENTS.md)。
+
+本轮已确认交付范围为 Data Service 与只读 HTTP API。UI、具体 Alert 规则和通知尚未实现；[独立盘中模拟器](simulator/README.md) 已按用户最新要求实现为极简 WebSocket Quote 数据源，不参与本规格的生产验证和持久化。
+
 ## 1. 目的
 
 建立一个个人使用的行情数据服务，用于：
@@ -105,7 +109,7 @@ Closed Bar only
 
 # 3. 数据可靠性状态
 
-每个 ticker 独立维护两个状态：
+每个 ticker 独立维护两个严格验证状态；另提供下述短历史降级状态：
 
 ```text
 READY
@@ -149,7 +153,17 @@ ready = true
 ready_through = 最近一个已完成交易日
 ```
 
-只有达到 `READY` 后，该 ticker 的历史对比 Alert 才可以运行。
+历史基线可用条件为 `ready or degraded_ready`，以 `alert_eligible` 暴露。消费端还须检查 Quote 时效、连接状态、regular session 和策略所需样本数。
+
+### 短历史降级（用户已确认）
+
+不足 300 个交易日时，可按供应商可用历史降级运行后续 Alert：
+
+- `ready` 保持 false；经验证后设置 `degraded_ready=true`、`alert_eligible=true`。
+- 额外向前查询确认 API 可用历史边界；仅返回不足 1000 根不能直接作为新股证据。
+- 对可用范围内的 Daily 和最近最多 12 个已完成交易日 5m 检查完整性；未知缺口仍失败。
+- 返回可用样本天数、起始日期和验证覆盖日期，供具体策略决定是否足够。
+- 边界代表供应商可用历史，不等同于独立核实 IPO 日期。
 
 ---
 
@@ -185,7 +199,9 @@ Validator 必须验证本次返回的所有 closed bars。
 1h  → 最多 1000 根全部验证
 ```
 
-如果证券本身历史不足 1000 根，则验证 API 实际返回的全部 available closed bars。
+如果证券本身历史不足 1000 根，则验证 API 实际返回的全部 available closed bars。5m 为满足 READY 所补拉的前缀也纳入该批次验证，因此总验证数量可能略超 1000。
+
+1000 根可能从某交易日中段开始：不要求窗口之前的 bar，但窗口内应覆盖至拉取时最后一根预期已闭合 bar。批次范围和拒绝项保存在 SQLite，离线重建时不得混合不同初始化批次。
 
 验证内容：
 
@@ -257,13 +273,17 @@ DO UPDATE ...
 
 # 5. 每日冷启动
 
+每次服务冷启动先重新读取 `workspace.json`，只加载 `statuses` 中为 `focus` / `wait` 的 ticker；`orders` 只决定顺序。禁止把 hidden、carried 或仅出现在排序列表的 ticker 加入请求。运行中不监控 workspace 变化。
+
 每次服务冷启动都执行一次 reconciliation。
 
 正常情况下不根据 ready 日期计算复杂的增量范围。
 
 直接重新获取最近最多 1000 根，然后 UPSERT。
 
-这样同时完成：
+对于 5m，12 个普通已完成交易日为 936 根，加上当天盘中数据最多需要 1014 根。若本地与最近 1000 根仍不足以覆盖验证范围，应按缺失前缀定向补拉。
+
+这样在最近窗口内同时完成：
 
 - 新数据补充
 - 旧数据修复
@@ -319,13 +339,13 @@ Daily 最近 300 个交易日
 READY
 ```
 
-此时核心 Alert 可以启动。
+此时历史基线可供后续 Alert 使用；短历史 ticker 按第 3.1 节的降级规则判断。具体 Alert 尚未实现。
 
 ---
 
 ## Phase 3 — 15m / 30m / 1h
 
-READY 之后继续下载：
+完成 5m 阶段及验证后继续下载；不要求所有 ticker 先通过 READY，单个失败不阻断其他 ticker：
 
 ```text
 15m count = 1000
@@ -383,6 +403,8 @@ recent full refresh + UPSERT
 ---
 
 # 7. 初始化请求规模
+
+以下是基础请求规模，不含短历史边界确认、5m 前缀补拉、失败重试与 Quote snapshot。实际初始化耗时应据运行日志判断。
 
 一个 ticker：
 
@@ -454,10 +476,14 @@ Closed bar 到达对应 timeframe boundary 后进入 BarScheduler。
 
 10:45 → 5m + 15m
 
-11:00 → 5m + 15m + 30m + 1h
+11:00 → 5m + 15m + 30m
+
+11:30 → 5m + 15m + 30m + 1h
 ```
 
-盘中更新不需要重新拉 1000 根。
+以上使用美东交易时间。美股 1h 从 09:30 开始，普通尾段为 15:30–16:00；提前收盘按实际边界截短。
+
+正常连续运行时，盘中更新不需要重新拉 1000 根。跨多个周期或休眠恢复时改拉最近 1000 根并检查缺口，超出覆盖范围的旧缺口明确报告。
 
 使用：
 
@@ -473,14 +499,7 @@ count = 2
 retry
 ```
 
-建议：
-
-```text
-+2s
-+5s
-+10s
-+30s
-```
+当前采用：初次更新在 bar_end + 2 秒进入队列；失败后的等待间隔为 2 / 5 / 10 / 30 秒。它们是重试间隔，不是都相对 bar_end 的绝对时刻。单 worker 排队可能增加延迟。
 
 成功后 UPSERT。
 
@@ -580,12 +599,12 @@ Daily:
 - holiday
 - early close
 
-不能硬编码每天固定 78 根。
+不能硬编码每天固定 78 根。使用支持多年历史的 XNYS 日历；Longbridge trading_days 文档仅保证最近一年且单次跨度不超过一月，不足以独立支撑 300 个交易日或 1000 根 Daily 的验证。
 
 失败：
 
 ```text
-ready 不推进
+当前验证窗口不通过时撤销 ready/alert_eligible（不沿用旧 true）
 记录具体缺失
 进入 repair/retry
 ```
@@ -606,12 +625,12 @@ ready 不推进
 
 每种 timeframe 最多 1000 根。
 
-验证全部 returned closed bars 的时间连续性和交易日完整性。
+验证全部 returned closed bars 及补拉前缀的时间连续性和范围内完整性。首日的正常窗口截断不是缺口；同一初始化批次内出现无法解释的缺失或拒绝项，则不放行。
 
 失败：
 
 ```text
-full_ready 不推进
+full_ready = false，不沿用旧通过状态
 记录具体 timeframe / trading day / timestamp
 进入 repair/retry
 ```
@@ -632,6 +651,8 @@ runtime/data_ready.json
 {
   "AAPL.US": {
     "ready": true,
+    "degraded_ready": false,
+    "alert_eligible": true,
     "ready_through": "2026-09-18",
     "full_ready": true,
     "full_ready_through": "2026-09-18",
@@ -679,7 +700,7 @@ runtime/history_symbol_usage.json
 只负责记录：
 
 ```text
-本自然月已经使用过历史 K-line 的 unique symbols
+本自然月已尝试请求历史 K-line 的 unique symbols（本地保守记录）
 ```
 
 与：
@@ -695,7 +716,7 @@ Alert
 
 该文件允许直接删除。
 
-删除不会影响行情数据正确性。
+删除不会影响行情数据正确性，也不会恢复券商额度。该文件不是券商实际使用量或剩余额度的权威来源。
 
 ---
 
@@ -850,9 +871,11 @@ Data Service 只提供 authoritative data。
 
 ---
 
-# 17. 推荐模块
+# 17. 模块职责与当前文件边界
 
-保持模块数量少。
+完整代码位置及调用关系见 [Data 模块维护手册](docs/data/README.md)。正式数据逻辑集中在 `data_service/`，离线测试在 `tests/`，真实接口诊断在 `scripts/`。UI、Alert、模拟器各自独立，不向数据层添加展示、策略或随机数据生成逻辑。
+
+以下是职责名称，不要求每个名称都创建一个独立类或文件。保持模块数量少。
 
 ```text
 TickerLoader
@@ -1116,7 +1139,7 @@ SQLite 只保存 Longbridge official closed bars
 每天冷启动重新获取最近 1000 根
 UPSERT 覆盖旧数据
 READY / FULL_READY 通过独立 Validator 验证
-任何局部缺失都可以通过重新下载恢复
+最近窗口内的可修复缺失通过重新下载恢复；超窗缺口和持续上游异常明确报告
 ```
 
 系统设计必须始终遵守：
@@ -1128,7 +1151,7 @@ READY / FULL_READY 通过独立 Validator 验证
 
 # 21. 实现审阅与已确认补充（2026-09-19）
 
-本节修正前文存在冲突的边界；其余原则继续适用。
+本节保留已确认的修订依据；相关规则已合入正文。当前代码位置和已知限制以维护手册说明，实测数字以带日期报告为证据。
 
 1. **Universe**：每次进程启动重新读取 `workspace.json`。只以 `statuses` 中 `focus` / `wait` 为准，`orders` 只排序；不订阅其他 ticker，不监控文件变化。当前为 45 个。
 2. **交付范围**：本轮实现 Data Service、可验证的只读 HTTP 数据接口；看盘 UI 和具体 Alert 公式、阈值、通知另行确定。
@@ -1147,3 +1170,12 @@ READY / FULL_READY 通过独立 Validator 验证
 - [Longbridge Market Trading Days](https://open.longbridge.com/docs/quote/pull/trade-day)
 - [Longbridge 官方接入点](https://open.longbridge.com/docs/getting-started)
 - [exchange_calendars](https://github.com/gerrymanoim/exchange_calendars)
+
+
+# 22. 文档维护与模拟测试边界
+
+- 本规格维护已确认的需求；`docs/data/README.md` 维护开发地图、当前实现与限制；根/局部 `AGENTS.md` 作为后续工作的阅读入口。
+- 新增或移动模块、调整 API/状态语义时，同步更新相应文档。不要将未来计划写成当前能力。
+- 用户已取消复杂模拟方案，当前 [盘中模拟器](simulator/README.md) 只输出 Longbridge Quote JSON 格式的随机盘中数据。它独立运行，无 SDK 适配器、验证器、历史生成或异常场景；官方 SDK 不直接连接这个 JSON WebSocket。
+- 模拟数据库、凭证使用、网络目的地、运行产物必须与正式环境隔离；生产 authoritative 数据规则不因模拟需求放宽。
+- 不修改 macOS 系统时间。模拟器使用实际 Unix 时间戳，并始终标记 Intraday；不改正式代码、不引入业务时钟，模拟消费者直接使用数据，不经过正式日历或 readiness。
