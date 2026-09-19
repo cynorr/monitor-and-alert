@@ -4,6 +4,7 @@ import asyncio
 import os
 import time
 from datetime import datetime
+from collections import deque
 from pathlib import Path
 
 from longbridge.openapi import AdjustType, AsyncQuoteContext, Config, Period, SubType, TradeSessions
@@ -17,14 +18,21 @@ SDK_PERIODS = {'1d': Period.Day, '5m': Period.Min_5, '15m': Period.Min_15,
 
 
 class RateLimiter:
-    def __init__(self, interval: float = 0.55):
-        self.interval, self.last = interval, 0.0
+    def __init__(self, limit: int = 10, window: float = 1.0):
+        self.limit, self.window = limit, window
+        self.starts = deque()
         self.lock = asyncio.Lock()
 
     async def wait(self):
         async with self.lock:
-            await asyncio.sleep(max(0, self.last + self.interval - time.monotonic()))
-            self.last = time.monotonic()
+            while True:
+                now = time.monotonic()
+                while self.starts and now - self.starts[0] >= self.window:
+                    self.starts.popleft()
+                if len(self.starts) < self.limit:
+                    self.starts.append(now)
+                    return
+                await asyncio.sleep(max(0, self.starts[0] + self.window - now))
 
 
 class Broker:
@@ -39,7 +47,8 @@ class Broker:
             http_url=f'https://openapi.longbridge.{domain}',
             quote_ws_url=f'wss://openapi-quote.longbridge.{domain}/v2')
         self.timeout, self.limiter = timeout, RateLimiter()
-        self.history_context = None
+        self._context = None
+        self.inflight = asyncio.Semaphore(5)
         self.quota = HistoryQuotaTracker(runtime / 'history_symbol_usage.json')
 
     def check(self, symbols: list[str]) -> None:
@@ -47,16 +56,19 @@ class Broker:
             raise ValueError('API request outside startup focus/wait universe')
 
     def context(self):
-        return AsyncQuoteContext.create(self.config)
+        if self._context is None:
+            self._context = AsyncQuoteContext.create(self.config)
+        return self._context
 
     async def call(self, method, *args):
-        await self.limiter.wait()
-        try:
-            return await asyncio.wait_for(method(*args), timeout=self.timeout)
-        except TimeoutError:
-            raise TimeoutError(f'Longbridge request timed out after {self.timeout}s') from None
-        except Exception as exc:
-            raise RuntimeError(redact(str(exc), self.secrets)) from None
+        async with self.inflight:
+            await self.limiter.wait()
+            try:
+                return await asyncio.wait_for(method(*args), timeout=self.timeout)
+            except TimeoutError:
+                raise TimeoutError(f'Longbridge request timed out after {self.timeout}s') from None
+            except Exception as exc:
+                raise RuntimeError(redact(str(exc), self.secrets)) from None
 
     async def candles(self, symbol: str, timeframe: str, count: int = 1000,
                       before: int | None = None):
@@ -64,9 +76,7 @@ class Broker:
         if not 1 <= count <= 1000:
             raise ValueError('Count must be 1..1000')
         self.quota.record(datetime.now(ET).strftime('%Y-%m'), symbol)
-        if self.history_context is None:
-            self.history_context = self.context()
-        ctx = self.history_context
+        ctx = self.context()
         if before is None:
             return await self.call(ctx.candlesticks, symbol, SDK_PERIODS[timeframe], count,
                                    AdjustType.NoAdjust, TradeSessions.Intraday)

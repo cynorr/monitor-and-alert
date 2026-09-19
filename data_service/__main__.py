@@ -40,9 +40,8 @@ async def run(args, tickers):
             service.validator.save()
         elif args.command == 'reconcile':
             await service.reconcile()
-            await service.repair_initial()
         else:
-            server = start_http(service, args.port, args.cors_origin)
+            server = await start_http(service, args.port, args.cors_origin)
             if args.duration:
                 try:
                     await asyncio.wait_for(service.run(), args.duration)
@@ -50,18 +49,16 @@ async def run(args, tickers):
                     pass
             else:
                 await service.run()
-        summary = {s: {k: v for k, v in state.items() if k not in ('ready_checks', 'full_checks')}
-                   for s, state in service.validator.states.items()}
+        summary = {s: service.validate(s, current_run=broker is not None) for s in service.symbols}
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         if args.command == 'serve':
             report = {'health': await service.api('/health', {}), 'readiness': summary,
                       'quotes': await service.api('/v1/quotes', {})}
             atomic_json(args.runtime / 'last_run_report.json', report)
-        return 0 if all(s['alert_eligible'] and s['full_ready'] for s in summary.values()) and summary else 2
+        return 0 if summary and all(s['full_ready'] for s in summary.values()) else 2
     finally:
         if server:
-            await asyncio.to_thread(server.shutdown)
-            server.server_close()
+            await server.cleanup()
         service.store.close()
 
 

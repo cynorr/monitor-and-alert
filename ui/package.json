@@ -1,0 +1,7 @@
+{
+  "name": "market-monitor-ui",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {"build": "tsc", "check": "tsc --noEmit"},
+  "devDependencies": {"lightweight-charts": "5.2.0", "typescript": "5.9.3"}
+}

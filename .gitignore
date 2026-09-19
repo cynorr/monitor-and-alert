@@ -10,3 +10,5 @@ runtime/
 *.egg-info/
 build/
 dist/
+
+ui/node_modules/

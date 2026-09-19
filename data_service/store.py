@@ -24,6 +24,7 @@ class Bar:
     low: float
     close: float
     volume: int
+    turnover: float | None = None
 
     def validate(self, calendar: TradingCalendar, now: int) -> None:
         values = (self.open, self.high, self.low, self.close)
@@ -33,6 +34,8 @@ class Bar:
             raise ValueError('Invalid OHLC range')
         if not isinstance(self.volume, int) or isinstance(self.volume, bool) or self.volume < 0:
             raise ValueError('Volume must be a nonnegative integer')
+        if self.turnover is not None and (not math.isfinite(self.turnover) or self.turnover < 0):
+            raise ValueError('Turnover must be finite and nonnegative')
         if calendar.bar_end(self.ts, self.timeframe) > now:
             raise ValueError('Forming candle cannot be persisted')
 
@@ -77,6 +80,9 @@ class BarStore:
                 symbol TEXT PRIMARY KEY, payload TEXT NOT NULL
             );
         ''')
+        if 'turnover' not in {r['name'] for r in self.db.execute('PRAGMA table_info(bars)')}:
+            self.db.execute('ALTER TABLE bars ADD COLUMN turnover REAL')
+        self.revisions: dict[tuple[str, str], int] = {}
 
     def check(self, symbol: str) -> None:
         if symbol not in self.allowed:
@@ -87,17 +93,23 @@ class BarStore:
             self.check(bar.symbol)
             bar.validate(self.calendar, now)
         with self.db:
-            self.db.executemany('''INSERT INTO bars VALUES (?,?,?,?,?,?,?,?)
+            self.db.executemany('''INSERT INTO bars (symbol,timeframe,ts,open,high,low,close,volume,turnover)
+                VALUES (?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(symbol,timeframe,ts) DO UPDATE SET
                 open=excluded.open,high=excluded.high,low=excluded.low,
-                close=excluded.close,volume=excluded.volume''',
+                close=excluded.close,volume=excluded.volume,turnover=excluded.turnover''',
                 [tuple(asdict(bar).values()) for bar in bars])
             if batch is not None:
                 self.check(batch['symbol'])
                 self.db.execute('''INSERT INTO batches VALUES (?,?,?,?,?)
                     ON CONFLICT(symbol,timeframe) DO UPDATE SET
                     run_id=excluded.run_id,as_of=excluded.as_of,payload=excluded.payload''',
-                    (batch['symbol'], batch['timeframe'], batch['run_id'], batch['as_of'], json.dumps(batch)))
+                            (batch['symbol'], batch['timeframe'], batch['run_id'], batch['as_of'], json.dumps(batch)))
+        keys = {(b.symbol, b.timeframe) for b in bars}
+        if batch:
+            keys.add((batch['symbol'], batch['timeframe']))
+        for key in keys:
+            self.revisions[key] = self.revisions.get(key, 0) + 1
 
     def bars(self, symbol: str, timeframe: str, start: int = 0, end: int = 2**62,
              limit: int | None = None) -> list[Bar]:

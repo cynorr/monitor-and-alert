@@ -3,55 +3,114 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlsplit
+from pathlib import Path
+from urllib.parse import urlsplit
 
+from aiohttp import web, WSMsgType
+
+UI_ROOT = Path(__file__).resolve().parents[1] / 'ui' / 'public'
 log = logging.getLogger(__name__)
 
 
-def start_http(service, port: int, cors_origin: str | None = None):
-    loop = asyncio.get_running_loop()
+def create_app(service, cors_origin=None):
+    @web.middleware
+    async def errors(request, handler):
+        try:
+            response = await handler(request)
+        except (ValueError, TypeError) as exc:
+            response = web.json_response({'error': str(exc)}, status=400)
+        except KeyError:
+            response = web.json_response({'error': 'Not found'}, status=404)
+        response.headers['Cache-Control'] = 'no-store'
+        if cors_origin and request.headers.get('Origin') == cors_origin:
+            response.headers['Access-Control-Allow-Origin'] = cors_origin
+        return response
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            future = None
+    app = web.Application(middlewares=[errors], client_max_size=8192)
+    sockets = set()
+
+    async def shutdown(_app):
+        await asyncio.gather(*(ws.close(code=1001, message=b'Service stopping') for ws in list(sockets)))
+
+    app.on_shutdown.append(shutdown)
+
+    async def api(request):
+        query = {k: request.query.getall(k) for k in request.query}
+        return web.json_response(await service.api(request.path, query), dumps=lambda v: json.dumps(v, allow_nan=False))
+
+    async def socket(request):
+        origin = request.headers.get('Origin')
+        if origin and origin != cors_origin and urlsplit(origin).netloc != request.host:
+            raise web.HTTPForbidden(text='Origin not allowed')
+        ws = web.WebSocketResponse(heartbeat=10, max_msg_size=8192)
+        await ws.prepare(request)
+        sockets.add(ws)
+        symbol, tf = service.focus
+        request_id = 0
+        revisions = {}
+        generation = 0
+
+        async def publish():
+            nonlocal revisions
+            last_board = 0
             try:
-                url = urlsplit(self.path)
-                if len(self.path) > 8192:
-                    raise ValueError('Request URL too long')
-                future = asyncio.run_coroutine_threadsafe(service.api(url.path, parse_qs(url.query)), loop)
-                body, status = future.result(timeout=30), 200
-            except (ValueError, TypeError) as exc:
-                body, status = {'error': str(exc)}, 400
-            except KeyError:
-                body, status = {'error': 'Not found'}, 404
-            except TimeoutError:
-                if future:
-                    future.cancel()
-                body, status = {'error': 'Data service busy'}, 503
+                while not ws.closed:
+                    view = service.view(symbol, tf, revisions)
+                    revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
+                    message = {'type': 'view', 'request_id': request_id, 'generation': generation, **view}
+                    if asyncio.get_running_loop().time() - last_board >= 1:
+                        message['board'] = service.board()
+                        last_board = asyncio.get_running_loop().time()
+                    await ws.send_json(message, dumps=lambda v: json.dumps(v, allow_nan=False))
+                    await asyncio.sleep(0.2)
+            except (ConnectionError, RuntimeError):
+                await ws.close()
             except Exception:
-                log.exception('HTTP request failed')
-                body, status = {'error': 'Internal data service error'}, 500
-            payload = json.dumps(body, ensure_ascii=False, allow_nan=False).encode()
-            try:
-                self.send_response(status)
-                self.send_header('Content-Type', 'application/json; charset=utf-8')
-                self.send_header('Content-Length', str(len(payload)))
-                self.send_header('Cache-Control', 'no-store')
-                if cors_origin:
-                    self.send_header('Access-Control-Allow-Origin', cors_origin)
-                self.end_headers()
-                self.wfile.write(payload)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+                log.exception('Chart stream failed')
+                await ws.close(code=1011)
 
-        def log_message(self, *_):
-            pass
+        sender = asyncio.create_task(publish())
+        try:
+            async for msg in ws:
+                if msg.type == WSMsgType.TEXT:
+                    try:
+                        payload = json.loads(msg.data)
+                        if payload.get('type') != 'select':
+                            raise ValueError('Expected select message')
+                        new_symbol, new_tf = payload['symbol'], payload['timeframe']
+                        new_id = int(payload['request_id'])
+                        service.select(new_symbol, new_tf)
+                        symbol, tf, request_id = new_symbol, new_tf, new_id
+                        revisions = {}
+                        generation += 1
+                    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                        await ws.send_json({'type': 'error', 'error': str(exc)})
+                elif msg.type == WSMsgType.ERROR:
+                    break
+        finally:
+            sockets.discard(ws)
+            sender.cancel()
+            await asyncio.gather(sender, return_exceptions=True)
+        return ws
 
-    server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
-    server.daemon_threads = True
-    thread = threading.Thread(target=server.serve_forever, name='local-http', daemon=True)
-    thread.start()
-    log.info('Data API listening http://127.0.0.1:%d', server.server_port)
-    return server
+    async def index(request):
+        return web.FileResponse(UI_ROOT / 'index.html')
+
+    app.router.add_get('/v1/stream', socket)
+    app.router.add_get('/v1/{resource}', api)
+    app.router.add_get('/health', api)
+    app.router.add_get('/', index)
+    app.router.add_static('/', UI_ROOT, show_index=False)
+    return app
+
+
+async def start_http(service, port: int, cors_origin: str | None = None):
+    runner = web.AppRunner(create_app(service, cors_origin))
+    await runner.setup()
+    try:
+        site = web.TCPSite(runner, '127.0.0.1', port)
+        await site.start()
+    except BaseException:
+        await runner.cleanup()
+        raise
+    return runner

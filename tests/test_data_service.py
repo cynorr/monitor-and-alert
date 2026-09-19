@@ -102,32 +102,40 @@ def seed(store, cal, now, days=300, symbol='PAYS.US', exhausted=False):
     return daily, five
 
 
-def test_ready_and_deleted_json_rebuild_and_revoke(store, cal, tmp_path):
-    now = at('2026-09-18T12:00')
-    daily, five = seed(store, cal, now)
-    path = tmp_path / 'readiness.json'
+def install_batch(store, cal, now, symbol='PAYS.US', tf='5m', run='run', count=80):
+    target = cal.latest_closed(tf, now)
+    days = cal.completed_days(now, 100) + [datetime.fromtimestamp(now, ET).date()]
+    times = sorted(set(ts for d in days for ts, end in cal.grid(d, tf) if end <= now))[-count:]
+    rows = [bar(ts, tf, symbol) for ts in times]
+    store.upsert(rows, now, {'symbol': symbol, 'timeframe': tf, 'run_id': run, 'as_of': now,
+                            'returned_count': len(rows), 'returned_closed_ts': times, 'rejected': []})
+    return rows
+
+
+def test_ready_rebuild_and_intraday_target_moves(store, cal, tmp_path):
+    now = at('2026-09-18T12:01')
+    for tf in ('1d', '5m'):
+        install_batch(store, cal, now, tf=tf)
+    path = tmp_path / 'ready.json'
     validator = DataValidator(store, cal, path)
     state = validator.validate('PAYS.US', now)
-    assert state['ready'] and state['alert_eligible']
-    assert state['ready_through'] == '2026-09-17'
+    assert state['ready'] and not state['full_ready']
+    assert state['through']['5m'] == at('2026-09-18T11:55')
+    assert state['warnings']  # Short history is usable, with an explicit warning.
     validator.save()
     path.write_text('corrupt')
     assert DataValidator(store, cal, path).validate('PAYS.US', now)['ready']
-    store.db.execute('DELETE FROM bars WHERE symbol=? AND timeframe=? AND ts=?', ('PAYS.US', '5m', five[10].ts))
-    state = validator.validate('PAYS.US', now)
-    assert not state['ready'] and not state['alert_eligible']
-    assert five[10].ts in state['ready_checks'][1]['missing']
+    assert not validator.validate('PAYS.US', at('2026-09-18T12:05'))['ready']
 
 
-def test_short_history_requires_boundary_proof_then_degrades(store, cal, tmp_path):
-    now = at('2026-09-18T12:00')
-    daily, _ = seed(store, cal, now, days=20, symbol='BLSH.US')
-    validator = DataValidator(store, cal, tmp_path / 'ready.json')
-    assert not validator.validate('BLSH.US', now)['alert_eligible']
-    store.set_metadata('BLSH.US', {'history_exhausted': True, 'first_daily_ts': daily[0].ts})
-    state = validator.validate('BLSH.US', now)
-    assert state['degraded_ready'] and state['alert_eligible'] and not state['ready']
-    assert state['available_daily_days'] == 20
+def test_short_history_does_not_require_old_300_day_baseline(store, cal, tmp_path):
+    now = at('2026-09-18T12:01')
+    for tf in PHASES:
+        install_batch(store, cal, now, symbol='BLSH.US', tf=tf, count=10)
+    state = DataValidator(store, cal, tmp_path / 'ready.json').validate('BLSH.US', now)
+    assert state['ready'] and state['full_ready']
+    assert state['warnings']
+    assert 'alert_eligible' not in state
 
 
 def test_full_ready_truncated_first_day_and_manifest_isolation(store, cal, tmp_path):
@@ -145,23 +153,7 @@ def test_full_ready_truncated_first_day_and_manifest_isolation(store, cal, tmp_p
     assert not validator.validate('PAYS.US', now, 'different')['full_ready']
     assert validator.validate('PAYS.US', now)['full_ready']
     store.db.execute("DELETE FROM bars WHERE timeframe='15m' AND ts=?", (at('2026-09-18T11:00'),))
-    assert not validator.validate('PAYS.US', now)['full_ready']
-
-
-def test_1000_window_prefix_repair(store, cal):
-    now = at('2026-09-18T15:19')
-    days = cal.completed_days(now, 12)
-    expected = [ts for day in days for ts, _ in cal.grid(day, '5m')]
-    store.upsert([bar(ts) for ts in expected[7:]], now)
-    class Fake:
-        calls = []
-        async def candles(self, symbol, tf, count, before=None):
-            self.calls.append((symbol, tf, count, before))
-            return [raw(ts) for ts in expected[:7]]
-    broker = Fake()
-    asyncio.run(BarDownloader(broker, store, cal).repair_ready_window('PAYS.US', now))
-    assert len(store.bars('PAYS.US', '5m')) == 936
-    assert broker.calls[0][3] == expected[7] - 60
+    assert not DataValidator(store, cal, tmp_path / 'ready.json').validate('PAYS.US', now)['full_ready']
 
 
 def test_quote_is_cumulative_separated_and_monotonic(cal):
@@ -197,22 +189,24 @@ def test_api_blocks_nonuniverse_and_returns_lightweight_chart_rows(tmp_path, cal
         service.store.close()
 
 
-def test_failed_ticker_does_not_stop_phases_and_daily_phase_first(tmp_path, cal):
+def test_failed_ticker_isolated_and_selected_five_first(tmp_path, cal, monkeypatch):
+    monkeypatch.setattr('data_service.service.RETRY_DELAYS', ())
     class Fake:
         calls = []
         async def candles(self, symbol, tf, count=1000, before=None):
             self.calls.append((symbol, tf))
             if symbol == 'BLSH.US':
                 raise RuntimeError('upstream error')
+            if before is not None:
+                return []
             return [raw(cal.latest_closed(tf, int(time.time())))]
     fake = Fake()
     service = DataService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, fake, cal)
     try:
         asyncio.run(service.reconcile())
         assert service.initialized
+        assert fake.calls[0] == ('PAYS.US', '5m')
         assert ('PAYS.US', '1h') in fake.calls
-        first_five = next(i for i, (_, tf) in enumerate(fake.calls) if tf == '5m')
-        assert ('BLSH.US', '1d') in fake.calls[:first_five]
         assert 'BLSH.US/1d' in service.errors
     finally:
         service.store.close()
@@ -244,22 +238,15 @@ def test_resume_after_multiple_boundaries_uses_refresh(tmp_path, cal):
 
 
 def test_rejected_revision_prevents_old_valid_row_from_passing(store, cal, tmp_path):
-    now = at('2026-09-18T12:00')
-    _, five = seed(store, cal, now)
-    batch = {'symbol':'PAYS.US','timeframe':'5m','run_id':'r','as_of':now,
-             'returned_closed_ts':[b.ts for b in five],
-             'rejected':[{'ts':five[0].ts,'error':'Invalid OHLC range'}]}
+    now = at('2026-09-18T12:01')
+    for tf in ('1d', '5m'):
+        install_batch(store, cal, now, tf=tf)
+    batch = store.batch('PAYS.US', '5m')
+    batch['rejected'] = [{'ts': at('2026-09-18T11:55'), 'error': 'Invalid OHLC range'}]
     store.upsert([], now, batch)
     state = DataValidator(store, cal, tmp_path / 'ready.json').validate('PAYS.US', now)
-    assert not state['alert_eligible']
-
-
-def test_ready_expires_at_new_market_close(store, cal, tmp_path):
-    now = at('2026-09-18T12:00')
-    seed(store, cal, now)
-    validator = DataValidator(store, cal, tmp_path / 'ready.json')
-    assert validator.validate('PAYS.US', now)['ready']
-    assert not validator.validate('PAYS.US', at('2026-09-18T16:00'))['ready']
+    assert not state['ready']
+    assert not state['timeframes']['5m']['loaded']
 
 
 def test_reconnect_restores_snapshot_and_ignores_old_connection(cal):

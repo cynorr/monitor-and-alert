@@ -39,7 +39,7 @@ macOS 双击 start.command，或执行 `./simulator/start.command`。地址为 `
 
 不复制过去复杂的测试方案，不为了边界情况继续加框架。开发验收仅检查一键启动和实际 WebSocket 连续推送的核心路径。
 
-UI/Alert 尚未实现；后续在其模拟输入入口消费该 WebSocket，历史输入另接正式数据服务。不要宣称已有 Data API 自动切换或已有 UI/Alert 全流程验收。
+正式图表 UI 已实现，消费 Data API 的 HTTP/WebSocket；模拟器输入切换尚未接入该 UI。Price Alert 不在本版范围。不要宣称已有 Data API 自动切换或模拟 UI/Alert 全流程验收。
 
 删除 `simulator/` 即移除模拟功能；正式生产依赖与代码没有 simulator 引用。
 

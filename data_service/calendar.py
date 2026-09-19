@@ -70,6 +70,7 @@ class TradingCalendar:
         return [ts for day in self.days(first, last) for ts, close in self.grid(day, timeframe)
                 if start <= ts <= end and close <= as_of]
 
+    @lru_cache(maxsize=10000)
     def latest_closed(self, timeframe: str, now: int) -> int:
         today = datetime.fromtimestamp(now, ET).date()
         candidates = [ts for day in self.days(today - timedelta(days=15), today)
@@ -79,3 +80,11 @@ class TradingCalendar:
     def is_open(self, now: int) -> bool:
         session = self.session(datetime.fromtimestamp(now, ET).date())
         return bool(session and session[0] <= now < session[1])
+
+    def active_start(self, timeframe: str, now: int) -> int | None:
+        day = datetime.fromtimestamp(now, ET).date()
+        for start, end in self.grid(day, timeframe):
+            opened = self.session(day)[0] if timeframe == '1d' else start
+            if opened <= now < end:
+                return start
+        return None

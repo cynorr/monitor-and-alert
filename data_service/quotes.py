@@ -5,6 +5,7 @@ import logging
 import math
 import time
 from datetime import datetime
+from types import SimpleNamespace
 
 from .calendar import ET
 from .downloader import sdk_timestamp
@@ -13,9 +14,10 @@ log = logging.getLogger(__name__)
 
 
 class QuoteService:
-    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90):
+    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90, on_quote=None):
         self.broker, self.symbols, self.calendar = broker, symbols, calendar
         self.stale_seconds = stale_seconds
+        self.on_quote = on_quote
         self.values: dict[str, dict] = {}
         self.last_push_monotonic = 0.0
         self.last_quote_received_at = None
@@ -27,7 +29,7 @@ class QuoteService:
         self.ctx = None
         self.subscription_errors: dict[str, str] = {}
 
-    def apply(self, symbol, event, snapshot=False):
+    def apply(self, symbol, event, snapshot=False, session_override=None):
         if symbol not in self.symbols:
             return
         try:
@@ -35,7 +37,7 @@ class QuoteService:
             price, volume = float(event.last_done), int(event.volume)
             if not math.isfinite(price) or price <= 0 or volume < 0 or ts > time.time() + 10:
                 raise ValueError('Invalid quote price, volume or timestamp')
-            session = 'Intraday' if snapshot else str(event.trade_session).split('.')[-1]
+            session = session_override or ('Intraday' if snapshot else str(event.trade_session).split('.')[-1])
             if session == 'Normal':
                 session = 'Intraday'
             entry = self.values.setdefault(symbol, {})
@@ -46,6 +48,8 @@ class QuoteService:
                               'timestamp': ts, 'trade_session': session,
                               'received_at': int(time.time()), 'source': 'snapshot' if snapshot else 'push',
                               'trade_status': str(getattr(event, 'trade_status', 'Unknown')).split('.')[-1]}
+            if self.on_quote:
+                self.on_quote(symbol, entry[session])
             if not snapshot:
                 self.last_push_monotonic = time.monotonic()
                 self.last_quote_received_at = int(time.time())
@@ -71,6 +75,14 @@ class QuoteService:
         rows = await self.broker.snapshot(ctx, symbols)
         for row in rows:
             self.apply(row.symbol, row, snapshot=True)
+            for field, session in (('pre_market_quote', 'Pre'), ('post_market_quote', 'Post'),
+                                   ('overnight_quote', 'Overnight'), ('over_night_quote', 'Overnight')):
+                extended = getattr(row, field, None)
+                if extended is not None:
+                    event = SimpleNamespace(timestamp=extended.timestamp, last_done=extended.last_done,
+                                            volume=extended.volume, trade_session=session)
+                    # Snapshot extended values must retain their actual session.
+                    self.apply(row.symbol, event, snapshot=True, session_override=session)
 
     async def connect(self):
         self.generation += 1
