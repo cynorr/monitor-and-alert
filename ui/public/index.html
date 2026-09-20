@@ -1,11 +1,38 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Market Monitor</title><link rel="stylesheet" href="/style.css"><script src="/vendor/lightweight-charts/5.2.0/lightweight-charts.standalone.production.js"></script><script type="module" src="/main.js"></script></head>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Charts</title><link rel="stylesheet" href="/style.css">
+  <script src="/vendor/lightweight-charts/5.2.0/lightweight-charts.standalone.production.js"></script>
+  <script type="module" src="/main.js"></script>
+</head>
 <body>
-<header class="app-header"><div class="brand"><span class="brand-mark">m<span>·</span></span><div>MARKET MONITOR<small>个人行情工作台</small></div></div><div class="header-right"><span id="connection" role="status" class="connection">加载</span><span id="clock">— ET</span></div></header>
-<div class="workspace"><aside class="watchlist"><div class="list-heading"><h1>观察列表</h1><span id="symbol-count">—</span></div><label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索股票" aria-label="搜索股票" autocomplete="off"><kbd>↑↓</kbd></label><div class="list-columns"><span>股票</span><span>最新价</span></div><nav id="symbols" aria-label="股票列表"></nav><div class="list-footer"><span class="tiny-dot"></span> FOCUS / WAIT <span>仅观察</span></div></aside>
-<main><section class="instrument" aria-label="当前股票"><div class="instrument-name"><span id="group-label">—</span><h2 id="selected-symbol">—</h2><span class="market-label">US · USD</span></div><div class="price-block"><strong id="last-price">—</strong><span id="price-session">等待行情</span><small id="price-time"></small></div><div class="metrics"><div><span>ADR 20</span><strong id="adr">—</strong></div><div><span>20 日均额</span><strong id="adv">—</strong></div><div><span>当日成交量</span><strong id="day-volume">—</strong></div></div></section>
-<div id="warning" class="warning" role="status" hidden></div>
-<section class="charts" aria-label="行情图表">
-<article class="chart-panel" id="daily-panel"><div class="chart-toolbar"><h3>Daily <span>日线</span></h3><div class="chart-actions"><span id="daily-state" class="chart-state">加载</span><button id="daily-latest" aria-label="日线回到最新" title="回到最新">↦</button></div></div><div class="legend" id="daily-legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma50">SMA 50</span></div><div class="ohlc" id="daily-ohlc">等待历史数据</div><div class="chart-host" id="daily-chart"></div><div class="chart-empty" id="daily-empty">正在加载日线…</div><div class="chart-footer"><span>REGULAR · NO ADJUST</span><span id="daily-count">—</span></div></article>
-<article class="chart-panel" id="intraday-panel"><div class="chart-toolbar"><div class="timeframes" role="group" aria-label="盘中周期"><button data-tf="5m" class="active" aria-pressed="true">5m</button><button data-tf="15m" aria-pressed="false">15m</button><button data-tf="30m" aria-pressed="false">30m</button><button data-tf="1h" aria-pressed="false">1h</button></div><div class="chart-actions"><span id="intraday-state" class="chart-state">加载</span><button id="intraday-latest" aria-label="盘中图回到最新" title="回到最新">↦</button></div></div><div class="legend" id="intraday-legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma50">SMA 50</span></div><div class="ohlc" id="intraday-ohlc">等待历史数据</div><div class="chart-host" id="intraday-chart"></div><div class="chart-empty" id="intraday-empty">正在加载盘中数据…</div><div class="chart-footer"><span>NEW YORK TIME</span><span id="intraday-count">—</span></div></article>
-</section><footer class="workspace-footer"><span id="update-note">正在连接数据服务</span><span>Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a></span></footer></main></div></body></html>
+<main id="workspace" class="workspace" aria-label="Charts and watchlist">
+  <article class="chart-panel" id="daily-panel" aria-label="Daily chart">
+    <div class="chart-toolbar"><strong class="symbol">—</strong><span class="period">Daily</span><time class="clock"></time><button id="daily-latest" class="latest" aria-label="Daily: go to latest" title="Go to latest">↦</button></div>
+    <div id="daily-ohlc" class="ohlc">—</div>
+    <div class="price-row"><strong class="last-price">—</strong><span class="session pill" hidden></span><span id="daily-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
+    <div class="spread" hidden><span class="bid"></span><span class="ask"></span></div>
+    <div class="metrics"><span>ADR20 <b class="adr">—</b></span><span>ADV20 <b class="adv">—</b></span></div>
+    <div id="daily-legend" class="legend"><span class="ema10">EMA10</span><span class="ema20">EMA20</span><span class="sma50">SMA50</span></div>
+    <div class="chart-host" id="daily-chart"></div><div class="chart-empty" id="daily-empty">Loading</div>
+  </article>
+  <div class="divider" id="divider-0" role="separator" aria-orientation="vertical" aria-label="Resize Daily and Intraday" tabindex="0"></div>
+  <article class="chart-panel" id="intraday-panel" aria-label="Intraday chart">
+    <div class="chart-toolbar"><strong class="symbol">—</strong><div class="timeframes" role="group" aria-label="Intraday period"><button data-tf="5m" class="active" aria-pressed="true">5m</button><button data-tf="15m" aria-pressed="false">15m</button><button data-tf="30m" aria-pressed="false">30m</button><button data-tf="1h" aria-pressed="false">1h</button></div><time class="clock"></time><button id="intraday-latest" class="latest" aria-label="Intraday: go to latest" title="Go to latest">↦</button></div>
+    <div id="intraday-ohlc" class="ohlc">—</div>
+    <div class="price-row"><strong class="last-price">—</strong><span class="session pill" hidden></span><span id="intraday-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
+    <div class="spread" hidden><span class="bid"></span><span class="ask"></span></div>
+    <div class="metrics"><span>ADR20 <b class="adr">—</b></span><span>ADV20 <b class="adv">—</b></span></div>
+    <div id="intraday-legend" class="legend"><span class="ema10">EMA10</span><span class="ema20">EMA20</span><span class="sma50">SMA50</span></div>
+    <div class="chart-host" id="intraday-chart"></div><div class="chart-empty" id="intraday-empty">Loading</div>
+  </article>
+  <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
+  <aside class="watchlist" aria-label="Watchlist">
+    <div class="list-heading"><strong>Watchlist</strong><span id="symbol-count"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span></div>
+    <input id="search" type="search" placeholder="Search" aria-label="Search symbols" autocomplete="off">
+    <div class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span></div>
+    <nav id="symbols" aria-label="Symbols"></nav>
+  </aside>
+</main>
+</body></html>

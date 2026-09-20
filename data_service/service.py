@@ -6,9 +6,10 @@ import sqlite3
 import time
 import uuid
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 
-from .calendar import PHASES, TradingCalendar
+from .calendar import ET, PHASES, TradingCalendar
 from .charts import ChartCache, bar_row
 from .downloader import BarDownloader
 from .quotes import QuoteService
@@ -30,19 +31,21 @@ class Job:
 
 
 class DataService:
-    def __init__(self, tickers, runtime: Path, broker=None, calendar=None):
+    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None):
         self.tickers = tickers
         self.symbols = [t.symbol for t in tickers]
         self.runtime, self.broker = runtime, broker
+        self.now = clock or (lambda: time.time())
+        self.mode = "live"
         self.calendar = calendar or TradingCalendar()
         self.store = BarStore(runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
         self.validator = DataValidator(self.store, self.calendar, runtime / 'data_ready.json')
         self.charts = ChartCache(self.store, self.calendar)
-        self.downloader = BarDownloader(broker, self.store, self.calendar) if broker else None
+        self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
         self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.charts.apply_quote) if broker else None
         self.run_id = uuid.uuid4().hex
         self.phase, self.initialized = 'starting', False
-        self.started_at = int(time.time())
+        self.started_at = int(self.now())
         self.errors = {}
         self.retry_pairs = set()
         self.focus = (self.symbols[0], '5m')
@@ -54,7 +57,7 @@ class DataService:
         self.retry_after = {}
 
     def validate(self, symbol, now=None, current_run=True):
-        return self.validator.validate(symbol, int(time.time()) if now is None else now,
+        return self.validator.validate(symbol, int(self.now()) if now is None else now,
                                        self.run_id if current_run else None)
 
     def select(self, symbol, timeframe):
@@ -84,7 +87,7 @@ class DataService:
 
     async def update_bar(self, symbol, timeframe, target):
         previous = self.store.bars(symbol, timeframe, limit=1)
-        now = int(time.time())
+        now = int(self.now())
         missing = self.calendar.expected(timeframe, previous[0].ts + 1, target, now) if previous else []
         count = 1000 if not previous or len(missing) > 1 else 2
         batch = await self.downloader.fetch(symbol, timeframe, count=count)
@@ -121,11 +124,11 @@ class DataService:
             self.errors['/'.join(key)] = str(exc)
             self.retry_pairs.add(key)
             if job.attempt < len(RETRY_DELAYS):
-                job.due = time.time() + RETRY_DELAYS[job.attempt]
+                job.due = self.now() + RETRY_DELAYS[job.attempt]
                 job.attempt += 1
                 return
             log.warning('History retry exhausted %s: %s', key, exc)
-            self.retry_after[key] = time.time() + 30
+            self.retry_after[key] = self.now() + 30
         else:
             self.retry_pairs.discard(key)
             self.retry_after.pop(key, None)
@@ -160,13 +163,13 @@ class DataService:
                     if task.done():
                         task.result()
                         del self.running[key]
-                now = int(time.time())
+                now = int(self.now())
                 self._schedule(now, initial_only=initial_only)
                 for job in sorted(self.jobs.values(), key=self.priority):
                     key = (job.symbol, job.timeframe)
                     if len(self.running) >= 5:
                         break
-                    if key not in self.running and job.due <= time.time():
+                    if key not in self.running and job.due <= self.now():
                         self.running[key] = asyncio.create_task(self._execute(key, job))
                 self.initialized = len(self.initial_done) == len(self.symbols) * len(PHASES)
                 self.phase = 'running' if self.initialized else 'loading'
@@ -203,26 +206,33 @@ class DataService:
             elif key in self.ever_loaded:
                 target = self.lag_targets.setdefault(key, check['target'])
                 if now - self.calendar.bar_end(target, tf) > 15:
-                    warnings.append(f'{tf}: 官方 K 线更新延迟超过 15 秒')
+                    warnings.append(f'{tf}: Closed bar delayed >15s')
             error = self.errors.get(f'{symbol}/{tf}')
             if error:
-                warnings.append(f'{tf}: {error}')
+                warnings.append(f'{tf}: History unavailable')
         summary = self.charts.summary(symbol, now)
         if summary['samples'] < 20:
-            warnings.append(f"Daily: 20 日指标可用样本 {summary['samples']} 日")
+            warnings.append(f"Daily: {summary['samples']}/20 summary samples")
         if summary['estimated']:
-            warnings.append('20 日均额包含估算成交额')
+            warnings.append('ADV20 includes estimated turnover')
         return {**state, 'warnings': list(dict.fromkeys(warnings))}
 
     def quote(self, symbol, now):
-        return self.quotes.output(symbol, now) if self.quotes else {
+        result = self.quotes.output(symbol, now) if self.quotes else {
             'symbol': symbol, 'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}
+        regular = result['regular']
+        if regular:
+            day = datetime.fromtimestamp(regular['timestamp'], ET).date()
+            previous = next((b['close'] for b in reversed(self.charts.closed(symbol, '1d')[1])
+                             if datetime.fromtimestamp(b['time'], ET).date() < day), None)
+            result['regular'] = {**regular, 'prev_close': previous or regular.get('prev_close')}
+        return result
 
     def view(self, symbol, tf, revisions=None):
         self.store.check(symbol)
         if tf not in ('5m', '15m', '30m', '1h'):
             raise ValueError('Invalid chart timeframe')
-        now = int(time.time())
+        now = int(self.now())
         charts = {}
         for period in ('1d', tf):
             rev = self.store.revisions.get((symbol, period), 0)
@@ -231,12 +241,12 @@ class DataService:
         status = self.status(symbol, now)
         for chart in charts.values():
             status['warnings'].extend(chart['warnings'])
-        return {'symbol': symbol, 'timeframe': tf, 'server_time': now, 'run_id': self.run_id,
+        return {'symbol': symbol, 'timeframe': tf, 'server_time': now, 'run_id': self.run_id, 'mode': self.mode,
                 'charts': charts, 'quote': self.quote(symbol, now), 'status': status,
                 'summary': self.charts.summary(symbol, now)}
 
     def board(self):
-        now = int(time.time())
+        now = int(self.now())
         result = []
         for ticker in self.tickers:
             state = self.status(ticker.symbol, now)
@@ -246,7 +256,7 @@ class DataService:
         return result
 
     async def api(self, path: str, query: dict):
-        now = int(time.time())
+        now = int(self.now())
         symbol = query.get('symbol', [None])[0]
         if symbol is not None:
             self.store.check(symbol)

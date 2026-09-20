@@ -1,63 +1,57 @@
-# 盘中 Quote 模拟器
+# Chart and Quote simulator
 
-只做一件事：通过 WebSocket 持续推送盘中随机行情，供 UI / Alert 开发使用。
+An isolated, continuous market for chart development: historical candles, live Quotes and new closed bars. No credentials or broker connection.
 
-## 一键启动
-
-macOS 双击 **start.command**，或在项目根目录执行：
+## Start
 
 ```bash
 ./simulator/start.command
 ```
 
-首次启动自动创建本目录的 Python 虚拟环境并安装唯一依赖 `websockets`（需要 Python 3.11+ 和联网安装）。后续启动可离线运行。关闭窗口或按 Ctrl+C 停止。
+The script uses the repository Python environment and installs the two simulator dependencies if needed. Open **http://127.0.0.1:18765/**. The regular production UI shows a small **SIM** badge. Ctrl+C stops both endpoints and removes the temporary database.
 
-连接 **ws://127.0.0.1:18766**，无需发送订阅消息：立即收到所有 ticker 的当前状态，之后每个 ticker 每秒一条 JSON 文本消息。所有客户端共享同一份行情。
+```bash
+# Faster closed-bar testing: 10 exchange seconds per real second
+./simulator/start.command --speed 10
 
-```javascript
-const feed = new WebSocket('ws://127.0.0.1:18766');
-feed.onmessage = ({ data }) => {
-  const quote = JSON.parse(data);
-  console.log(quote.symbol, quote.last_done, quote.volume);
-};
-// 停止接收：feed.close();
+# A chosen regular-session instant in New York time
+./simulator/start.command --start 2026-09-18T13:44:45 --speed 30
 ```
 
-## 数据
+Options: `--workspace`, `--symbols` (a subset of that workspace), `--port` (chart, default 18765), `--quote-port` (raw Quote, default 18766), `--speed` and `--start`.
 
-启动时读取根目录 `workspace.json`，仅选 `statuses` 为 `focus` / `wait` 的 ticker。随机分配起始价格和成交活跃度，轮流采用上涨、下跌、震荡倾向；价格在初始价 ±30% 内波动，成交量非负递增。
+## Data flow
 
-使用 [Longbridge Quote 推送的 JSON 字段及类型](https://open.longbridge.com/zh-CN/docs/quote/push/quote)：
-
-```json
-{
-  "symbol": "PAYS.US",
-  "sequence": 12,
-  "last_done": "18.520",
-  "open": "18.500",
-  "high": "18.530",
-  "low": "18.480",
-  "timestamp": 1789738212,
-  "volume": 3600,
-  "turnover": "66672.000",
-  "trade_status": 0,
-  "trade_session": 0,
-  "current_volume": 300,
-  "current_turnover": "5556.000",
-  "tag": 0
-}
+```text
+Synthetic session price path
+  ├─ Quote → in-memory current candle
+  └─ closed bar API → actual downloader / validator / BarScheduler
+                         ↓
+                    temporary SQLite
+                         ↓
+                 Data HTTP + WebSocket → UI
 ```
 
-价格和成交额为字符串；时间戳是当前真实 UTC Unix 秒；成交量和状态为整数。`trade_session=0`、`trade_status=0`、`tag=0` 始终表示正常盘中实时数据。每条消息提供全部字段，没有外层 envelope。
+- Startup reads workspace focus/wait and its order, using the same loader as production.
+- Every period has up to 1000 consistent closed bars: Daily, 5m, 15m, 30m and 1h. Count=2 and history-offset calls use the same market path.
+- OHLC, volume and turnover across periods come from a deterministic session path. Quote cumulative volume is the same day's integral, not volume since process startup.
+- The actual DataService scheduler initializes history and fetches closed bars after each boundary. Validation is enabled; READY is calculated, not forced.
+- The exchange clock starts on the latest trading date in regular hours. It advances at the chosen speed and skips nights/weekends/holidays. Early closes follow the calendar. macOS time is unchanged.
+- Quotes refresh five times per real second for the chart. The browser uses the normal snapshot and stream endpoints, with no simulation rendering branch.
+- On restart, history regenerates in a new temporary directory. No simulated bars enter runtime/bars.sqlite3.
 
-`volume` 从本次进程启动开始累计，`current_volume` 为最近一个生成周期的增量；各客户端接入不会重置市场。固定随机种子方便观察，重启会重置模拟行情。初始价格独立随机生成，不与真实历史收盘价对齐。
+## Raw Quote WebSocket
 
-无需更改 macOS 时间：休市也持续输出 Intraday 标记；不模拟交易日历或完整交易日，不做跨日重置。下游的**模拟显示/Alert 模式**应直接消费这些消息，不再经过正式数据服务的交易时段或 readiness 检查。
+**ws://127.0.0.1:18766/** remains available. Connect without a subscription message to receive one JSON per symbol per second. All clients share the same market and sequence.
 
-这是 JSON 业务数据格式一致的 WebSocket 数据源，不是 Longbridge 二进制协议服务器，官方 SDK 不直接连接它。未来 UI/Alert 需要接入该 WebSocket；当前仓库尚未实现这些消费者。
+Fields retain the Longbridge Quote JSON shape: symbol, sequence, last_done, open, high, low, timestamp, volume, turnover, trade_status, trade_session, current_volume, current_turnover, tag. Prices/turnover are strings; timestamp/volumes/status are integers. Session/status/tag are zero. Timestamps use the simulator exchange clock. This is not the Longbridge binary protocol.
 
-## 保持独立
+## Maintenance
 
-没有历史数据、K 线接口、验证器、READY、异常场景、重试框架、数据库或虚拟时钟。不连接真实 API、不读取 token、不改动正式 data 逻辑。历史数据由正式服务按现有方式另行提供。
+- market.py: price path, generated history, exchange clock and Quotes.
+- server.py: isolated DataService instance, UI/API and raw Quote WebSocket lifecycle.
+- start.command / requirements.txt: startup and dependencies.
+- ../tests/test_simulator.py: period consistency, all-history completeness, actual scheduling across boundaries/session rollover, raw WebSocket and clock checks.
+- ../tests/preview_fixture.py: compatibility entry point for this simulator; no separate fake data generator.
 
-文件只有 `server.py`、`start.command`、`requirements.txt` 和本说明。删除整个 `simulator/` 即可移除，无需修改正式项目依赖或代码。
+Production never imports simulator. The simulator imports the generic data workflow, without importing Broker or reading credentials. No fault-injection engine, replay, trading or Alert implementation is included. Offline simulation is not live broker evidence.

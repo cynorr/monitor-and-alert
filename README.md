@@ -2,7 +2,7 @@
 
 个人美股看盘工作台：Python 行情服务、SQLite 官方历史、Daily / Intraday 双图与实时指标。Price Alert 和运行中编辑股票名单不在本版范围。
 
-入口：[图表规格](Tradingview-Lightweight-Chart-Visualization-and-Alert-Development-Specification.md) · [数据规格](Longbridge-Data-Service-Design.md) · [维护地图](docs/data/README.md) · [测试记录](docs/testing/chart-validation.md)
+入口：[图表交互维护](docs/ui/chart-interactions.md) · [图表规格](Tradingview-Lightweight-Chart-Visualization-and-Alert-Development-Specification.md) · [数据规格](Longbridge-Data-Service-Design.md) · [维护地图](docs/data/README.md) · [测试记录](docs/testing/chart-validation.md)
 
 ## 启动
 
@@ -38,14 +38,16 @@ python3 -m venv .venv
 
 ## 图表
 
-- 左图 Daily，右图默认 5m，可切换 15m / 30m / 1h；两图均有成交量、EMA10、EMA20、SMA50。
+- 左 Daily、中 Intraday、右紧凑列表；拖动两条分界线调整宽度。右图默认 5m，可切换 15m / 30m / 1h。
+- 两图均有成交量、EMA10/EMA20/SMA50；无网格、自由十字线、交易日联动。Daily 初始约九个月，短历史保持 candle 宽度、靠右显示。
 - 观察列表支持搜索、上下键选股；图表支持十字线、缩放、拖动、回到最新。
 - 当前 ticker 优先加载，其余白名单后台并发加载。
 - 官方 closed bars 存 SQLite，活跃 candle 和指标仅存后端内存。
 - 最新 5m 由 Quote last_done 更新；较大周期活跃 candle 合并官方 5m 和临时 5m。官方到达后修正。
 - 活跃成交量只有在当日前缀完整时显示差值，Daily 使用官方累计量。
 - ADR20 为最近 20 个完成交易日平均振幅百分比；20 日均额优先官方 turnover。
-- READY / FULL_READY 提示 5 秒消失；历史不足、缺 K、估算及闭合后超过 15 秒的更新延迟显示 ticker warning。
+- 界面仅英文，正常时无状态通知；加载/断线使用小标签，数据问题用 ticker 警告图标及悬停详情。
+- 列表四列 Symbol / Last / Chg% / Ext；OHLC、ADR20、ADV20 与可用 Bid/Ask 位于图表顶部。
 - 所有图表采用不复权 regular 数据；pre/post 仅显示价格，不修改 regular candle。
 
 ## API
@@ -82,7 +84,7 @@ npm ci
 npm run build
 ```
 
-TypeScript 源码在 ui/src/main.ts，生成 ui/public/main.js。使用本地 IIFE 图表文件，npm 中 lightweight-charts 仅提供编译期类型，不重复打包运行时。
+TypeScript 源码在 ui/src/，main.ts 管传输/列表、chart.ts 管图表联动、layout.ts 管列宽、types.ts 管契约；构建至 ui/public/。使用本地 IIFE 图表文件，npm 中 lightweight-charts 仅提供编译期类型，不重复打包运行时。
 
 浏览器离线验收夹具（只写临时目录，不读真实凭证）：
 
@@ -90,11 +92,13 @@ TypeScript 源码在 ui/src/main.ts，生成 ui/public/main.js。使用本地 II
 .venv/bin/python tests/preview_fixture.py
 ```
 
-打开 http://127.0.0.1:18765/，页面明确标注“离线测试 · 合成数据”。该入口仅用于开发验收，不是生产数据源。
+打开 http://127.0.0.1:18765/，页面用 SIM 标签标识合成数据。该兼容入口直接启动完整模拟器，不再使用静态历史夹具。
 
-## 独立 Quote 模拟器
+## 独立图表模拟器
 
-双击 simulator/start.command，或执行 `./simulator/start.command`，监听 ws://127.0.0.1:18766。范围保持不变：仅盘中随机 Quote，无历史、时钟或验证框架。本版生产图表不自动切换到模拟来源。见 [模拟器说明](simulator/README.md)。
+双击 simulator/start.command，或执行 `./simulator/start.command`。打开 http://127.0.0.1:18765/；同时保留 ws://127.0.0.1:18766 Quote 推送。
+
+模拟器提供一致的 Quote 与五周期历史，复用实际 BarScheduler 持续生成 closed bars，独立临时数据库、无需凭证。`./simulator/start.command --speed 10` 可加速收盘测试；`--start` 指定美东盘中时刻。不修改系统时间、不连接真实券商。见 [模拟器说明](simulator/README.md)。
 
 ## 本地文件与证据
 

@@ -4,7 +4,7 @@
 
 ## 1. 范围
 
-- 左侧 Daily，右侧可切换 5m / 15m / 30m / 1h；各含价格与成交量 pane，浅色主题。
+- 左侧 Daily、中间可切换 5m / 15m / 30m / 1h、右侧股票列表；可拖动列宽，图表默认等宽，各含价格与成交量 pane。
 - 使用本地 Lightweight Charts 5.2.0，保留版权与归属信息。
 - 股票列表仅使用启动加载的 focus / wait，支持搜索、选择；不支持运行中编辑名单。
 - Price Alert 的显示、交互、存储、计算和通知全部不在本版范围。
@@ -78,13 +78,13 @@ Longbridge Quote 长连接 → Python data → 本地 WebSocket → UI。
 | UI 状态 | 行为 |
 | --- | --- |
 | 加载 | 首次补齐、未加载周期、恢复补齐 |
-| 正常 | READY / FULL_READY 提示 5 秒后消失 |
+| 正常 | 不显示通知；READY / FULL_READY 保留为数据 API 状态 |
 | 连接中断 | 连接失效至恢复 |
-| ticker warning | 历史不足、缺 K、非法数据、官方 bar 延迟、成交额估算 |
+| ticker warning | 紧凑图标与英文悬停详情；不显示多行错误横条 |
 
 - 正常运行后，官方 bar 从应闭合时刻起超过 15 秒仍未有效取得即警告；恢复后清除。
 - 初始补旧历史使用加载状态，不逐根报告旧历史延迟。
-- 正常提示消失后继续检查连接、缺口与更新延迟。
+- 后台持续检查连接、缺口与更新延迟。
 - 不显示休市状态；显示完整历史及 pre/post price。
 - 不设置独立指标状态，样本不足的均线直接不画。
 
@@ -116,15 +116,15 @@ Longbridge Quote 长连接 → Python data → 本地 WebSocket → UI。
 - ADR / ADV$ 样本不足按窗口内有效样本计算，ticker 提示样本数；不使用更早交易日填补窗口缺失，不补零。
 - 不复权口径，本版不实现公司行动调整。
 
-## 7. 界面
+## 7. 界面与交互
 
-- focus / wait 列表显示 ticker、最新价、必要 warning，支持搜索和键盘选择。
-- Daily 与 Intraday 同步切股，右图默认 5m，支持周期切换。
-- 支持十字线 OHLCV、缩放、拖动、回到最新；实时刷新保持用户视口。
-- 切股/周期取消旧请求；旧响应不得污染新图。
-- 突出 last_price；pre/post 标明来源，不修改 regular candle。
-- 加载、空数据和连接中断有明确提示，已有合法历史保持可见。
-- 离线库放置于 ui/public/vendor/lightweight-charts/5.2.0。
+交互唯一维护入口：[docs/ui/chart-interactions.md](docs/ui/chart-interactions.md)。界面仅英文，核心是双图看盘与列表切换。
+
+- 三栏可调宽度、无品牌顶栏或图表底栏，紧凑列表与胶囊控制。
+- 无网格，teal/red candle 与成交量，EMA10 蓝 / EMA20 黄 / SMA50 红。
+- Daily 约九个月初始窗口，短历史靠右且不拉宽 candle；实时刷新与调整列宽保持当前 candle 间距。
+- 使用原生十字线、pane、滚动和缩放 API；按美东交易日联动两图。
+- HTTP / WebSocket 请求代次、重连快照与后端缓存保持不变。
 
 ## 8. 验收
 
@@ -135,4 +135,4 @@ Longbridge Quote 长连接 → Python data → 本地 WebSocket → UI。
 - 重复 Quote 不造成 EMA 漂移，官方覆盖后指标重算。
 - 快速切股/周期、刷新、重连不串数据、不反复重置视口。
 - 默认测试离线，不读取真实凭证；离线与券商 live 证据分别记录。
-- 独立模拟器保持现有极简 Quote 范围，不扩展为历史、时钟或回放框架。
+- 独立模拟器提供一致 Quote 与五周期 closed bars，注入交易时钟，复用实际调度/验证；仅写临时库，不新增故障注入或回放框架。

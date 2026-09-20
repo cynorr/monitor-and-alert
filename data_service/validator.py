@@ -49,11 +49,11 @@ class DataValidator:
         latest_ok = target in present and not any(r['ts'] in (target, None) for r in invalid)
         warnings = []
         if batch and batch.get('returned_count', len(starts)) < 1000:
-            warnings.append(f'{tf}: 历史样本 {len(rows)} 根（不足 1000）')
+            warnings.append(f'{tf}: Short history ({len(rows)} samples)')
         if missing:
-            warnings.append(f'{tf}: 缺少 {len(missing)} 根 K 线')
+            warnings.append(f'{tf}: {len(missing)} missing bars')
         if invalid or unexpected:
-            warnings.append(f'{tf}: 官方数据异常')
+            warnings.append(f'{tf}: Invalid bar data')
         result = {'timeframe': tf, 'synced': synced, 'target': target,
                   'latest': max(present) if present else None,
                   'loaded': synced and latest_ok,

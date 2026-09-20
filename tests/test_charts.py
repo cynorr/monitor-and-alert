@@ -185,12 +185,12 @@ def test_lag_warning_from_close_time_after_initial_load(tmp_path, cal):
         for tf in PHASES:
             install_batch(service.store, cal, now, tf=tf)
         assert service.status('PAYS.US', now)['ready']
-        assert not any('延迟' in w for w in service.status('PAYS.US', at('2026-09-18T10:05:14'))['warnings'])
+        assert not any('delayed' in w for w in service.status('PAYS.US', at('2026-09-18T10:05:14'))['warnings'])
         late = service.status('PAYS.US', at('2026-09-18T10:05:16'))
-        assert any('5m: 官方' in w for w in late['warnings'])
+        assert any('5m: Closed bar delayed' in w for w in late['warnings'])
         assert not late['ready']
         service.store.upsert([bar(at('2026-09-18T10:00'))], at('2026-09-18T10:05:17'))
-        assert not any('5m: 官方' in w for w in service.status('PAYS.US', at('2026-09-18T10:05:17'))['warnings'])
+        assert not any('5m: Closed bar delayed' in w for w in service.status('PAYS.US', at('2026-09-18T10:05:17'))['warnings'])
     finally:
         service.store.close()
 
@@ -207,7 +207,7 @@ def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
         try:
             async with ClientSession() as client:
                 async with client.get(base + '/') as response:
-                    assert response.status == 200 and 'Market Monitor' in await response.text()
+                    assert response.status == 200 and '<title>Charts</title>' in await response.text()
                 async with client.get(base + '/v1/chart?symbol=NO.US') as response:
                     assert response.status == 400
                 async with client.get(base + '/v1/chart?symbol=PAYS.US&timeframe=5m') as response:
@@ -326,7 +326,7 @@ def test_lag_warning_does_not_reset_at_next_boundary(tmp_path, cal):
             install_batch(service.store, cal, now, tf=tf)
         service.status('PAYS.US', now)
         service.status('PAYS.US', at('2026-09-18T10:05:16'))
-        assert any('5m: 官方' in w for w in service.status('PAYS.US', at('2026-09-18T10:10:01'))['warnings'])
+        assert any('5m: Closed bar delayed' in w for w in service.status('PAYS.US', at('2026-09-18T10:10:01'))['warnings'])
     finally:
         service.store.close()
 

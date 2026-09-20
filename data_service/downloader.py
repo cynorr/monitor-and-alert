@@ -18,15 +18,16 @@ def sdk_timestamp(value: datetime) -> int:
 
 
 class BarDownloader:
-    def __init__(self, broker, store: BarStore, calendar: TradingCalendar):
+    def __init__(self, broker, store: BarStore, calendar: TradingCalendar, clock=None):
         self.broker, self.store, self.calendar = broker, store, calendar
+        self.now = clock or (lambda: time.time())
 
     async def fetch(self, symbol: str, timeframe: str, count: int = 1000,
                     run_id: str | None = None, before: int | None = None,
                     now: int | None = None) -> dict:
         self.store.check(symbol)
         raw = await self.broker.candles(symbol, timeframe, count, before)
-        as_of = int(time.time()) if now is None else now
+        as_of = int(self.now()) if now is None else now
         bars, rejected, forming, seen = [], [], 0, set()
         for item in raw:
             ts = None

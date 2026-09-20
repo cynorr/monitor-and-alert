@@ -1,79 +1,97 @@
-"""Intraday-only Quote generator. Connect a WebSocket client to receive JSON."""
+"""One-command, isolated chart simulation with Quote and closed-bar scheduling."""
+import argparse
 import asyncio
-import json
-import random
-import time
+import logging
+import sys
+import tempfile
+from datetime import datetime
 from pathlib import Path
 
-from websockets.asyncio.server import broadcast, serve
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from aiohttp import web
+from data_service.calendar import TradingCalendar, ET
+from data_service.config import load_tickers
+from data_service.http_api import create_app
+from data_service.service import DataService
+from simulator.market import Market, SessionClock, SimulatedQuotes, default_start
 
-WORKSPACE = Path(__file__).resolve().parents[1] / 'workspace.json'
-HOST, PORT = '127.0.0.1', 18766
-
-
-def load_symbols():
-    workspace = json.loads(WORKSPACE.read_text())
-    return list(dict.fromkeys(
-        ticker if ticker.endswith('.US') else ticker + '.US'
-        for ticker, entry in workspace['statuses'].items()
-        if entry['status'] in ('focus', 'wait')
-    ))
+ROOT = Path(__file__).resolve().parents[1]
 
 
-class Market:
-    def __init__(self, symbols):
-        self.random = random.Random(7)
-        self.quotes = {}
-        self.settings = {}
-        for index, symbol in enumerate(symbols):
-            price = self.random.randrange(500, 15000) * 10
-            self.settings[symbol] = (price, (1, -1, 0)[index % 3], self.random.randint(10, 800))
-            self.quotes[symbol] = {
-                'symbol': symbol, 'sequence': 0, 'last_done': f'{price / 1000:.3f}',
-                'open': f'{price / 1000:.3f}', 'high': f'{price / 1000:.3f}',
-                'low': f'{price / 1000:.3f}', 'timestamp': int(time.time()),
-                'volume': 0, 'turnover': '0.000', 'trade_status': 0,
-                'trade_session': 0, 'current_volume': 0, 'current_turnover': '0.000', 'tag': 0,
-            }
-
-    def tick(self):
-        now = int(time.time())
-        for symbol, quote in self.quotes.items():
-            anchor, direction, typical_volume = self.settings[symbol]
-            price = float(quote['last_done'])
-            change = direction * 0.00004 + self.random.gauss(0, 0.0002)
-            price = round(min(anchor / 1000 * 1.3, max(anchor / 1000 * 0.7, price * (1 + change))), 3)
-            volume = max(1, round(typical_volume * self.random.uniform(0.3, 1.7)))
-            turnover = round(price * volume, 3)
-            quote.update(
-                sequence=quote['sequence'] + 1, timestamp=now, last_done=f'{price:.3f}',
-                high=f"{max(float(quote['high']), price):.3f}",
-                low=f"{min(float(quote['low']), price):.3f}",
-                volume=quote['volume'] + volume,
-                turnover=f"{float(quote['turnover']) + turnover:.3f}",
-                current_volume=volume, current_turnover=f'{turnover:.3f}',
-            )
+def create_simulation(tickers, runtime, calendar, clock):
+    market = Market([t.symbol for t in tickers], calendar, clock)
+    service = DataService(tickers, runtime, market, calendar, clock=clock)
+    service.mode = 'simulation'
+    service.quotes = SimulatedQuotes(market, service.charts)
+    return service
 
 
-async def main():
-    market = Market(load_symbols())
+def quote_app(service):
+    app = web.Application()
+    sockets = set()
+    async def connected(request):
+        ws = web.WebSocketResponse(heartbeat=10)
+        await ws.prepare(request)
+        sockets.add(ws)
+        async def publish():
+            try:
+                while not ws.closed:
+                    for quote in list(service.quotes.raw.values()):
+                        await ws.send_json(quote)
+                    await asyncio.sleep(1)
+            except (ConnectionError, RuntimeError):
+                await ws.close()
+        sender = asyncio.create_task(publish())
+        try:
+            async for _ in ws:
+                pass
+        finally:
+            sockets.discard(ws)
+            sender.cancel()
+            await asyncio.gather(sender, return_exceptions=True)
+        return ws
+    async def shutdown(_app):
+        await asyncio.gather(*(ws.close(code=1001) for ws in list(sockets)))
+    app.on_shutdown.append(shutdown)
+    app.router.add_get('/', connected)
+    return app
 
-    async def connected(socket):
-        for quote in market.quotes.values():
-            await socket.send(json.dumps(quote))
-        await socket.wait_closed()
 
-    async with serve(connected, HOST, PORT) as server:
-        print(f'SIMULATION — ws://{HOST}:{PORT} — {len(market.quotes)} focus/wait symbols', flush=True)
-        print('One Quote per symbol per second. Ctrl+C to stop.', flush=True)
-        while True:
-            market.tick()
-            for quote in market.quotes.values():
-                broadcast(server.connections, json.dumps(quote))
-            await asyncio.sleep(1)
+def parser():
+    result = argparse.ArgumentParser(description='Offline chart and Quote simulator')
+    result.add_argument('--workspace', type=Path, default=ROOT/'workspace.json')
+    result.add_argument('--symbols', nargs='+', help='Optional subset of workspace focus/wait')
+    result.add_argument('--port', type=int, default=18765)
+    result.add_argument('--quote-port', type=int, default=18766)
+    result.add_argument('--speed', type=float, default=1, help='Trading seconds per real second')
+    result.add_argument('--start', help='Regular-session start in ET, e.g. 2026-09-18T13:44:45')
+    return result
+
+
+async def main(args=None):
+    args = args or parser().parse_args()
+    calendar = TradingCalendar()
+    start = int(datetime.fromisoformat(args.start).replace(tzinfo=ET).timestamp()) if args.start else default_start(calendar)
+    clock = SessionClock(calendar, start, args.speed)
+    tickers = load_tickers(args.workspace, args.symbols)
+    with tempfile.TemporaryDirectory(prefix='chart-simulator-') as folder:
+        service = create_simulation(tickers, Path(folder), calendar, clock)
+        runners = [web.AppRunner(create_app(service)), web.AppRunner(quote_app(service))]
+        try:
+            for runner, port in zip(runners, [args.port, args.quote_port]):
+                await runner.setup()
+                await web.TCPSite(runner, '127.0.0.1', port).start()
+            print(f'SIMULATION: http://127.0.0.1:{args.port} | Quote ws://127.0.0.1:{args.quote_port}', flush=True)
+            print(f'{len(tickers)} focus/wait symbols | {args.speed:g}x exchange time | temporary database | no broker', flush=True)
+            await service.run()
+        finally:
+            for runner in runners:
+                await runner.cleanup()
+            service.store.close()
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.WARNING)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

@@ -75,7 +75,7 @@ class ChartCache:
                 if volume >= 0:
                     candle['volume'] = volume
                 else:
-                    warnings.append('活跃成交量口径不一致，等待同步')
+                    warnings.append('Live volume mismatch; waiting for synchronization')
         return candle, warnings
 
     def chart(self, symbol, tf, now, include_history=True):

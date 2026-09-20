@@ -48,6 +48,14 @@ class QuoteService:
                               'timestamp': ts, 'trade_session': session,
                               'received_at': int(time.time()), 'source': 'snapshot' if snapshot else 'push',
                               'trade_status': str(getattr(event, 'trade_status', 'Unknown')).split('.')[-1]}
+            for field in ('prev_close', 'bid_price', 'ask_price'):
+                value = getattr(event, field, (previous or {}).get(field))
+                try:
+                    value = float(value)
+                    if math.isfinite(value) and value > 0:
+                        entry[session][field] = value
+                except (TypeError, ValueError, OverflowError):
+                    pass
             if self.on_quote:
                 self.on_quote(symbol, entry[session])
             if not snapshot:
