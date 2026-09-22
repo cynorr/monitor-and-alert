@@ -1,7 +1,5 @@
 import { $, money, compact, dayKey } from './types.js';
 const L = window.LightweightCharts;
-const colors = { ema10: '#2962ff', ema20: '#e4b400', sma50: '#e53935' };
-const labels = { ema10: 'EMA10', ema20: 'EMA20', sma50: 'SMA50' };
 const dateFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 function dateOf(t) { return typeof t === 'number' ? new Date(t * 1000) : typeof t === 'string' ? new Date(t) : new Date(Date.UTC(t.year, t.month - 1, t.day, 12)); }
@@ -28,19 +26,30 @@ export class Panel {
         this.daily = daily;
         this.chart = L.createChart($(id + '-chart'), {
             autoSize: true,
-            layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 10, attributionLogo: false, panes: { separatorColor: '#171b20', separatorHoverColor: '#171b20' } },
+            layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 10, attributionLogo: false, panes: { separatorColor: '#c6cbd1', separatorHoverColor: '#a8afb8' } },
             grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-            rightPriceScale: { borderColor: '#171b20', minimumWidth: 55, scaleMargins: { top: 0.07, bottom: 0.05 } },
+            rightPriceScale: { borderVisible: false, minimumWidth: 55, scaleMargins: { top: 0.07, bottom: 0.05 } },
             timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: 6, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t, type) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },
             localization: { locale: 'en-US', timeFormatter: (t) => daily ? dayKey(Number(t)) : `${dayKey(Number(t))} ${timeFormat.format(dateOf(t))}` },
             crosshair: { mode: L.CrosshairMode.Normal, vertLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
         });
-        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineStyle: L.LineStyle.Dashed });
+        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false });
+        const colors = { ema10: '#2962ff', ema20: '#e4b400', [daily ? 'sma50' : 'sma65']: '#e53935' };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
         this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
         this.chart.panes()[0].setStretchFactor(1);
         this.chart.panes()[1].setStretchFactor(0.22);
+        const volumePosition = () => {
+            const label = $(id + '-volume');
+            label.style.top = `${this.chart.panes()[0].getHeight() + 5}px`;
+            label.style.right = `${this.chart.priceScale('right').width() + 8}px`;
+        };
+        const observer = new ResizeObserver(volumePosition);
+        observer.observe($(id + '-chart'));
+        const mainPane = this.chart.panes()[0].getHTMLElement();
+        if (mainPane)
+            observer.observe(mainPane);
         this.chart.subscribeCrosshairMove(param => {
             const candle = param.seriesData.get(this.candles);
             const volume = param.seriesData.get(this.volume);
@@ -81,9 +90,9 @@ export class Panel {
         Object.values(this.lines).forEach(line => line.setData([]));
         $(this.id + '-empty').hidden = false;
         this.showOHLC();
-        for (const [name, label] of Object.entries(labels)) {
+        $(this.id + '-volume').textContent = 'V —';
+        for (const name of Object.keys(this.lines)) {
             const node = $(this.id + '-legend').querySelector('.' + name);
-            node.textContent = label;
             node.hidden = true;
         }
     }
@@ -130,8 +139,11 @@ export class Panel {
             const items = this.days.get(dayKey(next.time));
             if (items)
                 items[items.length - 1] = next;
-            for (const [name, value] of Object.entries(data.indicator_preview))
-                this.lines[name].update(value);
+            for (const [name, line] of Object.entries(this.lines)) {
+                const value = data.indicator_preview[name];
+                if (value)
+                    line.update(value);
+            }
         }
         if (this.daily && !this.initialSpacing && this.rows.length && latest) {
             const scale = this.chart.timeScale();
@@ -147,16 +159,24 @@ export class Panel {
             this.fitted = true;
         }
         $(this.id + '-empty').hidden = !!latest;
+        $(this.id + '-volume').textContent = `V ${compact(latest?.volume)}`;
         if (!this.hovering)
             this.showOHLC(latest);
-        for (const [name, label] of Object.entries(labels)) {
+        for (const name of Object.keys(this.lines)) {
             const point = data.indicator_preview[name] ?? this.indicators[name]?.at(-1);
             const node = $(this.id + '-legend').querySelector('.' + name);
             node.hidden = !point;
-            node.textContent = `${label}${point ? ' ' + money(point.value) : ''}`;
         }
     }
-    showOHLC(row) { $(this.id + '-ohlc').textContent = row ? `O ${money(row.open)}  H ${money(row.high)}  L ${money(row.low)}  C ${money(row.close)}  V ${compact(row.volume)}` : '—'; }
+    showOHLC(row) {
+        const node = $(this.id + '-ohlc');
+        if (!row) {
+            node.textContent = '—';
+            return;
+        }
+        const range = row.low > 0 ? ((row.high - row.low) / row.low * 100).toFixed(2) + '%' : '—';
+        node.innerHTML = `O ${money(row.open)}  H <b>${money(row.high)}</b>  L <b>${money(row.low)}</b>  C ${money(row.close)}  <span title="(H − L) / L">Range <b>${range}</b></span>`;
+    }
     reveal(row) {
         const index = this.rows.findIndex(r => r.time === row.time);
         const logical = index >= 0 ? index : this.rows.length;

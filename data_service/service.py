@@ -80,8 +80,8 @@ class DataService:
             await self.downloader.confirm_short_history(symbol, batch)
         state = self.validate(symbol)
         check = state['timeframes'][timeframe]
-        if not check['ok']:
-            raise ValueError(f'{timeframe}: historical range incomplete or invalid')
+        if not check['loaded']:
+            raise ValueError(f'{timeframe}: latest closed bar unavailable or invalid')
         self.errors.pop(f'{symbol}/{timeframe}', None)
         return batch
 
@@ -92,7 +92,7 @@ class DataService:
         count = 1000 if not previous or len(missing) > 1 else 2
         batch = await self.downloader.fetch(symbol, timeframe, count=count)
         found = self.store.bars(symbol, timeframe, target, target)
-        if not found or batch['rejected']:
+        if not found or any(r['ts'] in (target, None) for r in batch['rejected']):
             raise ValueError(f'Expected closed bar not available: {target}')
         if len(missing) > 1:
             actual = {b.ts for b in self.store.bars(symbol, timeframe, missing[0], target)}
@@ -262,7 +262,7 @@ class DataService:
             self.store.check(symbol)
         symbols = [symbol] if symbol else self.symbols
         if path == '/health':
-            return {'service': 'running', 'phase': self.phase, 'initialized': self.initialized,
+            return {'service': 'running', 'mode': self.mode, 'phase': self.phase, 'initialized': self.initialized,
                     'started_at': self.started_at, 'universe_count': len(self.symbols),
                     'quote_health': self.quotes.connection_health if self.quotes else 'OFFLINE',
                     'last_quote_received_at': self.quotes.last_quote_received_at if self.quotes else None,

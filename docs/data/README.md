@@ -4,7 +4,7 @@
 
 ## 已实现范围
 
-本地单进程 Python + SQLite，HTTP 初始查询与 WebSocket 图表更新；Daily / Intraday 双图、观察列表、EMA10/20、SMA50、ADR20、20 日均额。Price Alert 与运行中编辑名单不在本版范围。
+本地单进程 Python + SQLite，HTTP 初始查询与 WebSocket 图表更新；Daily / Intraday 双图、观察列表、EMA10/20、Daily SMA50 / Intraday SMA65、ADR20、20 日均额。Price Alert 与运行中编辑名单不在本版范围。
 
 启动只读取 focus/wait；官方历史只保存 NoAdjust、regular、closed bars。临时 candle、派生指标只在内存；模拟器独立且不被生产模块导入。
 
@@ -17,7 +17,7 @@
 | data_service/broker.py | 唯一 SDK 入口，共享 context、10 req/s、5 在途、超时、配额 |
 | data_service/calendar.py | UTC/ET、XNYS、闭合目标和活跃区间 |
 | data_service/quotes.py | Quote 分桶、倒序拒绝、snapshot、watchdog、推送回调 |
-| data_service/downloader.py | 获取/过滤/校验/写入、官方 turnover、拒绝记录修订 |
+| data_service/downloader.py | 获取/过滤/校验/写入、官方 turnover、异常 OHLC 有界同源重取、拒绝记录修订 |
 | data_service/store.py | bars/batches/metadata、turnover 迁移、事务、内存 revision |
 | data_service/validator.py | readiness v2，按 revision/目标/run 缓存完整性检查 |
 | data_service/charts.py | 临时 candle、较大周期组合、成交量前缀、图表缓存 |
@@ -42,7 +42,10 @@
 - 正常 closed 更新 count=2；跨多个周期 count=1000，必要时补缺失前缀。初始化及更新失败有界重试；serve 耗尽后等待 30 秒继续恢复，reconcile 有界结束。
 - READY=当前 Daily+5m 完整追齐；FULL_READY=五周期完整追齐。目标是具体 bar timestamp，随当前时间变化。
 - loaded 允许更早历史缺口伴随 warning；最新目标缺失则不可宣称追齐。
-- 已知非法新修订不能被旧合法数据掩盖，合法重取可清除对应拒绝证据。
+- OHLC range 异常逐 timestamp history offset(count=2) 重取一次，每批最多 10 个，仍受 Broker 共享限流约束；不递归修复、不改 OHLC。仍异常保留原字段，重取成功保存 recovered 证据。
+- 已知非法新修订会事务性撤下旧 bar，防止旧合法值进入图表/指标；合法重取可恢复并清除拒绝证据。首条异常也参与范围验证。
+- 初始化 latest 已有效时，旧历史质量缺陷不触发整窗重试；loaded 可用、ready/full_ready 保持 false，ticker warning 保留。最新目标缺失或非法继续重试。
+- 启动命令决定数据来源，无自动切换；模拟器自身提供 18765 网站，serve 启动真实 Longbridge 并打印 LIVE。/health 返回 mode=live/simulation。
 - 正常时 UI 静默，历史不足/缺口/异常/估算/超过 15 秒的 bar 延迟以图标和英文悬停详情提示。
 - HTTP readiness 使用缓存检查，不每次重复扫描不变数据。
 - bars 新增 turnover。迁移保留旧记录，null 使日均额使用估算值并提示。

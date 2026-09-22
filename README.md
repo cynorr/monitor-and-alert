@@ -6,6 +6,15 @@
 
 ## 启动
 
+**模拟和真实行情使用不同启动命令。每个命令都同时启动数据服务和网站，只需选择一个，再打开对应地址。没有自动切换或回退，也不需要额外模式开关。**
+
+| 模式 | 启动命令 | 浏览器地址 | 数据位置 |
+| --- | --- | --- | --- |
+| 模拟盘中 | `./simulator/start.command --speed 30` | http://127.0.0.1:18765/（SIM 标签） | 独立临时 SQLite，退出删除 |
+| 真实行情 | `.venv/bin/python -m data_service serve` | http://127.0.0.1:8765/ | runtime/bars.sqlite3 |
+
+模拟时不要为了打开网页而另跑 `data_service serve`：该命令会使用真实凭证请求 Longbridge。两者可以独立同时运行，浏览器所在地址决定其数据源；停止模拟器不会使模拟页面自动转为真实行情。`/health` 的 `mode` 为 `simulation` 或 `live`，真实服务启动会打印 `LIVE` 和地址。
+
 Python 3.11+，macOS / Linux，在仓库目录执行：
 
 ```bash
@@ -39,7 +48,7 @@ python3 -m venv .venv
 ## 图表
 
 - 左 Daily、中 Intraday、右紧凑列表；拖动两条分界线调整宽度。右图默认 5m，可切换 15m / 30m / 1h。
-- 两图均有成交量、EMA10/EMA20/SMA50；无网格、自由十字线、交易日联动。Daily 初始约九个月，短历史保持 candle 宽度、靠右显示。
+- 两图均有成交量、EMA10/EMA20、Daily SMA50 / Intraday SMA65；无网格、自由十字线、交易日联动。Daily 初始约九个月，短历史保持 candle 宽度、靠右显示。
 - 观察列表支持搜索、上下键选股；图表支持十字线、缩放、拖动、回到最新。
 - 当前 ticker 优先加载，其余白名单后台并发加载。
 - 官方 closed bars 存 SQLite，活跃 candle 和指标仅存后端内存。
@@ -54,7 +63,7 @@ python3 -m venv .venv
 
 | 接口 | 内容 |
 | --- | --- |
-| GET /health | 连接、初始化、错误和推送计数 |
+| GET /health | 数据模式 mode、连接、初始化、错误和推送计数 |
 | GET /v1/universe | 启动白名单 |
 | GET /v1/quotes?symbol=PAYS.US | regular / extended 最新状态；省略 symbol 返回全部 |
 | GET /v1/bars?symbol=PAYS.US&timeframe=5m&limit=1000 | 官方 closed OHLCV + turnover，升序 |
@@ -75,6 +84,8 @@ WebSocket 选择消息：
 接口只接受启动白名单。默认同源访问；必要时可设 `--cors-origin` 为具体前端 origin。WebSocket 校验 Origin。浏览器不连接券商、不写数据库。
 
 **readiness v2 为语义变更**：ready=Daily+5m 当前闭合范围验证通过；full_ready=五周期全部通过；loaded 表示已完成同步并取得最新目标，可伴随旧历史缺口 warning。旧 300 日/12 日、alert_eligible、degraded_ready 不再属于此接口。
+
+官方 OHLC 区间异常时，小范围重取同源历史；仍不合法则隔离并显示 ticker warning。旧历史异常不会使初始化反复下载整个窗口，最新目标缺失仍重试。`Quarantined invalid bars` 表示供应商数据未通过校验，不是模拟/真实数据混用；原始异常字段保留在 SQLite batches，不通过修改价格来消除警告。
 
 ## 前端开发
 
@@ -98,7 +109,7 @@ TypeScript 源码在 ui/src/，main.ts 管传输/列表、chart.ts 管图表联�
 
 双击 simulator/start.command，或执行 `./simulator/start.command`。打开 http://127.0.0.1:18765/；同时保留 ws://127.0.0.1:18766 Quote 推送。
 
-模拟器提供一致的 Quote 与五周期历史，复用实际 BarScheduler 持续生成 closed bars，独立临时数据库、无需凭证。`./simulator/start.command --speed 10` 可加速收盘测试；`--start` 指定美东盘中时刻。不修改系统时间、不连接真实券商。见 [模拟器说明](simulator/README.md)。
+模拟器提供一致的 Quote 与五周期历史，复用实际 BarScheduler 持续生成 closed bars，独立临时数据库、无需凭证。`./simulator/start.command --speed 30` 可加速收盘测试（5m 约 10 秒）；`--start` 指定美东盘中时刻。不修改系统时间、不连接真实券商。保持终端运行，使用 18765 页面并确认 SIM 标签；8765 是正式行情，不会自动进入模拟。修改 Python 后重启模拟器。见 [模拟器说明](simulator/README.md)。
 
 ## 本地文件与证据
 

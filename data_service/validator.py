@@ -27,9 +27,12 @@ class DataValidator:
         rows = self.store.bars(symbol, tf, limit=1000)
         synced = bool(batch and batch['run_id'] == run_id)
         starts = batch['returned_closed_ts'] if batch else []
-        first = min(starts) if starts else (rows[0].ts if rows else target)
+        rejected_starts = [r['ts'] for r in (batch or {}).get('rejected', [])
+                           if r['ts'] is not None and r['ts'] <= target]
+        bounds = starts + rejected_starts
+        first = min(bounds) if bounds else (rows[0].ts if rows else target)
         # Only the current display window is required, including its partial first day.
-        if rows:
+        if len(rows) == 1000:
             first = max(first, rows[0].ts)
         expected = self.calendar.expected(tf, first, target, now)
         present, invalid = set(), []

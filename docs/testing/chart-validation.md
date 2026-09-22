@@ -1,5 +1,17 @@
 # 图表开发验收记录
 
+## 2026-09-20：数据模式与异常官方 OHLC 处理
+
+macOS / Python 3.13.1，`.venv/bin/python -m pytest -q`：**52 passed，2.37 秒**。本机 HTTP/WebSocket 回环已放行执行；没有读取真实凭证或连接券商。
+
+- 用户日志中的五组非法 OHLC 原值全部作为回归输入；重取仍异常时不入 bars，并撤下旧合法修订。
+- 精确 timestamp 的合法官方替身可修复；错误 timestamp、重复响应、重取超时不能消除拒绝证据。
+- 每批定点重取最多 10 次；首条坏 bar 不缩短验证范围；旧历史质量缺陷不使初始化重试整窗，最新目标非法仍继续重试。
+- /health 明确 live/simulation；既有模拟历史、BarScheduler 跨周期/交易日、HTTP/WebSocket 测试通过。
+- 未重新做浏览器视觉验收，未核实 Longbridge 是否已修正这些原始记录。
+
+此前微调：Daily/Intraday 信息去重、固定对齐的顶部边界、边界下方 OHLC/Range、volume 位置调整、Intraday SMA65 和 Ext 百分比。当时仅重新构建前端，按用户要求未运行测试或浏览器验收。
+
 ## 2026-09-20：三栏交互与完整模拟器
 
 本轮离线回归 **40 passed，2.45 秒**；TypeScript check/build 通过。没有读取凭证或调用券商。

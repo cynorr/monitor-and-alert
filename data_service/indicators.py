@@ -6,8 +6,8 @@ from datetime import datetime
 from .calendar import ET
 
 
-def series(rows: list[dict]) -> dict:
-    result = {'ema10': [], 'ema20': [], 'sma50': []}
+def series(rows: list[dict], sma_period: int = 50) -> dict:
+    result = {'ema10': [], 'ema20': [], f'sma{sma_period}': []}
     previous = {10: None, 20: None}
     closes = []
     for row in rows:
@@ -19,9 +19,9 @@ def series(rows: list[dict]) -> dict:
             previous[period] = value
             if len(closes) >= period:
                 result[f'ema{period}'].append({'time': row['time'], 'value': value})
-        if len(closes) >= 50:
-            result['sma50'].append({'time': row['time'], 'value': sum(closes[-50:]) / 50})
-    return {'series': result, 'ema': previous, 'tail': closes[-49:], 'count': len(closes)}
+        if len(closes) >= sma_period:
+            result[f'sma{sma_period}'].append({'time': row['time'], 'value': sum(closes[-sma_period:]) / sma_period})
+    return {'series': result, 'ema': previous, 'tail': closes[-(sma_period - 1):], 'count': len(closes), 'sma_period': sma_period}
 
 
 def preview(base: dict, active: dict | None) -> dict:
@@ -34,8 +34,9 @@ def preview(base: dict, active: dict | None) -> dict:
         value = close if old is None else 2 / (period + 1) * close + (1 - 2 / (period + 1)) * old
         if count >= period:
             values[f'ema{period}'] = {'time': active['time'], 'value': value}
-    if count >= 50:
-        values['sma50'] = {'time': active['time'], 'value': (sum(base['tail']) + close) / 50}
+    period = base.get('sma_period', 50)
+    if count >= period:
+        values[f'sma{period}'] = {'time': active['time'], 'value': (sum(base['tail']) + close) / period}
     return values
 
 

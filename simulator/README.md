@@ -10,6 +10,8 @@ An isolated, continuous market for chart development: historical candles, live Q
 
 The script uses the repository Python environment and installs the two simulator dependencies if needed. Open **http://127.0.0.1:18765/**. The regular production UI shows a small **SIM** badge. Ctrl+C stops both endpoints and removes the temporary database.
 
+This command already starts the website and its data API. Do not also run `python -m data_service serve` to open the website: that starts a separate **live Longbridge** service on port 8765. There is no automatic source switching or fallback. `/health` on port 18765 reports `mode: simulation`; the live service reports `mode: live`.
+
 ```bash
 # Faster closed-bar testing: 10 exchange seconds per real second
 ./simulator/start.command --speed 10
@@ -19,6 +21,14 @@ The script uses the repository Python environment and installs the two simulator
 ```
 
 Options: `--workspace`, `--symbols` (a subset of that workspace), `--port` (chart, default 18765), `--quote-port` (raw Quote, default 18766), `--speed` and `--start`.
+
+## Seeing intraday movement
+
+Run `./simulator/start.command --speed 30` and keep that terminal open. Open **http://127.0.0.1:18765/** and confirm the **SIM** badge. Refresh after frontend edits; restart the simulator after Python/indicator edits.
+
+Port **8765** is the production service and can correctly report MARKET_CLOSED. It does not switch into simulation when markets are closed. Port **18766** is the raw Quote WebSocket, not the chart page.
+
+The simulated clock always starts inside a regular session, even on weekends. At 30x, one five-minute bar takes about ten real seconds. At the default 1x, smooth price movements can take several seconds to change a two-decimal display.
 
 ## Data flow
 

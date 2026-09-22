@@ -42,6 +42,8 @@ async def run(args, tickers):
             await service.reconcile()
         else:
             server = await start_http(service, args.port, args.cors_origin)
+            print(f'LIVE: http://127.0.0.1:{args.port}/ | Longbridge real data | '
+                  f'database: {args.runtime.resolve() / "bars.sqlite3"}', flush=True)
             if args.duration:
                 try:
                     await asyncio.wait_for(service.run(), args.duration)

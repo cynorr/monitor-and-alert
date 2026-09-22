@@ -96,7 +96,7 @@ Longbridge Quote 长连接 → Python data → 本地 WebSocket → UI。
 
 ### EMA / SMA
 
-- 两图都显示对应周期 close 的 EMA10、EMA20、SMA50。
+- 两图都显示对应周期 close 的 EMA10、EMA20、Daily SMA50 / Intraday SMA65。
 - EMA 以加载序列首个 close 初始化，alpha=2/(N+1)，满 N 根显示。
 - SMA 满 N 根显示。
 - 包含活跃 candle；每条 Quote 从上一根 closed bar 的 EMA 基准计算预览，不能把 Quote 当成新 bar 递推。

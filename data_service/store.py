@@ -101,6 +101,11 @@ class BarStore:
                 [tuple(asdict(bar).values()) for bar in bars])
             if batch is not None:
                 self.check(batch['symbol'])
+                # Do not expose an obsolete valid revision after its replacement was
+                # rejected. Raw rejected OHLCV remains in the batch as evidence.
+                self.db.executemany('DELETE FROM bars WHERE symbol=? AND timeframe=? AND ts=?',
+                                    [(batch['symbol'], batch['timeframe'], r['ts'])
+                                     for r in batch.get('rejected', []) if r['ts'] is not None])
                 self.db.execute('''INSERT INTO batches VALUES (?,?,?,?,?)
                     ON CONFLICT(symbol,timeframe) DO UPDATE SET
                     run_id=excluded.run_id,as_of=excluded.as_of,payload=excluded.payload''',

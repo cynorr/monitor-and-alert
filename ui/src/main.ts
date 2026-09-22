@@ -42,8 +42,10 @@ function renderList() {
             chg.className = change == null ? '' : change >= 0 ? 'positive' : 'negative';
             const ext = document.createElement('span');
             const extended = extendedQuote(ticker.quote);
-            ext.textContent = money(extended?.last_price);
-            ext.title = extended?.trade_session ?? '';
+            const extChange = extended && regular?.last_price ? (extended.last_price / regular.last_price - 1) * 100 : null;
+            ext.textContent = extChange == null ? '—' : `${extChange > 0 ? '+' : ''}${extChange.toFixed(2)}%`;
+            ext.className = extChange == null ? '' : extChange >= 0 ? 'positive' : 'negative';
+            ext.title = extended ? `${extended.trade_session}: change from regular close` : '';
             button.append(name, last, chg, ext);
             button.addEventListener('click', () => void select(ticker.symbol, timeframe));
             fragment.append(button);

@@ -38,6 +38,8 @@
 - Quote 与 BarScheduler 从启动就运行，历史初始化不阻断到期更新。
 - 正常 closed-bar 更新用 candlesticks(count=2)，bar_end+2 秒开始请求。
 - 未取得有效目标 bar 时按 2/5/10/30 秒间隔重试；耗尽后记录错误并释放任务。持续服务等待 30 秒继续补齐，无本轮同步证据时重新执行初始同步，不依赖下一边界；一次性 reconcile 在有界重试后结束。
+- OHLC 区间异常对该 timestamp 使用官方 history offset(count=2) 重取一次，每批最多 10 个；仅接受同 timestamp 且完整校验通过的返回，不递归重试、不本地修正价格。正常收盘更新仍走最近 K 线 count=2。
+- 初始化已取得有效最新目标时，更早的坏历史仅降级显示并保留 warning，不因此重试整批 1000 根；ready/full_ready 仍要求完整。持续异常待后续官方重取或下次启动重新核查。
 - 跨多个周期/休眠恢复使用最近 1000 根；必要时按缺失前缀调用 history offset。无进展、上游非法或持续缺口明确失败，不伪造数据。
 - 每次官方更新覆盖相同 timestamp 的旧合法记录，并使派生指标缓存失效。
 - 单 ticker 请求错误隔离；SQLite 基础设施错误使服务失败退出。
@@ -51,8 +53,9 @@ bars 的主键为 (symbol,timeframe,ts)，字段：open/high/low/close、整数�
 - ts 为 UTC Unix 秒。
 - turnover 优先官方值；缺失/非法成交额存 null，由派生层估算并提示。
 - OHLC 必须为正数、有限值，low≤open/close≤high；非法 OHLCV 不落盘并保存拒绝证据。
+- 未修复的非法修订与批次写入在同一事务中撤下相同 timestamp 的旧 bar，避免旧价格进入图表和指标。合法重取后正常恢复。
 - 旧数据库自动增加 turnover 列，不删除、清空或重建旧行情。
-- batches 保存本轮返回范围、run_id、as_of、拒绝项；后续合法修订可清除对应拒绝项。
+- batches 保存本轮返回范围、run_id、as_of、拒绝项及本次重取成功的 recovered 原始异常证据；后续合法修订可清除对应拒绝项。验证范围包含首条被拒绝记录，不能缩短范围掩盖缺口。
 - metadata 保存供应商可用历史边界，不宣称已独立核实 IPO 日期。
 - 已移出白名单的数据库数据保留，但本轮不对外暴露，不继续请求。
 
@@ -106,7 +109,7 @@ charts.py 管理当前 5m 以及较大周期活跃 candle，indicators.py 提供
 - 较大周期由官方已收盘 5m + 当前临时 5m 合并，只在内存展示。
 - 官方闭合数据到达后替换该位置、重算活跃较大周期及指标。
 - volume 用官方累计量减当前区间之前完整的当日官方 5m 总量。前缀缺失/已知拒绝时不显示差值，负数不伪造为零。
-- EMA10/20、SMA50 使用对应周期 close，包含当前预览；每条 Quote 从上一根 closed 基准计算，不累加 EMA 状态。
+- EMA10/20、Daily SMA50 / Intraday SMA65 使用对应周期 close，包含当前预览；每条 Quote 从上一根 closed 基准计算，不累加 EMA 状态。
 - ADR20 = mean((high-low)/low)×100%；ADV$20 优先官方 turnover，退化为 volume×(open+close)/2。
 - ADR/ADV 只用最近 20 个已完成交易日窗口内有效数据；不足/缺失提示 ticker warning。
 - 数据持久化只有一份 SQLite，不建指标数据库。价格不复权，不实现公司行动调整。

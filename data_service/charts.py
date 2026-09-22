@@ -43,7 +43,7 @@ class ChartCache:
         if key not in self.history or self.history[key][0] != revision:
             bars = self.store.bars(symbol, tf, limit=1000)
             rows = [bar_row(b) for b in bars]
-            self.history[key] = (revision, rows, series(rows), bars)
+            self.history[key] = (revision, rows, series(rows, sma_period=50 if tf == '1d' else 65), bars)
         return self.history[key]
 
     def forming(self, symbol, tf, now):

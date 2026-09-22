@@ -92,6 +92,115 @@ def test_downloader_filters_forming_and_extended_reports_invalid(store, cal):
     assert [b.ts for b in store.bars('PAYS.US', '5m')] == [ts]
 
 
+@pytest.mark.parametrize('tf,ts,prices', [
+    ('15m', 1787059800, (158.580, 162.990, 158.650, 162.135)),
+    ('30m', 1780493400, (7.360, 7.350, 7.000, 7.020)),
+    ('30m', 1781616600, (32.800, 34.000, 32.860, 33.300)),
+    ('30m', 1781616600, (34.370, 34.340, 32.914, 33.510)),
+    ('5m', 1788874200, (13.510, 13.500, 12.880, 12.920)),
+])
+def test_reported_ohlc_remains_quarantined_when_official_refetch_is_invalid(store, cal, tf, ts, prices):
+    item = raw(ts)
+    item.open, item.high, item.low, item.close = prices
+    class Fake:
+        calls = []
+        async def candles(self, *args):
+            self.calls.append(args)
+            return [item]
+    broker = Fake()
+    # An older valid revision must no longer reach charts or indicators.
+    store.upsert([bar(ts, tf)], ts + 3600)
+    batch = asyncio.run(BarDownloader(broker, store, cal).fetch(
+        'PAYS.US', tf, run_id='run', now=ts + 3600))
+    assert broker.calls == [('PAYS.US', tf, 1000, None),
+                            ('PAYS.US', tf, 2, cal.bar_end(ts, tf))]
+    assert batch['rejected'][0]['ohlcv']['open'] == str(item.open)
+    assert not batch['recovered']
+    assert not store.bars('PAYS.US', tf)
+
+
+@pytest.mark.parametrize('response', ['valid', 'wrong_timestamp', 'timeout', 'duplicate'])
+def test_targeted_official_repair_requires_exact_valid_bar(store, cal, tmp_path, response):
+    ts = at('2026-09-18T09:30')
+    invalid = raw(ts)
+    invalid.open = 13
+    class Fake:
+        async def candles(self, symbol, tf, count, before):
+            if before is None:
+                return [invalid, raw(ts + 300)]
+            if response == 'timeout':
+                raise TimeoutError('unavailable')
+            if response == 'wrong_timestamp':
+                return [raw(ts + 300)]
+            if response == 'duplicate':
+                return [raw(ts), raw(ts)]
+            return [raw(ts)]
+    batch = asyncio.run(BarDownloader(Fake(), store, cal).fetch(
+        'PAYS.US', '5m', run_id='run', now=ts + 601))
+    check = DataValidator(store, cal, tmp_path / 'ready.json').check('PAYS.US', '5m', ts + 601, 'run')
+    assert check['loaded']
+    if response == 'valid':
+        assert not batch['rejected'] and len(batch['recovered']) == 1
+        assert check['ok']
+        assert store.bars('PAYS.US', '5m')[0].open == 10
+    else:
+        assert len(batch['rejected']) == 1 and not batch['recovered']
+        # A rejected first row must not shrink the validation range and hide the gap.
+        assert check['missing'] == [ts] and not check['ok']
+
+
+def test_official_repair_request_budget_is_bounded(store, cal):
+    ts = at('2026-09-18T09:30')
+    invalid = [raw(ts + n * 300) for n in range(12)]
+    for item in invalid:
+        item.open = 13
+    class Fake:
+        calls = 0
+        async def candles(self, *args):
+            self.calls += 1
+            return invalid
+    broker = Fake()
+    batch = asyncio.run(BarDownloader(broker, store, cal).fetch(
+        'PAYS.US', '5m', run_id='run', now=ts + 3600))
+    assert broker.calls == 11  # Initial fetch + at most ten targeted repairs.
+    assert len(batch['rejected']) == 12
+
+
+@pytest.mark.parametrize('invalid_latest', [False, True])
+def test_initial_historical_defect_does_not_retry_whole_window(tmp_path, cal, invalid_latest):
+    from data_service.service import Job
+    ts = at('2026-09-18T09:30')
+    invalid = raw(ts + 300 if invalid_latest else ts)
+    invalid.open = 13
+    class Fake:
+        calls = []
+        async def candles(self, symbol, tf, count, before):
+            self.calls.append((count, before))
+            return [invalid, raw(ts if invalid_latest else ts + 300)]
+    broker = Fake()
+    service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, broker,
+                          calendar=cal, clock=lambda: ts + 601)
+    key = ('PAYS.US', '5m')
+    job = service.jobs[key] = Job(*key, initial=True)
+    try:
+        asyncio.run(service._execute(key, job))
+        assert len(broker.calls) == 2
+        state = service.validate('PAYS.US')['timeframes']['5m']
+        assert not state['ok']
+        assert state['loaded'] == (not invalid_latest)
+        if invalid_latest:
+            assert job.attempt == 1 and key in service.jobs
+        else:
+            assert key in service.initial_done and key not in service.jobs
+            assert not service.errors and not service.retry_pairs
+            assert state['warnings']
+        assert asyncio.run(service.api('/health', {}))['mode'] == 'live'
+        service.mode = 'simulation'
+        assert asyncio.run(service.api('/health', {}))['mode'] == 'simulation'
+    finally:
+        service.store.close()
+
+
 def seed(store, cal, now, days=300, symbol='PAYS.US', exhausted=False):
     dates = cal.completed_days(now, days)
     daily = [bar(cal.grid(d, '1d')[0][0], '1d', symbol) for d in dates]
