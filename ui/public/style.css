@@ -12,3 +12,5 @@
 #daily-latest{margin-left:auto}.ohlc b{font-weight:400;color:#000}.legend span{display:inline-block;width:22px;height:2px;background:currentColor;border-radius:999px}.legend{align-items:center;min-height:12px;padding-top:4px;padding-bottom:4px}.volume-label{position:absolute;z-index:2;right:63px;pointer-events:none;font-size:11px;color:#000;background:#ffffffde;padding:1px 4px;border-radius:4px}
 
 .chart-header{height:120px;flex:0 0 120px;display:flex;flex-direction:column;overflow:hidden}.header-bottom{display:flex;align-items:center;gap:8px;margin-top:auto;padding:0 12px 6px}.header-bottom .legend{padding:0;min-height:15px}.period-row{display:flex;align-items:center;gap:8px;padding:0 12px 4px}.ohlc{border-top:1px solid #171b20;height:23px;flex:0 0 23px;padding:4px 12px 2px;overflow:hidden}
+
+.state.basic{color:#b88700}.state.full{color:#2962ff}

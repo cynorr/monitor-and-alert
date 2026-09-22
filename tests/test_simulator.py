@@ -7,7 +7,7 @@ from aiohttp import ClientSession, web
 from data_service.calendar import ET, PHASES
 from data_service.config import Ticker
 from simulator.market import Market, SessionClock
-from simulator.server import create_simulation, quote_app
+from simulator.server import create_simulation
 from test_data_service import cal, at
 
 
@@ -40,8 +40,6 @@ def test_simulator_returns_1000_closed_bars_all_periods(cal):
             assert times == sorted(set(times))
             assert times[-1] == cal.latest_closed(tf, now)
             assert all(cal.bar_end(t, tf) <= now for t in times)
-            previous = await market.candles('PAYS.US', tf, 2, times[0]-60)
-            assert all(b.timestamp.timestamp() < times[0] for b in previous)
         with pytest.raises(ValueError):
             await market.candles('NOT_ALLOWED.US', '5m')
     asyncio.run(scenario())
@@ -53,21 +51,20 @@ def test_actual_scheduler_crosses_boundaries_and_rollover(tmp_path, cal):
     async def wait_ready():
         for _ in range(500):
             state = service.validate('PAYS.US')
-            if state['full_ready']:
+            if all(c['complete'] for c in state.values()):
                 return state
             await asyncio.sleep(.01)
-        raise AssertionError(service.errors or state)
+        raise AssertionError(state)
     async def scenario():
         await service.reconcile()
-        assert service.validate('PAYS.US')['full_ready']
+        assert all(c['complete'] for c in service.validate('PAYS.US').values())
         task = asyncio.create_task(service.scheduler())
         try:
             for moment in ['2026-09-18T13:45:03','2026-09-18T14:00:03','2026-09-18T14:30:03','2026-09-21T09:35:03']:
                 now[0] = at(moment)
                 service.quotes.tick()
                 state = await wait_ready()
-                assert not state['warnings']
-                assert not service.errors
+                assert all(not c['errors'] for c in state.values())
                 quote = service.quote('PAYS.US', now[0])['regular']
                 assert quote['prev_close'] > 0
                 for tf in PHASES:
@@ -75,7 +72,7 @@ def test_actual_scheduler_crosses_boundaries_and_rollover(tmp_path, cal):
                     assert view['bars'][-1]['time'] == cal.latest_closed(tf, now[0])
                     assert view['active'] is not None and view['active']['volume'] >= 0
                 view = service.view('PAYS.US', '5m')
-                assert view['mode'] == 'simulation' and not view['status']['warnings']
+                assert view['mode'] == 'simulation' and not view['status']['errors']
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
@@ -94,30 +91,6 @@ def test_clock_skips_weekend_and_early_close(cal):
     assert clock.value == at('2026-11-30T09:30:10')
     clock.advance(6.5*3600)
     assert clock.value == at('2026-12-01T09:30:10')
-
-
-def test_quote_socket_remains_available(tmp_path, cal):
-    service = create_simulation([Ticker('PAYS.US','PAYS','focus')], tmp_path, cal, lambda: at('2026-09-18T13:44:45'))
-    async def scenario():
-        runner = web.AppRunner(quote_app(service))
-        await runner.setup()
-        site = web.TCPSite(runner,'127.0.0.1',0)
-        await site.start()
-        port = site._server.sockets[0].getsockname()[1]
-        try:
-            async with ClientSession() as client:
-                async with client.ws_connect(f'http://127.0.0.1:{port}') as ws:
-                    quote = await ws.receive_json(timeout=2)
-                    assert quote['symbol'] == 'PAYS.US'
-                    assert isinstance(quote['last_done'],str)
-                    assert quote['volume'] >= quote['current_volume'] >= 0
-                    assert quote['trade_session'] == 0
-        finally:
-            await runner.cleanup()
-    try:
-        asyncio.run(scenario())
-    finally:
-        service.store.close()
 
 
 def test_change_baseline_remains_previous_day_after_daily_close(tmp_path, cal):

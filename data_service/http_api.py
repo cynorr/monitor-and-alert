@@ -48,7 +48,6 @@ def create_app(service, cors_origin=None):
         symbol, tf = service.focus
         request_id = 0
         revisions = {}
-        generation = 0
 
         async def publish():
             nonlocal revisions
@@ -57,7 +56,7 @@ def create_app(service, cors_origin=None):
                 while not ws.closed:
                     view = service.view(symbol, tf, revisions)
                     revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
-                    message = {'type': 'view', 'request_id': request_id, 'generation': generation, **view}
+                    message = {'type': 'view', 'request_id': request_id, **view}
                     if asyncio.get_running_loop().time() - last_board >= 1:
                         message['board'] = service.board()
                         last_board = asyncio.get_running_loop().time()
@@ -82,7 +81,6 @@ def create_app(service, cors_origin=None):
                         service.select(new_symbol, new_tf)
                         symbol, tf, request_id = new_symbol, new_tf, new_id
                         revisions = {}
-                        generation += 1
                     except (ValueError, TypeError, KeyError, AttributeError) as exc:
                         await ws.send_json({'type': 'error', 'error': str(exc)})
                 elif msg.type == WSMsgType.ERROR:

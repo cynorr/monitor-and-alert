@@ -14,10 +14,11 @@ log = logging.getLogger(__name__)
 
 
 class QuoteService:
-    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90, on_quote=None):
+    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90, on_quote=None, on_reconnect=None):
         self.broker, self.symbols, self.calendar = broker, symbols, calendar
         self.stale_seconds = stale_seconds
-        self.on_quote = on_quote
+        self.on_quote, self.on_reconnect = on_quote, on_reconnect
+        self.has_connected = False
         self.values: dict[str, dict] = {}
         self.last_push_monotonic = 0.0
         self.last_quote_received_at = None
@@ -143,7 +144,10 @@ class QuoteService:
         if not snapshot_ok and self.last_push_monotonic < connect_started:
             raise RuntimeError('No quote snapshot or fresh push available after subscribe')
         self.connected_at = time.monotonic()
-        self.connection_health = 'LIVE' if self.calendar.is_open(int(time.time())) else 'MARKET_CLOSED'
+        self.connection_health = 'CONNECTED'
+        if self.has_connected and self.on_reconnect:
+            self.on_reconnect()
+        self.has_connected = True
         log.info('Quote connected symbols=%d', len(subscribed))
 
     async def disconnect(self):
@@ -171,9 +175,7 @@ class QuoteService:
                         if self.calendar.is_open(now):
                             if time.monotonic() - max(self.last_push_monotonic, self.connected_at) > self.stale_seconds:
                                 raise TimeoutError('No universe quote push; reconnecting stale connection')
-                            self.connection_health = 'DEGRADED' if self.subscription_errors or self.errors else 'LIVE'
-                        else:
-                            self.connection_health = 'MARKET_CLOSED'
+                        self.connection_health = 'CONNECTED'
                         # Periodic snapshots also restore state after SDK-internal reconnects.
                         if time.monotonic() - last_snapshot >= 30:
                             for symbol in list(self.subscription_errors):
@@ -195,11 +197,11 @@ class QuoteService:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    self.connection_health = 'STALE'
+                    self.connection_health = 'DISCONNECTED'
                     log.warning('Quote disconnected: %s', exc)
                     await self.disconnect()
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 60)
         finally:
             await self.disconnect()
-            self.connection_health = 'STOPPED'
+            self.connection_health = 'DISCONNECTED'

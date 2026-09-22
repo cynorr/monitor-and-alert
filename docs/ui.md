@@ -1,6 +1,6 @@
 # Chart layout and interactions
 
-Updated: 2026-09-20. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
+Updated: 2026-09-23. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
 
 ## Layout
 
@@ -16,7 +16,7 @@ Updated: 2026-09-20. Approved interaction specification and maintenance referenc
 - No horizontal or vertical grid. Teal up candles/volume (#26a69a), red down candles/volume (#ef5350).
 - EMA10 blue (#2962ff), EMA20 yellow (#e4b400), Daily SMA50 / Intraday SMA65 red (#e53935). Indicator calculations remain in Python.
 - Daily initially shows approximately nine calendar months. Determine the initial pixel spacing from the nine-month window, then retain that spacing across symbols and column resizing. Short histories stay aligned right with blank space on the left; never fitContent to available samples. Resizing changes the number of visible candles, not candle width. User zoom changes spacing intentionally.
-- Intraday defaults to 5m; controls: 5m, 15m, 30m, 1h.
+- Intraday defaults to 5m; controls: 5m, 15m, 30m, 1h, 2h, 4h.
 - rightOffset=1, rightBarStaysOnScroll=true. Keep about one bar between the latest candle and the price axis.
 - CrosshairMode.Normal with dashed horizontal and vertical lines; no magnet/snap mode.
 - Native pan, zoom, price scaling, pane resizing and scrollToRealTime are used. Realtime updates preserve a historical viewport.
@@ -48,21 +48,27 @@ Updated: 2026-09-20. Approved interaction specification and maintenance referenc
 - Last is the regular price. Chg% is regular price / previous completed Daily close - 1. Use the previous trading day relative to the quote date, including after today's Daily bar is stored.
 - Ext is (latest extended price / regular close - 1) × 100%, with up/down coloring. Only use extended quotes newer than the regular quote, including next-day premarket. Missing extended data or regular baseline displays an em dash.
 - Click or ArrowUp/ArrowDown selects the ticker for both charts. Search filters locally. No list editing.
-- Quiet normal state. Small Loading/Disconnected labels remain where action is needed. Required data warnings become one compact per-ticker indicator with English details on hover, not a multi-line banner. No raw exception dump in the chart.
+- Use the Loading / yellow Ready / blue Ready / error-icon rules below; no multi-line banner. Keep details in hover text.
 - Simulation displays one small SIM badge so generated data cannot be confused with a live account. No extra branding bar.
 
 ## Data and simulator boundaries
 
-- Production consumes Data HTTP snapshots and WebSocket updates. Keep request cancellation, request_id checks and reconnect snapshots.
-- Simulator now supplies coherent Quote plus closed Daily/5m/15m/30m/1h history. Use the actual DataService downloader, validator and BarScheduler against an isolated temporary SQLite database.
-- All periods and cumulative volume follow the same synthetic session price path. Normal count=2 requests produce newly closed bars; startup and multi-boundary recovery use full history requests.
-- A simulator-owned exchange clock makes regular-session development possible on weekends; optional speed accelerates bar closure. Do not change system time or globally patch time.time.
-- Production does not import simulator and never falls back to it. Simulator never reads credentials or calls Longbridge. Raw Quote WebSocket remains available for consumers.
+- One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics. A chart GET must not change selection priority.
+- Keep request_id and socket identity checks. Switching periods preserves the selected trading day and native viewport behavior. Indicators are calculated only in Python.
+- 2h/4h are always converted from official closed 5m bars. Missing official 15m/30m/1h history uses the same 5m conversion; official rows replace the display at the next stream update. All conversions remain in memory.
+- 5m history spans roughly 13 full sessions at the 1000-response limit. Larger derived periods share that time coverage; insufficient SMA65 history means the line is absent.
+- Simulator uses the same UI, scheduler, validation and conversion against temporary data, with an instance exchange clock. It never reads credentials or falls back to a broker.
+- Only the full simulator HTTP/WS endpoint remains; the old extra raw-Quote listener was removed.
 
-## Maintenance and checks
+## Status
 
-UI code lives in ui/src; ui/public contains HTML/CSS, compiled JavaScript and the unchanged vendor library. Rebuild with npm run build after TypeScript edits. Update this document when layout or interaction behavior changes.
+- Loading until Daily + 5m complete.
+- Yellow Ready remains visible while only Daily + 5m are complete.
+- Blue Ready when all five official periods complete; hide after three seconds. Routine successful closed updates do not restart the timer.
+- Errors after exhausted history retries use one exclamation icon with reason on hover. Connection failure also remains visible; existing charts remain on screen.
+- Finite positive OHLC range contradictions do not produce UI warnings or retries. Keep official prices exactly as returned.
+- List rows are retained between quote updates. Search/list membership changes rebuild the visible structure; quote updates only change values.
 
-Validate drag resizing, short-history spacing, chart-day linking, free crosshair, rapid ticker/period changes, quiet warnings and reconnect. Simulator regression must cross 5m and larger boundaries and session rollover without missing/invalid bars or cumulative-volume mismatch. Offline success is not broker live evidence.
+## Checks
 
-References: [time-scale options](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/TimeScaleOptions), [crosshair synchronization](https://tradingview.github.io/lightweight-charts/tutorials/how_to/set-crosshair-position), [crosshair options](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/CrosshairOptions).
+Check splitters, native pane resizing, short-history spacing, free crosshairs, linked days, historical viewport preservation, rapid selections, 2h/4h, reconnect snapshots and Ready timing. See [development.md](development.md) and [validation.md](validation.md).

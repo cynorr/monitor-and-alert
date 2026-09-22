@@ -111,14 +111,12 @@ class Market:
                         return tuple(reversed(times))
         return tuple(reversed(times))
 
-    async def candles(self, symbol, timeframe, count=1000, before=None):
+    async def candles(self, symbol, timeframe, count=1000, *, background=False):
         self.check([symbol])
         if not 1 <= count <= 1000:
             raise ValueError('Count must be 1..1000')
         now = int(self.clock())
         target = self.calendar.latest_closed(timeframe, now)
-        if before is not None:
-            target = min(target, before)
         await asyncio.sleep(0)  # Let quote publication and other symbols progress.
         return [self.bar(symbol, timeframe, ts) for ts in self.timestamps(timeframe, target)[-count:]]
 
@@ -136,7 +134,7 @@ class Market:
 class SimulatedQuotes:
     def __init__(self, market, cache):
         self.market, self.cache = market, cache
-        self.connection_health = 'LIVE'
+        self.connection_health = 'CONNECTED'
         self.last_quote_received_at = None
         self.push_count = 0
         self.raw, self.values = {}, {}
@@ -170,4 +168,4 @@ class SimulatedQuotes:
                 self.tick()
                 await asyncio.sleep(0.2)
         finally:
-            self.connection_health = 'STOPPED'
+            self.connection_health = 'DISCONNECTED'

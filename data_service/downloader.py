@@ -1,35 +1,36 @@
 from __future__ import annotations
 
+import json
 import logging
 import math
 import time
 from datetime import datetime
 
-from .calendar import TradingCalendar, timestamp
+from .calendar import ET, TradingCalendar, timestamp
 from .store import Bar, BarStore
 
 log = logging.getLogger(__name__)
 
 
 def sdk_timestamp(value: datetime) -> int:
-    # SDK 5 returns naive machine-local datetimes. astimezone resolves the DST
-    # offset at the actual instant; never label these naive values as UTC.
+    # SDK naive datetimes represent machine-local time, including its DST offset.
     return timestamp(value.astimezone())
 
 
 class BarDownloader:
     def __init__(self, broker, store: BarStore, calendar: TradingCalendar, clock=None):
         self.broker, self.store, self.calendar = broker, store, calendar
-        self.now = clock or (lambda: time.time())
+        self.now = clock or time.time
 
     def _parse(self, raw, symbol, timeframe, as_of):
-        bars, rejected, forming, seen = [], [], 0, set()
+        bars, rejected, forming, seen, anomalies = [], [], 0, set(), []
         for item in raw:
             ts = None
             try:
                 ts = sdk_timestamp(item.timestamp)
-                if str(item.trade_session).split('.')[-1] not in {'Intraday', 'Normal'}:
-                    raise ValueError('Non-regular candle returned by Intraday request')
+                session = str(item.trade_session).split('.')[-1]
+                if session not in {'Intraday', 'Normal'}:
+                    raise ValueError('Non-regular candle returned')
                 end = self.calendar.bar_end(ts, timeframe)
                 if ts in seen:
                     raise ValueError('Duplicate timestamp in API response')
@@ -47,68 +48,40 @@ class BarDownloader:
                           float(item.low), float(item.close), item.volume, turnover)
                 bar.validate(self.calendar, as_of)
                 bars.append(bar)
-            except (ValueError, TypeError, OverflowError) as exc:
-                rejected.append({'ts': ts, 'error': str(exc),
-                                 'ohlcv': {k: str(getattr(item, k, None))
-                                           for k in ('open', 'high', 'low', 'close', 'volume')}})
-        # A duplicate/invalid revision must not retain another row at the same timestamp.
-        invalid_ts = {r['ts'] for r in rejected}
-        return [b for b in bars if b.ts not in invalid_ts], rejected, forming
-
-    async def fetch(self, symbol: str, timeframe: str, count: int = 1000,
-                    run_id: str | None = None, before: int | None = None,
-                    now: int | None = None) -> dict:
-        self.store.check(symbol)
-        raw = await self.broker.candles(symbol, timeframe, count, before)
-        as_of = int(self.now()) if now is None else now
-        bars, rejected, forming = self._parse(raw, symbol, timeframe, as_of)
-        recovered = []
-        # Bounded, nonrecursive repair using the same official source and validation.
-        # Query backwards from the next boundary; count=2 also covers an inclusive
-        # response containing the following candle. Accept only the exact target.
-        candidates = [r for r in rejected if r['error'] == 'Invalid OHLC range'][:10]
-        for rejection in candidates:
-            ts = rejection['ts']
+                if bar.invalid_range:
+                    anomalies.append({'symbol': symbol, 'timeframe': timeframe, 'session': session,
+                        'start': ts, 'end': end,
+                        'start_et': datetime.fromtimestamp(ts, ET).isoformat(),
+                        'end_et': datetime.fromtimestamp(end, ET).isoformat(),
+                        'fetched_at': as_of, 'fetched_at_et': datetime.fromtimestamp(as_of, ET).isoformat(),
+                        'ohlcv': {k: str(getattr(item, k)) for k in ('open', 'high', 'low', 'close', 'volume')}})
+            except (AttributeError, ValueError, TypeError, OverflowError) as exc:
+                rejected.append({'ts': ts, 'error': str(exc)})
+        if anomalies:
             try:
-                boundary = ts + 86400 if timeframe == '1d' else self.calendar.bar_end(ts, timeframe)
-                retry = await self.broker.candles(symbol, timeframe, 2, boundary)
-                valid, _, _ = self._parse(retry, symbol, timeframe, as_of)
-            except Exception as exc:
-                rejection['repair_error'] = type(exc).__name__
-                continue
-            replacement = next((b for b in valid if b.ts == ts), None)
-            if replacement is not None:
-                bars.append(replacement)
-                rejected.remove(rejection)
-                recovered.append(rejection)
-        bars.sort(key=lambda b: b.ts)
-        batch = {'symbol': symbol, 'timeframe': timeframe, 'run_id': run_id,
-                 'as_of': as_of, 'requested_count': count, 'returned_count': len(raw),
-                 'returned_closed_ts': [b.ts for b in bars], 'forming_count': forming,
-                 'rejected': rejected, 'recovered': recovered}
-        previous = self.store.batch(symbol, timeframe)
-        if run_id is None and previous:
-            valid_ts = {b.ts for b in bars}
-            previous['rejected'] = [r for r in previous['rejected'] if r['ts'] not in valid_ts]
-            previous['rejected'] = [r for r in previous['rejected']
-                                    if r['ts'] not in {r['ts'] for r in rejected}] + rejected
-            previous['as_of'] = as_of
-            previous['recovered'] = recovered
-        self.store.upsert(bars, as_of, batch if run_id is not None else previous)
-        if rejected:
-            log.warning('Quarantined invalid bars %s %s count=%d first=%s', symbol, timeframe,
-                        len(rejected), rejected[0])
-        return batch
+                with (self.store.path.parent / 'invalid_ohlc.jsonl').open('a') as file:
+                    for anomaly in anomalies:
+                        file.write(json.dumps(anomaly, allow_nan=False) + '\n')
+            except OSError as exc:
+                log.warning('Could not append OHLC comparison log: %s', exc)
+        invalid_ts = {r['ts'] for r in rejected}
+        return sorted((b for b in bars if b.ts not in invalid_ts), key=lambda b: b.ts), rejected, forming
 
-    async def confirm_short_history(self, symbol: str, batch: dict):
-        starts = batch['returned_closed_ts']
-        if batch['rejected'] or not starts:
-            return
-        first = min(starts)
-        if batch['returned_count'] == 1000:
-            return
-        earlier = await self.broker.candles(symbol, '1d', 1, first - 60)
-        existing = self.store.metadata(symbol)
-        existing.update(first_daily_ts=first, history_exhausted=not earlier,
-                        checked_at=batch['as_of'], source='longbridge_history_offset')
-        self.store.set_metadata(symbol, existing)
+    async def fetch(self, symbol: str, timeframe: str, count: int = 1000, *, background=False) -> dict:
+        self.store.check(symbol)
+        raw = await self.broker.candles(symbol, timeframe, count, background=background)
+        as_of = int(self.now())
+        bars, rejected, forming = self._parse(raw, symbol, timeframe, as_of)
+        previous = self.store.batch(symbol, timeframe) or {}
+        bounds = [b.ts for b in bars] + [r['ts'] for r in rejected if r['ts'] is not None and r['ts'] <= as_of]
+        # A full recent response defines a NEW window. Older disconnected history is irrelevant.
+        start = min(bounds) if bounds else self.calendar.latest_closed(timeframe, as_of)
+        if count != 1000:
+            start = previous.get('window_start', start)
+            replaced = {b.ts for b in bars} | {r['ts'] for r in rejected}
+            rejected = [r for r in previous.get('rejected', []) if r['ts'] not in replaced] + rejected
+        batch = {'symbol': symbol, 'timeframe': timeframe, 'as_of': as_of,
+                 'window_start': start, 'requested_count': count, 'returned_count': len(raw),
+                 'forming_count': forming, 'rejected': rejected}
+        self.store.upsert(bars, as_of, batch)
+        return batch

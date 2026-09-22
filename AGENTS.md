@@ -1,42 +1,15 @@
-# 项目工作入口
+# 项目入口：Market Monitor
 
-这是个人美股看盘与 Alert 项目的仓库。当前已实现 Data Service、双图 UI、指标及独立完整图表模拟器；Price Alert 不在本版范围。不要依赖聊天记忆判断文件归属或功能状态。
+先读 [README.md](README.md)；开发读 [docs/development.md](docs/development.md)，产品逻辑读 [docs/behavior.md](docs/behavior.md)，UI 改动另读 [docs/ui.md](docs/ui.md)。这些是唯一维护入口，用户当前要求优先于文档。
 
-## 开始工作时
-
-1. 先读 [README.md](README.md) 确认运行方式。
-2. 修改 data 或其消费者之前，读 [Data 模块维护手册](docs/data/README.md) 和 [数据开发规格](Longbridge-Data-Service-Design.md) 的相关章节。
-3. 修改 `data_service/` 时遵循其 [局部 AGENTS.md](data_service/AGENTS.md)。
-4. 涉及模拟测试时读 [模拟器范围说明](docs/testing/simulation-plan.md)，保持用户已确认的极简范围。用户当前要求优先于旧文档；不要把未确认提案当作已完成需求。
-5. 修改图表交互先读 [UI 维护文档](docs/ui/chart-interactions.md) 与 ui/AGENTS.md。
-6. [VALIDATION-REPORT.md](VALIDATION-REPORT.md) 是历史实测证据，不是持续运行状态。
-
-## 目录边界
-
-- `data_service/`：正式行情、历史持久化、验证、调度、Data API。
-- `tests/`：data/图表离线测试、本机 HTTP/WS 集成及显式浏览器夹具。
-- `scripts/`：明确执行才运行的真实接口诊断，不是业务库。
-- `docs/data/`：数据层实现地图与维护状态；根设计文档定义需求。
-- `docs/testing/`：测试方案与覆盖边界。
-- `runtime/`：本地运行产物，不能作为代码或需求来源。
-- `simulator/`：隔离行情生成、closed bars 与完整图表模拟；复用 data 流程但只写临时数据库。
-- `ui/`：TypeScript 图表界面与本地 Lightweight Charts，消费 HTTP/WebSocket。
-- `alerts/` 不在本版范围，不创建空框架。
-
-后续 UI/Alert 正式模式消费 Data API，模拟模式可直接消费独立模拟器 WebSocket；不得直接调用 Longbridge 或写 authoritative bars。正式 data 不依赖 UI、Alert 或 simulator。具体文件地图在维护手册，移动/新增职责时同步更新。
-
-## 跨模块不变量
-
-- 启动重读 workspace；只有 `statuses` 为 focus/wait 的 ticker 可请求/订阅。不要把历史报告或示例 ticker 当成固定白名单。
-- 生产 bars 仅来自官方已收盘 regular-session NoAdjust K 线；模拟、聚合和回放数据必须隔离。
-- 正式 data 保留严格数据校验和显式降级，不伪造 READY。模拟器复用验证及调度，所有模拟数据与生产目录隔离。
-- 模拟器提供 Quote、五周期历史和实例级交易时钟；不扩展故障注入、回放或多层适配框架。
-- 不将凭证输出到日志、文档或 fixtures。模拟测试不读真实凭证、不自动回退真实 API。
-- 默认离线测试不连券商。真实接口测试独立选择范围和时限，遵守用户当次任务范围。
-- 维持单进程、SQLite 和直接可读的实现；不为假想规模引入多层框架。
-
-## 文档维护
-
-变更需求更新设计规格；变更文件归属、已实现能力或已知限制更新维护手册；变更启动/API 更新 README；测试证据写明日期、环境及未覆盖项。提案始终标注状态，实施后再改成已实现。
-
-不能把模拟测试通过表述成券商 live 测试通过，也不能把历史通过记录表述为本轮重新验证。若代码与文档冲突，定位并说明真实差异。
+- 单进程 Python + SQLite + 本机 WebSocket + TypeScript；不新增服务、消息中间件或通用适配框架。
+- 每次启动重读 workspace，只请求/订阅 focus、wait；不以历史报告中的 ticker 作为白名单。
+- 唯一正式 SDK 入口是 broker.py。只订阅 Quote；UI 不调用券商。
+- SQLite bars 只存官方 NoAdjust、regular、closed 的五个周期。2h/4h 及其他合成数据只在内存。
+- OHLC 正数有限值与基本结构必须验证；仅上下界矛盾保留官方原值，追加 invalid_ohlc.jsonl，不修正、不告警、不重试。
+- 初始化、恢复、补缺只请求最近 1000 根，过滤未收盘；接受少于 1000 根。禁止 offset、翻页、连接旧历史和历史查缺口。
+- 缺失和请求失败用同一回补任务重试；次数与节点见开发文档。不要把 UI 查询变成下载触发器。
+- 模拟器只写临时库，不读凭证、不自动回退真实 API。默认测试不连券商；live 验收必须明确 ticker 范围与时限。
+- 不输出凭证；不新增 Price Alert、下单、故障注入或回放框架。
+- 变更行为同步 behavior；变更职责/契约同步 development；UI 同步 ui。验证记录写日期、环境、覆盖和未覆盖范围。
+- TypeScript 改动后 npm run build --prefix ui；数据/调度改动运行离线测试及相关错误路径。历史记录不能当成本轮 live 证据。

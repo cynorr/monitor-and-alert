@@ -43,7 +43,7 @@ export type Ticker = {
     ticker: string;
     status: string;
     quote?: Quote;
-    warnings?: string[];
+    errors?: string[];
 };
 export type View = {
     type?: string;
@@ -51,6 +51,7 @@ export type View = {
     symbol: string;
     timeframe: string;
     server_time: number;
+    run_id: string;
     mode?: string;
     charts: Record<string, ChartData>;
     quote: Quote;
@@ -62,11 +63,8 @@ export type View = {
         estimated: boolean;
     };
     status: {
-        warnings: string[];
-        timeframes: Record<string, {
-            loaded: boolean;
-            synced: boolean;
-        }>;
+        stage: 'loading' | 'basic' | 'full';
+        errors: string[];
     };
 };
 export function extendedQuote(quote?: Quote) {

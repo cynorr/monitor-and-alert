@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import sqlite3
 import time
 import uuid
@@ -9,25 +8,27 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-from .calendar import ET, PHASES, TradingCalendar
+from .calendar import ET, PHASES, INTRADAY, TradingCalendar
 from .charts import ChartCache, bar_row
 from .downloader import BarDownloader
 from .quotes import QuoteService
 from .store import BarStore
 from .validator import DataValidator
 
-log = logging.getLogger(__name__)
-RETRY_DELAYS = (2, 5, 10, 30)
-
 
 @dataclass
-class Job:
-    symbol: str
-    timeframe: str
-    initial: bool
+class SyncState:
+    pending: bool = True
+    refresh: bool = True
+    complete: bool = False
+    target: int | None = None
     due: float = 0
     attempt: int = 0
-    target: int | None = None
+    limit: int = 4  # Initial attempt plus three retries; later 5m rounds get three attempts.
+    error: str | None = None
+    alert: bool = False
+    task: asyncio.Task | None = None
+    background: bool = False
 
 
 class DataService:
@@ -35,157 +36,124 @@ class DataService:
         self.tickers = tickers
         self.symbols = [t.symbol for t in tickers]
         self.runtime, self.broker = runtime, broker
-        self.now = clock or (lambda: time.time())
-        self.mode = "live"
+        self.now = clock or time.time
+        self.mode = 'live'
         self.calendar = calendar or TradingCalendar()
         self.store = BarStore(runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
-        self.validator = DataValidator(self.store, self.calendar, runtime / 'data_ready.json')
+        self.validator = DataValidator(self.store, self.calendar)
         self.charts = ChartCache(self.store, self.calendar)
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
-        self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.charts.apply_quote) if broker else None
+        self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.charts.apply_quote,
+                                   on_reconnect=self.recover) if broker else None
         self.run_id = uuid.uuid4().hex
-        self.phase, self.initialized = 'starting', False
         self.started_at = int(self.now())
-        self.errors = {}
-        self.retry_pairs = set()
         self.focus = (self.symbols[0], '5m')
-        self.jobs: dict[tuple, Job] = {}
-        self.running: dict[tuple, asyncio.Task] = {}
-        self.initial_done = set()
-        self.ever_loaded = set()
-        self.lag_targets = {}
-        self.retry_after = {}
+        self.sync = {(symbol, tf): SyncState() for symbol in self.symbols for tf in PHASES}
 
-    def validate(self, symbol, now=None, current_run=True):
-        return self.validator.validate(symbol, int(self.now()) if now is None else now,
-                                       self.run_id if current_run else None)
+    def validate(self, symbol, now=None):
+        return self.validator.validate(symbol, int(self.now()) if now is None else now)
 
     def select(self, symbol, timeframe):
         self.store.check(symbol)
-        if timeframe not in PHASES or timeframe == '1d':
-            raise ValueError('Intraday timeframe must be 5m, 15m, 30m or 1h')
+        if timeframe not in INTRADAY:
+            raise ValueError('Invalid intraday timeframe')
         self.focus = (symbol, timeframe)
 
-    def priority(self, job):
-        if not job.initial:
-            return (-2 if job.symbol == self.focus[0] else -1, 0)
-        if job.symbol == self.focus[0] and job.timeframe in ('1d', '5m', self.focus[1]):
-            return (0, ('5m', '1d', '15m', '30m', '1h').index(job.timeframe))
-        return ({'5m': 1, '1d': 2, '15m': 3, '30m': 4, '1h': 5}[job.timeframe],
-                self.symbols.index(job.symbol))
+    def recover(self):
+        for state in self.sync.values():
+            state.pending = state.refresh = True
+            state.complete = False
+            state.due = state.attempt = 0
+            state.limit = 4
 
-    async def _cold_fetch(self, symbol, timeframe):
-        batch = await self.downloader.fetch(symbol, timeframe, run_id=self.run_id)
-        if timeframe == '1d':
-            await self.downloader.confirm_short_history(symbol, batch)
-        state = self.validate(symbol)
-        check = state['timeframes'][timeframe]
-        if not check['loaded']:
-            raise ValueError(f'{timeframe}: latest closed bar unavailable or invalid')
-        self.errors.pop(f'{symbol}/{timeframe}', None)
-        return batch
+    def priority(self, key):
+        symbol, tf = key
+        state = self.sync[key]
+        selected = symbol == self.focus[0]
+        if not state.refresh:
+            return (-2 if selected else -1, 0)
+        if selected and tf in ('5m', '1d', self.focus[1]):
+            return (0, ('5m', '1d', '15m', '30m', '1h').index(tf))
+        return (('5m', '1d', '15m', '30m', '1h').index(tf) + 1, self.symbols.index(symbol))
 
-    async def update_bar(self, symbol, timeframe, target):
-        previous = self.store.bars(symbol, timeframe, limit=1)
-        now = int(self.now())
-        missing = self.calendar.expected(timeframe, previous[0].ts + 1, target, now) if previous else []
-        count = 1000 if not previous or len(missing) > 1 else 2
-        batch = await self.downloader.fetch(symbol, timeframe, count=count)
-        found = self.store.bars(symbol, timeframe, target, target)
-        if not found or any(r['ts'] in (target, None) for r in batch['rejected']):
-            raise ValueError(f'Expected closed bar not available: {target}')
-        if len(missing) > 1:
-            actual = {b.ts for b in self.store.bars(symbol, timeframe, missing[0], target)}
-            returned = batch['returned_closed_ts']
-            cursor = min(returned) if returned else target
-            while any(ts < cursor for ts in set(missing) - actual):
-                prefix = [ts for ts in missing if ts < cursor and ts not in actual]
-                extra = await self.downloader.fetch(symbol, timeframe, count=min(1000, len(prefix)),
-                                                    before=cursor - 60)
-                earlier = [ts for ts in extra['returned_closed_ts'] if ts < cursor]
-                if not earlier or extra['rejected']:
-                    break
-                cursor = min(earlier)
-                actual.update(earlier)
-            if set(missing) - actual:
-                raise ValueError('Unrepaired gap after refresh')
-        self.errors.pop(f'{symbol}/{timeframe}', None)
-        self.validate(symbol)
-
-    async def _execute(self, key, job):
+    async def _execute(self, key):
+        state = self.sync[key]
+        count = 1000 if state.refresh else 2
+        state.refresh = False
         try:
-            if job.initial:
-                await self._cold_fetch(*key)
-            else:
-                await self.update_bar(*key, job.target)
+            await self.downloader.fetch(*key, count=count, background=state.background)
+            check = self.validator.check(*key, int(self.now()))
+            if not check['complete']:
+                raise ValueError('; '.join(check['errors']))
         except sqlite3.Error:
             raise
         except Exception as exc:
-            self.errors['/'.join(key)] = str(exc)
-            self.retry_pairs.add(key)
-            if job.attempt < len(RETRY_DELAYS):
-                job.due = self.now() + RETRY_DELAYS[job.attempt]
-                job.attempt += 1
-                return
-            log.warning('History retry exhausted %s: %s', key, exc)
-            self.retry_after[key] = self.now() + 30
+            state.error = str(exc)
+            state.complete = False
+            state.refresh = state.pending = True
+            state.attempt += 1
+            if state.attempt >= state.limit:
+                state.alert = True
+                state.attempt, state.limit = 0, 3
+                state.due = self.calendar.next_close('5m', int(self.now())) + 2
+            else:
+                state.due = self.now() + (2, 5, 10)[state.attempt - 1]
         else:
-            self.retry_pairs.discard(key)
-            self.retry_after.pop(key, None)
-            if self.validate(job.symbol)['timeframes'][job.timeframe]['loaded']:
-                self.ever_loaded.add(key)
-        if job.initial:
-            self.initial_done.add(key)
-        self.jobs.pop(key, None)
+            state.complete = not state.refresh  # A recovery may have arrived while this request was in flight.
+            state.pending = state.refresh
+            state.target = check['target']
+            state.error, state.alert = None, False
+            state.attempt, state.limit, state.due = 0, 4, 0
 
-    def _schedule(self, now, initial_only=False):
-        for tf in PHASES:
-            target = self.calendar.latest_closed(tf, now)
-            for symbol in self.symbols:
-                key = (symbol, tf)
-                if key not in self.initial_done:
-                    self.jobs.setdefault(key, Job(*key, initial=True))
-                    continue
-                check = self.validate(symbol, now)['timeframes'][tf]
-                if check['loaded']:
-                    self.ever_loaded.add(key)
-                if initial_only or key in self.jobs or now < self.retry_after.get(key, 0):
-                    continue
-                if not check['loaded']:
-                    self.jobs[key] = Job(*key, initial=not check['synced'],
-                                         target=target, due=self.calendar.bar_end(target, tf) + 2)
+    def _schedule(self, now):
+        targets = {tf: self.calendar.latest_closed(tf, now) for tf in PHASES}
+        for (symbol, tf), state in self.sync.items():
+            if state.pending or state.task is not None or state.target == targets[tf]:
+                continue
+            state.pending = True
+            state.due = self.calendar.bar_end(targets[tf], tf) + 2
+            # A missed boundary uses the same recent-1000 refresh, never pagination.
+            state.refresh = state.target is None or len(self.calendar.expected(tf, state.target + 1, targets[tf], now)) > 1
 
     async def scheduler(self, initial_only=False):
-        last_save = 0
+        previous_time = self.now()
         try:
             while True:
-                for key, task in list(self.running.items()):
-                    if task.done():
-                        task.result()
-                        del self.running[key]
-                now = int(self.now())
-                self._schedule(now, initial_only=initial_only)
-                for job in sorted(self.jobs.values(), key=self.priority):
-                    key = (job.symbol, job.timeframe)
-                    if len(self.running) >= 5:
+                for state in self.sync.values():
+                    if state.task is not None and state.task.done():
+                        state.task.result()
+                        state.task = None
+                now = self.now()
+                if now - previous_time > 30:
+                    self.recover()
+                previous_time = now
+                if not initial_only:
+                    self._schedule(int(now))
+                running = sum(s.task is not None for s in self.sync.values())
+                background = sum(s.task is not None and s.background for s in self.sync.values())
+                for key in sorted(self.sync, key=self.priority):
+                    state = self.sync[key]
+                    if running >= 5:
                         break
-                    if key not in self.running and job.due <= self.now():
-                        self.running[key] = asyncio.create_task(self._execute(key, job))
-                self.initialized = len(self.initial_done) == len(self.symbols) * len(PHASES)
-                self.phase = 'running' if self.initialized else 'loading'
-                if now - last_save >= 5:
-                    for symbol in self.symbols:
-                        self.validate(symbol, now)
-                    self.validator.save()
-                    last_save = now
-                if initial_only and self.initialized and not self.running:
+                    if not state.pending or state.task is not None or state.due > now:
+                        continue
+                    bg = state.refresh and self.priority(key)[0] > 0
+                    if bg and background >= 3:
+                        continue
+                    state.background = bg
+                    state.task = asyncio.create_task(self._execute(key))
+                    running += 1
+                    background += int(bg)
+                if initial_only and not running and all(not s.pending or s.alert for s in self.sync.values()):
                     return
                 await asyncio.sleep(0.1)
         finally:
-            for task in self.running.values():
+            tasks = [s.task for s in self.sync.values() if s.task is not None]
+            for task in tasks:
                 task.cancel()
-            await asyncio.gather(*self.running.values(), return_exceptions=True)
-            self.running.clear()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            for state in self.sync.values():
+                state.task = None
 
     async def reconcile(self):
         await self.scheduler(initial_only=True)
@@ -196,30 +164,19 @@ class DataService:
             group.create_task(self.scheduler())
 
     def status(self, symbol, now):
-        state = self.validate(symbol, now, current_run=self.broker is not None)
-        warnings = list(state['warnings'])
-        for tf, check in state['timeframes'].items():
-            key = (symbol, tf)
-            if check['loaded']:
-                self.ever_loaded.add(key)
-                self.lag_targets.pop(key, None)
-            elif key in self.ever_loaded:
-                target = self.lag_targets.setdefault(key, check['target'])
-                if now - self.calendar.bar_end(target, tf) > 15:
-                    warnings.append(f'{tf}: Closed bar delayed >15s')
-            error = self.errors.get(f'{symbol}/{tf}')
-            if error:
-                warnings.append(f'{tf}: History unavailable')
-        summary = self.charts.summary(symbol, now)
-        if summary['samples'] < 20:
-            warnings.append(f"Daily: {summary['samples']}/20 summary samples")
-        if summary['estimated']:
-            warnings.append('ADV20 includes estimated turnover')
-        return {**state, 'warnings': list(dict.fromkeys(warnings))}
+        if self.broker is None:
+            checks = self.validate(symbol, now)
+            completed = [tf for tf, check in checks.items() if check['complete']]
+            errors = [f"{tf}: {error}" for tf, check in checks.items() for error in check['errors']]
+        else:
+            completed = [tf for tf in PHASES if self.sync[symbol, tf].complete]
+            errors = [f"{tf}: {self.sync[symbol, tf].error}" for tf in PHASES if self.sync[symbol, tf].alert]
+        level = 'full' if len(completed) == len(PHASES) else 'basic' if all(tf in completed for tf in ('1d', '5m')) else 'loading'
+        return {'stage': level, 'errors': errors}
 
     def quote(self, symbol, now):
         result = self.quotes.output(symbol, now) if self.quotes else {
-            'symbol': symbol, 'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}
+            'symbol': symbol, 'regular': None, 'extended': {}, 'connection_health': 'DISCONNECTED', 'error': None}
         regular = result['regular']
         if regular:
             day = datetime.fromtimestamp(regular['timestamp'], ET).date()
@@ -230,17 +187,14 @@ class DataService:
 
     def view(self, symbol, tf, revisions=None):
         self.store.check(symbol)
-        if tf not in ('5m', '15m', '30m', '1h'):
+        if tf not in INTRADAY:
             raise ValueError('Invalid chart timeframe')
         now = int(self.now())
         charts = {}
         for period in ('1d', tf):
-            rev = self.store.revisions.get((symbol, period), 0)
-            include = revisions is None or revisions.get(period) != rev
-            charts[period] = self.charts.chart(symbol, period, now, include)
+            charts[period] = self.charts.chart(symbol, period, now,
+                known_revision=None if revisions is None else revisions.get(period))
         status = self.status(symbol, now)
-        for chart in charts.values():
-            status['warnings'].extend(chart['warnings'])
         return {'symbol': symbol, 'timeframe': tf, 'server_time': now, 'run_id': self.run_id, 'mode': self.mode,
                 'charts': charts, 'quote': self.quote(symbol, now), 'status': status,
                 'summary': self.charts.summary(symbol, now)}
@@ -251,8 +205,7 @@ class DataService:
         for ticker in self.tickers:
             state = self.status(ticker.symbol, now)
             result.append({**asdict(ticker), 'quote': self.quote(ticker.symbol, now),
-                           'ready': state['ready'], 'full_ready': state['full_ready'],
-                           'warnings': state['warnings']})
+                           'errors': state['errors']})
         return result
 
     async def api(self, path: str, query: dict):
@@ -262,23 +215,22 @@ class DataService:
             self.store.check(symbol)
         symbols = [symbol] if symbol else self.symbols
         if path == '/health':
-            return {'service': 'running', 'mode': self.mode, 'phase': self.phase, 'initialized': self.initialized,
-                    'started_at': self.started_at, 'universe_count': len(self.symbols),
-                    'quote_health': self.quotes.connection_health if self.quotes else 'OFFLINE',
-                    'last_quote_received_at': self.quotes.last_quote_received_at if self.quotes else None,
+            return {'service': 'running', 'mode': self.mode, 'started_at': self.started_at,
+                    'universe_count': len(self.symbols),
+                    'quote_health': self.quotes.connection_health if self.quotes else 'DISCONNECTED',
                     'quote_push_count': self.quotes.push_count if self.quotes else 0,
-                    'history_errors': dict(self.errors), 'pending_repairs': len(self.retry_pairs)}
+                    'pending': sum(s.pending for s in self.sync.values()),
+                    'errors': {'/'.join(key): s.error for key, s in self.sync.items() if s.alert}}
         if path == '/v1/universe':
             return [asdict(ticker) for ticker in self.tickers]
         if path == '/v1/quotes':
             return [self.quote(s, now) for s in symbols]
         if path == '/v1/readiness':
-            return {s: self.status(s, now) for s in symbols}
+            return {s: {'status': self.status(s, now), 'timeframes': self.validate(s, now)} for s in symbols}
         if path == '/v1/chart':
             if symbol is None:
                 raise ValueError('symbol is required')
             tf = query.get('timeframe', ['5m'])[0]
-            self.select(symbol, tf)
             return self.view(symbol, tf)
         if path == '/v1/bars':
             if symbol is None:

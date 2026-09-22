@@ -14,7 +14,7 @@ from data_service.config import Ticker
 from data_service.downloader import BarDownloader
 from data_service.http_api import create_app
 from data_service.indicators import series, preview, daily_summary
-from data_service.service import DataService, Job
+from data_service.service import DataService
 from data_service.store import BarStore, Bar
 from data_service.broker import RateLimiter
 from test_data_service import cal, store, at, bar, raw, install_batch
@@ -31,18 +31,18 @@ def test_active_five_restart_boundary_and_official_replacement(store, cal):
     cache.apply_quote('PAYS.US', quote(now, 15))
     cache.apply_quote('PAYS.US', quote(now + 1, 17))
     cache.apply_quote('PAYS.US', quote(now + 2, 14))
-    active, _ = cache.forming('PAYS.US', '5m', now + 2)
+    active = cache.forming('PAYS.US', '5m', now + 2)
     assert (active['open'], active['high'], active['low'], active['close']) == (15, 17, 14, 14)
     assert not store.bars('PAYS.US', '5m')
-    assert cache.forming('PAYS.US', '5m', start + 300)[0] is None
+    assert cache.forming('PAYS.US', '5m', start + 300) is None
     store.upsert([bar(start)], start + 301)
     cache.apply_quote('PAYS.US', quote(start + 301, 20))
     view = cache.chart('PAYS.US', '5m', start + 301)
     assert view['bars'][-1]['open'] == 10
     assert view['active']['time'] == start + 300 and view['active']['open'] == 20
     cache.apply_quote('PAYS.US', quote(start + 302, 500, session='Post'))
-    assert cache.forming('PAYS.US', '5m', start + 302)[0]['close'] == 20
-    assert cache.forming('PAYS.US', '5m', at('2026-09-18T16:00'))[0] is None
+    assert cache.forming('PAYS.US', '5m', start + 302)['close'] == 20
+    assert cache.forming('PAYS.US', '5m', at('2026-09-18T16:00')) is None
 
 
 def test_larger_candle_rebuilds_from_official_five(store, cal):
@@ -50,12 +50,12 @@ def test_larger_candle_rebuilds_from_official_five(store, cal):
     now = at('2026-09-18T10:13')
     opened = at('2026-09-18T10:00')
     cache.apply_quote('PAYS.US', quote(now, 20))
-    assert cache.forming('PAYS.US', '15m', now)[0]['open'] == 20
+    assert cache.forming('PAYS.US', '15m', now)['open'] == 20
     store.upsert([Bar('PAYS.US', '5m', opened, 10, 30, 8, 25, 20),
                   Bar('PAYS.US', '5m', opened + 300, 25, 26, 18, 19, 30)], now)
-    active, _ = cache.forming('PAYS.US', '15m', now)
+    active = cache.forming('PAYS.US', '15m', now)
     assert (active['open'], active['high'], active['low'], active['close']) == (10, 30, 8, 20)
-    daily, _ = cache.forming('PAYS.US', '1d', now)
+    daily = cache.forming('PAYS.US', '1d', now)
     assert daily['volume'] == 100
 
 
@@ -65,14 +65,14 @@ def test_volume_waits_for_whole_prefix_and_never_fakes_zero(store, cal):
     opened = at('2026-09-18T09:30')
     cache.apply_quote('PAYS.US', quote(now, volume=100))
     store.upsert([bar(opened, volume=20)], now)
-    assert cache.forming('PAYS.US', '5m', now)[0]['volume'] is None
+    assert cache.forming('PAYS.US', '5m', now)['volume'] is None
     store.upsert([bar(opened + 300, volume=30)], now)
-    assert cache.forming('PAYS.US', '5m', now)[0]['volume'] == 50
+    assert cache.forming('PAYS.US', '5m', now)['volume'] == 50
     cache.apply_quote('PAYS.US', quote(now + 1, volume=40))
-    active, warnings = cache.forming('PAYS.US', '5m', now + 1)
-    assert active['volume'] is None and warnings
+    active = cache.forming('PAYS.US', '5m', now + 1)
+    assert active['volume'] is None
     cache.apply_quote('PAYS.US', quote(at('2026-09-21T09:31'), volume=17))
-    assert cache.forming('PAYS.US', '5m', at('2026-09-21T09:31'))[0]['volume'] == 17
+    assert cache.forming('PAYS.US', '5m', at('2026-09-21T09:31'))['volume'] == 17
 
 
 def test_live_ema_uses_closed_anchor_and_sma_requires_50():
@@ -121,23 +121,11 @@ def test_summary_does_not_fill_missing_day_with_older_data(store, cal):
 def test_bad_turnover_falls_back_without_rejecting_valid_ohlc(store, cal):
     ts = at('2026-09-18T09:30')
     class Fake:
-        async def candles(self, *args):
+        async def candles(self, *args, **kwargs):
             return [SimpleNamespace(**vars(raw(ts)), turnover=float('nan'))]
-    batch = asyncio.run(BarDownloader(Fake(), store, cal).fetch('PAYS.US', '5m', now=ts + 300))
+    batch = asyncio.run(BarDownloader(Fake(), store, cal, clock=lambda: ts + 300).fetch('PAYS.US', '5m'))
     assert not batch['rejected']
     assert store.bars('PAYS.US', '5m')[0].turnover is None
-
-
-def test_priority_tracks_selection_and_deadlines(tmp_path, cal):
-    service = DataService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, calendar=cal)
-    try:
-        service.select('BLSH.US', '1h')
-        jobs = [Job('PAYS.US','5m',True), Job('BLSH.US','1h',True), Job('PAYS.US','15m',False)]
-        assert sorted(jobs, key=service.priority) == [jobs[2], jobs[1], jobs[0]]
-        with pytest.raises(ValueError):
-            service.select('NO.US', '5m')
-    finally:
-        service.store.close()
 
 
 def test_global_limiter_rolling_window():
@@ -151,48 +139,6 @@ def test_global_limiter_rolling_window():
         assert times[3] - times[0] >= 0.029
         assert times[6] - times[3] >= 0.029
     asyncio.run(scenario())
-
-
-def test_concurrent_history_cap_and_no_global_phase_barrier(tmp_path, cal, monkeypatch):
-    monkeypatch.setattr('data_service.service.RETRY_DELAYS', ())
-    class Fake:
-        active = 0
-        maximum = 0
-        async def candles(self, symbol, tf, count=1000, before=None):
-            self.active += 1
-            self.maximum = max(self.maximum, self.active)
-            try:
-                await asyncio.sleep(0.005)
-                if before is not None:
-                    return []
-                return [raw(cal.latest_closed(tf, int(time.time())))]
-            finally:
-                self.active -= 1
-    fake = Fake()
-    service = DataService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, fake, cal)
-    try:
-        asyncio.run(service.reconcile())
-        assert fake.maximum == 5
-        assert service.initialized
-    finally:
-        service.store.close()
-
-
-def test_lag_warning_from_close_time_after_initial_load(tmp_path, cal):
-    service = DataService([Ticker('PAYS.US','PAYS','focus')], tmp_path, calendar=cal)
-    try:
-        now = at('2026-09-18T10:04')
-        for tf in PHASES:
-            install_batch(service.store, cal, now, tf=tf)
-        assert service.status('PAYS.US', now)['ready']
-        assert not any('delayed' in w for w in service.status('PAYS.US', at('2026-09-18T10:05:14'))['warnings'])
-        late = service.status('PAYS.US', at('2026-09-18T10:05:16'))
-        assert any('5m: Closed bar delayed' in w for w in late['warnings'])
-        assert not late['ready']
-        service.store.upsert([bar(at('2026-09-18T10:00'))], at('2026-09-18T10:05:17'))
-        assert not any('5m: Closed bar delayed' in w for w in service.status('PAYS.US', at('2026-09-18T10:05:17'))['warnings'])
-    finally:
-        service.store.close()
 
 
 def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
@@ -245,7 +191,7 @@ def test_rejected_prefix_cannot_supply_live_volume(store, cal):
     store.upsert([], now, batch)
     cache = ChartCache(store, cal)
     cache.apply_quote('PAYS.US', quote(now))
-    assert cache.forming('PAYS.US', '5m', now)[0]['volume'] is None
+    assert cache.forming('PAYS.US', '5m', now)['volume'] is None
 
 
 def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
@@ -271,8 +217,8 @@ def test_incremental_valid_revision_clears_rejection(store, cal):
     batch['rejected'] = [{'ts': rows[0].ts, 'error':'invalid'}]
     store.upsert([], now, batch)
     class Fake:
-        async def candles(self, *args): return [raw(rows[0].ts)]
-    asyncio.run(BarDownloader(Fake(), store, cal).fetch('PAYS.US', '5m', count=2, now=now))
+        async def candles(self, *args, **kwargs): return [raw(rows[0].ts)]
+    asyncio.run(BarDownloader(Fake(), store, cal, clock=lambda: now).fetch('PAYS.US', '5m', count=2))
     assert store.batch('PAYS.US', '5m')['rejected'] == []
 
 
@@ -295,69 +241,3 @@ def test_broker_request_budget_shared_by_all_callers():
         assert maximum == 5
         assert all(started[i + 10] - started[i] >= 0.039 for i in range(15))
     asyncio.run(scenario())
-
-
-def test_recent_window_gap_uses_history_prefix(tmp_path, cal, monkeypatch):
-    now = at('2026-09-18T10:00')
-    monkeypatch.setattr('data_service.service.time.time', lambda: now)
-    opened = at('2026-09-18T09:30')
-    class Fake:
-        calls = []
-        async def candles(self, symbol, tf, count=1000, before=None):
-            self.calls.append((count,before))
-            times = [opened+1200, opened+1500] if before is None else [opened+300,opened+600,opened+900]
-            return [raw(t) for t in times]
-    fake = Fake()
-    service = DataService([Ticker('PAYS.US','PAYS','focus')], tmp_path, fake, cal)
-    try:
-        service.store.upsert([bar(opened)], now)
-        asyncio.run(service.update_bar('PAYS.US','5m',opened+1500))
-        assert fake.calls == [(1000,None),(3,opened+1140)]
-        assert len(service.store.bars('PAYS.US','5m')) == 6
-    finally:
-        service.store.close()
-
-
-def test_lag_warning_does_not_reset_at_next_boundary(tmp_path, cal):
-    service = DataService([Ticker('PAYS.US','PAYS','focus')], tmp_path, calendar=cal)
-    try:
-        now = at('2026-09-18T10:04')
-        for tf in PHASES:
-            install_batch(service.store, cal, now, tf=tf)
-        service.status('PAYS.US', now)
-        service.status('PAYS.US', at('2026-09-18T10:05:16'))
-        assert any('5m: Closed bar delayed' in w for w in service.status('PAYS.US', at('2026-09-18T10:10:01'))['warnings'])
-    finally:
-        service.store.close()
-
-
-def test_exhausted_initial_sync_recovers_without_new_boundary(tmp_path, cal, monkeypatch):
-    now = at('2026-09-18T10:04')
-    monkeypatch.setattr('data_service.service.time.time', lambda: now)
-    class RecoveringBroker:
-        offline = True
-        async def candles(self, symbol, tf, count=1000, before=None):
-            if self.offline:
-                raise TimeoutError('offline')
-            return [raw(cal.latest_closed(tf, now))]
-    broker = RecoveringBroker()
-    service = DataService([Ticker('PAYS.US','PAYS','focus')], tmp_path, broker, cal)
-    key = ('PAYS.US', '5m')
-    try:
-        service.initial_done = {(key[0], tf) for tf in PHASES}
-        job = Job(*key, initial=True, attempt=4)
-        service.jobs[key] = job
-        asyncio.run(service._execute(key, job))
-        service._schedule(now + 29)
-        assert key not in service.jobs
-        service._schedule(now + 30, initial_only=True)
-        assert key not in service.jobs  # One-shot reconcile remains bounded.
-        service._schedule(now + 30)
-        assert service.jobs[key].initial  # Must establish this run's batch evidence.
-        broker.offline = False
-        asyncio.run(service._execute(key, service.jobs[key]))
-        assert service.validate(key[0], now)['timeframes']['5m']['loaded']
-        assert key not in service.retry_pairs
-        assert key not in service.retry_after
-    finally:
-        service.store.close()

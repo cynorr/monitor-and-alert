@@ -8,8 +8,9 @@ import exchange_calendars as xcals
 
 ET = ZoneInfo('America/New_York')
 UTC = timezone.utc
-PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '1d': 0}
+PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '2h': 120, '4h': 240, '1d': 0}
 PHASES = ('1d', '5m', '15m', '30m', '1h')
+INTRADAY = ('5m', '15m', '30m', '1h', '2h', '4h')
 
 
 def timestamp(value: datetime) -> int:
@@ -88,3 +89,8 @@ class TradingCalendar:
             if opened <= now < end:
                 return start
         return None
+
+    def next_close(self, timeframe: str, now: int) -> int:
+        today = datetime.fromtimestamp(now, ET).date()
+        return next(end for day in self.days(today, today + timedelta(days=15))
+                    for _, end in self.grid(day, timeframe) if end > now)

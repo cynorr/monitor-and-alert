@@ -4,81 +4,80 @@ import { initLayout } from './layout.js';
 initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
-let tickers: Ticker[] = [], symbol = '', timeframe = '5m', epoch = 0, streamEpoch = -1;
-let socket: WebSocket | null = null, request: AbortController | null = null;
+let tickers: Ticker[] = [], symbol = '', timeframe = '5m', epoch = 0;
+let socket: WebSocket | null = null;
 let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, currentView: View | null = null;
+let listKey = '', readyKey = '', readySince = 0, lastStage = '';
+const listRows = new Map<string, HTMLButtonElement>();
 function renderList() {
-    const term = ($('search') as HTMLInputElement).value.trim().toUpperCase(), fragment = document.createDocumentFragment();
-    const focusedSymbol = (document.activeElement as HTMLElement)?.dataset?.symbol;
-    for (const group of ['focus', 'wait']) {
-        const items = tickers.filter(t => t.status === group && t.ticker.includes(term));
-        if (!items.length)
-            continue;
-        const label = document.createElement('div');
-        label.className = 'group';
-        label.textContent = group === 'focus' ? 'Focus' : 'Wait';
-        fragment.append(label);
-        for (const ticker of items) {
-            const button = document.createElement('button');
-            button.className = 'symbol-row' + (ticker.symbol === symbol ? ' active' : '');
-            button.setAttribute('aria-pressed', String(ticker.symbol === symbol));
-            button.dataset.symbol = ticker.symbol;
-            button.setAttribute('aria-label', `Select ${ticker.ticker}`);
-            const name = document.createElement('span');
-            name.className = 'ticker';
-            name.textContent = ticker.ticker.replace('.US', '');
-            if (ticker.warnings?.length) {
+    const term = ($('search') as HTMLInputElement).value.trim().toUpperCase();
+    const visible = tickers.filter(t => t.ticker.includes(term));
+    const key = visible.map(t => t.symbol + '/' + t.status).join(',');
+    if (key !== listKey || !$('symbols').childNodes.length) {
+        listKey = key;
+        listRows.clear();
+        const fragment = document.createDocumentFragment();
+        for (const group of ['focus', 'wait']) {
+            const items = visible.filter(t => t.status === group);
+            if (!items.length) continue;
+            const label = document.createElement('div');
+            label.className = 'group'; label.textContent = group === 'focus' ? 'Focus' : 'Wait';
+            fragment.append(label);
+            for (const ticker of items) {
+                const button = document.createElement('button');
+                button.dataset.symbol = ticker.symbol;
+                button.setAttribute('aria-label', `Select ${ticker.ticker}`);
+                const name = document.createElement('span');
+                name.className = 'ticker'; name.textContent = ticker.ticker.replace('.US', '');
                 const mark = document.createElement('span');
-                mark.className = 'warn';
-                mark.textContent = '!';
-                mark.title = [...new Set(ticker.warnings)].join('\n');
+                mark.className = 'warn'; mark.textContent = '!'; mark.hidden = true;
                 name.append(mark);
+                button.append(name, document.createElement('span'), document.createElement('span'), document.createElement('span'));
+                fragment.append(button); listRows.set(ticker.symbol, button);
             }
-            const regular = ticker.quote?.regular, change = regular?.prev_close ? (regular.last_price / regular.prev_close - 1) * 100 : null;
-            const last = document.createElement('span');
-            last.textContent = money(regular?.last_price);
-            const chg = document.createElement('span');
-            chg.textContent = change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`;
-            chg.className = change == null ? '' : change >= 0 ? 'positive' : 'negative';
-            const ext = document.createElement('span');
-            const extended = extendedQuote(ticker.quote);
-            const extChange = extended && regular?.last_price ? (extended.last_price / regular.last_price - 1) * 100 : null;
-            ext.textContent = extChange == null ? '—' : `${extChange > 0 ? '+' : ''}${extChange.toFixed(2)}%`;
-            ext.className = extChange == null ? '' : extChange >= 0 ? 'positive' : 'negative';
-            ext.title = extended ? `${extended.trade_session}: change from regular close` : '';
-            button.append(name, last, chg, ext);
-            button.addEventListener('click', () => void select(ticker.symbol, timeframe));
-            fragment.append(button);
         }
+        if (!visible.length) {
+            const empty = document.createElement('div'); empty.className = 'empty-list'; empty.textContent = 'No symbols'; fragment.append(empty);
+        }
+        $('symbols').replaceChildren(fragment);
     }
-    if (!fragment.childNodes.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-list';
-        empty.textContent = 'No symbols';
-        fragment.append(empty);
+    for (const ticker of visible) {
+        const row = listRows.get(ticker.symbol)!;
+        row.className = 'symbol-row' + (ticker.symbol === symbol ? ' active' : '');
+        row.setAttribute('aria-pressed', String(ticker.symbol === symbol));
+        const mark = row.querySelector<HTMLElement>('.warn')!;
+        const errors = [...(ticker.errors ?? []), ...(ticker.quote?.error ? ['Quote: ' + ticker.quote.error] : [])];
+        mark.hidden = !errors.length; mark.title = errors.join('\n');
+        const regular = ticker.quote?.regular, extended = extendedQuote(ticker.quote);
+        const change = regular?.prev_close ? (regular.last_price / regular.prev_close - 1) * 100 : null;
+        const extChange = extended && regular?.last_price ? (extended.last_price / regular.last_price - 1) * 100 : null;
+        row.children[1].textContent = money(regular?.last_price);
+        for (const [index, value] of [[2, change], [3, extChange]] as const) {
+            const cell = row.children[index];
+            cell.textContent = value == null ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+            cell.className = value == null ? '' : value >= 0 ? 'positive' : 'negative';
+        }
+        (row.children[3] as HTMLElement).title = extended ? `${extended.trade_session}: change from regular close` : '';
     }
-    const scroll = $('symbols').scrollTop;
-    $('symbols').replaceChildren(fragment);
-    $('symbols').scrollTop = scroll;
-    if (focusedSymbol)
-        Array.from(document.querySelectorAll<HTMLButtonElement>('.symbol-row')).find(b => b.dataset.symbol === focusedSymbol)?.focus({ preventScroll: true });
 }
-function state(text: string, error = false) { for (const id of ['daily', 'intraday']) {
-    const node = $(id + '-state');
-    node.textContent = text;
-    node.className = 'state' + (error ? ' error' : '');
-} }
+function state(text: string, kind = '') {
+    for (const id of ['daily', 'intraday']) {
+        const node = $(id + '-state'); node.textContent = text; node.className = 'state ' + kind;
+    }
+}
 function showState(view: View) {
-    const disconnected = ['STALE', 'STOPPED', 'OFFLINE'].includes(view.quote.connection_health) || socket?.readyState !== WebSocket.OPEN;
-    if (disconnected)
-        state('Disconnected', true);
-    else
-        for (const [id, tf] of [['daily', '1d'], ['intraday', timeframe]]) {
-            $(id + '-state').textContent = !view.status.timeframes[tf]?.loaded || view.quote.connection_health === 'CONNECTING' ? 'Loading' : '';
-            $(id + '-state').className = 'state';
-        }
-    const warnings = [...new Set([...view.status.warnings, ...(view.quote.error ? ['Quote unavailable'] : [])])];
-    document.querySelectorAll<HTMLElement>('.quality').forEach(node => { node.hidden = !warnings.length; node.title = warnings.join('\n'); });
+    const errors = [...view.status.errors, ...(view.quote.error ? ['Quote: ' + view.quote.error] : [])];
+    if (view.quote.connection_health === 'DISCONNECTED' || socket?.readyState !== WebSocket.OPEN)
+        errors.push('Connection lost');
+    const key = view.run_id + '/' + symbol;
+    if (key !== readyKey || lastStage !== view.status.stage) {
+        readyKey = key; lastStage = view.status.stage; readySince = Date.now();
+    }
+    if (errors.length) state('');
+    else if (view.quote.connection_health === 'CONNECTING' || view.status.stage === 'loading') state('Loading');
+    else if (view.status.stage === 'basic') state('Ready', 'basic');
+    else state(Date.now() - readySince < 3000 ? 'Ready' : '', 'full');
+    document.querySelectorAll<HTMLElement>('.quality').forEach(node => { node.hidden = !errors.length; node.title = errors.join('\n'); });
 }
 function apply(view: View) {
     if (view.symbol !== symbol || view.timeframe !== timeframe)
@@ -102,13 +101,12 @@ function apply(view: View) {
     }
     showState(view);
 }
-async function select(next: string, tf: string) {
+function select(next: string, tf: string) {
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
     timeframe = tf;
-    const id = ++epoch;
-    streamEpoch = -1;
+    ++epoch;
     currentView = null;
     daily.reset(symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
@@ -118,38 +116,37 @@ async function select(next: string, tf: string) {
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
     renderList();
     state('Loading');
-    request?.abort();
-    request = new AbortController();
-    if (socket?.readyState === WebSocket.OPEN)
-        socket.send(JSON.stringify({ type: 'select', symbol, timeframe, request_id: id }));
-    try {
-        const response = await fetch(`/v1/chart?symbol=${encodeURIComponent(symbol)}&timeframe=${tf}`, { signal: request.signal });
-        if (!response.ok)
-            throw new Error('Data unavailable');
-        const view = await response.json() as View;
-        if (id === epoch && streamEpoch !== id)
-            apply(view);
-    }
-    catch (error) {
-        if (id === epoch && (error as Error).name !== 'AbortError')
-            state('Disconnected', true);
-    }
+    sendSelection();
+}
+function sendSelection() {
+    if (symbol && socket?.readyState === WebSocket.OPEN)
+        socket.send(JSON.stringify({ type: 'select', symbol, timeframe, request_id: epoch }));
 }
 function connect() {
     clearTimeout(reconnectTimer);
     const current = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/v1/stream`);
     socket = current;
-    current.onopen = () => { lastMessage = Date.now(); reconnectDelay = 1000; if (symbol)
-        void select(symbol, timeframe); };
-    current.onmessage = event => { if (socket !== current)
-        return; lastMessage = Date.now(); const view = JSON.parse(event.data) as View; if (view.type === 'view' && view.request_id === epoch) {
-        streamEpoch = epoch;
-        apply(view);
-    } };
-    current.onclose = () => { if (socket !== current)
-        return; state('Disconnected', true); reconnectTimer = window.setTimeout(connect, reconnectDelay); reconnectDelay = Math.min(reconnectDelay * 2, 10000); };
+    current.onopen = () => { if (socket !== current) return; lastMessage = Date.now(); reconnectDelay = 1000; sendSelection(); };
+    current.onmessage = event => {
+        if (socket !== current) return;
+        lastMessage = Date.now();
+        try {
+            const view = JSON.parse(event.data) as View;
+            if (view.type === 'view' && view.request_id === epoch) apply(view);
+        } catch { current.close(); }
+    };
+    current.onclose = () => {
+        if (socket !== current) return;
+        if (currentView) showState(currentView); else state('Loading');
+        reconnectTimer = window.setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+    };
     current.onerror = () => current.close();
 }
+$('symbols').addEventListener('click', event => {
+    const row = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-symbol]');
+    if (row?.dataset.symbol) select(row.dataset.symbol, timeframe);
+});
 $('search').addEventListener('input', renderList);
 document.addEventListener('keydown', event => {
     if (!['ArrowUp', 'ArrowDown'].includes(event.key) || event.metaKey || event.ctrlKey || event.altKey)
@@ -168,7 +165,7 @@ setInterval(() => { if (socket?.readyState === WebSocket.OPEN && Date.now() - la
     socket.close(); if (currentView && socket?.readyState === WebSocket.OPEN)
     showState(currentView); }, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && symbol && socket?.readyState === WebSocket.OPEN)
-    void select(symbol, timeframe); });
+    sendSelection(); });
 async function start() { try {
     const response = await fetch('/v1/universe');
     if (!response.ok)
@@ -177,11 +174,11 @@ async function start() { try {
     $('symbol-count').textContent = String(tickers.length);
     renderList();
     if (tickers.length)
-        await select(tickers[0].symbol, timeframe);
+        select(tickers[0].symbol, timeframe);
     connect();
 }
 catch {
-    state('Disconnected', true);
+    state('Loading');
     window.setTimeout(start, 2000);
 } }
 void start();
