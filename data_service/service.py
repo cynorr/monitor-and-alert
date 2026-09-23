@@ -60,6 +60,11 @@ class DataService:
         self.focus = (symbol, timeframe)
 
     def recover(self):
+        # A recovery cannot attribute missed Quote increments to the active bucket.
+        self.charts.volume_baselines.clear()
+        self.charts.quotes.clear()
+        for active in self.charts.active.values():
+            active['volume'] = None
         for state in self.sync.values():
             state.pending = state.refresh = True
             state.complete = False

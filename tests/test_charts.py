@@ -59,20 +59,21 @@ def test_larger_candle_rebuilds_from_official_five(store, cal):
     assert daily['volume'] == 100
 
 
-def test_volume_waits_for_whole_prefix_and_never_fakes_zero(store, cal):
+def test_volume_uses_quote_delta_and_waits_for_closed_part(store, cal):
     cache = ChartCache(store, cal)
     now = at('2026-09-18T09:41')
     opened = at('2026-09-18T09:30')
-    cache.apply_quote('PAYS.US', quote(now, volume=100))
+    cache.apply_quote('PAYS.US', quote(now - 61, volume=10_000))
+    cache.apply_quote('PAYS.US', quote(now, volume=10_050))
     store.upsert([bar(opened, volume=20)], now)
-    assert cache.forming('PAYS.US', '5m', now)['volume'] is None
-    store.upsert([bar(opened + 300, volume=30)], now)
     assert cache.forming('PAYS.US', '5m', now)['volume'] == 50
-    cache.apply_quote('PAYS.US', quote(now + 1, volume=40))
-    active = cache.forming('PAYS.US', '5m', now + 1)
-    assert active['volume'] is None
+    assert cache.forming('PAYS.US', '15m', now)['volume'] is None
+    store.upsert([bar(opened + 300, volume=30)], now)
+    assert cache.forming('PAYS.US', '15m', now)['volume'] == 100
+    cache.apply_quote('PAYS.US', quote(now + 1, volume=9999))
+    assert cache.forming('PAYS.US', '5m', now + 1)['volume'] is None
     cache.apply_quote('PAYS.US', quote(at('2026-09-21T09:31'), volume=17))
-    assert cache.forming('PAYS.US', '5m', at('2026-09-21T09:31'))['volume'] == 17
+    assert cache.forming('PAYS.US', '5m', at('2026-09-21T09:31'))['volume'] is None
 
 
 def test_live_ema_uses_closed_anchor_and_sma_requires_50():

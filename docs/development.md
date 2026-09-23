@@ -53,6 +53,14 @@ resample 接受统一 5m 行结构，按 calendar 网格分组，O首/H最大/L�
 
 Quote 接收不按 UI 选择筛选；regular/pre/post/overnight 共用 apply，按时段保留最新值。snapshot 归一化后走同一入口。倒序拒绝、旧 callback 代次保护继续保留。扩展时段只改价格展示，不改 regular candle。
 
+### Active 成交量
+
+`ChartCache.volume_baselines[symbol]` 仅存当前 5m 的 Quote 起点累计量。跨入相邻桶时取上一条 regular Quote；每次新 Quote 做一次减法，重复推送不累加。首次盘中启动、跨桶缺失、恢复或累计量回退时清空基准；无基准显示 null，不用全天累计量兜底。恢复同时清掉旧 Quote，避免把断线期间的增量归给新桶。
+
+`closed_volume(symbol, tf, start, end)` 只算 active 所在周期内 `[start, 当前5m起点)` 的官方 closed 量，按 1h/30m/15m/5m 贪心覆盖，每段恰好使用一次，缺口不能跳过。较大周期可覆盖缺少的 5m；跨越 end 的 bar 不参与。每个 symbol/tf 缓存一个总量（或 null），签名为起止时间及四个官方周期的 store revision；新柱、修订、撤回或换桶自动失效。不为每次 Quote 读库或重算历史 sum，OHLC 的统一 resample 不重复计算这份成交量。
+
+Daily 保持累计量；2h/4h 的闭合 OHLCV 仍只由 5m 合成。这里的大周期优先只用于 active 成交量的已闭合部分。临时量基于收到的 Quote，推送跨边界合并或口径差异可能导致其与最终官方量有差别，闭合后以官方数据为准。
+
 ## 传输
 
 同源 HTTP 静态资源与 `/v1/universe`；`/health`、`/v1/quotes`、`/v1/bars`、`/v1/readiness`、`/v1/chart` 为只读诊断。`/v1/chart` 不改变优先级。

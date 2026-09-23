@@ -17,6 +17,7 @@ class ChartCache:
     def __init__(self, store, calendar):
         self.store, self.calendar = store, calendar
         self.active, self.quotes, self.history, self.dependencies, self.summaries = {}, {}, {}, {}, {}
+        self.volume_baselines, self.volume_prefixes = {}, {}
 
     def apply_quote(self, symbol, quote):
         if quote['trade_session'] != 'Intraday':
@@ -25,12 +26,21 @@ class ChartCache:
         start = self.calendar.active_start('5m', ts)
         if start is None or self.quotes.get(symbol, {}).get('timestamp', 0) > ts:
             return
+        previous = self.quotes.get(symbol)
         self.quotes[symbol] = quote
         old = self.active.get(symbol)
         if old is None or old['time'] != start:
             self.active[symbol] = {'time': start, 'open': price, 'high': price, 'low': price, 'close': price, 'volume': None}
+            # Compare Quote to Quote, never the day total to historical candle volume.
+            # A missed bucket or mid-bucket startup has no trustworthy starting counter.
+            self.volume_baselines[symbol] = (previous['cumulative_volume'] if previous
+                and start - 300 <= previous['timestamp'] < start else None)
         else:
             old.update(high=max(old['high'], price), low=min(old['low'], price), close=price)
+        if previous and quote['cumulative_volume'] < previous['cumulative_volume']:
+            self.volume_baselines[symbol] = None
+        baseline = self.volume_baselines.get(symbol)
+        self.active[symbol]['volume'] = None if baseline is None else quote['cumulative_volume'] - baseline
 
     def closed(self, symbol, tf):
         key = (symbol, tf)
@@ -59,24 +69,48 @@ class ChartCache:
         start = self.calendar.active_start(tf, now)
         five_start = self.calendar.active_start('5m', now)
         active, quote = self.active.get(symbol), self.quotes.get(symbol)
-        if start is None or active is None or active['time'] != five_start:
+        if start is None or active is None or quote is None or active['time'] != five_start:
             return None
         day = datetime.fromtimestamp(now, ET).date()
         opened = self.calendar.session(day)[0]
         prefix = [b for b in self.closed(symbol, '5m')[1] if opened <= b['time'] < five_start]
-        pieces = [b for b in prefix if b['time'] >= start] + [active]
+        # Volume comes from the cached official prefix below; do not sum it in resample.
+        pieces = [b for b in prefix if b['time'] >= start] + [{**active, 'volume': None}]
         candle = resample(pieces, tf, self.calendar, now, include_active=True)[-1]
         candle['volume'] = None
         if tf == '1d':
             candle['volume'] = quote['cumulative_volume']
-        else:
-            expected = {ts for ts, end in self.calendar.grid(day, '5m') if end <= start}
-            before = [b for b in prefix if b['time'] < start]
-            if {b['time'] for b in before} == expected:
-                volume = quote['cumulative_volume'] - sum(b['volume'] for b in before)
-                if volume >= 0:
-                    candle['volume'] = volume
+        elif active['volume'] is not None:
+            completed = self.closed_volume(symbol, tf, start, five_start)
+            if completed is not None:
+                candle['volume'] = completed + active['volume']
         return candle
+
+    def closed_volume(self, symbol, tf, start, end):
+        """Cached scalar for [start, end): cover once with the largest official bars."""
+        periods = ('1h', '30m', '15m', '5m')
+        signature = (start, end, tuple(self.store.revisions.get((symbol, p), 0) for p in periods))
+        key = (symbol, tf)
+        cached = self.volume_prefixes.get(key)
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+        candidates = {}
+        if start < end:
+            for period in periods:
+                for bar in self.store.bars(symbol, period, start, end - 1):
+                    close = self.calendar.bar_end(bar.ts, period)
+                    if close <= end:
+                        candidates.setdefault(bar.ts, (close, bar.volume))
+        cursor, total = start, 0
+        while cursor < end:
+            piece = candidates.get(cursor)
+            if piece is None:
+                total = None
+                break
+            cursor, volume = piece
+            total += volume
+        self.volume_prefixes[key] = (signature, total)
+        return total
 
     def chart(self, symbol, tf, now, known_revision=None):
         revision, rows, base, _ = self.closed(symbol, tf)

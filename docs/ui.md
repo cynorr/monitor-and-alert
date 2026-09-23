@@ -27,6 +27,7 @@ Updated: 2026-09-23. Approved interaction specification and maintenance referenc
 - Only Daily displays ADR20 and ADV20. Intraday displays the current price and any extended-session pill. Available Sell/Bid and Buy/Ask quotes remain optional.
 - EMA/SMA legends show colored line swatches only, without numeric values; names are available on hover. Daily uses SMA50 and Intraday uses SMA65.
 - OHLC sits immediately below the aligned black horizontal border on each chart. Add Range = (H-L)/L × 100%; H/L values and Range value are black, other labels/values retain their original color.
+- Intraday active volume uses a cached official closed portion plus the current 5m Quote-counter delta. Missing initialization after startup/recovery shows no volume until a usable boundary; closed official bars replace estimates. Daily retains the regular cumulative volume.
 - Current/latest candle volume appears at a fixed top-right position within the volume pane, independently of the hovered OHLC candle. The position follows native pane resizing.
 - Hide the persistent last-price horizontal line on both charts; retain the freely moving dashed crosshair.
 - Lightweight Charts does not supply a TradingView-style instrument/OHLC header; these small DOM legends use subscribeCrosshairMove and seriesData.

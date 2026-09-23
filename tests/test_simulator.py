@@ -65,12 +65,18 @@ def test_actual_scheduler_crosses_boundaries_and_rollover(tmp_path, cal):
                 service.quotes.tick()
                 state = await wait_ready()
                 assert all(not c['errors'] for c in state.values())
+                # Recovery clears the live counter; supply the next simulated Quote.
+                service.quotes.tick()
                 quote = service.quote('PAYS.US', now[0])['regular']
                 assert quote['prev_close'] > 0
                 for tf in PHASES:
                     view = service.charts.chart('PAYS.US', tf, now[0])
                     assert view['bars'][-1]['time'] == cal.latest_closed(tf, now[0])
-                    assert view['active'] is not None and view['active']['volume'] >= 0
+                    assert view['active'] is not None
+                    volume = view['active']['volume']
+                    assert volume is None or volume >= 0
+                    if tf == '1d':
+                        assert volume == quote['cumulative_volume']
                 view = service.view('PAYS.US', '5m')
                 assert view['mode'] == 'simulation' and not view['status']['errors']
         finally:
