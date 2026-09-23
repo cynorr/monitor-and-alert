@@ -116,8 +116,18 @@ export class Watchlist {
             void this.mutate({ action: 'add', ticker: $('add-ticker').value, section: this.targetSection }, true);
         });
         document.addEventListener('keydown', event => {
-            if (!['ArrowUp', 'ArrowDown'].includes(event.key) || event.metaKey || event.ctrlKey || event.altKey ||
-                event.target.matches('input,textarea') || $('add-dialog').open)
+            const target = event.target;
+            if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing ||
+                target.closest('input,textarea,select,[contenteditable="true"]') || $('add-dialog').open)
+                return;
+            if (event.key === '/') {
+                event.preventDefault();
+                const search = $('search');
+                search.focus();
+                search.select();
+                return;
+            }
+            if (!['ArrowUp', 'ArrowDown'].includes(event.key))
                 return;
             const rows = Array.from(this.rows.values());
             if (!rows.length)
@@ -191,7 +201,11 @@ export class Watchlist {
                 heading.className = 'group';
                 const toggle = document.createElement('button');
                 toggle.dataset.toggle = group;
-                toggle.textContent = `${this.collapsed.has(group) ? '▸' : '▾'} ${group === 'focus' ? 'Focus' : 'Wait'}`;
+                const arrow = document.createElement('span');
+                arrow.className = 'section-arrow';
+                arrow.textContent = this.collapsed.has(group) ? '▸' : '▾';
+                arrow.setAttribute('aria-hidden', 'true');
+                toggle.append(arrow, group === 'focus' ? 'Focus' : 'Wait');
                 toggle.setAttribute('aria-expanded', String(!this.collapsed.has(group)));
                 const add = document.createElement('button');
                 add.dataset.add = group;
@@ -217,8 +231,8 @@ export class Watchlist {
                         mark.hidden = true;
                         name.append(mark);
                         const remove = document.createElement('button');
-                        remove.className = 'delete-ticker';
-                        remove.textContent = '×';
+                        remove.className = 'delete-ticker icon-button';
+                        remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
                         remove.setAttribute('aria-label', `Delete ${ticker.ticker}`);
                         remove.title = `Delete ${ticker.ticker}`;
                         remove.hidden = !this.editable;

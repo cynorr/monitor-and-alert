@@ -23,10 +23,10 @@ Updated: 2026-09-24. Approved interaction specification and maintenance referenc
 
 ## Chart information
 
-- Both chart headers have a fixed 120px height so the black horizontal borders align. Daily shows the symbol at top-left; Intraday shows the current price there with identical position, 23px size, weight and color. Only Intraday shows ET time beside its latest button. Period controls sit on its next row.
+- Both chart headers and the watchlist header share a 120px height and one bottom border, aligning all three panels. The watchlist column labels have no top border. Daily shows only the symbol at top-left (no Daily tag); Intraday shows the current price there with the same 28px size, weight and color. Its ET clock is 15px. The extended-session pill sits immediately to the clock’s left, both 26px high; regular sessions show no pill. Period controls sit on the next row.
 - Only Daily displays ADR20 and ADV20. Intraday displays the current price and any extended-session pill. Available Sell/Bid and Buy/Ask quotes remain optional.
-- EMA/SMA legends show colored line swatches only, without numeric values; names are available on hover. Daily uses SMA50 and Intraday uses SMA65.
-- OHLC sits immediately below the aligned black horizontal border on each chart. Add Range = (H-L)/L × 100%; H/L values and Range value are black, other labels/values retain their original color.
+- EMA/SMA legends pair colored line swatches with concise labels: EMA 10, EMA 20, and SMA 50 for Daily or SMA 65 for Intraday. They do not show current indicator values.
+- OHLC sits immediately below the aligned black horizontal border on each chart, at 15px; ADR/ADV also use 15px. OHLC fields stay together and wrap on narrow panels. Native chart axes use 12px. Shared CSS font variables keep other small labels at 11px, list values at 12px and body text at 13px. Add Range = (H-L)/L × 100%; H/L values and Range value are black, other labels/values retain their original color.
 - Intraday active volume uses a cached official closed portion plus the current 5m Quote-counter delta. Missing initialization after startup/recovery shows no volume until a usable boundary; closed official bars replace estimates. Daily retains the regular cumulative volume.
 - Current/latest candle volume appears at a fixed top-right position within the volume pane, independently of the hovered OHLC candle. The position follows native pane resizing.
 - Hide the persistent last-price horizontal line on both charts; retain the freely moving dashed crosshair.
@@ -45,13 +45,13 @@ Updated: 2026-09-24. Approved interaction specification and maintenance referenc
 
 ## Watchlist and status
 
-- Right panel: search, compact Focus/Wait sections, four columns: Symbol, Last, Chg%, Ext. Rows are 26px high.
+- Right panel: search, compact Focus/Wait sections, four columns: Symbol, Last, Chg%, Ext. Rows are 28px high, with a shared grid reserving a separate 36px action column.
 - Last is the regular price. Chg% is regular price / previous completed Daily close - 1. Use the previous trading day relative to the quote date, including after today's Daily bar is stored.
 - Ext is (latest extended price / regular close - 1) × 100%, with up/down coloring. Only use extended quotes newer than the regular quote, including next-day premarket. Missing extended data or regular baseline displays an em dash.
-- Click or ArrowUp/ArrowDown selects the ticker for both charts. Search filters locally. Arrow navigation skips collapsed sections and does not intercept ticker/search input.
-- Focus and Wait always remain visible, including when empty. Their order is fixed. Each header has a collapse/expand control and a + button opening a US ticker form; Add validates and saves through the backend. Duplicates remain in place. Errors stay in the form; a successful add shows the returned security name. Market suffixes are not displayed.
+- Click or ArrowUp/ArrowDown selects the ticker for both charts. Search filters locally. Press / outside editable fields or the Add dialog to focus search and select its current text, ready for typing. Arrow navigation skips collapsed sections and does not intercept ticker/search input.
+- Focus and Wait always remain visible, including when empty. Their order is fixed. Each header has an enlarged collapse/expand arrow and a + button opening an empty US ticker form without an example placeholder; Add validates and saves through the backend. Duplicates remain in place. Errors stay in the form; a successful add shows the returned security name. Market suffixes are not displayed.
 - Drag a row within or between sections. A line shows before/after row placement; dropping on a header inserts first, and an empty section accepts drops. Search uses visible rows as anchors into the full list. Mouse release submits immediately; no delayed persistence. Only the dragged ticker receives a new local status date.
-- Each row has a Delete button revealed on hover or keyboard focus. Delete removes it from Focus/Wait; it never moves to hidden. If the selection disappears, select the first remaining ticker; an empty list clears both charts and keeps both + controls available.
+- The selected row has a black inset border and no background change; only unselected hovered rows get a gray background. Each row has a round Delete button with a line-drawn trash icon, revealed on hover or keyboard focus. Delete removes it from Focus/Wait; it never moves to hidden. If the selection disappears, select the first remaining ticker; an empty list clears both charts and keeps both + controls available.
 - Incoming workspace changes and new trading-day files refresh the list automatically. No refresh button. Editing is disabled for bounded --symbols sessions. Simulator edits a temporary copy and labels successful additions as simulated, without broker validation.
 - Use the Loading / yellow Ready / blue Ready / error-icon rules below; no multi-line banner. Keep details in hover text.
 - Simulation displays one small SIM badge so generated data cannot be confused with a live account. No extra branding bar.

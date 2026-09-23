@@ -95,8 +95,16 @@ export class Watchlist {
             void this.mutate({ action: 'add', ticker: ($('add-ticker') as HTMLInputElement).value, section: this.targetSection }, true);
         });
         document.addEventListener('keydown', event => {
-            if (!['ArrowUp', 'ArrowDown'].includes(event.key) || event.metaKey || event.ctrlKey || event.altKey ||
-                (event.target as HTMLElement).matches('input,textarea') || ($('add-dialog') as HTMLDialogElement).open) return;
+            const target = event.target as HTMLElement;
+            if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing ||
+                target.closest('input,textarea,select,[contenteditable="true"]') || ($('add-dialog') as HTMLDialogElement).open) return;
+            if (event.key === '/') {
+                event.preventDefault();
+                const search = $('search') as HTMLInputElement;
+                search.focus(); search.select();
+                return;
+            }
+            if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
             const rows = Array.from(this.rows.values());
             if (!rows.length) return;
             const index = rows.findIndex(row => row.dataset.symbol === this.selected);
@@ -159,7 +167,9 @@ export class Watchlist {
                 const section = document.createElement('section'); section.dataset.section = group;
                 const heading = document.createElement('div'); heading.className = 'group';
                 const toggle = document.createElement('button'); toggle.dataset.toggle = group;
-                toggle.textContent = `${this.collapsed.has(group) ? '▸' : '▾'} ${group === 'focus' ? 'Focus' : 'Wait'}`;
+                const arrow = document.createElement('span'); arrow.className = 'section-arrow';
+                arrow.textContent = this.collapsed.has(group) ? '▸' : '▾'; arrow.setAttribute('aria-hidden', 'true');
+                toggle.append(arrow, group === 'focus' ? 'Focus' : 'Wait');
                 toggle.setAttribute('aria-expanded', String(!this.collapsed.has(group)));
                 const add = document.createElement('button'); add.dataset.add = group; add.textContent = '+';
                 add.setAttribute('aria-label', `Add ticker to ${group === 'focus' ? 'Focus' : 'Wait'}`); add.disabled = !this.editable;
@@ -172,7 +182,8 @@ export class Watchlist {
                         const name = document.createElement('button'); name.className = 'ticker'; name.textContent = ticker.ticker.replace(/\.US$/, '');
                         name.setAttribute('aria-label', `Select ${ticker.ticker}`);
                         const mark = document.createElement('span'); mark.className = 'warn'; mark.textContent = '!'; mark.hidden = true; name.append(mark);
-                        const remove = document.createElement('button'); remove.className = 'delete-ticker'; remove.textContent = '×';
+                        const remove = document.createElement('button'); remove.className = 'delete-ticker icon-button';
+                        remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
                         remove.setAttribute('aria-label', `Delete ${ticker.ticker}`); remove.title = `Delete ${ticker.ticker}`; remove.hidden = !this.editable;
                         row.append(name, document.createElement('span'), document.createElement('span'), document.createElement('span'), remove);
                         section.append(row); this.rows.set(ticker.symbol, row);

@@ -26,7 +26,7 @@ export class Panel {
         this.daily = daily;
         this.chart = L.createChart($(id + '-chart'), {
             autoSize: true,
-            layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 10, attributionLogo: false, panes: { separatorColor: '#c6cbd1', separatorHoverColor: '#a8afb8' } },
+            layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 12, attributionLogo: false, panes: { separatorColor: '#c6cbd1', separatorHoverColor: '#a8afb8' } },
             grid: { vertLines: { visible: false }, horzLines: { visible: false } },
             rightPriceScale: { borderVisible: false, minimumWidth: 55, scaleMargins: { top: 0.07, bottom: 0.05 } },
             timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: 6, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t, type) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },
@@ -175,7 +175,7 @@ export class Panel {
             return;
         }
         const range = row.low > 0 ? ((row.high - row.low) / row.low * 100).toFixed(2) + '%' : '—';
-        node.innerHTML = `O ${money(row.open)}  H <b>${money(row.high)}</b>  L <b>${money(row.low)}</b>  C ${money(row.close)}  <span title="(H − L) / L">Range <b>${range}</b></span>`;
+        node.innerHTML = `<span>O ${money(row.open)}</span><span>H <b>${money(row.high)}</b></span><span>L <b>${money(row.low)}</b></span><span>C ${money(row.close)}</span><span title="(H − L) / L">Range <b>${range}</b></span>`;
     }
     reveal(row) {
         const index = this.rows.findIndex(r => r.time === row.time);
