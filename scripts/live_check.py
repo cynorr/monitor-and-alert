@@ -16,10 +16,11 @@ from data_service.config import load_tickers
 from data_service.http_api import start_http
 from data_service.service import DataService
 from data_service.store import atomic_json
+from data_service.workspace import resolve_latest_workspace
 
 
 async def run(args):
-    tickers = load_tickers(ROOT / 'workspace.json', args.symbols)
+    tickers = load_tickers(resolve_latest_workspace(), args.symbols)
     runtime = Path(tempfile.mkdtemp(prefix='longbridge-check-'))
     requests = []
     class ObservedBroker(Broker):
@@ -49,6 +50,8 @@ async def run(args):
                         counts['history_snapshots'] += int('bars' in view['charts']['4h'])
             async with client.ws_connect(f'http://127.0.0.1:{args.port}/v1/stream') as ws:
                 view = await ws.receive_json(timeout=10)
+                while view.get('type') != 'view':
+                    view = await ws.receive_json(timeout=10)
                 counts['reconnect_snapshot'] = 'bars' in view['charts'][view['timeframe']]
         report = {'tested_at': int(time.time()), 'symbols': service.symbols,
                   'market_open': service.calendar.is_open(int(time.time())),

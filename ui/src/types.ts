@@ -55,7 +55,6 @@ export type View = {
     mode?: string;
     charts: Record<string, ChartData>;
     quote: Quote;
-    board?: Ticker[];
     summary: {
         adr20: number | null;
         adv20: number | null;

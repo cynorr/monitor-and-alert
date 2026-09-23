@@ -1,14 +1,15 @@
 # 开发维护手册
 
-更新：2026-09-23。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
+更新：2026-09-24。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
 | 文件 | 唯一职责 |
 | --- | --- |
 | data_service/__main__.py | CLI、单实例锁、生命周期、有限运行报告 |
-| config.py | 启动白名单、凭证读取、错误脱敏 |
-| broker.py | 单 SDK context、最近 K 线、Quote 请求、全局/后台请求预算 |
+| config.py | 当前 focus/wait 解析、凭证读取、错误脱敏 |
+| workspace.py | 最新日期选择、内存 JSON、同步直接写入、单个原生文件事件 watcher |
+| broker.py | 单 SDK context、static_info 添加验证、最近 K 线、Quote 请求、全局/后台请求预算 |
 | calendar.py | UTC/ET、XNYS、实际闭合边界、5m 到 4h 时间网格 |
 | downloader.py | 每次一页 fetch/parse/validate/写入，追加 OHLC 比较日志 |
 | store.py | 官方 bars、最近窗口批次、事务及 revision |
@@ -17,13 +18,22 @@
 | quotes.py | 共用 Quote 标准化入口、时段最新值、snapshot/watchdog、恢复通知 |
 | resample.py | 所有内存周期合成的唯一算法 |
 | charts.py / indicators.py | 活跃 candle、官方/合成显示、图表缓存；唯一指标公式 |
-| http_api.py | aiohttp 静态页面、只读 HTTP、WebSocket/Origin 校验 |
-| ui/src/main.ts / types.ts | WS 选择与重连、列表、显示状态、契约 |
+| http_api.py | aiohttp 静态页面、诊断 HTTP、List mutation、WebSocket/Origin 校验 |
+| ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
+| ui/src/list.ts | Focus/Wait 编辑、拖动落点、折叠、搜索和报价行更新 |
 | ui/src/chart.ts / layout.ts | Lightweight Charts、日联动、列宽和原生交互 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
 
 依赖方向：UI → Data API → service/charts → store/quotes；正式 data 不 import simulator。不增加 services 层、指标数据库或事件日志协议。
+
+## Workspace 与动态名单
+
+watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 watcher；线程仅把事件派发回 asyncio loop。默认跟随 days 最新文件；显式 --workspace 监听该文件父目录并固定文件。创建、修改、移动、删除事件触发重读，无定时扫描。自身写入产生的事件在 JSON 相同情况下不重复更新。
+
+Workspace 直接维护原始 JSON，读取 focus/wait 和 statuses（statuses 仍决定可请求范围，数组负责排序）；写入只修改两组数组与操作 ticker 的 status/status_at，删除则删该记录。保留所有其他数据。无 schema migration/validation 层、repository 层、锁、临时文件或写队列。文件为空或无法解析时显示读取错误，下一文件事件再读取，不建立恢复协议。
+
+DataService.attach_workspace 接收变更，update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
 ## 同步与状态
 
@@ -65,7 +75,9 @@ Daily 保持累计量；2h/4h 的闭合 OHLCV 仍只由 5m 合成。这里的大
 
 同源 HTTP 静态资源与 `/v1/universe`；`/health`、`/v1/quotes`、`/v1/bars`、`/v1/readiness`、`/v1/chart` 为只读诊断。`/v1/chart` 不改变优先级。
 
-UI 图表只通过 `/v1/stream`：select 消息含 symbol/timeframe/request_id。初次、选择、重连为完整 bars+指标；常规只传 active/indicator_preview/status，历史改变才重发。约 5Hz 图表预览、1Hz 列表。run_id 标识后端实例，request_id 与 socket identity 防止串图。保留 heartbeat、慢客户端独立发送任务和 Origin 校验；不新增差量重放协议。
+UI 图表只通过 `/v1/stream`：select 消息含 symbol/timeframe/request_id。初次、选择、重连为完整 bars+指标；常规只传 active/indicator_preview/status，历史改变才重发。约 5Hz 图表预览、1Hz 独立 list 消息。list 不依赖选中 symbol/request_id，所以删空、删当前项或重连时仍可刷新名单；图表继续保留 request_id 校验。run_id 标识后端实例，request_id 与 socket identity 防止串图。保留 heartbeat、慢客户端独立发送任务和 Origin 校验；不新增差量重放协议。
+
+List 写接口：`POST /v1/list`，Content-Type 为 application/json，接受 `{action:"add",ticker,section}`、`{action:"delete",ticker}`、`{action:"move",ticker,section,index}`。index 为移除主动 ticker 后目标数组的零基位置。返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
 
 ## 检查与真实测试
 

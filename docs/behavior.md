@@ -1,12 +1,28 @@
 # 看盘服务运行逻辑
 
-更新：2026-09-23。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
+更新：2026-09-24。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
 
 ## 启动与接收
 
-启动读取 workspace 的 focus/wait，开始接收全部白名单的 Quote，同时加载历史。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
+启动选择 `~/qull-scan-workspace/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus/wait，开始接收当前名单的 Quote，同时加载历史。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
 
 Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 只显示最新价格。页面选股不改变券商订阅范围。关闭网页不停止后端。
+
+## Focus / Wait 列表
+
+需求来源：[List Module V0](list-module-v0.md)。
+
+Monitor 与 Scan 共用当前 workspace.json，保留 schema 和 version。Focus、Wait 固定顺序，可折叠；数组顺序就是显示顺序。Section 右侧 + 输入美国 ticker（不带 .US），由同一 Longbridge context 的 static_info 验证后加入该 Section 首位。无效或验证失败不添加；已在 Focus/Wait 的 ticker 保持位置、状态和日期不变。
+
+可拖动排序或跨 Section 移动，删除直接移出数组并删除对应 statuses 记录。新增、移动和排序只更新主动操作 ticker 的 status_at，使用本机本地日期；被动移位 ticker 不变。所有操作同步直接写回文件，完成即保存，无 debounce、队列、原子替换或文件锁。
+
+不读取 hidden 的成员来决定行为，不修改 orders.hidden 或 carried。即使 ticker 在 hidden 数组内，也可正常加入 Focus/Wait；保留 statuses 记录的其他字段。
+
+一个 watchdog 原生文件事件 watcher 递归监听 days：Scan 修改当前文件后自动重读；出现更大日期的 workspace.json 自动切换。外部更新只读、不回写，无轮询、合并或并发冲突处理。读取/保存失败显示简单错误。
+
+名单增加会立即安排五个官方周期最近 1000 根，并订阅 Quote；移除会撤下下载任务、停止后续请求并取消 Quote 订阅，已有 SQLite 历史不删除。排序和 Focus/Wait 互移不重下载、不重订阅。Quote 订阅变更在现有 context 上执行；网络请求仍受现有预算约束。文件切换保留仍在名单中的行情状态。选中 ticker 被删除时选择第一项，名单为空时清空图表、保留新增入口和 WebSocket。
+
+`--symbols` 验收会话始终限制在指定子集，禁用列表编辑；文件更新不会扩大该范围。模拟器仅编辑临时 workspace 副本，新增使用明确标记的模拟证券信息，不调用真实验证。
 
 ## 请求顺序与恢复
 

@@ -21,6 +21,9 @@ def create_app(service, cors_origin=None):
             response = web.json_response({'error': str(exc)}, status=400)
         except KeyError:
             response = web.json_response({'error': 'Not found'}, status=404)
+        except (OSError, RuntimeError) as exc:
+            log.warning('Request failed: %s', exc)
+            response = web.json_response({'error': 'Request failed; please try again'}, status=503)
         response.headers['Cache-Control'] = 'no-store'
         if cors_origin and request.headers.get('Origin') == cors_origin:
             response.headers['Access-Control-Allow-Origin'] = cors_origin
@@ -38,6 +41,17 @@ def create_app(service, cors_origin=None):
         query = {k: request.query.getall(k) for k in request.query}
         return web.json_response(await service.api(request.path, query), dumps=lambda v: json.dumps(v, allow_nan=False))
 
+    async def mutate_list(request):
+        origin = request.headers.get('Origin')
+        if origin and origin != cors_origin and urlsplit(origin).netloc != request.host:
+            raise web.HTTPForbidden(text='Origin not allowed')
+        if request.content_type != 'application/json':
+            raise web.HTTPUnsupportedMediaType()
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise ValueError('Expected a list action')
+        return web.json_response(await service.mutate_list(payload))
+
     async def socket(request):
         origin = request.headers.get('Origin')
         if origin and origin != cors_origin and urlsplit(origin).netloc != request.host:
@@ -54,13 +68,16 @@ def create_app(service, cors_origin=None):
             last_board = 0
             try:
                 while not ws.closed:
-                    view = service.view(symbol, tf, revisions)
-                    revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
-                    message = {'type': 'view', 'request_id': request_id, **view}
                     if asyncio.get_running_loop().time() - last_board >= 1:
-                        message['board'] = service.board()
+                        await ws.send_json({'type': 'list', **service.list_state()})
                         last_board = asyncio.get_running_loop().time()
-                    await ws.send_json(message, dumps=lambda v: json.dumps(v, allow_nan=False))
+                    if symbol in service.symbols:
+                        view = service.view(symbol, tf, revisions)
+                        revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
+                        message = {'type': 'view', 'request_id': request_id, **view}
+                        await ws.send_json(message, dumps=lambda v: json.dumps(v, allow_nan=False))
+                    else:
+                        revisions = {}
                     await asyncio.sleep(0.2)
             except (ConnectionError, RuntimeError):
                 await ws.close()
@@ -95,6 +112,7 @@ def create_app(service, cors_origin=None):
         return web.FileResponse(UI_ROOT / 'index.html')
 
     app.router.add_get('/v1/stream', socket)
+    app.router.add_post('/v1/list', mutate_list)
     app.router.add_get('/v1/{resource}', api)
     app.router.add_get('/health', api)
     app.router.add_get('/', index)

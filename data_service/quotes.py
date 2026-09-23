@@ -29,6 +29,41 @@ class QuoteService:
         self.connected_at = 0.0
         self.ctx = None
         self.subscription_errors: dict[str, str] = {}
+        self.subscribed = set()
+        self.changed = asyncio.Event()
+
+    def set_symbols(self, symbols):
+        removed = set(self.symbols) - set(symbols)
+        self.symbols = list(symbols)
+        for symbol in removed:
+            for mapping in (self.values, self.errors, self.subscription_errors):
+                mapping.pop(symbol, None)
+        self.changed.set()
+
+    async def update_subscriptions(self):
+        """Run on the same Quote loop as connect/retry, using the existing context."""
+        removed = self.subscribed - set(self.symbols)
+        if removed:
+            await self.broker.unsubscribe(self.ctx, sorted(removed))
+            self.subscribed.difference_update(removed)
+        added = [s for s in self.symbols if s not in self.subscribed]
+        for symbol in added:
+            if symbol not in self.symbols:
+                continue
+            try:
+                await self.broker.subscribe(self.ctx, [symbol])
+                self.subscribed.add(symbol)
+                self.connected_at = time.monotonic()
+                self.has_connected = True
+                self.subscription_errors.pop(symbol, None)
+                if symbol in self.symbols:
+                    await self._snapshot(self.ctx, [symbol])
+            except Exception as exc:
+                if symbol in self.symbols:
+                    if symbol in self.subscribed:
+                        self.errors[symbol] = str(exc)
+                    else:
+                        self.subscription_errors[symbol] = str(exc)
 
     def apply(self, symbol, event, snapshot=False, session_override=None):
         if symbol not in self.symbols:
@@ -111,11 +146,15 @@ class QuoteService:
                 pass
 
         ctx.set_on_quote(callback)
+        if not self.symbols:
+            self.connection_health = 'CONNECTED'
+            return
         subscribed = []
         for start in range(0, len(self.symbols), 20):
             chunk = self.symbols[start:start + 20]
             try:
                 await self.broker.subscribe(ctx, chunk)
+                self.subscribed.update(chunk)
                 subscribed.extend(chunk)
             except Exception as exc:
                 if isinstance(exc, TimeoutError):
@@ -123,6 +162,7 @@ class QuoteService:
                 for symbol in chunk:
                     try:
                         await self.broker.subscribe(ctx, [symbol])
+                        self.subscribed.add(symbol)
                         subscribed.append(symbol)
                     except Exception as single:
                         self.subscription_errors[symbol] = str(single)
@@ -156,7 +196,9 @@ class QuoteService:
         if ctx is not None:
             ctx.set_on_quote(lambda *_: None)
             try:
-                await self.broker.unsubscribe(ctx, self.symbols)
+                if self.subscribed:
+                    await self.broker.unsubscribe(ctx, sorted(self.subscribed))
+                    self.subscribed.clear()
             except Exception:
                 pass
 
@@ -170,20 +212,21 @@ class QuoteService:
                     backoff = 2
                     last_snapshot = time.monotonic()
                     while True:
-                        await asyncio.sleep(1)
+                        try:
+                            await asyncio.wait_for(self.changed.wait(), timeout=1)
+                        except TimeoutError:
+                            pass
+                        if self.changed.is_set():
+                            self.changed.clear()
+                            await self.update_subscriptions()
                         now = int(time.time())
-                        if self.calendar.is_open(now):
+                        if self.symbols and self.calendar.is_open(now):
                             if time.monotonic() - max(self.last_push_monotonic, self.connected_at) > self.stale_seconds:
                                 raise TimeoutError('No universe quote push; reconnecting stale connection')
                         self.connection_health = 'CONNECTED'
                         # Periodic snapshots also restore state after SDK-internal reconnects.
                         if time.monotonic() - last_snapshot >= 30:
-                            for symbol in list(self.subscription_errors):
-                                try:
-                                    await self.broker.subscribe(self.ctx, [symbol])
-                                    del self.subscription_errors[symbol]
-                                except Exception as exc:
-                                    self.subscription_errors[symbol] = str(exc)
+                            await self.update_subscriptions()
                             for start in range(0, len(self.symbols), 20):
                                 chunk = self.symbols[start:start + 20]
                                 try:

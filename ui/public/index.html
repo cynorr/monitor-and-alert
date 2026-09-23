@@ -34,7 +34,18 @@
     <div class="list-heading"><strong>Watchlist</strong><span id="symbol-count"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search symbols" autocomplete="off">
     <div class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span></div>
+    <div id="workspace-error" class="list-message" role="alert"></div>
+    <div id="list-notice" class="list-message" role="status"></div>
     <nav id="symbols" aria-label="Symbols"></nav>
   </aside>
 </main>
+<dialog id="add-dialog" aria-labelledby="add-title">
+  <form id="add-form">
+    <h2 id="add-title">Add ticker</h2>
+    <label for="add-ticker">US ticker</label>
+    <input id="add-ticker" name="ticker" placeholder="NVDA" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20" required>
+    <p id="add-error" role="alert"></p>
+    <div class="dialog-actions"><button id="add-cancel" type="button">Cancel</button><button id="add-submit" type="submit">Add</button></div>
+  </form>
+</dialog>
 </body></html>

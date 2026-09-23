@@ -1,6 +1,6 @@
 # Chart layout and interactions
 
-Updated: 2026-09-23. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
+Updated: 2026-09-24. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
 
 ## Layout
 
@@ -48,13 +48,17 @@ Updated: 2026-09-23. Approved interaction specification and maintenance referenc
 - Right panel: search, compact Focus/Wait sections, four columns: Symbol, Last, Chg%, Ext. Rows are 26px high.
 - Last is the regular price. Chg% is regular price / previous completed Daily close - 1. Use the previous trading day relative to the quote date, including after today's Daily bar is stored.
 - Ext is (latest extended price / regular close - 1) × 100%, with up/down coloring. Only use extended quotes newer than the regular quote, including next-day premarket. Missing extended data or regular baseline displays an em dash.
-- Click or ArrowUp/ArrowDown selects the ticker for both charts. Search filters locally. No list editing.
+- Click or ArrowUp/ArrowDown selects the ticker for both charts. Search filters locally. Arrow navigation skips collapsed sections and does not intercept ticker/search input.
+- Focus and Wait always remain visible, including when empty. Their order is fixed. Each header has a collapse/expand control and a + button opening a US ticker form; Add validates and saves through the backend. Duplicates remain in place. Errors stay in the form; a successful add shows the returned security name. Market suffixes are not displayed.
+- Drag a row within or between sections. A line shows before/after row placement; dropping on a header inserts first, and an empty section accepts drops. Search uses visible rows as anchors into the full list. Mouse release submits immediately; no delayed persistence. Only the dragged ticker receives a new local status date.
+- Each row has a Delete button revealed on hover or keyboard focus. Delete removes it from Focus/Wait; it never moves to hidden. If the selection disappears, select the first remaining ticker; an empty list clears both charts and keeps both + controls available.
+- Incoming workspace changes and new trading-day files refresh the list automatically. No refresh button. Editing is disabled for bounded --symbols sessions. Simulator edits a temporary copy and labels successful additions as simulated, without broker validation.
 - Use the Loading / yellow Ready / blue Ready / error-icon rules below; no multi-line banner. Keep details in hover text.
 - Simulation displays one small SIM badge so generated data cannot be confused with a live account. No extra branding bar.
 
 ## Data and simulator boundaries
 
-- One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics. A chart GET must not change selection priority.
+- One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics; POST /v1/list performs edits. Independent list messages on the existing WebSocket refresh membership even without a chart selection. A chart GET must not change selection priority.
 - Keep request_id and socket identity checks. Switching periods preserves the selected trading day and native viewport behavior. Indicators are calculated only in Python.
 - 2h/4h are always converted from official closed 5m bars. Missing official 15m/30m/1h history uses the same 5m conversion; official rows replace the display at the next stream update. All conversions remain in memory.
 - 5m history spans roughly 13 full sessions at the 1000-response limit. Larger derived periods share that time coverage; insufficient SMA65 history means the line is absent.

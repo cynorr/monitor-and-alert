@@ -144,6 +144,12 @@ def test_global_limiter_rolling_window():
 
 def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
     service = DataService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, calendar=cal)
+    async def receive_view(ws):
+        while True:
+            message = await ws.receive_json(timeout=2)
+            if message['type'] == 'view':
+                return message
+
     async def scenario():
         runner = web.AppRunner(create_app(service))
         await runner.setup()
@@ -163,18 +169,18 @@ def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
                 async with client.get(base + '/v1/stream', headers={'Origin':'https://untrusted.example'}) as response:
                     assert response.status == 403
                 async with client.ws_connect(base + '/v1/stream') as ws:
-                    initial = await ws.receive_json(timeout=2)
+                    initial = await receive_view(ws)
                     assert 'bars' in initial['charts']['5m']
                     await ws.send_json({'type':'select','symbol':'BLSH.US','timeframe':'1h','request_id':12})
                     while True:
-                        message = await ws.receive_json(timeout=2)
+                        message = await receive_view(ws)
                         if message['request_id'] == 12:
                             break
                     assert message['symbol'] == 'BLSH.US' and 'bars' in message['charts']['1h']
-                    message = await ws.receive_json(timeout=2)
+                    message = await receive_view(ws)
                     assert 'bars' not in message['charts']['1h']
                 async with client.ws_connect(base + '/v1/stream') as ws:
-                    message = await ws.receive_json(timeout=2)
+                    message = await receive_view(ws)
                     assert 'bars' in message['charts']['1h']
         finally:
             await runner.cleanup()

@@ -59,6 +59,9 @@ class Market:
         if not set(symbols) <= self.allowed:
             raise ValueError('Symbol outside simulation workspace')
 
+    async def validate_ticker(self, ticker):
+        return {'ticker': ticker, 'name': 'Simulated security (not Longbridge validated)'}
+
     @lru_cache(maxsize=16000)
     def path(self, symbol: str, day: date):
         self.check([symbol])
@@ -139,6 +142,10 @@ class SimulatedQuotes:
         self.push_count = 0
         self.raw, self.values = {}, {}
         self.tick()
+
+    def set_symbols(self, symbols):
+        self.raw = {s: v for s, v in self.raw.items() if s in symbols}
+        self.values = {s: v for s, v in self.values.items() if s in symbols}
 
     def tick(self):
         now = int(self.market.clock())

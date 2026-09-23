@@ -47,8 +47,79 @@ class DataService:
                                    on_reconnect=self.recover) if broker else None
         self.run_id = uuid.uuid4().hex
         self.started_at = int(self.now())
-        self.focus = (self.symbols[0], '5m')
+        self.focus = (self.symbols[0] if self.symbols else '', '5m')
         self.sync = {(symbol, tf): SyncState() for symbol in self.symbols for tf in PHASES}
+        self.workspace = None
+        self.workspace_subset = None
+        self.retired_tasks = set()
+
+    def attach_workspace(self, workspace, only=None):
+        self.workspace = workspace
+        self.workspace_subset = {s if s.endswith('.US') else s + '.US' for s in only} if only else None
+
+        def changed():
+            tickers = workspace.tickers()
+            if self.workspace_subset is not None:
+                tickers = [t for t in tickers if t.symbol in self.workspace_subset]
+            self.update_tickers(tickers)
+
+        workspace.on_change = changed
+        changed()
+
+    def update_tickers(self, tickers):
+        symbols = [t.symbol for t in tickers]
+        removed = set(self.symbols) - set(symbols)
+        added = set(symbols) - set(self.symbols)
+        self.tickers, self.symbols = tickers, symbols
+        self.store.allowed = frozenset(symbols)
+        if self.broker:
+            self.broker.allowed = frozenset(symbols)
+        for key in list(self.sync):
+            if key[0] in removed:
+                state = self.sync.pop(key)
+                if state.task is not None:
+                    state.task.cancel()
+                    self.retired_tasks.add(state.task)
+                    state.task.add_done_callback(self.retired_tasks.discard)
+        for symbol in added:
+            for tf in PHASES:
+                self.sync[symbol, tf] = SyncState()
+        for symbol in removed:
+            for cache in (self.charts.active, self.charts.quotes, self.charts.volume_baselines):
+                cache.pop(symbol, None)
+        if self.focus[0] not in symbols:
+            self.focus = (symbols[0] if symbols else '', self.focus[1])
+        if self.quotes and (added or removed):
+            self.quotes.set_symbols(symbols)
+
+    def list_state(self):
+        return {'board': self.board(), 'mode': self.mode,
+                'editable': self.workspace is not None and self.workspace_subset is None,
+                'workspace_error': self.workspace.error if self.workspace else None}
+
+    async def mutate_list(self, payload):
+        from .workspace import normalize_ticker, SECTIONS
+        if self.workspace is None or self.workspace_subset is not None:
+            raise ValueError('List editing unavailable for this session')
+        action, ticker = payload.get('action'), normalize_ticker(payload.get('ticker', ''))
+        section = payload.get('section')
+        if action == 'add':
+            if section not in SECTIONS:
+                raise ValueError('Invalid section')
+            if self.workspace.section(ticker):
+                return {**self.list_state(), 'notice': 'Ticker already in Focus or Wait'}
+            if self.broker is None:
+                raise ValueError('Ticker validation unavailable')
+            info = await self.broker.validate_ticker(ticker)
+            self.workspace.add_ticker(ticker, section)
+            return {**self.list_state(), 'notice': f"Added {ticker} · {info['name']}"}
+        if action == 'delete':
+            self.workspace.delete_ticker(ticker)
+        elif action == 'move':
+            self.workspace.move_ticker(ticker, section, payload.get('index'))
+        else:
+            raise ValueError('Unknown list action')
+        return self.list_state()
 
     def validate(self, symbol, now=None):
         return self.validator.validate(symbol, int(self.now()) if now is None else now)
@@ -153,7 +224,7 @@ class DataService:
                     return
                 await asyncio.sleep(0.1)
         finally:
-            tasks = [s.task for s in self.sync.values() if s.task is not None]
+            tasks = [s.task for s in self.sync.values() if s.task is not None] + list(self.retired_tasks)
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
