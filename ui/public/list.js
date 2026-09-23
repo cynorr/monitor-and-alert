@@ -1,4 +1,13 @@
 import { $, money, extendedQuote } from './types.js';
+async function listRequest(payload, signal) {
+    const response = await fetch('/v1/list', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal,
+    });
+    const data = await response.json();
+    if (!response.ok)
+        throw new Error(data.error ?? 'Request failed');
+    return data;
+}
 export class Watchlist {
     onSelect;
     tickers = [];
@@ -8,25 +17,29 @@ export class Watchlist {
     rows = new Map();
     key = '';
     dragged = '';
-    targetSection = 'focus';
+    input = $('search');
+    search = null;
+    lookupTimer;
+    lookupController;
     busy = false;
     dragStart = null;
     suppressClick = false;
     constructor(onSelect) {
         this.onSelect = onSelect;
-        $('search').addEventListener('input', () => this.render());
+        this.input.addEventListener('focus', () => { if (!this.search)
+            this.beginSearch(); });
+        this.input.addEventListener('input', () => this.changeSearch());
         $('symbols').addEventListener('click', event => {
             if (this.suppressClick)
                 return;
             const target = event.target;
             const add = target.closest('[data-add]');
             if (add) {
-                this.targetSection = add.dataset.add;
-                $('add-title').textContent = `Add to ${this.targetSection === 'focus' ? 'Focus' : 'Wait'}`;
-                $('add-ticker').value = '';
-                $('add-error').textContent = '';
-                $('add-dialog').showModal();
-                $('add-ticker').focus();
+                this.beginSearch(add.dataset.add);
+                return;
+            }
+            if (target.closest('[data-candidate]')) {
+                void this.commitSearch();
                 return;
             }
             const toggle = target.closest('[data-toggle]');
@@ -45,6 +58,8 @@ export class Watchlist {
             if (target.closest('.delete-ticker')) {
                 void this.mutate({ action: 'delete', ticker: row.dataset.ticker });
             }
+            else if (this.search)
+                this.endSearch(row.dataset.symbol);
             else
                 this.onSelect(row.dataset.symbol);
         });
@@ -110,34 +125,137 @@ export class Watchlist {
             void this.mutate({ action: 'move', ticker, section, index });
         });
         $('symbols').addEventListener('pointercancel', () => this.endDrag());
-        $('add-cancel').addEventListener('click', () => $('add-dialog').close());
-        $('add-form').addEventListener('submit', event => {
-            event.preventDefault();
-            void this.mutate({ action: 'add', ticker: $('add-ticker').value, section: this.targetSection }, true);
-        });
         document.addEventListener('keydown', event => {
-            const target = event.target;
-            if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing ||
-                target.closest('input,textarea,select,[contenteditable="true"]') || $('add-dialog').open)
+            if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing)
                 return;
             if (event.key === '/') {
                 event.preventDefault();
-                const search = $('search');
-                search.focus();
-                search.select();
+                this.beginSearch();
                 return;
             }
-            if (!['ArrowUp', 'ArrowDown'].includes(event.key))
+            if (this.search && ['Escape', 'Enter'].includes(event.key)) {
+                event.preventDefault();
+                if (event.key === 'Escape')
+                    this.endSearch();
+                else
+                    void this.commitSearch();
                 return;
-            const rows = Array.from(this.rows.values());
+            }
+            if (event.target.closest('input,textarea,select,[contenteditable="true"]') ||
+                !['ArrowUp', 'ArrowDown'].includes(event.key))
+                return;
+            event.preventDefault();
+            const direction = event.key === 'ArrowDown' ? 1 : -1;
+            if (event.shiftKey) {
+                void this.swapSelected(direction);
+                return;
+            }
+            const rows = [...this.rows.values()];
             if (!rows.length)
                 return;
             const index = rows.findIndex(row => row.dataset.symbol === this.selected);
-            const next = Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
-            event.preventDefault();
+            const next = Math.max(0, Math.min(rows.length - 1, index + direction));
             this.onSelect(rows[next].dataset.symbol);
             rows[next].scrollIntoView({ block: 'nearest' });
         });
+    }
+    query() { return this.input.value.trim().toUpperCase(); }
+    matches() { return this.tickers.filter(t => t.ticker.includes(this.query())); }
+    cancelLookup() {
+        clearTimeout(this.lookupTimer);
+        this.lookupController?.abort();
+        this.lookupController = undefined;
+    }
+    beginSearch(section = 'focus') {
+        this.endDrag();
+        this.input.value = '';
+        this.changeSearch(section);
+        this.input.focus();
+    }
+    changeSearch(section = this.search?.section ?? 'focus') {
+        this.cancelLookup();
+        const search = { section, message: '' };
+        this.search = search;
+        this.input.placeholder = `Search or add to ${section === 'focus' ? 'Focus' : 'Wait'}`;
+        this.render();
+        const term = this.query();
+        if (term && this.editable && !this.tickers.some(t => t.ticker === term))
+            this.lookupTimer = window.setTimeout(() => { void this.lookup(search, term); }, 1000);
+    }
+    lookup(search, term) {
+        clearTimeout(this.lookupTimer);
+        if (search.lookup)
+            return search.lookup;
+        if (!this.editable)
+            return Promise.resolve(null);
+        search.message = 'Searching…';
+        this.render();
+        this.lookupController = new AbortController();
+        search.lookup = listRequest({ action: 'lookup', ticker: term }, this.lookupController.signal)
+            .then(candidate => {
+            if (this.search !== search)
+                return null;
+            search.candidate = candidate;
+            search.message = '';
+            return candidate;
+        })
+            .catch(error => {
+            if (this.search === search)
+                search.message = error instanceof Error ? error.message : 'Search unavailable';
+            return null;
+        })
+            .finally(() => { if (this.search === search)
+            this.render(); });
+        return search.lookup;
+    }
+    endSearch(symbol) {
+        this.endDrag();
+        this.cancelLookup();
+        this.search = null;
+        this.input.value = '';
+        this.input.placeholder = 'Search or add';
+        this.input.blur();
+        $('list-notice').textContent = '';
+        const ticker = this.tickers.find(t => t.symbol === symbol);
+        if (ticker)
+            this.collapsed.delete(ticker.status);
+        this.render();
+        if (symbol)
+            this.onSelect(symbol);
+        this.rows.get(symbol ?? this.selected)?.scrollIntoView({ block: 'nearest' });
+    }
+    async commitSearch() {
+        const search = this.search, term = this.query();
+        if (!search || !term || this.busy)
+            return;
+        // Enter selects the exact local ticker, or the first currently displayed local match.
+        const local = this.tickers.find(t => t.ticker === term) ?? (!search.candidate ? this.matches()[0] : undefined);
+        if (local) {
+            this.endSearch(local.symbol);
+            return;
+        }
+        const candidate = search.candidate ?? await this.lookup(search, term);
+        if (this.search !== search || !candidate)
+            return;
+        const result = await this.mutate({ action: 'add', ticker: candidate.ticker, section: search.section });
+        if (result && this.search === search) {
+            const added = result.board.find(t => t.ticker === candidate.ticker);
+            if (added)
+                this.endSearch(added.symbol);
+        }
+    }
+    async swapSelected(direction) {
+        if (!this.editable || this.busy || this.search)
+            return;
+        const ticker = this.tickers.find(t => t.symbol === this.selected);
+        if (!ticker)
+            return;
+        const items = this.tickers.filter(t => t.status === ticker.status);
+        const index = items.indexOf(ticker) + direction;
+        if (index < 0 || index >= items.length)
+            return;
+        await this.mutate({ action: 'move', ticker: ticker.ticker, section: ticker.status, index });
+        this.rows.get(this.selected)?.scrollIntoView({ block: 'nearest' });
     }
     update(data) {
         this.tickers = data.board;
@@ -158,42 +276,61 @@ export class Watchlist {
         this.clearDrop();
         document.querySelector('.dragging')?.classList.remove('dragging');
     }
-    async mutate(payload, adding = false) {
+    async mutate(payload) {
         if (this.busy)
-            return;
+            return null;
         this.busy = true;
-        const submit = $('add-submit');
-        submit.disabled = true;
-        submit.textContent = 'Validating…';
-        const message = $(adding ? 'add-error' : 'list-notice');
-        message.textContent = '';
+        const search = this.search;
+        if (search)
+            search.message = 'Saving…';
+        $('list-notice').textContent = '';
+        this.render();
         try {
-            const response = await fetch('/v1/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await response.json();
-            if (!response.ok)
-                throw new Error(data.error ?? 'Could not save list');
+            const data = await listRequest(payload);
             this.update(data);
-            $('list-notice').textContent = data.notice ?? '';
-            if (adding)
-                $('add-dialog').close();
+            if (!this.search)
+                $('list-notice').textContent = data.notice ?? '';
+            return data;
         }
         catch (error) {
-            message.textContent = error instanceof Error ? error.message : 'Could not save list';
+            const message = error instanceof Error ? error.message : 'Could not save list';
+            if (search && this.search === search)
+                search.message = message;
+            else
+                $('list-notice').textContent = message;
+            return null;
         }
         finally {
             this.busy = false;
-            submit.disabled = false;
-            submit.textContent = 'Add';
+            this.render();
         }
     }
     render() {
-        const term = $('search').value.trim().toUpperCase();
-        const visible = this.tickers.filter(t => t.ticker.includes(term));
-        const key = JSON.stringify([visible.map(t => [t.symbol, t.status]), [...this.collapsed], this.editable]);
+        const term = this.query(), visible = this.search ? this.matches() : this.tickers;
+        const candidate = this.search?.candidate;
+        const showCandidate = candidate && !this.tickers.some(t => t.ticker === candidate.ticker);
+        if (this.search)
+            $('list-notice').textContent = this.search.message || `Enter to select · Esc to exit · Add to ${this.search.section === 'focus' ? 'Focus' : 'Wait'}`;
+        const key = JSON.stringify([visible.map(t => [t.symbol, t.status]), [...this.collapsed], this.editable,
+            this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
             this.key = key;
             this.rows.clear();
             const fragment = document.createDocumentFragment();
+            if (showCandidate) {
+                const result = document.createElement('button');
+                result.className = 'search-result';
+                result.dataset.candidate = candidate.ticker;
+                const name = document.createElement('strong');
+                name.textContent = candidate.ticker;
+                const action = document.createElement('span');
+                action.textContent = `Add to ${this.search.section === 'focus' ? 'Focus' : 'Wait'} ↵`;
+                const company = document.createElement('span');
+                company.className = 'security-name';
+                company.textContent = candidate.name;
+                result.append(name, action, company);
+                fragment.append(result);
+            }
             for (const group of ['focus', 'wait']) {
                 const section = document.createElement('section');
                 section.dataset.section = group;
@@ -203,10 +340,11 @@ export class Watchlist {
                 toggle.dataset.toggle = group;
                 const arrow = document.createElement('span');
                 arrow.className = 'section-arrow';
-                arrow.textContent = this.collapsed.has(group) ? '▸' : '▾';
+                const collapsed = !this.search && this.collapsed.has(group);
+                arrow.textContent = collapsed ? '▸' : '▾';
                 arrow.setAttribute('aria-hidden', 'true');
                 toggle.append(arrow, group === 'focus' ? 'Focus' : 'Wait');
-                toggle.setAttribute('aria-expanded', String(!this.collapsed.has(group)));
+                toggle.setAttribute('aria-expanded', String(!collapsed));
                 const add = document.createElement('button');
                 add.dataset.add = group;
                 add.textContent = '+';
@@ -215,7 +353,7 @@ export class Watchlist {
                 heading.append(toggle, add);
                 section.append(heading);
                 const items = visible.filter(t => t.status === group);
-                if (!this.collapsed.has(group)) {
+                if (!collapsed) {
                     for (const ticker of items) {
                         const row = document.createElement('div');
                         row.className = 'symbol-row';
@@ -251,6 +389,9 @@ export class Watchlist {
             }
             $('symbols').replaceChildren(fragment);
         }
+        const result = $('symbols').querySelector('[data-candidate]');
+        if (result)
+            result.disabled = this.busy;
         for (const ticker of visible) {
             const row = this.rows.get(ticker.symbol);
             if (!row)

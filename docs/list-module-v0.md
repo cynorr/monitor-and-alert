@@ -751,3 +751,8 @@ custom sections
 
 - List 变化立即同步当前行情范围：新增订阅 Quote 并加载五个官方周期，删除取消订阅并停止后续下载；Scan 外部修改和新日期切换应用同样规则。排序和 Focus/Wait 互移不触发重新下载。
 - 添加时不查询 hidden 成员；即使 ticker 在 orders.hidden 中，也可正常加入点击 + 的目标 Section。orders.hidden 与 carried 原样保留。
+
+
+## 20. Search / Add Interaction Revision — 2026-09-24
+
+新增与搜索合并为列表内同一输入框，删除新增弹窗。/ 随时进入并清空搜索（默认新增到 Focus），Section 的 + 复用搜索并指定该组；Esc 退出。停输 1 秒后用 static_info 查询不在当前名单的精确 ticker，候选直接显示在列表。回车选中已有 ticker，或将有效新候选加入目标组首位并选中，随后退出搜索。查询不修改名单，写入仍只发生在确认添加后。选中行使用圆角黑色边框；Shift+上下在当前组内交换相邻项并保留选中。当前交互细则以 [ui.md](ui.md) 为准。

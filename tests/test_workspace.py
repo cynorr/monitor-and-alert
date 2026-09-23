@@ -257,6 +257,12 @@ def test_list_http_mutations_validation_failure_origin_and_empty_stream(tmp_path
             async with ClientSession() as client, client.ws_connect(base + '/v1/stream') as stream:
                 assert (await stream.receive_json(timeout=2))['board'] == []
                 before = wsfile.path.read_bytes()
+                response = await client.post(base + '/v1/list', json={'action': 'lookup', 'ticker': 'nvda'})
+                assert response.status == 200
+                assert await response.json() == {'ticker': 'NVDA', 'name': 'Validated stock'}
+                assert wsfile.path.read_bytes() == before and service.symbols == [] and not service.sync
+                response = await client.post(base + '/v1/list', json={'action': 'lookup', 'ticker': 'BAD'})
+                assert response.status == 400 and wsfile.path.read_bytes() == before
                 for ticker, code in [('BAD', 400), ('FAIL', 503)]:
                     response = await client.post(base + '/v1/list', json={'action': 'add', 'ticker': ticker, 'section': 'focus'})
                     assert response.status == code

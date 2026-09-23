@@ -41,7 +41,7 @@ def create_app(service, cors_origin=None):
         query = {k: request.query.getall(k) for k in request.query}
         return web.json_response(await service.api(request.path, query), dumps=lambda v: json.dumps(v, allow_nan=False))
 
-    async def mutate_list(request):
+    async def list_action(request):
         origin = request.headers.get('Origin')
         if origin and origin != cors_origin and urlsplit(origin).netloc != request.host:
             raise web.HTTPForbidden(text='Origin not allowed')
@@ -50,7 +50,7 @@ def create_app(service, cors_origin=None):
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError('Expected a list action')
-        return web.json_response(await service.mutate_list(payload))
+        return web.json_response(await service.list_action(payload))
 
     async def socket(request):
         origin = request.headers.get('Origin')
@@ -112,7 +112,7 @@ def create_app(service, cors_origin=None):
         return web.FileResponse(UI_ROOT / 'index.html')
 
     app.router.add_get('/v1/stream', socket)
-    app.router.add_post('/v1/list', mutate_list)
+    app.router.add_post('/v1/list', list_action)
     app.router.add_get('/v1/{resource}', api)
     app.router.add_get('/health', api)
     app.router.add_get('/', index)

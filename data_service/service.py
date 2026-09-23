@@ -97,20 +97,23 @@ class DataService:
                 'editable': self.workspace is not None and self.workspace_subset is None,
                 'workspace_error': self.workspace.error if self.workspace else None}
 
-    async def mutate_list(self, payload):
+    async def list_action(self, payload):
         from .workspace import normalize_ticker, SECTIONS
         if self.workspace is None or self.workspace_subset is not None:
             raise ValueError('List editing unavailable for this session')
         action, ticker = payload.get('action'), normalize_ticker(payload.get('ticker', ''))
         section = payload.get('section')
-        if action == 'add':
-            if section not in SECTIONS:
-                raise ValueError('Invalid section')
-            if self.workspace.section(ticker):
-                return {**self.list_state(), 'notice': 'Ticker already in Focus or Wait'}
+        if action in {'lookup', 'add'}:
+            if action == 'add':
+                if section not in SECTIONS:
+                    raise ValueError('Invalid section')
+                if self.workspace.section(ticker):
+                    return {**self.list_state(), 'notice': 'Ticker already in Focus or Wait'}
             if self.broker is None:
                 raise ValueError('Ticker validation unavailable')
             info = await self.broker.validate_ticker(ticker)
+            if action == 'lookup':
+                return {'ticker': ticker, 'name': info['name']}
             self.workspace.add_ticker(ticker, section)
             return {**self.list_state(), 'notice': f"Added {ticker} · {info['name']}"}
         if action == 'delete':

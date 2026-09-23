@@ -12,9 +12,11 @@ Quote 统一接收和校验，regular 与 extended 按时段保存最新值，�
 
 需求来源：[List Module V0](list-module-v0.md)。
 
-Monitor 与 Scan 共用当前 workspace.json，保留 schema 和 version。Focus、Wait 固定顺序，可折叠；数组顺序就是显示顺序。Section 右侧 + 输入美国 ticker（不带 .US），由同一 Longbridge context 的 static_info 验证后加入该 Section 首位。无效或验证失败不添加；已在 Focus/Wait 的 ticker 保持位置、状态和日期不变。
+Monitor 与 Scan 共用当前 workspace.json，保留 schema 和 version。Focus、Wait 固定顺序，可折叠；数组顺序就是显示顺序。搜索与新增共用列表上方输入框，没有新增弹窗。按 / 随时进入搜索并清空输入，默认新增到 Focus；Section 右侧 + 进入同一搜索模式，只把新增目标改为该 Section。再次按 / 会清空并重置为 Focus。Esc 退出、清空输入并恢复完整列表。
 
-可拖动排序或跨 Section 移动，删除直接移出数组并删除对应 statuses 记录。新增、移动和排序只更新主动操作 ticker 的 status_at，使用本机本地日期；被动移位 ticker 不变。所有操作同步直接写回文件，完成即保存，无 debounce、队列、原子替换或文件锁。
+输入 ticker 时先过滤现有名单；输入停止 1 秒后，若无完全匹配 ticker，则通过同一 Longbridge context 的 static_info 查询美国证券，候选直接显示在列表中。查询不写 workspace、不订阅、不下载。回车选中完全匹配的现有 ticker（否则选当前显示的首个现有匹配）；若显示的是有效新候选，回车才验证、加入目标 Section 首位并选中。无现有结果时提前按回车会立即发起或等待同一候选查询。选中后退出搜索、展开对应 Section 并显示双图；已有 ticker 不改变位置、状态或日期。候选查不到或验证失败不添加；输入变化或退出后忽略旧查询结果。
+
+可拖动排序或跨 Section 移动；正常列表模式下，Shift+上/下将选中 ticker 与当前 Section 相邻项交换，保持该 ticker 选中，Section 边界不跨组。快捷键复用现有移动保存规则。删除直接移出数组并删除对应 statuses 记录。新增、移动和排序只更新主动操作 ticker 的 status_at，使用本机本地日期；被动移位 ticker 不变。所有操作同步直接写回文件，完成即保存，无 debounce、队列、原子替换或文件锁。
 
 不读取 hidden 的成员来决定行为，不修改 orders.hidden 或 carried。即使 ticker 在 hidden 数组内，也可正常加入 Focus/Wait；保留 statuses 记录的其他字段。
 

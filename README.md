@@ -23,7 +23,7 @@ python3 -m venv .venv
 ## 看盘
 
 - 三栏、双图、拖动列宽、搜索与键盘选股、自由十字线和交易日联动。
-- Focus/Wait 可新增、删除、拖动排序/跨组移动和折叠；立即同步写回 Scan workspace。添加由 Longbridge static_info 验证，不管理 hidden/carried。
+- / 进入统一搜索/新增：回车选中或添加到 Focus 首位，Esc 退出；Section 的 + 共用搜索并指定新增目标。停输 1 秒查询 Longbridge 候选。支持删除、拖动、Shift+上下同组换序和折叠；修改立即同步写回 Scan workspace，不管理 hidden/carried。
 - Intraday：5m/15m/30m/1h/2h/4h。2h/4h 永远由 5m 合成，官方 15m/30m/1h 未到时也可由 5m 临时显示。
 - Daily 约九个月初始范围；短历史靠右、保持 candle 宽度。5m 合成的大周期仅覆盖已有 5m 的时间范围。
 - EMA10/20、Daily SMA50、Intraday SMA65、ADR20/ADV20；计算在 Python。
@@ -50,7 +50,7 @@ npm run build --prefix ui
 | --- | --- |
 | GET /health | mode、Quote 连接、推送数、待处理任务、耗尽错误 |
 | GET /v1/universe | 当前白名单 |
-| POST /v1/list | 新增、删除、排序/跨组移动（同步保存） |
+| POST /v1/list | 候选查询（不写入）；新增、删除、排序/跨组移动（同步保存） |
 | GET /v1/quotes?symbol=PAYS.US | 最新 regular/extended |
 | GET /v1/bars?symbol=PAYS.US&timeframe=5m&limit=1000 | 官方 closed 数据，只支持五个官方周期 |
 | GET /v1/readiness?symbol=PAYS.US | 简单 status + 详细周期诊断 |

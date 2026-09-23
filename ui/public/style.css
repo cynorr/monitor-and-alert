@@ -95,7 +95,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .group button:disabled { opacity: .35; cursor: default; }
 .symbol-row { width: 100%; height: 28px; font-size: var(--font-row); text-align: left; white-space: nowrap; cursor: pointer; user-select: none; touch-action: none; }
 .symbol-row:hover:not(.active) { background: #f3f5f8; }
-.symbol-row.active { outline: 1px solid #000; outline-offset: -1px; }
+.symbol-row.active { border-radius: 6px; outline: 1px solid #000; outline-offset: -1px; }
 .ticker { text-align: left; padding: 0; font-size: inherit; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .warn { color: #b58722; font-size: 10px; margin-left: 3px; }
 .positive { color: #008f83; }
@@ -112,14 +112,8 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .list-message:empty { display: none; }
 #workspace-error { color: #b33; }
 
-/* Add ticker dialog. */
-dialog { border: 0; border-radius: 16px; padding: 22px; width: 320px; box-shadow: 0 12px 60px #0003; }
-dialog::backdrop { background: #18233435; }
-dialog h2 { font-size: 18px; margin: 0 0 18px; }
-dialog label { display: block; margin-bottom: 6px; }
-dialog input { width: 100%; border: 1px solid #c5cbd4; border-radius: 8px; padding: 10px; text-transform: uppercase; }
-#add-error { color: #ba3737; min-height: 15px; font-size: var(--font-row); }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.dialog-actions button { border-radius: 999px; padding: 8px 16px; background: #edf0f5; }
-#add-submit { background: #242c38; color: white; }
-#add-submit:disabled { opacity: .55; }
+/* Inline candidate shares the watchlist surface; Enter and click use one action. */
+.search-result { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; width: 100%; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.search-result:hover { background: #f3f5f8; }
+.search-result .security-name { grid-column: 1 / -1; color: #747c87; font-size: var(--font-small); }
+.search-result:disabled { opacity: .6; cursor: wait; }

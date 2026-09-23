@@ -20,7 +20,7 @@
 | charts.py / indicators.py | 活跃 candle、官方/合成显示、图表缓存；唯一指标公式 |
 | http_api.py | aiohttp 静态页面、诊断 HTTP、List mutation、WebSocket/Origin 校验 |
 | ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
-| ui/src/list.ts | Focus/Wait 编辑、拖动落点、折叠、搜索和报价行更新 |
+| ui/src/list.ts | 统一内联搜索/新增、输入查询生命周期、拖动/快捷键移动、折叠和报价行更新 |
 | ui/src/chart.ts / layout.ts | Lightweight Charts、日联动、列宽和原生交互 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
@@ -33,7 +33,7 @@ watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 wa
 
 Workspace 直接维护原始 JSON，读取 focus/wait 和 statuses（statuses 仍决定可请求范围，数组负责排序）；写入只修改两组数组与操作 ticker 的 status/status_at，删除则删该记录。保留所有其他数据。无 schema migration/validation 层、repository 层、锁、临时文件或写队列。文件为空或无法解析时显示读取错误，下一文件事件再读取，不建立恢复协议。
 
-DataService.attach_workspace 接收变更，update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
+DataService.attach_workspace 接收变更，update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
 ## 同步与状态
 
@@ -77,7 +77,9 @@ Daily 保持累计量；2h/4h 的闭合 OHLCV 仍只由 5m 合成。这里的大
 
 UI 图表只通过 `/v1/stream`：select 消息含 symbol/timeframe/request_id。初次、选择、重连为完整 bars+指标；常规只传 active/indicator_preview/status，历史改变才重发。约 5Hz 图表预览、1Hz 独立 list 消息。list 不依赖选中 symbol/request_id，所以删空、删当前项或重连时仍可刷新名单；图表继续保留 request_id 校验。run_id 标识后端实例，request_id 与 socket identity 防止串图。保留 heartbeat、慢客户端独立发送任务和 Origin 校验；不新增差量重放协议。
 
-List 写接口：`POST /v1/list`，Content-Type 为 application/json，接受 `{action:"add",ticker,section}`、`{action:"delete",ticker}`、`{action:"move",ticker,section,index}`。index 为移除主动 ticker 后目标数组的零基位置。返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
+List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,section}`、`{action:"delete",ticker}`、`{action:"move",ticker,section,index}`。index 为移除主动 ticker 后目标数组的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
+
+前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口，唯一差别是目标 Section。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 
 ## 检查与真实测试
 
