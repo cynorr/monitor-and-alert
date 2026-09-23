@@ -5,6 +5,7 @@ import logging
 import math
 import time
 from datetime import datetime
+from types import SimpleNamespace
 
 from .calendar import ET
 from .downloader import sdk_timestamp
@@ -13,9 +14,11 @@ log = logging.getLogger(__name__)
 
 
 class QuoteService:
-    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90):
+    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90, on_quote=None, on_reconnect=None):
         self.broker, self.symbols, self.calendar = broker, symbols, calendar
         self.stale_seconds = stale_seconds
+        self.on_quote, self.on_reconnect = on_quote, on_reconnect
+        self.has_connected = False
         self.values: dict[str, dict] = {}
         self.last_push_monotonic = 0.0
         self.last_quote_received_at = None
@@ -27,7 +30,7 @@ class QuoteService:
         self.ctx = None
         self.subscription_errors: dict[str, str] = {}
 
-    def apply(self, symbol, event, snapshot=False):
+    def apply(self, symbol, event, snapshot=False, session_override=None):
         if symbol not in self.symbols:
             return
         try:
@@ -35,7 +38,7 @@ class QuoteService:
             price, volume = float(event.last_done), int(event.volume)
             if not math.isfinite(price) or price <= 0 or volume < 0 or ts > time.time() + 10:
                 raise ValueError('Invalid quote price, volume or timestamp')
-            session = 'Intraday' if snapshot else str(event.trade_session).split('.')[-1]
+            session = session_override or ('Intraday' if snapshot else str(event.trade_session).split('.')[-1])
             if session == 'Normal':
                 session = 'Intraday'
             entry = self.values.setdefault(symbol, {})
@@ -46,6 +49,16 @@ class QuoteService:
                               'timestamp': ts, 'trade_session': session,
                               'received_at': int(time.time()), 'source': 'snapshot' if snapshot else 'push',
                               'trade_status': str(getattr(event, 'trade_status', 'Unknown')).split('.')[-1]}
+            for field in ('prev_close', 'bid_price', 'ask_price'):
+                value = getattr(event, field, (previous or {}).get(field))
+                try:
+                    value = float(value)
+                    if math.isfinite(value) and value > 0:
+                        entry[session][field] = value
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            if self.on_quote:
+                self.on_quote(symbol, entry[session])
             if not snapshot:
                 self.last_push_monotonic = time.monotonic()
                 self.last_quote_received_at = int(time.time())
@@ -71,6 +84,14 @@ class QuoteService:
         rows = await self.broker.snapshot(ctx, symbols)
         for row in rows:
             self.apply(row.symbol, row, snapshot=True)
+            for field, session in (('pre_market_quote', 'Pre'), ('post_market_quote', 'Post'),
+                                   ('overnight_quote', 'Overnight'), ('over_night_quote', 'Overnight')):
+                extended = getattr(row, field, None)
+                if extended is not None:
+                    event = SimpleNamespace(timestamp=extended.timestamp, last_done=extended.last_done,
+                                            volume=extended.volume, trade_session=session)
+                    # Snapshot extended values must retain their actual session.
+                    self.apply(row.symbol, event, snapshot=True, session_override=session)
 
     async def connect(self):
         self.generation += 1
@@ -123,7 +144,10 @@ class QuoteService:
         if not snapshot_ok and self.last_push_monotonic < connect_started:
             raise RuntimeError('No quote snapshot or fresh push available after subscribe')
         self.connected_at = time.monotonic()
-        self.connection_health = 'LIVE' if self.calendar.is_open(int(time.time())) else 'MARKET_CLOSED'
+        self.connection_health = 'CONNECTED'
+        if self.has_connected and self.on_reconnect:
+            self.on_reconnect()
+        self.has_connected = True
         log.info('Quote connected symbols=%d', len(subscribed))
 
     async def disconnect(self):
@@ -151,9 +175,7 @@ class QuoteService:
                         if self.calendar.is_open(now):
                             if time.monotonic() - max(self.last_push_monotonic, self.connected_at) > self.stale_seconds:
                                 raise TimeoutError('No universe quote push; reconnecting stale connection')
-                            self.connection_health = 'DEGRADED' if self.subscription_errors or self.errors else 'LIVE'
-                        else:
-                            self.connection_health = 'MARKET_CLOSED'
+                        self.connection_health = 'CONNECTED'
                         # Periodic snapshots also restore state after SDK-internal reconnects.
                         if time.monotonic() - last_snapshot >= 30:
                             for symbol in list(self.subscription_errors):
@@ -175,11 +197,11 @@ class QuoteService:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    self.connection_health = 'STALE'
+                    self.connection_health = 'DISCONNECTED'
                     log.warning('Quote disconnected: %s', exc)
                     await self.disconnect()
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 60)
         finally:
             await self.disconnect()
-            self.connection_health = 'STOPPED'
+            self.connection_health = 'DISCONNECTED'

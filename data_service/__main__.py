@@ -36,13 +36,13 @@ async def run(args, tickers):
     try:
         if args.command == 'verify':
             for symbol in service.symbols:
-                service.validate(symbol, current_run=False)
-            service.validator.save()
+                service.validate(symbol)
         elif args.command == 'reconcile':
             await service.reconcile()
-            await service.repair_initial()
         else:
-            server = start_http(service, args.port, args.cors_origin)
+            server = await start_http(service, args.port, args.cors_origin)
+            print(f'LIVE: http://127.0.0.1:{args.port}/ | Longbridge real data | '
+                  f'database: {args.runtime.resolve() / "bars.sqlite3"}', flush=True)
             if args.duration:
                 try:
                     await asyncio.wait_for(service.run(), args.duration)
@@ -50,18 +50,16 @@ async def run(args, tickers):
                     pass
             else:
                 await service.run()
-        summary = {s: {k: v for k, v in state.items() if k not in ('ready_checks', 'full_checks')}
-                   for s, state in service.validator.states.items()}
+        summary = {s: service.validate(s) for s in service.symbols}
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         if args.command == 'serve':
             report = {'health': await service.api('/health', {}), 'readiness': summary,
                       'quotes': await service.api('/v1/quotes', {})}
             atomic_json(args.runtime / 'last_run_report.json', report)
-        return 0 if all(s['alert_eligible'] and s['full_ready'] for s in summary.values()) and summary else 2
+        return 0 if summary and all(c['complete'] for s in summary.values() for c in s.values()) else 2
     finally:
         if server:
-            await asyncio.to_thread(server.shutdown)
-            server.server_close()
+            await server.cleanup()
         service.store.close()
 
 

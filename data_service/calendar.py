@@ -8,8 +8,9 @@ import exchange_calendars as xcals
 
 ET = ZoneInfo('America/New_York')
 UTC = timezone.utc
-PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '1d': 0}
+PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '2h': 120, '4h': 240, '1d': 0}
 PHASES = ('1d', '5m', '15m', '30m', '1h')
+INTRADAY = ('5m', '15m', '30m', '1h', '2h', '4h')
 
 
 def timestamp(value: datetime) -> int:
@@ -70,6 +71,7 @@ class TradingCalendar:
         return [ts for day in self.days(first, last) for ts, close in self.grid(day, timeframe)
                 if start <= ts <= end and close <= as_of]
 
+    @lru_cache(maxsize=10000)
     def latest_closed(self, timeframe: str, now: int) -> int:
         today = datetime.fromtimestamp(now, ET).date()
         candidates = [ts for day in self.days(today - timedelta(days=15), today)
@@ -79,3 +81,16 @@ class TradingCalendar:
     def is_open(self, now: int) -> bool:
         session = self.session(datetime.fromtimestamp(now, ET).date())
         return bool(session and session[0] <= now < session[1])
+
+    def active_start(self, timeframe: str, now: int) -> int | None:
+        day = datetime.fromtimestamp(now, ET).date()
+        for start, end in self.grid(day, timeframe):
+            opened = self.session(day)[0] if timeframe == '1d' else start
+            if opened <= now < end:
+                return start
+        return None
+
+    def next_close(self, timeframe: str, now: int) -> int:
+        today = datetime.fromtimestamp(now, ET).date()
+        return next(end for day in self.days(today, today + timedelta(days=15))
+                    for _, end in self.grid(day, timeframe) if end > now)
