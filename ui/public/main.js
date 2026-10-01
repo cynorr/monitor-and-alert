@@ -1,11 +1,11 @@
-import { $, money, compact, nyTime, extendedQuote } from './types.js';
+import { $, money, compact, nyTime, extendedQuote, defaultTimeframe } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
 initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
-let symbol = '', timeframe = '5m', epoch = 0;
+let symbol = '', timeframe = defaultTimeframe(), epoch = 0;
 let socket = null;
 let reconnectTimer, lastMessage = 0, reconnectDelay = 1000, currentView = null;
 let readyKey = '', readySince = 0, lastStage = '';

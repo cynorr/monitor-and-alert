@@ -115,5 +115,6 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 /* Inline candidate shares the watchlist surface; Enter and click use one action. */
 .search-result { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; width: 100%; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
 .search-result:hover { background: #f3f5f8; }
+.search-result strong { color: #2962ff; }
 .search-result .security-name { grid-column: 1 / -1; color: #747c87; font-size: var(--font-small); }
 .search-result:disabled { opacity: .6; cursor: wait; }

@@ -16,6 +16,8 @@ Monitor 与 Scan 共用当前 workspace.json，保留 schema 和 version。Focus
 
 输入 ticker 时先过滤现有名单；输入停止 1 秒后，若无完全匹配 ticker，则通过同一 Longbridge context 的 static_info 查询美国证券，候选直接显示在列表中。查询不写 workspace、不订阅、不下载。回车选中完全匹配的现有 ticker（否则选当前显示的首个现有匹配）；若显示的是有效新候选，回车才验证、加入目标 Section 首位并选中。无现有结果时提前按回车会立即发起或等待同一候选查询。选中后退出搜索、展开对应 Section 并显示双图；已有 ticker 不改变位置、状态或日期。候选查不到或验证失败不添加；输入变化或退出后忽略旧查询结果。
 
+搜索框始终提示 Search；搜索时只显示有匹配项的 Section，全部无结果时留白，不显示 No matches。Longbridge 新候选使用蓝色 symbol，右侧只显示 Add，不再显示新增目标或回车提示。请求/保存失败仍显示错误。regular 时段 Ext 单元格留空，不用横线占位。
+
 可拖动排序或跨 Section 移动；正常列表模式下，Shift+上/下将选中 ticker 与当前 Section 相邻项交换，保持该 ticker 选中，Section 边界不跨组。快捷键复用现有移动保存规则。删除直接移出数组并删除对应 statuses 记录。新增、移动和排序只更新主动操作 ticker 的 status_at，使用本机本地日期；被动移位 ticker 不变。所有操作同步直接写回文件，完成即保存，无 debounce、队列、原子替换或文件锁。
 
 不读取 hidden 的成员来决定行为，不修改 orders.hidden 或 carried。即使 ticker 在 hidden 数组内，也可正常加入 Focus/Wait；保留 statuses 记录的其他字段。
@@ -47,6 +49,8 @@ SDK 负责底层连接恢复；应用保留 30 秒 snapshot、开市无全名单
 ## 图表周期与指标
 
 官方闭合数据存 SQLite。Quote 产生的临时 5m、所有合成周期和指标仅在内存。
+
+页面打开时按美东 09:30 起的开盘时长选择 Intraday 默认周期：[0,5) 分钟为 5m、[5,15) 为 15m、[15,30) 为 30m，30 分钟起为 1h；开盘前为 5m。只计算初始默认值，之后保留手动选择（切换 ticker 也保留）；2h/4h 仅手动选择。
 
 2h/4h 始终从 5m 合成。15m/30m/1h 缺少官方 bar 时，用相同函数合成替代；官方到达后随下一次现有 WebSocket 更新直接替换，不另等收盘。按实际开盘时间分组，不跨日，尾根按收盘时间结束。闭合合成 candle 的 5m 前缀缺失时不编造完整结果。
 
