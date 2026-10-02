@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sqlite3
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -21,7 +22,7 @@ def create_app(service, cors_origin=None):
             response = web.json_response({'error': str(exc)}, status=400)
         except KeyError:
             response = web.json_response({'error': 'Not found'}, status=404)
-        except (OSError, RuntimeError) as exc:
+        except (OSError, RuntimeError, sqlite3.Error) as exc:
             log.warning('Request failed: %s', exc)
             response = web.json_response({'error': 'Request failed; please try again'}, status=503)
         response.headers['Cache-Control'] = 'no-store'
@@ -29,7 +30,7 @@ def create_app(service, cors_origin=None):
             response.headers['Access-Control-Allow-Origin'] = cors_origin
         return response
 
-    app = web.Application(middlewares=[errors], client_max_size=8192)
+    app = web.Application(middlewares=[errors], client_max_size=65536)
     sockets = set()
 
     async def shutdown(_app):
@@ -50,7 +51,9 @@ def create_app(service, cors_origin=None):
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError('Expected a list action')
-        return web.json_response(await service.list_action(payload))
+        resource = request.match_info.get('action', 'list')
+        result = await service.list_action(payload) if resource == 'list' else await service.action(resource, payload)
+        return web.json_response(result)
 
     async def socket(request):
         origin = request.headers.get('Origin')
@@ -62,12 +65,15 @@ def create_app(service, cors_origin=None):
         symbol, tf = service.focus
         request_id = 0
         revisions = {}
+        context = service.run_id
 
         async def publish():
-            nonlocal revisions
+            nonlocal revisions, context
             last_board = 0
             try:
                 while not ws.closed:
+                    if context != service.run_id:
+                        context, revisions = service.run_id, {}
                     if asyncio.get_running_loop().time() - last_board >= 1:
                         await ws.send_json({'type': 'list', **service.list_state()})
                         last_board = asyncio.get_running_loop().time()
@@ -94,6 +100,8 @@ def create_app(service, cors_origin=None):
                         if payload.get('type') != 'select':
                             raise ValueError('Expected select message')
                         new_symbol, new_tf = payload['symbol'], payload['timeframe']
+                        if payload.get('mode') and payload['mode'] != ('scan' if service.mode == 'scan' else 'monitor'):
+                            raise ValueError('Selection belongs to a previous mode')
                         new_id = int(payload['request_id'])
                         service.select(new_symbol, new_tf)
                         symbol, tf, request_id = new_symbol, new_tf, new_id
@@ -113,6 +121,7 @@ def create_app(service, cors_origin=None):
 
     app.router.add_get('/v1/stream', socket)
     app.router.add_post('/v1/list', list_action)
+    app.router.add_post('/v1/{action:mode|scan|preferences}', list_action)
     app.router.add_get('/v1/{resource}', api)
     app.router.add_get('/health', api)
     app.router.add_get('/', index)

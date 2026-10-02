@@ -1,12 +1,16 @@
 # 开发维护手册
 
-更新：2026-09-24。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
+更新：2026-10-02。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
 | 文件 | 唯一职责 |
 | --- | --- |
 | data_service/__main__.py | CLI、单实例锁、生命周期、有限运行报告 |
+| workbench.py | 同一 Workspace、互斥 Scan/Monitor、模式生命周期和本地 Scan API |
+| scan.py | 上游只读连接、完成日截面/发布、Scan 日图 |
+| features/atomic.py / screening.py / snapshot.py | 原子纯算子、初筛/排名、每只一次截面组装 |
+| preferences.py | Tag 保存契约；读取唯一 filter-catalog.json |
 | config.py | 当前 focus/wait 解析、凭证读取、错误脱敏 |
 | workspace.py | 最新日期选择、内存 JSON、同步直接写入、单个原生文件事件 watcher |
 | broker.py | 单 SDK context、static_info 添加验证、最近 K 线、Quote 请求、全局/后台请求预算 |
@@ -21,19 +25,37 @@
 | http_api.py | aiohttp 静态页面、诊断 HTTP、List mutation、WebSocket/Origin 校验 |
 | ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
 | ui/src/list.ts | 统一内联搜索/新增、输入查询生命周期、拖动/快捷键移动、折叠和报价行更新 |
+| ui/src/scan.ts / filters.ts / tags.ts | 日期/四列表、唯一条件匹配、Tag 草稿与保存 |
+| scripts/build_scan_mock.py | 明确指定目录的合成日 K/截面/测试名单 |
 | ui/src/chart.ts / layout.ts | Lightweight Charts、日联动、列宽和原生交互 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
 
-依赖方向：UI → Data API → service/charts → store/quotes；正式 data 不 import simulator。不增加 services 层、指标数据库或事件日志协议。
+依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
+
+## 模式与上游数据
+
+同一个服务、同一个 Workspace、一个全局模式。Workbench持有monitor实例/任务或只读Scan上下文；Scan初始状态不调用broker_factory。进入Monitor才构造Broker与既有DataService.run，进入Scan先确认截面，再取消并await所有Monitor任务、由Quote退出路径unsubscribe/清callback，最后释放context和store。模式切换和生成不得同时执行；不增加第二个后台服务、消息中间件或通用source接口。
+
+bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。两个文件物理分离：daily.sqlite3由上游写、Scan以mode=ro读；bars.sqlite3仍由Monitor写。BAR_SCHEMA、Bar和read_bars共用，日K ts为ET零点转Unix秒。裸ticker只保留在workspace与UI显示边界；计算/图表使用symbol.US。
+
+build_day仅对D当日有bar的symbol生成截面，每只调用read_bars读取截至D最多1000根，校验闭合/结构，feature_row统一计算指标及原子特征，最后初筛/截面排名。只保留单只历史和全市场标量，避免全市场历史fetchall。全日生成由显式完成日期触发，在asyncio.to_thread中执行；成功后同步publish_day，首次才创建workspace。相同日期重算不重新继承。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
+
+只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传四列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有Quote active、Intraday或Ready实时状态；Daily复用同一个Panel。
+
+indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。NoAdjust会改变旧Scan拆股附近的结果，不能宣称与旧复权输入等价。
+
+复权契约：broker.py 的 candlesticks 显式请求 AdjustType.NoAdjust 与 TradeSessions.Intraday，返回值直接校验并落库；读取、指标和图表阶段不再乘复权因子。项目没有拉取或应用 adjust table。NoAdjust 是本项目选择，Longbridge SDK 本身也支持 ForwardAdjust；当前不启用。pandas 的 ewm(adjust=False) 只控制指数加权计算，不是股票复权。上游必须输出原始 OHLCV，不能用拆股复权价格及四舍五入成交量替代。
+
+38项条件目录仅ui/src/filter-catalog.json一份，后端读取该文件验证保存契约，前端filters.ts唯一执行匹配。保存值不取整；旧maxExclusive语义保留到主动编辑。Tag草稿不写盘，Save写完整preferences后才更新内存，失败保留草稿；不建立长期多版本猜测/迁移框架。
 
 ## Workspace 与动态名单
 
 watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 watcher；线程仅把事件派发回 asyncio loop。默认跟随 days 最新文件；显式 --workspace 监听该文件父目录并固定文件。创建、修改、移动、删除事件触发重读，无定时扫描。自身写入产生的事件在 JSON 相同情况下不重复更新。
 
-Workspace 直接维护原始 JSON，读取 focus/wait 和 statuses（statuses 仍决定可请求范围，数组负责排序）；写入只修改两组数组与操作 ticker 的 status/status_at，删除则删该记录。保留所有其他数据。无 schema migration/validation 层、repository 层、锁、临时文件或写队列。文件为空或无法解析时显示读取错误，下一文件事件再读取，不建立恢复协议。
+Workspace 直接维护原始 JSON，读取 focus/wait 和 statuses（statuses 仍决定可请求范围，数组负责排序）；普通Focus/Wait移动修改相应数组和主动ticker的status/status_at；新增/删除移除该ticker旧hidden排序，删除清status。Scan批量移动验证当前来源归属后一次写入三组orders、status与必要的carried/discover_order。status_at使用所操作workspace日期。保留所有其他数据。无 schema migration/validation 层、repository 层、锁、临时文件或写队列。文件为空或无法解析时显示读取错误，下一文件事件再读取，不建立恢复协议。
 
-DataService.attach_workspace 接收变更，update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
+Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用DataService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
 ## 同步与状态
 
@@ -47,7 +69,7 @@ UI 契约仅 `status: {stage: loading|basic|full, errors: string[]}`。stage 根
 
 ## 存储与数据校验
 
-SQLite WAL/NORMAL，bars 主键 (symbol,timeframe,ts)，只允许 1d/5m/15m/30m/1h。OHLC 必须正数有限；volume 必须非负整数；必须 regular 且已经闭合。唯一 range 检测是 `Bar.invalid_range`，仅用于 downloader 的 JSONL 追加。不得 clamp 原值。
+SQLite WAL/NORMAL，bars 主键 (symbol,timeframe,ts)，只允许 1d/5m/15m/30m/1h。OHLC 必须正数有限；volume 必须非负整数；必须 regular 且已经闭合。唯一range检测是`Bar.invalid_range`，用于downloader/Scan生成的JSONL追加。不得 clamp 原值。
 
 旧库保留，turnover 缺列时仅 ALTER ADD COLUMN。batches 继续使用旧表结构，run_id 列留空字符串以兼容旧表；payload 仅保存最近窗口起点、请求/返回数量、as_of 和无法使用的返回项。旧 metadata 表不再读取/维护，也不破坏已有表。旧 data_ready.json / history_symbol_usage.json 均不再读取或更新。
 
@@ -75,11 +97,15 @@ Daily 保持累计量；2h/4h 的闭合 OHLCV 仍只由 5m 合成。这里的大
 
 同源 HTTP 静态资源与 `/v1/universe`；`/health`、`/v1/quotes`、`/v1/bars`、`/v1/readiness`、`/v1/chart` 为只读诊断。`/v1/chart` 不改变优先级。
 
-UI 图表只通过 `/v1/stream`：select 消息含 symbol/timeframe/request_id。初次、选择、重连为完整 bars+指标；常规只传 active/indicator_preview/status，历史改变才重发。约 5Hz 图表预览、1Hz 独立 list 消息。list 不依赖选中 symbol/request_id，所以删空、删当前项或重连时仍可刷新名单；图表继续保留 request_id 校验。run_id 标识后端实例，request_id 与 socket identity 防止串图。保留 heartbeat、慢客户端独立发送任务和 Origin 校验；不新增差量重放协议。
+UI 图表只通过 `/v1/stream`：select消息含symbol/timeframe/request_id/mode；旧模拟器仍可省略mode。初次、选择、重连为完整 bars+指标；常规只传 active/indicator_preview/status，历史改变才重发。约 5Hz 图表预览、1Hz 独立 list 消息。list 不依赖选中 symbol/request_id，所以删空、删当前项或重连时仍可刷新名单；图表继续保留 request_id 校验。run_id标识后端实例和当前数据上下文，request_id 与 socket identity 防止串图。保留 heartbeat、慢客户端独立发送任务和 Origin 校验；不新增差量重放协议。
 
 List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,section}`、`{action:"delete",ticker}`、`{action:"move",ticker,section,index}`。index 为移除主动 ticker 后目标数组的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
 
-前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口，唯一差别是目标 Section。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
+Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source:"discover",target:"focus"}`。列表状态增加app_mode、date、dates、preferences和mock；历史Scan日期或--symbols不可写。POST /v1/mode切换模式，POST /v1/scan选择/生成日期，POST /v1/preferences同步保存完整偏好；所有写入复用同源检查，body上限64KiB。生成不会改已有日期的人工workspace。
+
+新日继承Focus/Wait并写carried；Hidden保留原Scan的7个自然日/前后candidate交集规则，derive_day_view派生Discover/New/Returned。正式默认days改为runtime/days；本次一次复制15份旧正式workspace和7个现有Tag，原数据保留。原始拷贝目录仅参考并被git忽略，正式模块不import它。
+
+前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口，唯一差别是目标Section；Scan查询本地只读SQLite，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 
 ## 检查与真实测试
 
@@ -87,6 +113,7 @@ List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受
 .venv/bin/python -m pytest -q
 npm run check --prefix ui
 npm run build --prefix ui
+npm run test --prefix ui
 ```
 
 默认测试全部离线，只绑定本机 HTTP/WS，覆盖白名单、日历、OHLC 原值/日志、无法绘制的输入、最近窗口、次数/5m 重试、恢复、限流、合成、指标和模拟器跨边界/交易日。测试数量会随删除旧需求测试而变化，不与历史通过数量直接比较。

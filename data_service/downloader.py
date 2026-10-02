@@ -17,6 +17,27 @@ def sdk_timestamp(value: datetime) -> int:
     return timestamp(value.astimezone())
 
 
+def ohlc_comparison(bar, calendar, as_of, session, ohlcv):
+    end = calendar.bar_end(bar.ts, bar.timeframe)
+    return {'symbol': bar.symbol, 'timeframe': bar.timeframe, 'session': session,
+            'start': bar.ts, 'end': end,
+            'start_et': datetime.fromtimestamp(bar.ts, ET).isoformat(),
+            'end_et': datetime.fromtimestamp(end, ET).isoformat(),
+            'fetched_at': as_of, 'fetched_at_et': datetime.fromtimestamp(as_of, ET).isoformat(),
+            'ohlcv': ohlcv}
+
+
+def append_ohlc_log(path, anomalies):
+    if not anomalies:
+        return
+    try:
+        with path.open('a') as file:
+            for anomaly in anomalies:
+                file.write(json.dumps(anomaly, allow_nan=False) + '\n')
+    except OSError as exc:
+        log.warning('Could not append OHLC comparison log: %s', exc)
+
+
 class BarDownloader:
     def __init__(self, broker, store: BarStore, calendar: TradingCalendar, clock=None):
         self.broker, self.store, self.calendar = broker, store, calendar
@@ -49,21 +70,11 @@ class BarDownloader:
                 bar.validate(self.calendar, as_of)
                 bars.append(bar)
                 if bar.invalid_range:
-                    anomalies.append({'symbol': symbol, 'timeframe': timeframe, 'session': session,
-                        'start': ts, 'end': end,
-                        'start_et': datetime.fromtimestamp(ts, ET).isoformat(),
-                        'end_et': datetime.fromtimestamp(end, ET).isoformat(),
-                        'fetched_at': as_of, 'fetched_at_et': datetime.fromtimestamp(as_of, ET).isoformat(),
-                        'ohlcv': {k: str(getattr(item, k)) for k in ('open', 'high', 'low', 'close', 'volume')}})
+                    anomalies.append(ohlc_comparison(bar, self.calendar, as_of, session,
+                        {k: str(getattr(item, k)) for k in ('open', 'high', 'low', 'close', 'volume')}))
             except (AttributeError, ValueError, TypeError, OverflowError) as exc:
                 rejected.append({'ts': ts, 'error': str(exc)})
-        if anomalies:
-            try:
-                with (self.store.path.parent / 'invalid_ohlc.jsonl').open('a') as file:
-                    for anomaly in anomalies:
-                        file.write(json.dumps(anomaly, allow_nan=False) + '\n')
-            except OSError as exc:
-                log.warning('Could not append OHLC comparison log: %s', exc)
+        append_ohlc_log(self.store.path.parent / 'invalid_ohlc.jsonl', anomalies)
         invalid_ts = {r['ts'] for r in rejected}
         return sorted((b for b in bars if b.ts not in invalid_ts), key=lambda b: b.ts), rejected, forming
 

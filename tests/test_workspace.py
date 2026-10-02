@@ -52,7 +52,7 @@ def test_mutations_persist_order_dates_and_preserve_unowned_fields(tmp_path):
     assert 'HID' not in saved['statuses']
     for key in ('version', 'extra', 'carried'):
         assert saved[key] == original[key]
-    assert saved['orders']['hidden'] == original['orders']['hidden']
+    assert saved['orders']['hidden'] == []
     assert saved['statuses']['TSLA'] == original['statuses']['TSLA']
 
 

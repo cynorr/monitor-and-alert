@@ -1,15 +1,9 @@
-import { $, money, extendedQuote } from './types.js';
-async function listRequest(payload, signal) {
-    const response = await fetch('/v1/list', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal,
-    });
-    const data = await response.json();
-    if (!response.ok)
-        throw new Error(data.error ?? 'Request failed');
-    return data;
-}
+import { $, money, compact, extendedQuote } from './types.js';
+import { post } from './api.js';
 export class Watchlist {
     onSelect;
+    onUpdate;
+    scan;
     tickers = [];
     selected = '';
     editable = false;
@@ -24,8 +18,9 @@ export class Watchlist {
     busy = false;
     dragStart = null;
     suppressClick = false;
-    constructor(onSelect) {
+    constructor(onSelect, onUpdate) {
         this.onSelect = onSelect;
+        this.onUpdate = onUpdate;
         this.input.addEventListener('focus', () => { if (!this.search)
             this.beginSearch(); });
         this.input.addEventListener('input', () => this.changeSearch());
@@ -55,8 +50,16 @@ export class Watchlist {
             const row = target.closest('[data-symbol]');
             if (!row)
                 return;
+            if (target.matches('[data-check]')) {
+                this.scan?.toggle(row.dataset.symbol);
+                return;
+            }
             if (target.closest('.delete-ticker')) {
-                void this.mutate({ action: 'delete', ticker: row.dataset.ticker });
+                const item = this.tickers.find(t => t.symbol === row.dataset.symbol);
+                if (this.scan?.enabled && ['discover', 'hidden'].includes(item.status))
+                    void this.mutate({ action: 'move', tickers: [item.ticker], source: item.status, target: item.status === 'hidden' ? 'discover' : 'hidden' });
+                else
+                    void this.mutate({ action: 'delete', ticker: row.dataset.ticker });
             }
             else if (this.search)
                 this.endSearch(row.dataset.symbol);
@@ -66,7 +69,8 @@ export class Watchlist {
         $('symbols').addEventListener('pointerdown', event => {
             const target = event.target;
             const row = target.closest('[data-symbol]');
-            if (!row || target.closest('.delete-ticker') || !this.editable || this.busy || event.button !== 0)
+            if (!row || target.closest('.delete-ticker,input') || !this.editable || this.busy || event.button !== 0 ||
+                (this.scan?.enabled && (!['focus', 'wait'].includes(this.scan.activeList) || !this.scan.manualOrder)))
                 return;
             this.dragStart = { ticker: row.dataset.ticker, x: event.clientX, y: event.clientY };
         });
@@ -133,6 +137,11 @@ export class Watchlist {
                 this.beginSearch();
                 return;
             }
+            if (event.key === ' ' && this.scan?.enabled && this.selected && this.editable && !event.target.closest('input,textarea,select,button')) {
+                event.preventDefault();
+                this.scan.toggle(this.selected);
+                return;
+            }
             if (this.search && ['Escape', 'Enter'].includes(event.key)) {
                 event.preventDefault();
                 if (event.key === 'Escape')
@@ -160,7 +169,8 @@ export class Watchlist {
         });
     }
     query() { return this.input.value.trim().toUpperCase(); }
-    matches() { return this.tickers.filter(t => t.ticker.includes(this.query())); }
+    visible() { return this.scan?.enabled ? this.scan.visible(this.tickers) : this.tickers; }
+    matches() { return this.visible().filter(t => t.ticker.includes(this.query())); }
     cancelLookup() {
         clearTimeout(this.lookupTimer);
         this.lookupController?.abort();
@@ -190,7 +200,7 @@ export class Watchlist {
         search.message = 'Searching…';
         this.render();
         this.lookupController = new AbortController();
-        search.lookup = listRequest({ action: 'lookup', ticker: term }, this.lookupController.signal)
+        search.lookup = post('list', { action: 'lookup', ticker: term }, this.lookupController.signal)
             .then(candidate => {
             if (this.search !== search)
                 return null;
@@ -245,7 +255,7 @@ export class Watchlist {
         }
     }
     async swapSelected(direction) {
-        if (!this.editable || this.busy || this.search)
+        if (!this.editable || this.busy || this.search || (this.scan?.enabled && (!this.scan.manualOrder || !['focus', 'wait'].includes(this.scan.activeList))))
             return;
         const ticker = this.tickers.find(t => t.symbol === this.selected);
         if (!ticker)
@@ -263,8 +273,9 @@ export class Watchlist {
         $('symbol-count').textContent = String(this.tickers.length);
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
-        if (!this.tickers.some(t => t.symbol === this.selected) && (this.selected || this.tickers.length))
-            this.onSelect(this.tickers[0]?.symbol ?? '');
+        const visible = this.visible();
+        if (!visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
+            this.onSelect(visible[0]?.symbol ?? '');
         this.render();
     }
     clearDrop() {
@@ -286,8 +297,8 @@ export class Watchlist {
         $('list-notice').textContent = '';
         this.render();
         try {
-            const data = await listRequest(payload);
-            this.update(data);
+            const data = await post('list', payload);
+            this.onUpdate(data);
             if (!this.search)
                 $('list-notice').textContent = data.notice ?? '';
             return data;
@@ -306,13 +317,14 @@ export class Watchlist {
         }
     }
     render() {
-        const visible = this.search ? this.matches() : this.tickers;
+        const visible = this.search ? this.matches() : this.visible();
+        const scan = this.scan?.enabled;
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.tickers.some(t => t.ticker === candidate.ticker);
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search)
             $('list-notice').textContent = this.search.message;
-        const key = JSON.stringify([visible.map(t => [t.symbol, t.status]), [...this.collapsed], this.editable,
+        const key = JSON.stringify([visible.map(t => [t.symbol, t.status]), scan, [...this.collapsed], this.editable,
             this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
             this.key = key;
@@ -332,7 +344,7 @@ export class Watchlist {
                 result.append(name, action, company);
                 fragment.append(result);
             }
-            for (const group of ['focus', 'wait']) {
+            for (const group of scan ? [this.scan.activeList] : ['focus', 'wait']) {
                 const items = visible.filter(t => t.status === group);
                 if (this.search && !items.length)
                     continue;
@@ -347,13 +359,14 @@ export class Watchlist {
                 const collapsed = !this.search && this.collapsed.has(group);
                 arrow.textContent = collapsed ? '▸' : '▾';
                 arrow.setAttribute('aria-hidden', 'true');
-                toggle.append(arrow, group === 'focus' ? 'Focus' : 'Wait');
+                toggle.append(arrow, group[0].toUpperCase() + group.slice(1));
                 toggle.setAttribute('aria-expanded', String(!collapsed));
                 const add = document.createElement('button');
                 add.dataset.add = group;
                 add.textContent = '+';
                 add.setAttribute('aria-label', `Add ticker to ${group === 'focus' ? 'Focus' : 'Wait'}`);
                 add.disabled = !this.editable;
+                add.hidden = !['focus', 'wait'].includes(group);
                 heading.append(toggle, add);
                 section.append(heading);
                 if (!collapsed) {
@@ -378,6 +391,28 @@ export class Watchlist {
                         remove.title = `Delete ${ticker.ticker}`;
                         remove.hidden = !this.editable;
                         row.append(name, document.createElement('span'), document.createElement('span'), document.createElement('span'), remove);
+                        if (scan) {
+                            const symbolCell = document.createElement('div');
+                            symbolCell.className = 'scan-symbol';
+                            const check = document.createElement('input');
+                            check.type = 'checkbox';
+                            check.dataset.check = ticker.symbol;
+                            check.setAttribute('aria-label', `Select ${ticker.ticker} for move`);
+                            check.disabled = !this.editable;
+                            symbolCell.append(check, name);
+                            row.prepend(symbolCell);
+                            const detail = document.createElement('small');
+                            detail.className = 'scan-row-detail';
+                            row.append(detail);
+                            if (group === 'discover') {
+                                remove.title = `Hide ${ticker.ticker}`;
+                                remove.setAttribute('aria-label', remove.title);
+                            }
+                            if (group === 'hidden') {
+                                remove.title = `Return ${ticker.ticker} to Discover`;
+                                remove.setAttribute('aria-label', remove.title);
+                            }
+                        }
                         section.append(row);
                         this.rows.set(ticker.symbol, row);
                     }
@@ -406,6 +441,18 @@ export class Watchlist {
             mark.hidden = !errors.length;
             mark.title = errors.join('\n');
             const regular = ticker.quote?.regular, extended = extendedQuote(ticker.quote);
+            if (scan) {
+                const check = row.querySelector('[data-check]');
+                check.checked = this.scan.selected.has(ticker.symbol);
+                check.disabled = !this.editable || this.scan.busy;
+                row.querySelector('.delete-ticker').disabled = this.busy || this.scan.busy;
+                row.children[1].textContent = money(ticker.close);
+                row.children[2].textContent = ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%';
+                row.children[3].textContent = ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20);
+                row.querySelector('.scan-row-detail').textContent = (ticker.is_new ? 'NEW · ' : ticker.is_returned ? 'RETURNED · ' : '') +
+                    ['rfl1m', 'rfl3m', 'rfl6m'].map((field, index) => `${[1, 3, 6][index]}M ${typeof ticker[field] === 'number' ? ticker[field].toFixed(0) + '%' : '—'}`).join(' · ');
+                continue;
+            }
             const change = regular?.prev_close ? (regular.last_price / regular.prev_close - 1) * 100 : null;
             const ext = extended && regular?.last_price ? (extended.last_price / regular.last_price - 1) * 100 : null;
             row.children[1].textContent = money(regular?.last_price);

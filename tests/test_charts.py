@@ -101,22 +101,22 @@ def test_turnover_migration_and_indicator_invalidation(tmp_path, cal):
         rows = [Bar('PAYS.US', '1d', cal.grid(d, '1d')[0][0], 10, 12, 8, 11, 100, 1234) for d in days]
         store.upsert(rows, now)
         cache = ChartCache(store, cal)
-        assert cache.summary('PAYS.US', now)['adv20'] == 1234
+        assert cache.summary('PAYS.US', now)['adv20'] == 1100
         assert cache.summary('PAYS.US', now)['adr20'] == 50
         before = cache.closed('PAYS.US', '1d')[2]['ema'][10]
         old = rows[-1]
         store.upsert([Bar(old.symbol, old.timeframe, old.ts, 10, 21, 8, 20, 100, None)], now)
         assert cache.closed('PAYS.US', '1d')[2]['ema'][10] != before
-        assert cache.summary('PAYS.US', now)['estimated']
+        assert cache.summary('PAYS.US', now)['adv20'] == 1145
     finally:
         store.close()
 
 
-def test_summary_does_not_fill_missing_day_with_older_data(store, cal):
+def test_summary_uses_recent_twenty_records_for_sparse_history(store, cal):
     now = at('2026-09-18T12:00')
     days = cal.completed_days(now, 21)
     rows = [bar(cal.grid(d, '1d')[0][0], '1d') for d in days if d != days[-3]]
-    assert daily_summary(rows, cal, now)['samples'] == 19
+    assert daily_summary(rows, cal, now)['samples'] == 20
 
 
 def test_bad_turnover_falls_back_without_rejecting_valid_ohlc(store, cal):

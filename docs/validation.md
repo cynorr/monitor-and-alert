@@ -1,5 +1,30 @@
 # 验证记录
 
+## 2026-10-02：真实上游库核心测试与复权口径确认
+
+环境：macOS、现有 Python3.13 虚拟环境、pandas/numpy。只读用户新交付的 `runtime/bars.sqlite3`；6372033 根日 K、16365 个历史 symbol，metadata 明确完成日为 2026-09-30。未启动后端或浏览器，未调用券商，未跑前端测试、全量回归或全链路。
+
+- 九列、主键、时间索引符合结构契约；完成日12613行，symbol 均含 .US、OHLC 正数、volume 实际存储为非负 integer。全市场生成按生产 build_day 读取每只截至完成日最多1000根，逐根验证价格、成交量、turnover、实际交易日/ET时间戳与闭合边界。源库大小/修改时间未变。
+- 六个真实样本：NVDA、TSLA、AAPL、AAAA、ACCV、ACIG，覆盖557/305根及仅1根日 K。ADR/ADV/RFL与独立公式核算一致；EMA及Wilder ATR与手工递推一致；Scan 日图的均线/ADR/ADV一致，无active。35个原子字段逐一与原 Scan 算子比较，值及缺失语义一致。
+- 完整2026-09-30截面：12613只，622只eligible，90只candidate；三个RFL排名（含并列symbol顺序）和前三组各50名的候选并集与独立排序一致。生成及截面核对耗时94.45秒；JSON可序列化。结果写在临时目录，没有发布到正式days，也没有覆盖人工名单。
+- 本轮实际数据口径尚未通过正式验收：metadata 是 split_adjusted、volume half_up，session 是 massive_daily，不能据此确认 regular-only。用户再次确认最终维持NoAdjust与原始成交量，所以上游需重新提供原始OHLCV到runtime/daily.sqlite3；本轮计算通过不等于两来源口径一致。
+- 核实broker.py直接请求NoAdjust，没有后续adjust table处理。补充README与上游交接文件：默认serve进入Monitor；直接Scan用serve --mode scan；首次须scan --date D生成截面。上游日库与Monitor运行库物理分离。
+
+报告：`runtime/scan_core_report.json`。未覆盖：真正NoAdjust原始成交量交付、regular时段来源确认、真实Longbridge请求及与上游逐根比较；此次不执行这些网络或全链路验收。
+
+## 2026-10-02：Scan 合并与互斥模式
+
+环境：macOS，Python3.13，Longbridge SDK5.0.0（未连接），pandas3.0.6、numpy2.5.3，Node25.3.0、TypeScript5.9.3。本轮全部运行使用合成SQLite、临时目录或离线券商替身。
+
+- Python完整离线回归：110项、11个subtests通过；包含既有行情/日历/重试/恢复/合成回归和迁入原子算子、指标种子/空值、指定日截断、统一ADR/ADV/EMA、小数volume拒绝、形成日拒绝、OHLC原值/日志、Hidden6/7/8天、carried、批量写入/同日重算、HTTP/WS/Origin、历史只读、切换失败保留Monitor、偏好保存失败保留内存、互斥模式/白名单收缩。
+- TypeScript check/build通过；Node Filters/Tags6项通过：38字段唯一、数值闭区间/严格上界、AND/分类OR、Any与缺失、非有限值、滑杆异常范围和小数阈值保留、草稿/保存隔离、Tag唯一名和十个上限。git diff --check通过。
+- 浏览器离线替身：Scan日 K与ADR/ADV显示；新Tag编辑、阈值即时过滤、排序保留草稿、Save、重载恢复；两只候选批量移入Focus后，Monitor立即显示同一份成员，隐藏Discover/Hidden，切回Scan恢复上游日图；历史日期禁用名单编辑。该Monitor为FakeBroker，不是Longbridge live。
+- 正式CLI的Scan Mock另验：用不存在的凭证路径启动并成功退出，明确不读取凭证；Hide → Hidden → Return Discover置顶、同日Refresh保留人工顺序，页面控制台无error/warn。截图：`runtime/scan-mock/preview.png`。所有验收服务已停止。
+- 数据迁移：从原正式`~/qull-scan-workspace`复制15份workspace与7个Tag，保留字节内容和源文件；最新2026-09-30，Focus34/Wait20/Hidden5。universe离线解析54个Focus/Wait。未生成正式NoAdjust截面、未改原来源或Monitor bars的市场行。
+- 上游交接文件：upstream-daily-data.md。复制Scan数据库的列/行数/小数volume已只读核实；没有将旧复权未知数据自动转换为正式NoAdjust输入。
+
+未覆盖：真实上游NoAdjust全市场发布、类别股symbol映射、小数volume根因、两个供应商的逐根等价、全市场生成耗时、Longbridge连接释放的真实账户验收、物理断网/休眠/长时间运行和移动触屏。现有Monitor实时算法使用离线回归覆盖；历史live记录不作为本轮证据。
+
 ## 2026-09-24：默认周期与搜索显示微调
 
 - 环境：macOS、现有真实服务 `127.0.0.1:8765`。TypeScript build 通过；Node 直接检查构建后的默认周期函数，10 个开盘前、5/15/30 分钟边界、1h 上限及冬夏令时样例通过。

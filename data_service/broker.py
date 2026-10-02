@@ -61,6 +61,10 @@ class Broker:
             self._context = AsyncQuoteContext.create(self.config)
         return self._context
 
+    def close(self):
+        # All requests and Quote callbacks must be stopped before dropping the SDK context.
+        self._context = None
+
     async def call(self, method, *args, background=False, symbols=None):
         if background:
             async with self.background:

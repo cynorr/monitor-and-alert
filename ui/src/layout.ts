@@ -15,7 +15,9 @@ export function initLayout() {
         const total = wanted.reduce((a, b) => a + b, 0) || 1;
         return minimum.map((m, i) => m + extra * wanted[i] / total);
     }
-    function paint(values = widths()) { root.style.gridTemplateColumns = `${values[0]}px 12px ${values[1]}px 12px ${values[2]}px`; }
+    function paint(values = widths()) { root.style.gridTemplateColumns = root.dataset.mode === 'scan'
+        ? `${values[0] + values[1] + 12}px 12px ${values[2]}px`
+        : `${values[0]}px 12px ${values[1]}px 12px ${values[2]}px`; }
     function remember(values: number[]) { const total = values.reduce((a, b) => a + b, 0); ratios = values.map(v => v / total); try {
         localStorage.setItem('chart-columns', JSON.stringify(ratios));
     }
@@ -37,4 +39,9 @@ export function initLayout() {
     }
     new ResizeObserver(() => paint()).observe(root);
     paint();
+    return { setMode(mode: string) {
+        root.dataset.mode = mode; minimum[2] = mode === 'scan' ? 400 : 260;
+        $('divider-1').setAttribute('aria-label', mode === 'scan' ? 'Resize Daily and watchlist' : 'Resize Intraday and watchlist');
+        paint();
+    } };
 }
