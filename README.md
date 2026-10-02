@@ -33,11 +33,13 @@ Mock 生成器要求目标目录没有现成 daily.sqlite3；重复试验用 `--
 正式 Scan 接入：按 [上游契约](docs/upstream-daily-data.md) 放置 SQLite，全市场交易日写入完成后运行：
 
 ```bash
-.venv/bin/python -m data_service scan --date 2026-09-30
+.venv/bin/python -m data_service scan
 .venv/bin/python -m data_service serve --mode scan
 ```
 
-服务运行时改用 `POST /v1/scan` 触发生成；图表查询不触发下载或计算。日期必须是明确完成的美东交易日。`--daily-db` 可指定其他上游文件位置。
+`scan` 默认读取上游 `metadata.completed_date`，也可用 `--date 2026-10-01` 指定已完成交易日。`--daily-db` 可指定其他上游文件位置；图表查询不触发下载或计算。
+
+日常刷新只需三步：上游更新 `runtime/daily.sqlite3` 并提交 `metadata.completed_date` → 页面切入 Scan → 点击 **Refresh Scan**。按钮生成并打开上游最新完成日，不依赖日期下拉框当前选项，不需要另跑脚本。同日刷新保留人工名单；新日首次生成继承 Focus/Wait。历史日期下拉框用于查看已生成的日期；指定旧日重算可在服务停止时运行 `scan --date D`。服务运行时生成统一通过按钮或 `POST /v1/scan {"generate":true}`，CLI 与服务共用单实例锁。
 
 `serve` 不带参数默认进入 Monitor；`--mode scan` 才直接进入 Scan。放置 SQLite 后仍需先运行 `scan --date D`，生成 `runtime/days/D/scan.json`，页面才能切入 Scan。只有 workspace.json 或 SQLite 时，切换会报错。上游文件名即使叫 bars.sqlite3，也应交付到 `runtime/daily.sqlite3`；不要覆盖 Monitor 的 `runtime/bars.sqlite3`，或将 `--daily-db` 指向同一个 Monitor 运行库。
 
@@ -52,7 +54,7 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 ## 使用
 
 - 列表面板内切换Scan/Monitor；切回Scan时停止Monitor任务和订阅。两个SQLite来源共用读取/计算，不拼接历史。
-- Scan：选交易日、Discover/Focus/Wait/Hidden、38项Filters、保存的Tags、RFL排序。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，同日Refresh保留人工状态。
+- Scan：选交易日、Discover/Focus/Wait/Hidden、38项Filters、保存的Tags、RFL排序。ADR20≥5%、ADV20≥$5M 初筛，三组 RFL 各取前50，任一入选即候选；不设候选 Price≥5 门槛。只为候选建立均线/ATR/原子特征；其他成员保留 ADR/ADV，原子条件按缺失处理。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，同日Refresh保留人工状态。
 - Focus/Wait跨日保留；Hidden按7个自然日，仍是候选时第7天返回Discover并标记Returned。新候选标记NEW。删除Focus/Wait解除归属；Hide明确隐藏七天。
 - 共用Daily日 K：九个月初始范围、EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、缩放/十字线。Scan为所选日的closed数据；Monitor增加Quote活跃日 K。
 - Monitor：5m/15m/30m/1h/2h/4h、SMA65、交易日联动、实时行情；2h/4h由5m在内存合成。
@@ -83,7 +85,7 @@ reconcile是有界真实历史同步，verify不联网。live验收需明确当�
 | GET /health | 当前模式、Quote连接、待处理任务/错误 |
 | GET /v1/scan | 当前名单、日期、偏好和模式 |
 | POST /v1/mode | `{"mode":"scan"}` 或 `{"mode":"monitor"}` |
-| POST /v1/scan | 选择日期`{"date":"D"}`；生成`{"date":"D","generate":true}` |
+| POST /v1/scan | 选择日期`{"date":"D"}`；最新完成日生成`{"generate":true}`；指定日生成`{"date":"D","generate":true}` |
 | POST /v1/preferences | 同步保存完整Tag/显示偏好 |
 | GET /v1/filter-catalog | 唯一38字段目录 |
 | POST /v1/list | 查询、新增、删除、拖动；Scan支持批量四列表移动 |

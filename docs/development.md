@@ -44,7 +44,11 @@
 
 bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。两个文件物理分离：daily.sqlite3由上游写、Scan以mode=ro读；bars.sqlite3仍由Monitor写。BAR_SCHEMA、Bar和read_bars共用，日K ts为ET零点转Unix秒。裸ticker只保留在workspace与UI显示边界；计算/图表使用symbol.US。
 
-build_day仅对D当日有bar的symbol生成截面，每只调用read_bars读取截至D最多1000根，校验闭合/结构，feature_row统一计算指标及原子特征，最后初筛/截面排名。只保留单只历史和全市场标量，避免全市场历史fetchall。全日生成由显式完成日期触发，在asyncio.to_thread中执行；成功后同步publish_day，首次才创建workspace。相同日期重算不重新继承。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
+build_day仅对D当日有bar的symbol生成截面，分三步：全市场每只read_bars最多20根，用indicators.adr_adv计算ADR/ADV并初筛；仅eligible每只最多126根，用return_from_low计算三组RFL并排名；仅candidate每只最多1000根，由feature_row建立EMA/SMA/ATR及原子特征。daily_metrics组合相同两个纯算子，图表与特征不重复维护公式。候选初筛只有ADR/ADV，取消Price≥5门槛；并列仍按symbol顺序、rank(method=first)，各取前50的并集。非候选快照只保留轻量指标，不补算原子特征。
+
+每步只保留单只历史与全市场标量，避免全市场历史fetchall；读到的bar均验证闭合/结构。checked_history复用Bar.validate，OHLC范围矛盾保留原值；后续阶段仅为上一窗口起点之前的矛盾追加日志，避免一次生成内重叠窗口重复记录。阶段耗时和证券/候选数量写普通日志，不新增指标持久化或性能框架。真实样本线程对照：单线程1000只约0.46秒、四线程约1.12秒；不添加更慢的线程池。全日生成继续在现有asyncio.to_thread中执行，不阻塞HTTP/WS事件循环。
+
+latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)回退推断；缺少完成日则失败并保留原状态。CLI scan未传--date、页面Refresh未传date时用该完成日，build_day继续拒绝未收盘日或无当日bar。成功后同步publish_day、reload workspace并明确选中新生成日期，首次才创建workspace。相同日期重算不重新继承；生成失败释放busy并保留原日期/名单。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
 
 只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传四列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有Quote active、Intraday或Ready实时状态；Daily复用同一个Panel。
 

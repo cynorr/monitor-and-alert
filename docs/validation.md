@@ -1,5 +1,18 @@
 # 验证记录
 
+## 2026-10-02：Scan 分阶段提速与最新完成日刷新
+
+环境：macOS、现有Python3.13/pandas/numpy虚拟环境、TypeScript5.9.3。使用真实runtime/daily.sqlite3，完成日metadata.completed_date=2026-10-01。只验证本次Scan计算/刷新改动；没有全量回归、前端交互测试、全链路测试或券商/账户请求。
+
+- 针对性离线测试15项通过、5项无关测试未运行（1.96秒）；覆盖ADR/ADV与均线/ATR/特征既有公式、指定日截断、短历史、候选低于5美元、仅候选计算原子特征、无候选、小数volume拒绝、OHLC原值与阶段重叠仅记录一次、新完成日生成/选择、历史选择后刷新最新、Focus/Wait继承、同日保留人工文件、显式旧日重算、缺少完成日失败保留状态并释放busy。没有HTTP/WS模拟全链路。npm run build --prefix ui通过；git diff --check通过。
+- 真实12594只证券：855只ADR≥5%/ADV≥$5M eligible，三组RFL各前50并集96只candidate；恰好96行含EMA/ATR/原子字段。与先读全市场126根的对照流程比较：全市场ADR/ADV、eligible/candidate标记、eligible三组RFL/排名及96个候选的完整特征行一致。源SQLite只读、mtime未变。
+- 无profiler的完整计算：筛选2.586秒、候选特征/序列化0.737秒，总3.323秒（包含日历创建的外部计时3.425秒）。正式CLI再次生成时筛选2.619秒、特征0.748秒，总3.367秒。日志同时输出证券/候选数和两阶段耗时，没有新增性能框架。
+- 同一1000只真实样本、各线程独立只读SQLite连接：单线程0.460秒，四线程1.123秒；四线程更慢，未引入线程池。正式服务继续通过既有asyncio.to_thread在后台运行生成，主要收益来自20→126→1000根分阶段读取和只计算96只候选的原子特征。
+- 10/1未显示根因：上游已完成，但旧按钮发送当前9/30日期，日期下拉框又仅列已生成快照。改为无date生成请求，消费上游完成日标记；成功明确选择生成日期。CLI不传--date采用同一规则，不用MAX(ts)推断完成。
+- 当前8765原处Scan、broker_active=false；停止旧Python进程后用正式CLI生成并发布2026-10-01，再恢复同端口Scan服务。只读GET确认日期10/1、可编辑、无券商连接；Discover84/Focus35/Wait20/Hidden1。新日Focus/Wait顺序与statuses逐项等于9/30，未覆盖旧日期人工文件。页面需重载一次加载新Refresh按钮逻辑。
+
+报告：runtime/scan_performance_report.json。未覆盖：Monitor/SnapTrade/Longbridge实际请求、前端手势/Tag操作、长期运行、冷文件缓存耗时。上游metadata仍标注split_adjusted/half_up/massive_daily；本轮按用户提供的真实输入验证计算与速度，不修改源数据、不宣称已完成NoAdjust/原始成交量/regular来源验收。
+
 ## 2026-10-02：Holdings 单行与 Buy/Sold 明细
 
 环境：macOS、Node 25.3.0、TypeScript 5.9.3、现有真实8765服务（Monitor）；只改前端与文档。live预先限定当前11个Holdings（LITE、IOVA、EFOR、PAYS、TXG、ABCL、VSTM、MU、PBF、MRNA、CDNA）与最多3分钟，页面交互验收实际44秒。没有新增ticker、账户/workspace写入、模式切换或服务重启；结束后关闭临时页并恢复viewport。

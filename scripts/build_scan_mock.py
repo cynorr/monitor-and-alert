@@ -26,6 +26,8 @@ def build_mock(root, end='2026-09-30', count=48):
     symbols = ['PAYS','NVDA','AAPL','MSFT','TSLA','AMD'] + [f'MOCK{i:03d}' for i in range(count - 6)]
     with sqlite3.connect(path) as db:
         db.executescript(BAR_SCHEMA + 'CREATE INDEX bars_by_time ON bars(timeframe,ts,symbol);')
+        db.execute('CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+        db.execute('INSERT INTO metadata VALUES (?,?)', ('completed_date', end))
         for index, ticker in enumerate(symbols):
             history = days[-(8 if index == count-1 else 220):]
             previous = 8 + index * 1.3

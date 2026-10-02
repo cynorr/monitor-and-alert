@@ -24,7 +24,7 @@ def parser():
     result.add_argument('--runtime', type=Path, default=Path('runtime'))
     result.add_argument('--mode', choices=('monitor','scan'), default='monitor')
     result.add_argument('--daily-db', type=Path, help='Read-only upstream daily SQLite; defaults to runtime/daily.sqlite3')
-    result.add_argument('--date', help='Completed trading date for scan generation')
+    result.add_argument('--date', help='Completed trading date; scan defaults to upstream metadata.completed_date')
     result.add_argument('--mock-scan', action='store_true', help='Label the explicitly supplied daily data as synthetic')
     result.add_argument('--symbols', nargs='+', help='Optional SUBSET of current focus/wait tickers')
     result.add_argument('--region', choices=('cn', 'global'), default='cn')
@@ -105,9 +105,8 @@ def main():
         args.days = args.workspace.parent.parent if args.workspace and re.fullmatch(r'\d{4}-\d{2}-\d{2}', args.workspace.parent.name) else args.runtime / 'days'
         if args.command == 'scan':
             from .calendar import TradingCalendar
-            from .scan import build_day, publish_day
-            if not args.date:
-                raise ValueError('scan requires an explicitly completed --date')
+            from .scan import build_day, publish_day, latest_completed_date
+            args.date = args.date or latest_completed_date(args.daily_db)
             args.runtime.mkdir(parents=True, exist_ok=True)
             with (args.runtime / 'service.lock').open('a') as lock:
                 try:

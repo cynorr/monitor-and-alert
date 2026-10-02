@@ -34,7 +34,9 @@ Scan 读取上游 runtime/daily.sqlite3，截至选择日期最近最多1000根�
 
 两种来源统一使用 NoAdjust 原始价格与原始成交量；入库、指标及图表没有后续复权，也不读取 adjust table。拆股前后真实价格跳变会进入均线、ATR、RFL 等计算，这是当前选择的口径。上游已复权数据不能仅改表结构或元信息后视为 NoAdjust。
 
-全市场完成日期必须显式发布。scan --date D 或 Scan 模式下 POST /v1/scan 生成一份截面，页面Refresh重算当前选择日；GET和图表选择不生成。候选要求Price≥5、ADR20≥5%、ADV20≥$5M，再取RFL1M/3M/6M任一排名前50；排名仅在eligible截面执行，不因Tag或列表改变。
+全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 和不带 --date 的 scan 命令生成并打开最新完成日，按钮不重算日期下拉框当前选中的旧日。显式 scan --date D 或 POST /v1/scan 指定 date 仍可重算指定日；GET和图表选择不生成。更新 SQLite 本身不自动生成截面；日期下拉框仅显示已生成的日期。
+
+候选仅要求 ADR20≥5%、ADV20≥$5M，再取RFL1M/3M/6M任一排名前50，不设Price≥5门槛。排名仅在eligible截面执行，不因Tag或列表改变。全市场先计算ADR/ADV，通过初筛的股票再计算RFL，最终候选才计算EMA/SMA/ATR及原子特征。非候选Focus/Wait/carried保留成员、日 K和ADR/ADV，原子特征为空；未通过初筛的成员RFL也为空。有原子条件的Tag按既有缺失值规则筛选这些成员。
 
 同日生成保留名单；新日期第一次生成才继承Focus/Wait。Discover由candidate与carried派生，Hidden按7个自然日：小于7天隐藏，等于7天且仍是candidate返回Discover并标记Returned；后续新日清除过期状态。Hidden继承要求前后两日candidate交集。NEW是当前候选减上一份截面的候选。
 

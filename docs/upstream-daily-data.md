@@ -30,7 +30,7 @@ CREATE TABLE bars (
 CREATE INDEX bars_by_time ON bars(timeframe, ts, symbol);
 ```
 
-请按以上九列交付 bars 表。`ticker`、`date`、`vwap`、`transactions` 不进入这张表；其他上游内部信息可以放在独立表，本项目不读取。
+请按以上九列交付 bars 表。`ticker`、`date`、`vwap`、`transactions` 不进入这张表；其他上游内部信息可以放在独立表。消费者只额外读取下面的完成日元信息。
 
 | 列 | 类型与含义 |
 | --- | --- |
@@ -80,10 +80,20 @@ INSERT INTO bars VALUES
 
 先完成交易日 D 的全市场数据库事务并提交，再显式通知本项目生成 D 的 Scan。不能写入首批股票后就通知，也不能用 `MAX(ts)` 代替全市场完成信号。旧日修订与新日写入保持同一表结构，不需要额外任务服务。
 
+完成日通过已有 metadata 表发布，更新必须与全市场数据提交保持一致：
+
+```sql
+CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO metadata VALUES ('completed_date', '2026-10-01')
+ON CONFLICT(key) DO UPDATE SET value=excluded.value;
+```
+
+日期为美东 YYYY-MM-DD；只有全市场完成后才推进此值。不带date的CLI/Refresh读取该值，不读取MAX(ts)作为回退。当前真实库已经提供这个字段，无需增加额外文件。
+
 服务未启动时，在本项目根目录运行：
 
 ```bash
-.venv/bin/python -m data_service scan --date 2026-09-30
+.venv/bin/python -m data_service scan
 .venv/bin/python -m data_service serve --mode scan
 ```
 
@@ -93,14 +103,14 @@ INSERT INTO bars VALUES
 POST /v1/scan
 Content-Type: application/json
 
-{"date":"2026-09-30","generate":true}
+{"generate":true}
 ```
 
-该接口在同一进程后台线程完成计算。选择图表或 GET 查询不会生成 Scan，也不会下载行情。新日期首次生成才继承名单；同日重新生成只更新计算快照，保留人工 Focus/Wait/Hidden 及排序。
+该接口与页面Refresh Scan使用同一后台生成流程，默认生成并打开metadata.completed_date。显式date仍可指定已完成旧日；CLI可用--date D。选择图表或 GET 查询不会生成 Scan，也不会下载行情。新日期首次生成才继承名单；同日重新生成只更新计算快照，保留人工 Focus/Wait/Hidden 及排序。
 
 ## 本项目负责的计算
 
-价格、ADR、ADV 初筛后，按 RFL1M/3M/6M 截面分别排名，任一前50进入候选。公式只有一份：
+ADR≥5%、ADV≥$5M 初筛后，按 RFL1M/3M/6M 截面分别排名，任一前50进入候选，不设Price≥5门槛。原子特征只计算候选。公式只有一份：
 
 - ADR20 = 最近最多20根 closed 日 K 的 `(high-low)/low × 100` 均值。
 - ADV20 = 最近最多20根 `close × volume` 均值，单位 USD；不读取 turnover 代替此公式。

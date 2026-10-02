@@ -35,7 +35,7 @@
 
 ADR20 使用最近最多20根 `(H-L)/L × 100` 均值，ADV20 使用最近最多20根 `close × volume` 均值；不保留同名 turnover 版本。RFL 使用最近最多21/63/126根最低low。EMA 用首个 close 初始化，图表达到10/20个样本后显示；SMA50/ATR20 保留原 Scan 的完整窗口种子和空值语义。
 
-一个生成流程：指定完成日期 D → 逐只读取截至D最多1000根 → 一次计算连续指标/原子特征 → Price≥5、ADR≥5%、ADV≥$5M → 在 eligible 截面按三个RFL分别降序排名 → 任一rank≤50即candidate → 保存一份 `days/D/scan.json`。并列排名按固定symbol顺序使用 method=first；Tag和页面排序不重新排名。
+生成流程已按2026-10-02的提速要求调整：完成日期 D → 全市场最多20根计算ADR≥5%、ADV≥$5M → 仅eligible最多126根计算三个RFL并分别排名 → 任一rank≤50即candidate → 仅candidate最多1000根计算均线/ATR/原子特征 → 保存一份 `days/D/scan.json`。取消Price≥5门槛；并列排名按固定symbol顺序使用 method=first；Tag和页面排序不重新排名。Refresh和无--date的CLI读取上游metadata.completed_date并生成最新日，当前细节以development/behavior/ui为准。
 
 原子公式直接迁入 `features/atomic.py`，默认五日窗口。每次只保留一只证券的历史与全市场标量结果，避免把六百万根历史整体读进内存。生成运行在同进程后台线程，图表和GET读取不触发生成。
 

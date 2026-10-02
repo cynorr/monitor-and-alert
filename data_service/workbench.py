@@ -10,7 +10,7 @@ from copy import deepcopy
 
 from .calendar import TradingCalendar
 from .preferences import DEFAULT, validate_preferences
-from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily
+from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date
 from .service import DataService
 from .workspace import derive_day_view, normalize_ticker
 
@@ -229,11 +229,13 @@ class Workbench:
                     raise ValueError('Scan generation in progress')
                 self.generating = True
                 try:
-                    snapshot = await asyncio.to_thread(build_day, self.daily_path, payload['date'], self.calendar,
+                    value = payload.get('date') or latest_completed_date(self.daily_path)
+                    snapshot = await asyncio.to_thread(build_day, self.daily_path, value, self.calendar,
                                                         log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.scan_mock)
                     publish_day(self.workspace.root, snapshot)
                     self.workspace.reload()
-                    self.snapshot_cache.pop(payload['date'], None)
+                    self.selected_date = snapshot['date']
+                    self.snapshot_cache.pop(snapshot['date'], None)
                     self.chart_cache.clear()
                     self.previous_cache.clear()
                     self.run_id = uuid.uuid4().hex
