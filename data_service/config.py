@@ -13,8 +13,11 @@ class Ticker:
     status: str
 
 
-def load_tickers(path: Path, only: list[str] | None = None) -> list[Ticker]:
-    data = json.loads(path.read_text())
+def load_tickers(path: Path, only: list[str] | None = None, *, allow_empty=False) -> list[Ticker]:
+    return workspace_tickers(json.loads(path.read_text()), only, allow_empty=allow_empty)
+
+
+def workspace_tickers(data: dict, only: list[str] | None = None, *, allow_empty=True) -> list[Ticker]:
     statuses = data['statuses']
     if not isinstance(statuses, dict):
         raise ValueError('workspace.statuses must be an object')
@@ -41,7 +44,7 @@ def load_tickers(path: Path, only: list[str] | None = None) -> list[Ticker]:
         if wanted - seen:
             raise ValueError('Requested symbols outside focus/wait: ' + ', '.join(sorted(wanted - seen)))
         result = [item for item in result if item.symbol in wanted]
-    if not result:
+    if not result and not allow_empty:
         raise ValueError('No focus/wait tickers; refusing to connect')
     return result
 

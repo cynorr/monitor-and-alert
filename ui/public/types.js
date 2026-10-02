@@ -4,6 +4,12 @@ export const compact = (n) => n == null ? '—' : Intl.NumberFormat('en-US', { n
 const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 export const dayKey = (time) => dayFormat.format(new Date(time * 1000));
 export const nyTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+export function defaultTimeframe(now = Date.now()) {
+    const [hour, minute] = nyTime.format(new Date(now)).split(':').map(Number);
+    const elapsed = Math.max(0, hour * 60 + minute - (9 * 60 + 30));
+    const period = [5, 15, 30, 60].find(minutes => elapsed < minutes) ?? 60;
+    return period === 60 ? '1h' : `${period}m`;
+}
 export function extendedQuote(quote) {
     if (!quote)
         return undefined;

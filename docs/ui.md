@@ -1,6 +1,6 @@
 # Chart layout and interactions
 
-Updated: 2026-09-23. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
+Updated: 2026-09-24. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
 
 ## Layout
 
@@ -16,17 +16,17 @@ Updated: 2026-09-23. Approved interaction specification and maintenance referenc
 - No horizontal or vertical grid. Teal up candles/volume (#26a69a), red down candles/volume (#ef5350).
 - EMA10 blue (#2962ff), EMA20 yellow (#e4b400), Daily SMA50 / Intraday SMA65 red (#e53935). Indicator calculations remain in Python.
 - Daily initially shows approximately nine calendar months. Determine the initial pixel spacing from the nine-month window, then retain that spacing across symbols and column resizing. Short histories stay aligned right with blank space on the left; never fitContent to available samples. Resizing changes the number of visible candles, not candle width. User zoom changes spacing intentionally.
-- Intraday defaults to 5m; controls: 5m, 15m, 30m, 1h, 2h, 4h.
+- On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and [0,5) minutes → 5m, [5,15) → 15m, [15,30) → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h/4h are manual only. Controls: 5m, 15m, 30m, 1h, 2h, 4h.
 - rightOffset=1, rightBarStaysOnScroll=true. Keep about one bar between the latest candle and the price axis.
 - CrosshairMode.Normal with dashed horizontal and vertical lines; no magnet/snap mode.
 - Native pan, zoom, price scaling, pane resizing and scrollToRealTime are used. Realtime updates preserve a historical viewport.
 
 ## Chart information
 
-- Both chart headers have a fixed 120px height so the black horizontal borders align. Daily shows the symbol at top-left; Intraday shows the current price there with identical position, 23px size, weight and color. Only Intraday shows ET time beside its latest button. Period controls sit on its next row.
+- Both chart headers and the watchlist header share a 120px height and one bottom border, aligning all three panels. The watchlist column labels have no top border. Daily shows only the symbol at top-left (no Daily tag); Intraday shows the current price there with the same 28px size, weight and color. Its ET clock is 15px. The extended-session pill sits immediately to the clock’s left, both 26px high; regular sessions show no pill. Period controls sit on the next row.
 - Only Daily displays ADR20 and ADV20. Intraday displays the current price and any extended-session pill. Available Sell/Bid and Buy/Ask quotes remain optional.
-- EMA/SMA legends show colored line swatches only, without numeric values; names are available on hover. Daily uses SMA50 and Intraday uses SMA65.
-- OHLC sits immediately below the aligned black horizontal border on each chart. Add Range = (H-L)/L × 100%; H/L values and Range value are black, other labels/values retain their original color.
+- EMA/SMA legends pair colored line swatches with concise labels: EMA 10, EMA 20, and SMA 50 for Daily or SMA 65 for Intraday. They do not show current indicator values.
+- OHLC sits immediately below the aligned black horizontal border on each chart, at 15px; ADR/ADV also use 15px. OHLC fields stay together and wrap on narrow panels. Native chart axes use 12px. Shared CSS font variables keep other small labels at 11px, list values at 12px and body text at 13px. Add Range = (H-L)/L × 100%; H/L values and Range value are black, other labels/values retain their original color.
 - Intraday active volume uses a cached official closed portion plus the current 5m Quote-counter delta. Missing initialization after startup/recovery shows no volume until a usable boundary; closed official bars replace estimates. Daily retains the regular cumulative volume.
 - Current/latest candle volume appears at a fixed top-right position within the volume pane, independently of the hovered OHLC candle. The position follows native pane resizing.
 - Hide the persistent last-price horizontal line on both charts; retain the freely moving dashed crosshair.
@@ -45,16 +45,23 @@ Updated: 2026-09-23. Approved interaction specification and maintenance referenc
 
 ## Watchlist and status
 
-- Right panel: search, compact Focus/Wait sections, four columns: Symbol, Last, Chg%, Ext. Rows are 26px high.
+- Right panel: search, compact Focus/Wait sections, four columns: Symbol, Last, Chg%, Ext. Rows are 28px high, with a shared grid reserving a separate 36px action column.
 - Last is the regular price. Chg% is regular price / previous completed Daily close - 1. Use the previous trading day relative to the quote date, including after today's Daily bar is stored.
-- Ext is (latest extended price / regular close - 1) × 100%, with up/down coloring. Only use extended quotes newer than the regular quote, including next-day premarket. Missing extended data or regular baseline displays an em dash.
-- Click or ArrowUp/ArrowDown selects the ticker for both charts. Search filters locally. No list editing.
+- Ext is (latest extended price / regular close - 1) × 100%, with up/down coloring. Only use extended quotes newer than the regular quote, including next-day premarket. During regular trading or when extended data/baseline is unavailable, leave Ext blank.
+- Click or ArrowUp/ArrowDown selects the ticker for both charts. Outside search, Shift+ArrowUp/ArrowDown swaps the selected ticker with the adjacent row in its own section, retaining selection; boundaries do nothing. Arrow navigation skips collapsed sections.
+- Search and Add share the single inline search input and list. Press / in any state, including while typing, to clear the input and begin a fresh Focus search. Each section’s + uses the same flow with that section as the add destination. Esc exits, clears the input and restores the full list. There is no dialog or separate add form.
+- The placeholder is always Search. Filter existing tickers immediately; during search show only sections with matches, with no empty sections or No matches message. Hide quote column labels when no local rows match. With no exact local ticker, one second of idle input triggers a static_info lookup. Show a valid candidate (blue ticker, security name, Add) directly above any matching list sections; omit destination and keyboard hints. Do not save on lookup. Discard results belonging to previous input or an exited search.
+- Enter selects an exact existing ticker, otherwise the first displayed local result. A displayed new candidate takes precedence over partial local matches; Enter validates and inserts it first in the destination section, selects it, then exits search. Enter with no local match can start the lookup immediately or await the same pending request. Clicking a candidate uses the same commit action. A ticker not found leaves the results blank; request/save failures retain an inline error. Existing tickers are never moved by searching.
+- Outside search, Focus and Wait remain visible, including when empty. Their order is fixed. Search temporarily reveals matching collapsed sections; selecting a result expands its section so the selected row is visible. Market suffixes are not displayed.
+- Drag a row within or between sections. A line shows before/after row placement; dropping on a header inserts first, and an empty section accepts drops. Search uses visible rows as anchors into the full list. Mouse release submits immediately; no delayed persistence. Only the dragged ticker receives a new local status date.
+- The selected row has a rounded black inset border and no background change; only unselected hovered rows get a gray background. Each row has a round Delete button with a line-drawn trash icon, revealed on hover or keyboard focus. Delete removes it from Focus/Wait; it never moves to hidden. If the selection disappears, select the first remaining ticker; an empty list clears both charts and keeps both + controls available.
+- Incoming workspace changes and new trading-day files refresh the list automatically. No refresh button. Editing is disabled for bounded --symbols sessions. Simulator edits a temporary copy and labels successful additions as simulated, without broker validation.
 - Use the Loading / yellow Ready / blue Ready / error-icon rules below; no multi-line banner. Keep details in hover text.
 - Simulation displays one small SIM badge so generated data cannot be confused with a live account. No extra branding bar.
 
 ## Data and simulator boundaries
 
-- One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics. A chart GET must not change selection priority.
+- One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics; POST /v1/list performs edits. Independent list messages on the existing WebSocket refresh membership even without a chart selection. A chart GET must not change selection priority.
 - Keep request_id and socket identity checks. Switching periods preserves the selected trading day and native viewport behavior. Indicators are calculated only in Python.
 - 2h/4h are always converted from official closed 5m bars. Missing official 15m/30m/1h history uses the same 5m conversion; official rows replace the display at the next stream update. All conversions remain in memory.
 - 5m history spans roughly 13 full sessions at the 1000-response limit. Larger derived periods share that time coverage; insufficient SMA65 history means the line is absent.

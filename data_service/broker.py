@@ -54,22 +54,24 @@ class Broker:
 
     def check(self, symbols: list[str]) -> None:
         if not set(symbols) <= self.allowed:
-            raise ValueError('API request outside startup focus/wait universe')
+            raise ValueError('API request outside current focus/wait universe')
 
     def context(self):
         if self._context is None:
             self._context = AsyncQuoteContext.create(self.config)
         return self._context
 
-    async def call(self, method, *args, background=False):
+    async def call(self, method, *args, background=False, symbols=None):
         if background:
             async with self.background:
-                return await self._call(method, args, True)
-        return await self._call(method, args, False)
+                return await self._call(method, args, True, symbols)
+        return await self._call(method, args, False, symbols)
 
-    async def _call(self, method, args, background):
+    async def _call(self, method, args, background, symbols=None):
         async with self.inflight:
             await self.limiter.wait(background)
+            if symbols is not None:
+                self.check(symbols)
             try:
                 return await asyncio.wait_for(method(*args), timeout=self.timeout)
             except TimeoutError:
@@ -83,16 +85,25 @@ class Broker:
             raise ValueError('Count must be 1..1000')
         ctx = self.context()
         return await self.call(ctx.candlesticks, symbol, SDK_PERIODS[timeframe], count,
-                               AdjustType.NoAdjust, TradeSessions.Intraday, background=background)
+                               AdjustType.NoAdjust, TradeSessions.Intraday, background=background, symbols=[symbol])
 
     async def subscribe(self, ctx, symbols: list[str]):
         self.check(symbols)
-        await self.call(ctx.subscribe, symbols, [SubType.Quote])
+        await self.call(ctx.subscribe, symbols, [SubType.Quote], symbols=symbols)
 
     async def snapshot(self, ctx, symbols: list[str]):
         self.check(symbols)
-        return await self.call(ctx.quote, symbols)
+        return await self.call(ctx.quote, symbols, symbols=symbols)
 
     async def unsubscribe(self, ctx, symbols: list[str]):
-        self.check(symbols)
+        # Removed symbols must still be unsubscribed after the whitelist changes.
         await self.call(ctx.unsubscribe, symbols, [SubType.Quote])
+
+    async def validate_ticker(self, ticker: str):
+        from .workspace import normalize_ticker
+        symbol = normalize_ticker(ticker) + '.US'
+        rows = await self.call(self.context().static_info, [symbol])
+        info = next((row for row in rows if row.symbol == symbol and row.name_en), None)
+        if info is None:
+            raise ValueError('US ticker not found')
+        return {'ticker': ticker, 'name': info.name_en}

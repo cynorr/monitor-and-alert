@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import logging
+import shutil
 import sys
 import tempfile
 from datetime import datetime
@@ -12,6 +13,7 @@ from data_service.calendar import TradingCalendar, ET
 from data_service.config import load_tickers
 from data_service.http_api import start_http
 from data_service.service import DataService
+from data_service.workspace import Workspace
 from simulator.market import Market, SessionClock, SimulatedQuotes, default_start
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,16 +42,24 @@ async def main(args=None):
     calendar = TradingCalendar()
     start = int(datetime.fromisoformat(args.start).replace(tzinfo=ET).timestamp()) if args.start else default_start(calendar)
     clock = SessionClock(calendar, start, args.speed)
-    tickers = load_tickers(args.workspace, args.symbols)
+    tickers = load_tickers(args.workspace, args.symbols, allow_empty=True)
     with tempfile.TemporaryDirectory(prefix='chart-simulator-') as folder:
         service = create_simulation(tickers, Path(folder), calendar, clock)
-        runner = await start_http(service, args.port)
+        path = Path(folder) / 'workspace.json'
+        shutil.copyfile(args.workspace, path)
+        workspace = Workspace(path)
+        service.attach_workspace(workspace, args.symbols)
+        runner = None
         try:
+            workspace.start_watcher()
+            runner = await start_http(service, args.port)
             print(f'SIMULATION: http://127.0.0.1:{args.port}', flush=True)
             print(f'{len(tickers)} focus/wait symbols | {args.speed:g}x exchange time | temporary database | no broker', flush=True)
             await service.run()
         finally:
-            await runner.cleanup()
+            workspace.stop_watcher()
+            if runner:
+                await runner.cleanup()
             service.store.close()
 
 

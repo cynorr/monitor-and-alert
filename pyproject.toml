@@ -7,7 +7,7 @@ name = "longbridge-data-service"
 version = "0.1.0"
 description = "Local, whitelist-only Longbridge quote and closed-bar service"
 requires-python = ">=3.11"
-dependencies = ["longbridge==5.0.0", "exchange-calendars==4.13.2", "aiohttp>=3.11,<4"]
+dependencies = ["longbridge==5.0.0", "exchange-calendars==4.13.2", "aiohttp>=3.11,<4", "watchdog>=6,<7"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
