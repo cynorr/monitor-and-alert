@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-10-02：Holdings 零出售隐藏、成交价仅明细与盘中 Ext
+
+环境：macOS、现有Node/TypeScript及真实8765服务；仅前端与文档变更，未改账户/行情获取。真实只读验收预先限定当前11个Holdings（LITE、IOVA、EFOR、PAYS、TXG、ABCL、VSTM、MU、PBF、MRNA、CDNA）与最多2分钟，现场约09:56 ET处于regular。无新增ticker、账户/workspace写入、模式切换或服务重启；临时页面关闭、viewport恢复。
+
+- `npm run build --prefix ui`、`git diff --check`与仅定向的`node --test ui/tests/holdings.test.mjs`通过（5项）。原始数值排序保留精度；删除Trade Price排序列后测试范围改为八个数值列。未运行全局Node/Python测试。
+- 临时SIM网页只导入生产HoldingsList/layout，不加载main、不建WS、不访问券商。覆盖Sold=0的空值/隐藏箭头、实际非零0.1%显示<1%并保留展开、P/L %和Chg%一位小数（含Total/卖出明细），Ext保持两位；Buy/Sold成交价在Chg%位置。
+- SIM点击Ext排序后切regular：表头/主行/明细/Total第八列均隐藏，排序恢复默认；成交价仍可见。列表由489px收回至436px、双图等宽；切回扩展时段恢复489px与Ext。各状态scrollWidth=clientWidth。临时fixture已删除，未保留测试专用产品界面或新增服务。
+- 真实盘中有8个Sold为0的主行，均无数值及可见三角；IOVA/TXG/MRNA保留出售比例与展开箭头。主表九个结构单元、八个可见列，无Trade Price列；所有主行P/L %/Chg%均一位小数，Ext全列隐藏。
+- IOVA明细为Buy 2026-09-02/1,000股/8.61，Sold 2026-09-04/500股/8.73、2026-09-24/200股/10.36；卖出P/L %为+1.4%/+20.3%，日期/数量位置保持，Daily/Intraday选择联动正常。当前视口列表413px、展开后434px，双图等宽，scrollWidth=clientWidth。控制台无error/warn。截图 `runtime/holdings-compact-regular-live.png`。
+
+未覆盖：真实开盘/收盘边界长期观察、真实扩展时段、无任何当日regular Quote时的开盘初始等待、全局Scan/图表手势、后台会计/调度及移动触屏。Ext显隐依赖既有current_regular_session（已到当日regular Quote且交易日历is_open），不会新增客户端时钟/交易日历。历史记录不作为本轮live证据。
+
 ## 2026-10-02：Scan 分阶段提速与最新完成日刷新
 
 环境：macOS、现有Python3.13/pandas/numpy虚拟环境、TypeScript5.9.3。使用真实runtime/daily.sqlite3，完成日metadata.completed_date=2026-10-01。只验证本次Scan计算/刷新改动；没有全量回归、前端交互测试、全链路测试或券商/账户请求。

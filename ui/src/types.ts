@@ -43,6 +43,7 @@ export type Quote = {
     extended: Record<string, QuoteValue>;
     connection_health: string;
     error: string | null;
+    current_regular_session?: boolean;
 };
 export type Ticker = {
     [key: string]: unknown;

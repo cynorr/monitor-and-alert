@@ -16,6 +16,7 @@ let selectionSource = 'watchlist', holdingKey = '';
 const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), applyList);
 const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode = 'monitor', scanDate = '', modePending = false;
+let listRegularSession = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (!rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
@@ -40,7 +41,8 @@ function applyList(data) {
         holdings.selected = '';
         ++epoch;
     }
-    holdings.update(data.holdings ?? null);
+    listRegularSession = data.board.some(ticker => ticker.quote?.current_regular_session);
+    holdings.update(data.holdings ?? null, listRegularSession || currentView?.quote.current_regular_session === true);
     watchlist.update(data, selectionSource === 'watchlist');
     if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
         const first = holdings.first();
@@ -93,6 +95,8 @@ function apply(view) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
+    if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
+        holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
     daily.render(view.charts['1d']);
     if (appMode === 'monitor') {
         intraday.render(view.charts[timeframe]);

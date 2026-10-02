@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sortedHoldingRows } from '../public/holdings.js';
 
-const fields = ['market_value', 'holding_days', 'total_pnl_percent', 'total_pnl', 'sold_percent', 'buy_price', 'day_pnl'];
+const fields = ['market_value', 'holding_days', 'total_pnl_percent', 'total_pnl', 'sold_percent', 'day_pnl'];
 function holding(ticker, value, id = ticker) {
     return { ticker, change_percent: value, extended_percent: value, sequences: [{
         buy_ids: [id], ...Object.fromEntries(fields.map(field => [field, value])), sells: [],
@@ -10,7 +10,7 @@ function holding(ticker, value, id = ticker) {
 }
 const symbols = rows => rows.map(row => row.holding.ticker);
 
-test('all nine numeric columns sort descending using numbers, including losses', () => {
+test('all eight numeric columns sort descending using numbers, including losses', () => {
     const data = [holding('SMALL', '2'), holding('NEG', '-10'), holding('BIG', '12')];
     for (const field of [...fields, 'change_percent', 'extended_percent']) {
         assert.deepEqual(symbols(sortedHoldingRows(data, field)), ['BIG', 'SMALL', 'NEG'], field);

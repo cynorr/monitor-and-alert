@@ -60,7 +60,7 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 - Monitor：5m/15m/30m/1h/2h/4h、SMA65、交易日联动、实时行情；2h/4h由5m在内存合成。
 - /搜索，回车选中或新增到Focus首位；+指定新增到Focus/Wait。Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info。保存同步落盘。
 - Monitor支持Focus/Wait拖动、Shift+上下排序、删除、折叠；Scan默认排序下也可调整Focus/Wait顺序。
-- Monitor的Holdings在Focus/Wait上方，有独立十列和整体折叠；点击行显示同一Daily/Intraday。所有行单行显示，Net Liq、P/L、P/L Day及对应Total显示整数。每个批次均可展开，先列各笔Buy，再列Sold；日期在Net Liq对应列、股数在Sold对应列、Trade Price为该笔实际成交价，不增加明细列头。点击列头只降序，再点同列取消；换列替换原排序，买卖明细随主行移动。页面启动按完整表格内容测量最紧凑列表宽度，展开明细需要更多空间时自动加宽，剩余宽度由双图平分，不恢复旧宽度比例。Chg%/Ext沿用观察名单口径，P/L Day按当前剩余股数与前一常规收盘价计算、跟随最新时段。允许与观察名单重复，不校验其观察名单归属、不写workspace。Longbridge最新价（含盘前/盘后/夜盘）重算市值和盈亏；缺价回退最后成功的SnapTrade价格。cash来自SnapTrade，Account Value为当前持仓市值加cash。
+- Monitor的Holdings在Focus/Wait上方，有独立九列（盘中隐藏Ext为八列）和整体折叠；点击行显示同一Daily/Intraday。所有行单行显示，Net Liq、P/L、P/L Day及对应Total显示整数。Sold为0时数值留空并隐藏展开三角；其余批次可展开，先列各笔Buy，再列Sold。日期在Net Liq对应列、股数在Sold对应列、实际成交价放在Chg%对应列，不增加明细列头。P/L %（含Total和卖出明细）与Chg%显示一位小数；主表不再有Trade Price。点击列头只降序，再点同列取消；换列替换原排序，买卖明细随主行移动。页面启动按完整表格内容测量最紧凑列表宽度，展开明细需要更多空间时自动加宽，剩余宽度由双图平分，不恢复旧宽度比例。Chg%/Ext沿用观察名单口径，P/L Day按当前剩余股数与前一常规收盘价计算、跟随最新时段。允许与观察名单重复，不校验其观察名单归属、不写workspace。Longbridge最新价（含盘前/盘后/夜盘）重算市值和盈亏；缺价回退最后成功的SnapTrade价格。cash来自SnapTrade，Account Value为当前持仓市值加cash。
 - ADR20 = 最近最多20根`(H-L)/L × 100`均值；ADV20 = 最近最多20根`close × volume`均值，两模式同公式。
 - Monitor Loading → 黄色Ready（Daily+5m）→ 蓝色Ready（五周期，3秒后隐藏）；Scan显示所选日期。仅OHLC上下界矛盾保留原值并追加invalid_ohlc.jsonl，不修正或告警。
 
