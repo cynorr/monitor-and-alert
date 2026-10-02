@@ -60,3 +60,10 @@ def redact(message: str, secrets: tuple[str, ...]) -> str:
     for secret in secrets:
         message = message.replace(secret, '[REDACTED]')
     return message
+
+
+def read_snaptrade_credentials(path: Path) -> tuple[str, str, str]:
+    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    if len(lines) != 6 or lines[::2] != ['Client ID', 'Consumer Key', 'Account ID']:
+        raise ValueError('Expected Client ID / Consumer Key / Account ID labels, each followed by its value')
+    return tuple(lines[1::2])

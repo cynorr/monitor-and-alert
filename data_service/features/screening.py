@@ -2,15 +2,13 @@
 
 ADR20_MIN = 5.0
 ADV20_MIN = 5_000_000
-PRICE_MIN = 5.0
 TOP_N = 50
 
 def apply_filter(scan):
-    scan["price_pass"] = scan["close"] >= PRICE_MIN
     scan["adr_pass"] = scan["adr20"] >= ADR20_MIN
     scan["adv_pass"] = scan["adv20"] >= ADV20_MIN
 
-    scan["eligible"] = scan["price_pass"] & scan["adr_pass"] & scan["adv_pass"]
+    scan["eligible"] = scan["adr_pass"] & scan["adv_pass"]
 
     return scan
 

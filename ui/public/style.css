@@ -22,7 +22,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 [hidden] { display: none !important; }
 
 /* Shared panel layout and aligned header boundary. */
-.workspace { height: 100dvh; min-height: 480px; min-width: 980px; display: grid; grid-template-columns: minmax(320px,1fr) 12px minmax(320px,1fr) 12px minmax(260px,.63fr); padding: 10px; }
+.workspace { height: 100dvh; min-height: 480px; min-width: 1284px; display: grid; grid-template-columns: minmax(320px,1fr) 12px minmax(320px,1fr) 12px 600px; padding: 10px; }
 .chart-panel, .watchlist { background: white; border-radius: 22px; box-shadow: 0 3px 14px #1a253012; min-width: 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
 .chart-header, .list-header { height: var(--header-height); flex: 0 0 var(--header-height); display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
 .chart-header { overflow: hidden; }
@@ -85,7 +85,8 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .list-columns, .symbol-row { display: grid; grid-template-columns: minmax(52px,1.15fr) repeat(3,minmax(0,1fr)) 36px; align-items: center; gap: 3px; padding: 0 8px; }
 .list-columns { flex: 0 0 28px; margin-top: auto; color: #68727f; font-size: var(--font-small); }
 .list-columns span:not(:first-child), .symbol-row > span { text-align: right; }
-#symbols { overflow: auto; flex: 1; scrollbar-width: thin; }
+.list-body { overflow: auto; flex: 1; min-height: 0; scrollbar-width: thin; }
+#symbols { min-width: 0; }
 #symbols section + section { border-top: 1px solid var(--border); }
 .group { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; font-weight: 600; color: #747c87; }
 .group button { display: inline-flex; align-items: center; gap: 5px; font-size: var(--font-row); padding: 5px 2px; }
@@ -118,6 +119,35 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .search-result strong { color: #2962ff; }
 .search-result .security-name { grid-column: 1 / -1; color: #747c87; font-size: var(--font-small); }
 .search-result:disabled { opacity: .6; cursor: wait; }
+
+/* Holdings owns its columns and buy-sequence rows above Focus/Wait. */
+.holdings-list { border-bottom: 1px solid var(--border); }
+.holdings-heading { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 8px; }
+#holdings-toggle { display: inline-flex; gap: 5px; align-items: center; font-weight: 600; padding: 5px 0; }
+#holdings-arrow { width: 16px; font-size: 18px; line-height: 16px; }
+#holdings-count { font-weight: 400; color: #747c87; font-size: var(--font-small); }
+.holdings-meta { display: flex; flex-direction: column; gap: 4px; text-align: right; font-size: var(--font-small); }
+.holdings-meta b { display: block; color: #161b22; font-size: 14px; font-weight: 600; }
+#holdings-updated { color: #747c87; font-size: 10px; }
+#holdings-updated.negative { color: var(--down); }
+.holdings-scroll { overflow-x: auto; scrollbar-width: thin; padding: 0 8px; }
+.holdings-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: var(--font-row); }
+.holdings-table th, .holdings-table td { text-align: right; white-space: nowrap; padding: 5px 4px; }
+.holdings-table th { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: #68727f; font-size: var(--font-small); font-weight: 400; }
+.holdings-table th:first-child, .holdings-table td:first-child { text-align: left; padding-left: 16px; position: relative; }
+.holdings-table tbody tr[data-holding] { cursor: pointer; }
+.holdings-table tbody tr:hover:not(.active) { background: #f3f5f8; }
+.holdings-table tbody td { border-top: 1px solid transparent; border-bottom: 1px solid transparent; }
+.holdings-table tbody td:first-child { border-left: 1px solid transparent; }
+.holdings-table tbody td:last-child { border-right: 1px solid transparent; }
+.holdings-table th:first-child, .holdings-table tfoot td:first-child { padding-left: 17px; }
+.holdings-table tr.active td { border-top: 1px solid #000; border-bottom: 1px solid #000; }
+.holdings-table tr.active td:first-child { border-left: 1px solid #000; border-radius: 6px 0 0 6px; }
+.holdings-table tr.active td:last-child { border-right: 1px solid #000; border-radius: 0 6px 6px 0; }
+.holdings-table tr:focus-visible { outline: 2px solid #2962ff; outline-offset: -2px; }
+.holdings-trades { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 10px; padding: 0; font-size: 10px; line-height: 16px; color: #747c87; }
+.holdings-table .holding-trade td { background: #f5f7f9; font-size: var(--font-small); }
+.holdings-table tfoot td { border-top: 3px double var(--border); font-weight: 600; padding-top: 8px; }
 
 /* Scan reuses the Daily panel and watchlist, with a closed-day review sidebar. */
 .mode-switch, .scan-pills { display: flex; gap: 3px; align-items: center; }
@@ -162,3 +192,10 @@ button:disabled { cursor: default; opacity: .45; }
 .scan-symbol { display: flex; gap: 5px; align-items: center; min-width: 0; }
 .scan-symbol input { margin: 0; accent-color: #242c38; }
 .scan-row-detail { grid-column: 1 / 5; grid-row: 2; color: #747c87; padding-left: 18px; overflow: hidden; text-overflow: ellipsis; font-size: var(--font-small); }
+
+/* Natural width determines the compact sidebar; sort markers add no width. */
+.holdings-table th button { position: relative; padding: 0; color: inherit; font: inherit; white-space: nowrap; }
+.holdings-table th button:hover { color: #161b22; }
+.holdings-table th[aria-sort="descending"] button { color: #161b22; }
+.holdings-table th[aria-sort="descending"] button::after { content: ""; position: absolute; left: 50%; top: calc(100% + 1px); transform: translateX(-50%); border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 3px solid currentColor; }
+.holdings-table.holdings-measure { position: absolute; visibility: hidden; pointer-events: none; width: max-content; min-width: 0; left: 0; top: 0; }

@@ -4,6 +4,7 @@ import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
 import { post } from './api.js';
+import { HoldingsList } from './holdings.js';
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
@@ -11,7 +12,9 @@ let symbol = '', timeframe = defaultTimeframe(), epoch = 0;
 let socket = null;
 let reconnectTimer, lastMessage = 0, reconnectDelay = 1000, currentView = null;
 let readyKey = '', readySince = 0, lastStage = '';
-const watchlist = new Watchlist(next => select(next, timeframe), applyList);
+let selectionSource = 'watchlist', holdingKey = '';
+const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), applyList);
+const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode = 'monitor', scanDate = '', modePending = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (!rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
@@ -32,9 +35,24 @@ function applyList(data) {
     if (changed) {
         symbol = '';
         watchlist.selected = '';
+        selectionSource = 'watchlist';
+        holdingKey = '';
+        holdings.selected = '';
         ++epoch;
     }
-    watchlist.update(data);
+    holdings.update(data.holdings ?? null);
+    watchlist.update(data, selectionSource === 'watchlist');
+    if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
+        const first = holdings.first();
+        if (first)
+            select(first.symbol, timeframe, 'holdings', first.key);
+        else
+            select(data.board[0]?.symbol ?? '', timeframe, 'watchlist');
+    }
+    else if (!symbol && holdings.first()) {
+        const first = holdings.first();
+        select(first.symbol, timeframe, 'holdings', first.key);
+    }
     const labels = appMode === 'scan' ? ['Symbol', 'Price', 'ADR20', 'ADV20', ''] : ['Symbol', 'Last', 'Chg%', 'Ext', ''];
     Array.from($('list-columns').children).forEach((node, index) => { node.textContent = labels[index]; });
     if (changed && !symbol)
@@ -91,10 +109,12 @@ function apply(view) {
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
 }
-function select(next, tf) {
+function select(next, tf, source = selectionSource, key = holdingKey) {
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
+    selectionSource = source;
+    holdingKey = source === 'holdings' ? key : '';
     timeframe = tf;
     ++epoch;
     currentView = null;
@@ -104,7 +124,10 @@ function select(next, tf) {
     document.querySelectorAll('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
     document.querySelectorAll('.session,.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
-    watchlist.selected = symbol;
+    watchlist.selected = source === 'watchlist' ? symbol : '';
+    watchlist.keyboardEnabled = source === 'watchlist';
+    holdings.selected = source === 'holdings' ? holdingKey : '';
+    holdings.render();
     watchlist.render();
     for (const id of ['daily', 'intraday'])
         $(id + '-empty').textContent = symbol ? 'Loading' : 'No symbol selected';

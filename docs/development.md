@@ -14,6 +14,8 @@
 | config.py | 当前 focus/wait 解析、凭证读取、错误脱敏 |
 | workspace.py | 最新日期选择、内存 JSON、同步直接写入、单个原生文件事件 watcher |
 | broker.py | 单 SDK context、static_info 添加验证、最近 K 线、Quote 请求、全局/后台请求预算 |
+| snaptrade.py | 独立异步签名GET、指定账户、10次/滚动分钟预算、原始快照获取与成功提交；不提供HTTP服务、不调用Longbridge |
+| holdings.py | 原买卖关联/Decimal会计、30秒刷新任务、失败保留完整结果、Quote重估值；不含网页/端口/券商SDK |
 | calendar.py | UTC/ET、XNYS、实际闭合边界、5m 到 4h 时间网格 |
 | downloader.py | 每次一页 fetch/parse/validate/写入，追加 OHLC 比较日志 |
 | store.py | 官方 bars、最近窗口批次、事务及 revision |
@@ -25,6 +27,7 @@
 | http_api.py | aiohttp 静态页面、诊断 HTTP、List mutation、WebSocket/Origin 校验 |
 | ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
 | ui/src/list.ts | 统一内联搜索/新增、输入查询生命周期、拖动/快捷键移动、折叠和报价行更新 |
+| ui/src/holdings.ts | 独立十列单行表格、单列降序/取消、自然宽度测量、整体折叠、批次选中、逐笔Buy/Sold日期/数量/实际成交价明细 |
 | ui/src/scan.ts / filters.ts / tags.ts | 日期/四列表、唯一条件匹配、Tag 草稿与保存 |
 | scripts/build_scan_mock.py | 明确指定目录的合成日 K/截面/测试名单 |
 | ui/src/chart.ts / layout.ts | Lightweight Charts、日联动、列宽和原生交互 |
@@ -33,13 +36,19 @@
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
+持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/买卖行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq、P/L、P/L Day整数为显示格式，后端Decimal契约不变。展开直接使用既有sequence.buys/sells，所有Buy先于Sold；日期/数量/金额与买卖记录均纳入结构签名，刷新后更新明细。明细成交价为value/quantity；无副标题DOM或PNG生成/下载逻辑。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout默认锁定内容所需列表宽度、双图平分余量，不读写旧列宽localStorage；展开所需宽度增加时自动增长，收起不引起宽度抖动。手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
+
 ## 模式与上游数据
 
 同一个服务、同一个 Workspace、一个全局模式。Workbench持有monitor实例/任务或只读Scan上下文；Scan初始状态不调用broker_factory。进入Monitor才构造Broker与既有DataService.run，进入Scan先确认截面，再取消并await所有Monitor任务、由Quote退出路径unsubscribe/清callback，最后释放context和store。模式切换和生成不得同时执行；不增加第二个后台服务、消息中间件或通用source接口。
 
 bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。两个文件物理分离：daily.sqlite3由上游写、Scan以mode=ro读；bars.sqlite3仍由Monitor写。BAR_SCHEMA、Bar和read_bars共用，日K ts为ET零点转Unix秒。裸ticker只保留在workspace与UI显示边界；计算/图表使用symbol.US。
 
-build_day仅对D当日有bar的symbol生成截面，每只调用read_bars读取截至D最多1000根，校验闭合/结构，feature_row统一计算指标及原子特征，最后初筛/截面排名。只保留单只历史和全市场标量，避免全市场历史fetchall。全日生成由显式完成日期触发，在asyncio.to_thread中执行；成功后同步publish_day，首次才创建workspace。相同日期重算不重新继承。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
+build_day仅对D当日有bar的symbol生成截面，分三步：全市场每只read_bars最多20根，用indicators.adr_adv计算ADR/ADV并初筛；仅eligible每只最多126根，用return_from_low计算三组RFL并排名；仅candidate每只最多1000根，由feature_row建立EMA/SMA/ATR及原子特征。daily_metrics组合相同两个纯算子，图表与特征不重复维护公式。候选初筛只有ADR/ADV，取消Price≥5门槛；并列仍按symbol顺序、rank(method=first)，各取前50的并集。非候选快照只保留轻量指标，不补算原子特征。
+
+每步只保留单只历史与全市场标量，避免全市场历史fetchall；读到的bar均验证闭合/结构。checked_history复用Bar.validate，OHLC范围矛盾保留原值；后续阶段仅为上一窗口起点之前的矛盾追加日志，避免一次生成内重叠窗口重复记录。阶段耗时和证券/候选数量写普通日志，不新增指标持久化或性能框架。真实样本线程对照：单线程1000只约0.46秒、四线程约1.12秒；不添加更慢的线程池。全日生成继续在现有asyncio.to_thread中执行，不阻塞HTTP/WS事件循环。
+
+latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)回退推断；缺少完成日则失败并保留原状态。CLI scan未传--date、页面Refresh未传date时用该完成日，build_day继续拒绝未收盘日或无当日bar。成功后同步publish_day、reload workspace并明确选中新生成日期，首次才创建workspace。相同日期重算不重新继承；生成失败释放busy并保留原日期/名单。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
 
 只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传四列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有Quote active、Intraday或Ready实时状态；Daily复用同一个Panel。
 
@@ -53,9 +62,15 @@ indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统
 
 watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 watcher；线程仅把事件派发回 asyncio loop。默认跟随 days 最新文件；显式 --workspace 监听该文件父目录并固定文件。创建、修改、移动、删除事件触发重读，无定时扫描。自身写入产生的事件在 JSON 相同情况下不重复更新。
 
-Workspace 直接维护原始 JSON，读取 focus/wait 和 statuses（statuses 仍决定可请求范围，数组负责排序）；普通Focus/Wait移动修改相应数组和主动ticker的status/status_at；新增/删除移除该ticker旧hidden排序，删除清status。Scan批量移动验证当前来源归属后一次写入三组orders、status与必要的carried/discover_order。status_at使用所操作workspace日期。保留所有其他数据。无 schema migration/validation 层、repository 层、锁、临时文件或写队列。文件为空或无法解析时显示读取错误，下一文件事件再读取，不建立恢复协议。
+Workspace 直接维护原始 JSON，读取 focus/wait 和 statuses（statuses 决定观察名单行情范围，Holdings另由账户快照提供；数组负责排序）；普通Focus/Wait移动修改相应数组和主动ticker的status/status_at；新增/删除移除该ticker旧hidden排序，删除清status。Scan批量移动验证当前来源归属后一次写入三组orders、status与必要的carried/discover_order。status_at使用所操作workspace日期。保留所有其他数据。无 schema migration/validation 层、repository 层、锁、临时文件或写队列。文件为空或无法解析时显示读取错误，下一文件事件再读取，不建立恢复协议。
 
 Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用DataService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
+
+Holdings另由Workbench持有单个controller与轮询task，仅Monitor启用；停止模式时先cancel并await持仓任务及其aiohttp session，再退出Monitor。SnapTrade凭证工厂延迟到进入Monitor，mock/only禁用工厂。原项目代码迁入维护路径，不import `schwab-review`。凭证文件与规则/账户缓存均git忽略，凭证权限600；CLI缺少凭证文件时不启用持仓。启动与模式恢复的第一个refresh位于timer sleep之前；失败不调用成员更新、不提交raw缓存，下一周期再执行，没有额外即时重试。
+
+DataService.tickers仍只包含workspace成员，board只输出Focus/Wait；holdings_symbols独立接收当前已接受持仓。唯一_update_symbols按两来源并集更新store/broker.allowed、Quote范围和SyncState，同ticker保持既有任务。它不调用static_info、不检查workspace归属、不写workspace。Holdings只在账户成功刷新时重建买卖关联；约1Hz list_state读取用已有Decimal批次标量与Quote重新估值，不重复匹配流水。前端selectionSource与buy_ids批次key分离于symbol，Watchlist更新不得覆盖持仓选择，HTTP/WS图表继续用原request_id/mode/socket保护。
+
+SnapTrade固定请求配置account_id，不通过/accounts假设仅一个账户。成功核对后原始缓存只保存runtime/holdings/latest.json一份；activities分页仅属于SnapTrade成交历史，不改变K线count=1000约束。每轮重读sequences.txt/merge_buys.txt，明确关联与原错误检查不变。SnapTrade及Longbridge拥有独立额度，均在同一Python进程内运行，不新增监听端口或服务。
 
 ## 同步与状态
 
@@ -98,6 +113,8 @@ Daily 保持累计量；2h/4h 的闭合 OHLCV 仍只由 5m 合成。这里的大
 同源 HTTP 静态资源与 `/v1/universe`；`/health`、`/v1/quotes`、`/v1/bars`、`/v1/readiness`、`/v1/chart` 为只读诊断。`/v1/chart` 不改变优先级。
 
 UI 图表只通过 `/v1/stream`：select消息含symbol/timeframe/request_id/mode；旧模拟器仍可省略mode。初次、选择、重连为完整 bars+指标；常规只传 active/indicator_preview/status，历史改变才重发。约 5Hz 图表预览、1Hz 独立 list 消息。list 不依赖选中 symbol/request_id，所以删空、删当前项或重连时仍可刷新名单；图表继续保留 request_id 校验。run_id标识后端实例和当前数据上下文，request_id 与 socket identity 防止串图。保留 heartbeat、慢客户端独立发送任务和 Origin 校验；不新增差量重放协议。
+
+list_state增加独立holdings字段：未启用或Scan为null；启用为{data,loading,error}。data保留旧fetched_at/source_timestamps/positions_as_of/pnl_basis/funds/summary/holdings契约和Decimal字符串，holding增加price_source/price_timestamp/price_session、change_percent/extended_percent/day_reference_price；sequence与summary增加可空day_pnl。Workbench通过monitor.quote读取与观察名单相同的Daily修正基准，再由holdings.py用Decimal重算日盈亏；缺基准不返回部分总额。无新增SDK请求、下载任务或缓存文件。GET /v1/holdings返回同一只读状态；请求不刷新账户、不安排历史。Account Value从估值市值加SnapTrade现金计算，原details账户总值仍在原始缓存，不冒充相同时刻的券商官方净值。本机WS关闭可选压缩，避免大图表/持仓快照发送时快速重载遗留aiohttp压缩后台task。
 
 List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,section}`、`{action:"delete",ticker}`、`{action:"move",ticker,section,index}`。index 为移除主动 ticker 后目标数组的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
 

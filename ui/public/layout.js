@@ -1,33 +1,25 @@
 import { $ } from './types.js';
 export function initLayout() {
-    const root = $('workspace'), defaults = [0.38, 0.38, 0.24], minimum = [320, 320, 260];
-    let ratios = defaults.slice();
-    try {
-        const saved = JSON.parse(localStorage.getItem('chart-columns') ?? 'null');
-        if (Array.isArray(saved) && saved.length === 3 && saved.every(n => Number.isFinite(n) && n > 0))
-            ratios = saved;
-    }
-    catch { /* Storage is optional. */ }
+    const root = $('workspace'), minimum = [320, 320, 600];
+    let ratios = null, holdingsWidth = 600;
     function widths() {
         const available = root.clientWidth - 44;
+        if (!ratios) {
+            const chart = Math.max(minimum[0], (available - minimum[2]) / 2);
+            return [chart, chart, minimum[2]];
+        }
         const extra = Math.max(0, available - minimum.reduce((a, b) => a + b, 0));
         const wanted = ratios.map((r, i) => Math.max(0, r * available - minimum[i]));
         const total = wanted.reduce((a, b) => a + b, 0) || 1;
         return minimum.map((m, i) => m + extra * wanted[i] / total);
     }
     function paint(values = widths()) {
+        root.style.minWidth = `${minimum.reduce((a, b) => a + b, 0) + 44}px`;
         root.style.gridTemplateColumns = root.dataset.mode === 'scan'
             ? `${values[0] + values[1] + 12}px 12px ${values[2]}px`
             : `${values[0]}px 12px ${values[1]}px 12px ${values[2]}px`;
     }
-    function remember(values) {
-        const total = values.reduce((a, b) => a + b, 0);
-        ratios = values.map(v => v / total);
-        try {
-            localStorage.setItem('chart-columns', JSON.stringify(ratios));
-        }
-        catch { /* Storage is optional. */ }
-    }
+    function remember(values) { const total = values.reduce((a, b) => a + b, 0); ratios = values.map(v => v / total); }
     for (let index = 0; index < 2; index++) {
         const handle = $('divider-' + index);
         handle.addEventListener('pointerdown', event => {
@@ -39,7 +31,7 @@ export function initLayout() {
             handle.addEventListener('pointermove', move);
             handle.addEventListener('lostpointercapture', end, { once: true });
         });
-        handle.addEventListener('dblclick', () => { ratios = defaults.slice(); remember(widths()); paint(); });
+        handle.addEventListener('dblclick', () => { ratios = null; paint(); });
         handle.addEventListener('keydown', event => {
             if (!['ArrowLeft', 'ArrowRight'].includes(event.key))
                 return;
@@ -55,9 +47,19 @@ export function initLayout() {
     new ResizeObserver(() => paint()).observe(root);
     paint();
     return { setMode(mode) {
+            if (root.dataset.mode === mode)
+                return;
             root.dataset.mode = mode;
-            minimum[2] = mode === 'scan' ? 400 : 260;
+            minimum[2] = mode === 'scan' ? 400 : holdingsWidth;
             $('divider-1').setAttribute('aria-label', mode === 'scan' ? 'Resize Daily and watchlist' : 'Resize Intraday and watchlist');
             paint();
+        }, setHoldingsWidth(width) {
+            if (holdingsWidth === width)
+                return;
+            holdingsWidth = width;
+            if (root.dataset.mode !== 'scan') {
+                minimum[2] = width;
+                paint();
+            }
         } };
 }

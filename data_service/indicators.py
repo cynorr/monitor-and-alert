@@ -37,13 +37,23 @@ def add_indicators(history):
     return result
 
 
-def daily_metrics(history):
-    recent = history.tail(20)
-    result = {'adr20': ((recent['high'] - recent['low']) / recent['low'] * 100).mean(),
-              'adv20': (recent['close'] * recent['volume']).mean()}
+def adr_adv(history):
+    high, low, close, volume = (np.asarray(history[name], dtype=float)
+                                for name in ('high', 'low', 'close', 'volume'))
+    return {'adr20': ((high[-20:] - low[-20:]) / low[-20:] * 100).mean(),
+            'adv20': (close[-20:] * volume[-20:]).mean()}
+
+
+def return_from_low(history):
+    low, close = (np.asarray(history[name], dtype=float) for name in ('low', 'close'))
+    result = {}
     for name, window in (('rfl1m', 21), ('rfl3m', 63), ('rfl6m', 126)):
-        result[name] = (history['close'].iloc[-1] / history['low'].tail(window).min() - 1) * 100
+        result[name] = (close[-1] / low[-window:].min() - 1) * 100
     return result
+
+
+def daily_metrics(history):
+    return {**adr_adv(history), **return_from_low(history)}
 
 
 def series(rows: list[dict], sma_period: int = 50) -> dict:
@@ -78,6 +88,6 @@ def daily_summary(bars, calendar, now):
     rows = [b for b in bars if calendar.bar_end(b.ts, '1d') <= now][-20:]
     if not rows:
         return {'adr20': None, 'adv20': None, 'samples': 0}
-    metrics = daily_metrics(pd.DataFrame({'high': [b.high for b in rows], 'low': [b.low for b in rows],
-                                         'close': [b.close for b in rows], 'volume': [b.volume for b in rows]}))
+    metrics = adr_adv({'high': [b.high for b in rows], 'low': [b.low for b in rows],
+                             'close': [b.close for b in rows], 'volume': [b.volume for b in rows]})
     return {key: metrics[key] for key in ('adr20', 'adv20')} | {'samples': len(rows)}

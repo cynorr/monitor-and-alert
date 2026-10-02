@@ -2,8 +2,9 @@ import { $, money, compact, extendedQuote, type Ticker } from './types.js';
 import type { ScanControls } from './scan.js';
 import type { Preferences } from './tags.js';
 import { post } from './api.js';
+import type { HoldingsState } from './holdings.js';
 
-export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string };
+export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null };
 
 type Candidate = { ticker: string; name: string };
 type Search = { section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };
@@ -12,6 +13,7 @@ export class Watchlist {
     scan?: ScanControls;
     tickers: Ticker[] = [];
     selected = '';
+    keyboardEnabled = true;
     private editable = false;
     private collapsed = new Set<string>();
     private rows = new Map<string, HTMLElement>();
@@ -113,7 +115,7 @@ export class Watchlist {
                 return;
             }
             if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]') ||
-                !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+                !this.keyboardEnabled || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
             event.preventDefault();
             const direction = event.key === 'ArrowDown' ? 1 : -1;
             if (event.shiftKey) { void this.swapSelected(direction); return; }
@@ -214,14 +216,14 @@ export class Watchlist {
         this.rows.get(this.selected)?.scrollIntoView({ block: 'nearest' });
     }
 
-    update(data: ListState) {
+    update(data: ListState, maintainSelection = true) {
         this.tickers = data.board;
         this.editable = data.editable;
         $('symbol-count').textContent = String(this.tickers.length);
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
         const visible = this.visible();
-        if (!visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
+        if (maintainSelection && !visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
             this.onSelect(visible[0]?.symbol ?? '');
         this.render();
     }
