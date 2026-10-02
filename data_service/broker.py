@@ -54,7 +54,7 @@ class Broker:
 
     def check(self, symbols: list[str]) -> None:
         if not set(symbols) <= self.allowed:
-            raise ValueError('API request outside current focus/wait universe')
+            raise ValueError('API request outside current Focus/Wait and Holdings universe')
 
     def context(self):
         if self._context is None:

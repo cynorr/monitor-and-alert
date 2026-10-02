@@ -85,7 +85,8 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .list-columns, .symbol-row { display: grid; grid-template-columns: minmax(52px,1.15fr) repeat(3,minmax(0,1fr)) 36px; align-items: center; gap: 3px; padding: 0 8px; }
 .list-columns { flex: 0 0 28px; margin-top: auto; color: #68727f; font-size: var(--font-small); }
 .list-columns span:not(:first-child), .symbol-row > span { text-align: right; }
-#symbols { overflow: auto; flex: 1; scrollbar-width: thin; }
+.list-body { overflow: auto; flex: 1; min-height: 0; scrollbar-width: thin; }
+#symbols { min-width: 0; }
 #symbols section + section { border-top: 1px solid var(--border); }
 .group { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; font-weight: 600; color: #747c87; }
 .group button { display: inline-flex; align-items: center; gap: 5px; font-size: var(--font-row); padding: 5px 2px; }
@@ -118,6 +119,34 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .search-result strong { color: #2962ff; }
 .search-result .security-name { grid-column: 1 / -1; color: #747c87; font-size: var(--font-small); }
 .search-result:disabled { opacity: .6; cursor: wait; }
+
+/* Holdings owns its columns and buy-sequence rows above Focus/Wait. */
+.holdings-list { border-bottom: 1px solid var(--border); }
+.holdings-heading { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 8px; }
+#holdings-toggle { display: inline-flex; gap: 5px; align-items: center; font-weight: 600; padding: 5px 0; }
+#holdings-arrow { width: 16px; font-size: 18px; line-height: 16px; }
+#holdings-count { font-weight: 400; color: #747c87; font-size: var(--font-small); }
+.holdings-meta { display: flex; flex-direction: column; gap: 4px; text-align: right; font-size: var(--font-small); }
+.holdings-meta b { display: block; color: #161b22; font-size: 14px; font-weight: 600; }
+#holdings-updated { color: #747c87; font-size: 10px; }
+#holdings-updated.negative { color: var(--down); }
+.holdings-scroll { overflow-x: auto; scrollbar-width: thin; padding: 0 8px; }
+#holdings-table { border-collapse: separate; border-spacing: 0; min-width: 630px; width: 100%; font-size: var(--font-row); }
+#holdings-table th, #holdings-table td { text-align: right; white-space: nowrap; padding: 5px 8px; }
+#holdings-table th { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: #68727f; font-size: var(--font-small); font-weight: 400; }
+#holdings-table th:first-child, #holdings-table td:first-child { text-align: left; padding-left: 4px; }
+#holdings-table small { display: block; color: #747c87; font-size: 10px; margin-top: 2px; }
+#holdings-table tbody tr[data-holding] { cursor: pointer; }
+#holdings-table tbody tr:hover:not(.active) { background: #f3f5f8; }
+#holdings-table tr.active td { border-top: 1px solid #000; border-bottom: 1px solid #000; }
+#holdings-table tr.active td:first-child { border-left: 1px solid #000; border-radius: 6px 0 0 6px; }
+#holdings-table tr.active td:last-child { border-right: 1px solid #000; border-radius: 0 6px 6px 0; }
+#holdings-table tr:focus-visible { outline: 2px solid #2962ff; outline-offset: -2px; }
+.holdings-sales { width: 17px; padding: 0; font-size: 11px; color: #747c87; }
+#holdings-table .holding-sale td { background: #f5f7f9; font-size: var(--font-small); }
+#holdings-table tfoot td { border-top: 3px double var(--border); font-weight: 600; padding-top: 8px; }
+.holdings-footer { padding: 6px 8px; text-align: right; }
+#holdings-save { font-size: var(--font-small); border-radius: 999px; background: var(--surface-muted); padding: 5px 8px; }
 
 /* Scan reuses the Daily panel and watchlist, with a closed-day review sidebar. */
 .mode-switch, .scan-pills { display: flex; gap: 3px; align-items: center; }

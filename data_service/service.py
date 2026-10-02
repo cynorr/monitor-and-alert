@@ -34,6 +34,7 @@ class SyncState:
 class DataService:
     def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None):
         self.tickers = tickers
+        self.holdings_symbols = []
         self.symbols = [t.symbol for t in tickers]
         self.runtime, self.broker = runtime, broker
         self.now = clock or time.time
@@ -67,10 +68,18 @@ class DataService:
         changed()
 
     def update_tickers(self, tickers):
-        symbols = [t.symbol for t in tickers]
+        self.tickers = tickers
+        self._update_symbols()
+
+    def update_holdings(self, symbols):
+        self.holdings_symbols = list(symbols)
+        self._update_symbols()
+
+    def _update_symbols(self):
+        symbols = list(dict.fromkeys([t.symbol for t in self.tickers] + self.holdings_symbols))
         removed = set(self.symbols) - set(symbols)
         added = set(symbols) - set(self.symbols)
-        self.tickers, self.symbols = tickers, symbols
+        self.symbols = symbols
         self.store.allowed = frozenset(symbols)
         if self.broker:
             self.broker.allowed = frozenset(symbols)

@@ -59,7 +59,8 @@ def create_app(service, cors_origin=None):
         origin = request.headers.get('Origin')
         if origin and origin != cors_origin and urlsplit(origin).netloc != request.host:
             raise web.HTTPForbidden(text='Origin not allowed')
-        ws = web.WebSocketResponse(heartbeat=10, max_msg_size=8192)
+        # Local-only stream: avoid aiohttp detached compression tasks on disconnect.
+        ws = web.WebSocketResponse(heartbeat=10, max_msg_size=8192, compress=False)
         await ws.prepare(request)
         sockets.add(ws)
         symbol, tf = service.focus

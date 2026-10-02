@@ -16,11 +16,14 @@ from .workspace import derive_day_view, normalize_ticker
 
 
 class Workbench:
-    def __init__(self, workspace, runtime, daily_path, broker_factory, *, calendar=None, mock=False, only=None):
+    def __init__(self, workspace, runtime, daily_path, broker_factory, *, calendar=None, mock=False, only=None,
+                 holdings_factory=None):
         self.workspace, self.runtime, self.daily_path = workspace, runtime, daily_path
         self.broker_factory, self.calendar = broker_factory, calendar or TradingCalendar()
         self.mock, self.only = mock, only
         self.mode, self.monitor, self.monitor_task = 'scan', None, None
+        self.holdings_factory = holdings_factory if not mock and only is None else None
+        self.holdings, self.holdings_task = None, None
         self.focus = ('', '5m')
         self.run_id = uuid.uuid4().hex
         self.started_at = int(time.time())
@@ -57,6 +60,11 @@ class Workbench:
                 self.monitor = DataService(tickers, self.runtime, broker, self.calendar)
                 self.workspace_changed()
                 self.monitor_task = asyncio.create_task(self.monitor.run())
+                if self.holdings_factory:
+                    if self.holdings is None:
+                        self.holdings = self.holdings_factory()
+                    self.holdings_changed()
+                    self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
             else:
                 self.snapshot()  # Verify the local source before stopping the current mode.
                 with closing(connect_daily(self.daily_path)) as db:
@@ -70,6 +78,10 @@ class Workbench:
             self.switching = False
 
     async def stop_monitor(self):
+        if self.holdings_task:
+            self.holdings_task.cancel()
+            await asyncio.gather(self.holdings_task, return_exceptions=True)
+            self.holdings_task = None
         if self.monitor_task:
             self.monitor_task.cancel()
             await asyncio.gather(self.monitor_task, return_exceptions=True)
@@ -78,6 +90,15 @@ class Workbench:
             self.monitor.broker.close()
             self.monitor.store.close()
             self.monitor = None
+
+    def holdings_changed(self):
+        if self.monitor and self.holdings:
+            self.monitor.update_holdings(self.holdings.symbols)
+
+    def holdings_state(self):
+        if self.mode != 'monitor' or self.holdings is None:
+            return None
+        return self.holdings.state(self.monitor.quotes.values)
 
     async def close(self):
         await self.stop_monitor()
@@ -134,7 +155,8 @@ class Workbench:
                 'editable': self.only is None and (self.mode == 'monitor' or self.selected_date == self.workspace.date),
                 'workspace_error': self.workspace.error, 'date': self.selected_date,
                 'dates': sorted((p.parent.name for p in self.workspace.root.glob('*/scan.json')), reverse=True),
-                'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False}
+                'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False,
+                'holdings': self.holdings_state()}
 
     def select(self, symbol, timeframe):
         if self.mode == 'monitor':
@@ -220,6 +242,8 @@ class Workbench:
         raise ValueError('Unknown action')
 
     async def api(self, path, query):
+        if path == '/v1/holdings':
+            return self.holdings_state()
         if path == '/health':
             monitor = await self.monitor.api(path, query) if self.monitor else {}
             return {**monitor, 'service': 'running', 'mode': self.mode, 'broker_active': self.monitor is not None,

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 longbridge-token.txt
+snaptrade-token.txt
 .env
 .env.*
 runtime/
@@ -15,3 +16,4 @@ ui/node_modules/
 
 # Imported reference project; its source/data are migrated into maintained paths.
 /qull-scan-workspace/
+/schwab-review/

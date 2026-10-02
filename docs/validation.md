@@ -1,5 +1,29 @@
 # 验证记录
 
+## 2026-10-02：Holdings 独立持仓合并
+
+环境：macOS、Python 3.13.1、现有 Longbridge SDK 5.0.0（未连接）、Node 25.3.0、TypeScript 5.9.3。账户/行情测试使用离线替身，HTTP/WS只绑定本机临时端口；预览使用临时SQLite、合成持仓和SIM标记。没有读取真实账户或重启既有正式服务。
+
+- 最终Python完整离线回归：134项、11个subtests通过（7.22秒）。新增/迁入24项持仓测试覆盖原买卖批次、合并/明确卖出归属、数量错误、Decimal精度，最新regular/extended/overnight择价、缺价/非法价回退、已实现盈亏和历史成交保持、负cash及账户总值、市值/总P/L百分比、空仓位。
+- 拉取/调度覆盖：指定account_id直接获取、启动立即请求、失败保持最后成功快照并等下一周期、成功才提交缓存、历史缓存复用、滚动10次/分钟预算、HTTP429脱敏、坏缓存/其他账户缓存不阻止启动。HTTP/WS读取不额外请求SnapTrade；有界/Mock会话不构造真实持仓客户端。
+- 成员/图表覆盖：独立持仓与观察名单重复时共用SyncState；只在两个来源都移除时撤下行情，board仍只包含workspace成员；持仓专有ticker有Daily/4h历史，WS选择复用双图；失败不退出Monitor；Scan停止持仓task/session，返回Monitor立即请求，workspace文件保持不变。
+- TypeScript check/build、现有Node Filters/Tags6项及git diff --check通过。原持仓HTML迁入独立TypeScript模块，保留七列及买入/卖出字段；更新值不重建不变行。浏览器核对并修正金额与股数副标题共存的渲染，验证Enter选中、持仓与观察名单选中独立、仅持仓ticker双图、4h、卖出明细及整体折叠。从Wait删除重复ticker后持仓及图表仍保留；该操作只写临时workspace。
+- 最新夜盘14.5的离线样例：持仓估值1377.50，SnapTrade现金-200，Account Value1177.50，总P/L552.50；Intraday显示同一夜盘价和OVERNIGHT，市值悬停标识来源/时段/时间。前端控制台未观察到error/warn。预览截图：`runtime/holdings-preview.jpg`。快速重载暴露aiohttp压缩后台发送的关闭传输错误，已对本机WS关闭可选压缩，并再次通过完整HTTP/WS回归。
+- 本机已保存SnapTrade凭证并迁移原sequences.txt/merge_buys.txt，文件权限600；凭证、规则、账户缓存及原参考项目均git忽略。单进程/8765入口，未新增服务或端口；临时预览停止后无后台验收服务。
+
+未覆盖：真实凭证/账户有效性、当前持仓及规则能否对平、持仓证券Longbridge支持/行情权限、真实30秒长期运行、断网/休眠、移动触屏。Save PNG保留原表格生成/下载流程；内置浏览器未提供下载完成事件，本轮不宣称PNG文件交付已验证。折叠状态持久化依赖浏览器允许localStorage；本轮只确认当前页面折叠行为。离线与历史记录均不作为本轮live证据。
+
+## 2026-10-02：Holdings 合并前可行性核对
+
+环境：macOS、现有 Python 3.13 虚拟环境。只检查根目录 `schwab-review` 的源码、字段、买卖关联配置及主项目接入点；本轮尚未合并功能，未读取或保存真实凭证，未调用 SnapTrade 或 Longbridge。
+
+- 原 Holdings 的标准库离线测试：15 项通过，覆盖买入合并、部分卖出、历史订单覆盖活动、明确买卖关联、歧义/超卖/数量不一致、ETF、Decimal 精度、历史缓存复用和单快照覆盖。
+- 主项目离线回归首次运行：106 项及 11 个 subtests 通过；另 3 项 HTTP/WS 测试被沙箱禁止绑定本机临时端口，1 项 macOS FSEvents 测试无法启动事件流。这 4 项在沙箱外单独复核全部通过（3.71 秒）；没有修改测试或运行代码。
+- 核对 SnapTrade 官方当前认证、签名、限流和数据新鲜度文档：Personal key 省略 userId/userSecret；账户接口共用默认 10 请求/滚动分钟；原四接口每 30 秒一轮常态约 8 请求/分钟。初始化/流水变化仍需计入活动请求；轮询周期不代表券商数据每 30 秒更新。
+- 已定位合并边界：数据拉取与 HTTP 服务需拆开；Holdings 需独立列表及选择状态；现有行情白名单仅 Focus/Wait，持仓接入需扩展动态范围并去重；估值改用 Longbridge 时需明确账户总值、扩展时段、无报价和刷新错误的处理。
+
+未覆盖：真实凭证有效性、指定账户当前持仓/买卖关联、持仓 ticker 的 Longbridge 支持及行情权限、30 秒长期轮询、合并后的估值/图表/布局/错误隔离。本轮没有前端改动，未运行 TypeScript 构建或浏览器验收。
+
 ## 2026-10-02：真实上游库核心测试与复权口径确认
 
 环境：macOS、现有 Python3.13 虚拟环境、pandas/numpy。只读用户新交付的 `runtime/bars.sqlite3`；6372033 根日 K、16365 个历史 symbol，metadata 明确完成日为 2026-09-30。未启动后端或浏览器，未调用券商，未跑前端测试、全量回归或全链路。

@@ -6,6 +6,7 @@ export class Watchlist {
     scan;
     tickers = [];
     selected = '';
+    keyboardEnabled = true;
     editable = false;
     collapsed = new Set();
     rows = new Map();
@@ -151,7 +152,7 @@ export class Watchlist {
                 return;
             }
             if (event.target.closest('input,textarea,select,[contenteditable="true"]') ||
-                !['ArrowUp', 'ArrowDown'].includes(event.key))
+                !this.keyboardEnabled || !['ArrowUp', 'ArrowDown'].includes(event.key))
                 return;
             event.preventDefault();
             const direction = event.key === 'ArrowDown' ? 1 : -1;
@@ -267,14 +268,14 @@ export class Watchlist {
         await this.mutate({ action: 'move', ticker: ticker.ticker, section: ticker.status, index });
         this.rows.get(this.selected)?.scrollIntoView({ block: 'nearest' });
     }
-    update(data) {
+    update(data, maintainSelection = true) {
         this.tickers = data.board;
         this.editable = data.editable;
         $('symbol-count').textContent = String(this.tickers.length);
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
         const visible = this.visible();
-        if (!visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
+        if (maintainSelection && !visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
             this.onSelect(visible[0]?.symbol ?? '');
         this.render();
     }

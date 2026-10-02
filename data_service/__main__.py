@@ -19,6 +19,8 @@ def parser():
     result.add_argument('command', choices=('universe', 'serve', 'reconcile', 'verify', 'scan'))
     result.add_argument('--workspace', type=Path, help='Pin a workspace file instead of following the latest Scan day')
     result.add_argument('--credentials', type=Path, default=Path('longbridge-token.txt'))
+    result.add_argument('--holdings-credentials', type=Path, default=Path('snaptrade-token.txt'))
+    result.add_argument('--holdings-rules', type=Path, help='Buy/sell rules; defaults to runtime/holdings')
     result.add_argument('--runtime', type=Path, default=Path('runtime'))
     result.add_argument('--mode', choices=('monitor','scan'), default='monitor')
     result.add_argument('--daily-db', type=Path, help='Read-only upstream daily SQLite; defaults to runtime/daily.sqlite3')
@@ -39,10 +41,18 @@ async def run(args, tickers):
 
     if args.command == 'serve':
         from .workbench import Workbench
+        def holdings_factory():
+            from .config import read_snaptrade_credentials
+            from .holdings import Holdings
+            from .snaptrade import SnapTrade
+            return Holdings(SnapTrade(*read_snaptrade_credentials(args.holdings_credentials),
+                                      args.runtime / 'holdings' / 'latest.json'),
+                            args.holdings_rules or args.runtime / 'holdings')
         workspace = Workspace(args.workspace, root=args.days)
         service = Workbench(workspace, args.runtime, args.daily_db,
                             lambda allowed: Broker(args.credentials, allowed, args.runtime, args.region),
-                            mock=args.mock_scan, only=args.symbols)
+                            mock=args.mock_scan, only=args.symbols,
+                            holdings_factory=holdings_factory if args.holdings_credentials.exists() else None)
         server = None
         try:
             if args.mode == 'monitor':

@@ -4,13 +4,25 @@
 
 ## 启动与接收
 
-Monitor 启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus/wait，开始接收当前名单的 Quote，同时加载历史。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
+Monitor 启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus/wait，开始接收当前名单的 Quote，同时加载历史；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
 
-Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 只显示最新价格。页面选股不改变券商订阅范围。关闭网页不停止后端。
+Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 更新最新价格与持仓估值。页面选股不改变券商订阅范围。关闭网页不停止后端。
+
+## Holdings
+
+Holdings为独立的只读持仓列表，位于Monitor的Focus/Wait上方，独立列头并可整体折叠。保留Symbol、Net Liq、Days Held、P/L %、P/L、Sold、Trade Price及账户总值、Total、卖出明细和PNG导出。按买入sequence显示，允许同ticker多个买入批次，也允许与Focus/Wait重复；它不检查或修改观察名单归属，不参与新增/删除/移动/排序。点击行复用现有Daily/Intraday；名单刷新、折叠或从Focus/Wait删除同ticker不会抢走持仓选中状态。被选持仓批次消失时改选第一条持仓，持仓为空则回到观察名单。
+
+配置SnapTrade时，启动Monitor及从Scan返回Monitor立即发起刷新，首轮前不等待30秒；之后按30秒周期串行刷新。每轮请求指定账户的positions、details、balances、executed orders；activities仅无缓存或流水同步截止变化时获取并保留原分页。这是成交流水获取，与Longbridge K线禁止分页的规则无关。所有账户请求共用10次/滚动分钟预算，触及额度或慢请求时周期可能延长，不重叠请求。30秒是应用轮询频率，不保证券商持仓/资金每30秒更新；不调用付费连接refresh。
+
+成功获取并完成原买卖归属核对后，整体替换持仓与唯一原始缓存。网络失败、规则错误、歧义或数量不一致均保留上次成功的列表、时间戳与行情范围，提示刷新失败，下一周期再获取；不终止Monitor、不猜测买卖归属。保持单账户USD股票/ETF多头、同日买入先于卖出、明确TXT关联优先、税费前成交价及Decimal计算。持仓天数仍计算到positions快照日期，已结清批次不返回。
+
+Longbridge按quote时间戳取regular/pre/post/overnight最新有效价格，重算price、市值、浮盈亏、总P/L及其百分比。仅该ticker缺少有效Longbridge报价时，回退最后成功SnapTrade持仓快照中的price；来源/时段/时间放在市值悬停信息中。Trade Price仍是买入成交均价，已实现盈亏和买卖记录不随行情变化。cash保持SnapTrade最近成功值，Account Value = 当前所有持仓估值 + cash，不再直接展示details返回的账户总值。混合来源和不同更新时间可能与券商官方净值不同。
+
+底层Longbridge范围为Focus/Wait与已接受Holdings的并集，同ticker共用一个Quote订阅与一份五周期任务。只有从两类来源都移除才退订/撤下任务；UI和workspace归属仍完全独立。HTTP/WS读取不触发SnapTrade刷新或扩展下载。进入Scan停止持仓轮询与Monitor行情，离开Scan恢复并立即刷新；Scan Mock、独立模拟器与`--symbols`有界验收不读SnapTrade凭证、不获取真实账户。
 
 ## Scan 与互斥模式
 
-启动默认 Monitor，可用 --mode scan。页面在列表面板内切换模式，整个进程同时只有一种模式；所有浏览器会话跟随这个选择。进入 Scan 前确认已有截面；停止并等待 Monitor 下载/Quote 任务结束，取消订阅，释放 SDK context。Scan 不读凭证、不请求券商；切回 Monitor 才按最新 Focus/Wait 创建行情连接。
+启动默认 Monitor，可用 --mode scan。页面在列表面板内切换模式，整个进程同时只有一种模式；所有浏览器会话跟随这个选择。进入 Scan 前确认已有截面；停止持仓轮询并等待 Monitor 下载/Quote 任务结束，取消订阅，释放 SDK context。Scan 不读凭证、不请求券商；切回 Monitor 才按最新 Focus/Wait及已接受Holdings创建行情连接，并立即更新持仓。
 
 Scan 读取上游 runtime/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus/Wait 在Scan中也使用该上游来源；切回Monitor才使用runtime/bars.sqlite3与实时Quote。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
 
@@ -40,7 +52,7 @@ Monitor 与 Scan 共用当前 workspace.json，保留 schema 和 version。Focus
 
 一个 watchdog 原生文件事件 watcher 递归监听 days：Scan 修改当前文件后自动重读；出现更大日期的 workspace.json 自动切换。外部更新只读、不回写，无轮询、合并或并发冲突处理。读取/保存失败显示简单错误。
 
-名单增加会立即安排五个官方周期最近 1000 根，并订阅 Quote；移除会撤下下载任务、停止后续请求并取消 Quote 订阅，已有 SQLite 历史不删除。排序和 Focus/Wait 互移不重下载、不重订阅。Quote 订阅变更在现有 context 上执行；网络请求仍受现有预算约束。文件切换保留仍在名单中的行情状态。选中 ticker 被删除时选择第一项，名单为空时清空图表、保留新增入口和 WebSocket。
+名单增加会立即安排五个官方周期最近 1000 根，并订阅 Quote；移除且该ticker也不在Holdings时，撤下下载任务、停止后续请求并取消 Quote 订阅，已有 SQLite 历史不删除。排序和 Focus/Wait 互移不重下载、不重订阅。Quote 订阅变更在现有 context 上执行；网络请求仍受现有预算约束。文件切换保留仍在行情范围中的状态。观察名单选中 ticker 被删除时选择第一项；两类列表都为空时清空图表、保留新增入口和 WebSocket。
 
 `--symbols` 验收会话始终限制在指定子集，禁用列表编辑；文件更新不会扩大该范围。模拟器仅编辑临时 workspace 副本，新增使用明确标记的模拟证券信息，不调用真实验证。
 
