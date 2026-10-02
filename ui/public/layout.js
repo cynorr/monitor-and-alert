@@ -1,9 +1,9 @@
 import { $ } from './types.js';
 export function initLayout() {
-    const root = $('workspace'), defaults = [0.38, 0.38, 0.24], minimum = [320, 320, 260];
+    const root = $('workspace'), defaults = [0.26, 0.26, 0.48], minimum = [320, 320, 740];
     let ratios = defaults.slice();
     try {
-        const saved = JSON.parse(localStorage.getItem('chart-columns') ?? 'null');
+        const saved = JSON.parse(localStorage.getItem('chart-columns-holdings') ?? 'null');
         if (Array.isArray(saved) && saved.length === 3 && saved.every(n => Number.isFinite(n) && n > 0))
             ratios = saved;
     }
@@ -24,7 +24,7 @@ export function initLayout() {
         const total = values.reduce((a, b) => a + b, 0);
         ratios = values.map(v => v / total);
         try {
-            localStorage.setItem('chart-columns', JSON.stringify(ratios));
+            localStorage.setItem('chart-columns-holdings', JSON.stringify(ratios));
         }
         catch { /* Storage is optional. */ }
     }
@@ -56,7 +56,8 @@ export function initLayout() {
     paint();
     return { setMode(mode) {
             root.dataset.mode = mode;
-            minimum[2] = mode === 'scan' ? 400 : 260;
+            minimum[2] = mode === 'scan' ? 400 : 740;
+            root.style.minWidth = `${minimum.reduce((a, b) => a + b, 0) + 44}px`;
             $('divider-1').setAttribute('aria-label', mode === 'scan' ? 'Resize Daily and watchlist' : 'Resize Intraday and watchlist');
             paint();
         } };

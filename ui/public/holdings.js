@@ -135,14 +135,15 @@ export class HoldingsList {
                     const name = document.createElement('span');
                     name.className = 'ticker';
                     name.textContent = holding.ticker;
-                    const date = document.createElement('small');
-                    date.textContent = sequence.opened_on;
-                    label.append(toggle, name, date);
+                    label.append(toggle, name);
                     this.cell(row, '', '');
                     this.cell(row, '');
                     this.cell(row, '');
                     this.cell(row, '');
                     this.cell(row, '', '');
+                    this.cell(row, '', sequence.opened_on);
+                    this.cell(row, '');
+                    this.cell(row, '');
                     this.cell(row, '');
                     body.append(row);
                     this.rows.set(key, row);
@@ -151,13 +152,16 @@ export class HoldingsList {
                             const detail = document.createElement('tr');
                             detail.className = 'holding-sale';
                             detail.dataset.holding = key;
-                            this.cell(detail, sale.date, `Sold · ${quantity.format(Number(sale.quantity))} shares`).title = `Sale price ${money.format(Number(sale.value) / Number(sale.quantity))} · ${sale.id}`;
+                            this.cell(detail, 'Sold').title = sale.id;
                             this.cell(detail, '—');
                             this.cell(detail, String(sale.holding_days));
                             this.cell(detail, signed(sale.pnl_percent, true)).className = pnlClass(sale.pnl_percent);
                             this.cell(detail, signed(sale.pnl)).className = pnlClass(sale.pnl);
-                            this.cell(detail, `${soldPercent.format(Number(sale.sold_percent))}%`, `${quantity.format(Number(sale.quantity))} shares`);
-                            this.cell(detail, money.format(Number(sequence.buy_price)));
+                            this.cell(detail, `${soldPercent.format(Number(sale.sold_percent))}%`, quantity.format(Number(sale.quantity)));
+                            this.cell(detail, money.format(Number(sale.value) / Number(sale.quantity)), sale.date);
+                            this.cell(detail, '');
+                            this.cell(detail, '');
+                            this.cell(detail, '');
                             body.append(detail);
                         }
                 }
@@ -178,14 +182,23 @@ export class HoldingsList {
                 row.cells[3].className = pnlClass(sequence.total_pnl_percent);
                 this.value(row.cells[4], signed(sequence.total_pnl));
                 row.cells[4].className = pnlClass(sequence.total_pnl);
-                this.value(row.cells[5], `${soldPercent.format(Number(sequence.sold_percent))}%`, `${quantity.format(Number(sequence.sold_quantity))} / ${quantity.format(Number(sequence.buy_quantity))} shares`);
+                this.value(row.cells[5], `${soldPercent.format(Number(sequence.sold_percent))}%`, `${quantity.format(Number(sequence.sold_quantity))} / ${quantity.format(Number(sequence.buy_quantity))}`);
                 this.value(row.cells[6], money.format(Number(sequence.buy_price)));
+                for (const [index, value, percent, empty] of [[7, holding.change_percent, true, '—'], [8, holding.extended_percent, true, ''], [9, sequence.day_pnl, false, '—']]) {
+                    this.value(row.cells[index], value == null ? empty : signed(value, percent));
+                    row.cells[index].className = value == null ? '' : pnlClass(value);
+                }
+                row.cells[8].title = holding.extended_percent != null ? `${session}: change from regular close` : '';
+                row.cells[9].title = holding.day_reference_price != null ?
+                    `${quantity.format(Number(sequence.held_quantity))} shares × (latest price − ${money.format(Number(holding.day_reference_price))} previous regular close) · ${session} · ${priceTime}` : 'Daily P/L unavailable: missing Longbridge price or previous regular close';
             }
         $('holdings-total-value').textContent = data ? money.format(Number(data.funds.stock_market_value)) : '—';
         $('holdings-total-pnl').textContent = data ? signed(data.summary.pnl) : '—';
         $('holdings-total-pnl').className = data ? pnlClass(data.summary.pnl) : '';
         $('holdings-total-percent').textContent = data?.summary.pnl_percent != null ? signed(data.summary.pnl_percent, true) : '—';
         $('holdings-total-percent').className = data?.summary.pnl_percent != null ? pnlClass(data.summary.pnl_percent) : '';
+        $('holdings-total-day').textContent = data?.summary.day_pnl != null ? signed(data.summary.day_pnl) : '—';
+        $('holdings-total-day').className = data?.summary.day_pnl != null ? pnlClass(data.summary.day_pnl) : '';
     }
     async saveImage() {
         const table = $('holdings-table');

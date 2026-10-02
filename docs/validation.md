@@ -1,5 +1,16 @@
 # 验证记录
 
+## 2026-10-02：Holdings 十列与实际卖价
+
+环境：macOS、Python 3.13.1、现有Longbridge SDK 5.0.0、Node 25.3.0、TypeScript 5.9.3。用户明确授权使用正在运行的真实服务并重启；沿用当前Focus/Wait与已接受Holdings范围，未增加ticker。真实只读验收窗口约07:28–07:37 ET，服务在验收结束后按用户要求继续运行。
+
+- 仅定向执行 `tests/test_holdings_integration.py -k 'daily_metrics or corrected_daily_close or latest_session_reprices or missing_or_invalid_longbridge'`：8项通过（0.98秒），8项未选中。覆盖盘前/盘中/盘后/夜盘基准、旧扩展报价不覆盖新regular、剩余股数、Decimal精度、已实现盈亏/原快照保持、缺基准与非法基准、禁止部分总额、观察名单共用基准及既有缺价回退。没有运行全局Python或Node测试。
+- `npm run build --prefix ui` 与 `git diff --check` 通过。实际卖价直接使用原成交金额/数量；未修改成交流水、账户余额或买卖关联。
+- 从用户现有8765服务读取到11个持仓：LITE、IOVA、EFOR、PAYS、TXG、ABCL、VSTM、MU、PBF、MRNA、CDNA。重启同一服务后，11个均采用Longbridge最新Pre报价；逐批次核对P/L Day与最新价/基准/剩余股数一致，总额等于所有批次之和。无需新增券商接口调用；HTTP读取不触发账户刷新。
+- 真实浏览器核对1440×1000及1920×1080 CSS视口：十列完整显示，holdings-scroll的scrollWidth与clientWidth相等；所有ticker的左坐标相同，包括选中行。IOVA卖出明细显示8.73、10.36及对应日期，买入行保留8.61；Sold副标题不再有shares，Days列缩短、日期位于Trade Price下。点击IOVA联动既有Daily/Intraday，整体折叠/展开正常。控制台无error/warn。截图为 `runtime/holdings-columns-live.png`。
+
+未覆盖：本轮真实环境处于盘前，真实盘中/盘后/夜盘切换未观察（相应计算由定向离线测试覆盖）；未测试Scan、全局图表交互、PNG下载、长期运行、断网/休眠。低于1424px的视口保留面板最小宽度，工作区允许整体横向溢出；不声称小屏能同时容纳两个图表与十列表格。
+
 ## 2026-10-02：Holdings 独立持仓合并
 
 环境：macOS、Python 3.13.1、现有 Longbridge SDK 5.0.0（未连接）、Node 25.3.0、TypeScript 5.9.3。账户/行情测试使用离线替身，HTTP/WS只绑定本机临时端口；预览使用临时SQLite、合成持仓和SIM标记。没有读取真实账户或重启既有正式服务。

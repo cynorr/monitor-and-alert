@@ -58,9 +58,9 @@
         <div id="holdings-content">
           <div class="holdings-scroll">
             <table id="holdings-table" aria-label="Holdings and sales by buy order">
-              <thead><tr><th scope="col">Symbol</th><th scope="col" title="Shares held × latest price">Net Liq</th><th scope="col">Days Held</th><th scope="col" title="Row: total profit / buy cost; total: total profit / current market value">P/L %</th><th scope="col" title="Realized + unrealized profit">P/L</th><th scope="col">Sold</th><th scope="col">Trade Price</th></tr></thead>
+              <thead><tr><th scope="col">Symbol</th><th scope="col" title="Shares held × latest price">Net Liq</th><th scope="col">Days</th><th scope="col" title="Row: total profit / buy cost; total: total profit / current market value">P/L %</th><th scope="col" title="Realized + unrealized profit">P/L</th><th scope="col">Sold</th><th scope="col" title="Historical buy price; sale rows show the actual sale price">Trade Price</th><th scope="col" title="Regular price change from previous daily close">Chg%</th><th scope="col" title="Latest extended price change from regular close">Ext</th><th scope="col" title="Shares still held × (latest price − previous regular close)">P/L Day</th></tr></thead>
               <tbody id="holdings-rows"></tbody>
-              <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td></tr></tfoot>
+              <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td></td><td id="holdings-total-day">—</td></tr></tfoot>
             </table>
           </div>
           <div id="holdings-empty" class="empty-list">Loading…</div>

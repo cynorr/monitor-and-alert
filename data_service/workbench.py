@@ -98,7 +98,13 @@ class Workbench:
     def holdings_state(self):
         if self.mode != 'monitor' or self.holdings is None:
             return None
-        return self.holdings.state(self.monitor.quotes.values)
+        quotes = {}
+        now = int(self.monitor.now())
+        for symbol in self.holdings.symbols:
+            quote = self.monitor.quote(symbol, now)
+            # Share the watchlist's official Daily-close correction for Chg%.
+            quotes[symbol] = {'Intraday': quote['regular'], **quote['extended']} if quote['regular'] else quote['extended']
+        return self.holdings.state(quotes)
 
     async def close(self):
         await self.stop_monitor()

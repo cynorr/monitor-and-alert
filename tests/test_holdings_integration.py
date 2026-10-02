@@ -4,6 +4,7 @@ import copy
 from decimal import Decimal as D
 import json
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import pytest
 from aiohttp import ClientSession, web
@@ -89,6 +90,66 @@ def test_missing_or_invalid_longbridge_price_falls_back_to_last_snaptrade_price(
     result = value_positions(build(empty, []), {})
     assert result['funds']['stock_market_value'] == 0 and result['funds']['account_total'] == D(-200)
     assert result['summary']['pnl_percent'] is None
+
+
+@pytest.mark.parametrize('session,expected_day,expected_ext', [
+    ('Pre', D('112.5'), D('1.5') / D(13) * 100),
+    ('Overnight', D('112.5'), D('1.5') / D(13) * 100),
+    ('Post', D('187.5'), D('1.5') / D(13) * 100),
+    ('Intraday', D(75), None),
+])
+def test_holdings_daily_metrics_follow_latest_session_and_remaining_shares(session, expected_day, expected_ext):
+    base = build(raw_snapshot(), [])
+    original = copy.deepcopy(base)
+    quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 13,
+                                     'prev_close': 12, 'trade_session': 'Intraday'}}}
+    if session != 'Intraday':
+        quotes['XYZ.US'][session] = {'timestamp': 120, 'last_price': 14.5, 'trade_session': session}
+    result = value_positions(base, quotes)
+    holding = result['holdings'][0]
+    assert holding['change_percent'] == (D(13) / D(12) - 1) * 100
+    if expected_ext is None:
+        assert holding['extended_percent'] is None
+    else:
+        assert abs(holding['extended_percent'] - expected_ext) < D('1e-25')
+    assert holding['sequences'][0]['day_pnl'] == expected_day
+    assert result['summary']['day_pnl'] == expected_day
+    assert holding['sequences'][0]['realized_pnl'] == D(125)
+    assert base == original  # Revaluation never edits fills or the accepted snapshot.
+    if session != 'Intraday':
+        quotes['XYZ.US']['Intraday']['timestamp'] = 130
+        refreshed = value_positions(base, quotes)
+        assert refreshed['holdings'][0]['extended_percent'] is None
+        assert refreshed['summary']['day_pnl'] == D(75)
+
+
+def test_holdings_daily_metrics_missing_baseline_never_report_partial_total():
+    base = build(raw_snapshot(), [])
+    other = copy.deepcopy(base['holdings'][0])
+    other['ticker'] = 'MISSING'
+    base['holdings'].append(other)
+    regular = {'timestamp': 100, 'last_price': 13, 'prev_close': 12, 'trade_session': 'Intraday'}
+    result = value_positions(base, {'XYZ.US': {'Intraday': regular}})
+    assert result['holdings'][0]['sequences'][0]['day_pnl'] == D(75)
+    assert result['holdings'][1]['sequences'][0]['day_pnl'] is None
+    assert result['summary']['day_pnl'] is None
+    for previous in (None, 0, float('nan')):
+        result = value_positions(base, {'XYZ.US': {'Intraday': {**regular, 'prev_close': previous}}})
+        assert result['holdings'][0]['change_percent'] is None
+        assert result['holdings'][0]['sequences'][0]['day_pnl'] is None
+
+
+def test_holdings_uses_same_corrected_daily_close_as_watchlist(app_data):
+    app, _ = make_holdings_app(app_data)
+    app.holdings = app.holdings_factory()
+    app.mode = 'monitor'
+    app.monitor = SimpleNamespace(now=lambda: 150, quote=lambda symbol, now: {
+        'regular': {'timestamp': 100, 'last_price': 13, 'prev_close': 12, 'trade_session': 'Intraday'},
+        'extended': {'Pre': {'timestamp': 120, 'last_price': 14.5, 'trade_session': 'Pre'}},
+    })
+    state = app.holdings_state()['data']
+    assert D(state['holdings'][0]['change_percent']) == (D(13) / D(12) - 1) * 100
+    assert D(state['summary']['day_pnl']) == D('112.5')
 
 
 def test_refresh_is_immediate_and_failed_fetch_or_accounting_preserves_snapshot(tmp_path):

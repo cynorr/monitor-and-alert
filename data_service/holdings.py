@@ -260,13 +260,26 @@ def value_positions(base, quotes):
     """Reprice accepted positions without repeating trade matching or changing fills."""
     holdings = []
     for holding in base['holdings']:
+        sessions = quotes.get(symbol_for(holding['ticker']), {})
         candidates = []
-        for quote in quotes.get(symbol_for(holding['ticker']), {}).values():
+        for quote in sessions.values():
             price = D(str(quote['last_price']))
             if price.is_finite() and price > 0:
                 candidates.append((quote['timestamp'], price, quote['trade_session']))
         latest = max(candidates, key=lambda item: item[0]) if candidates else None
         price = latest[1] if latest else holding['price']
+        regular = sessions.get('Intraday', {})
+        def valid_price(field):
+            value = D(str(regular.get(field))) if regular.get(field) is not None else None
+            return value if value is not None and value.is_finite() and value > 0 else None
+        regular_price, previous_close = valid_price('last_price'), valid_price('prev_close')
+        change = (regular_price / previous_close - 1) * 100 if regular_price and previous_close else None
+        extended = max((item for item in candidates if item[2] != 'Intraday'
+                        and item[0] > regular.get('timestamp', 0)), default=None, key=lambda item: item[0])
+        ext = (extended[1] / regular_price - 1) * 100 if extended and regular_price else None
+        # Pre/overnight start a new session against the last regular close.
+        # Regular/post use the previous day's close, preserving the full day's move.
+        reference = (regular_price if latest[2] in ('Pre', 'Overnight') else previous_close) if latest else None
         items = []
         for sequence in holding['sequences']:
             unrealized = sequence['held_quantity'] * (price - sequence['buy_price'])
@@ -274,17 +287,23 @@ def value_positions(base, quotes):
             items.append({**sequence, 'market_value': sequence['held_quantity'] * price,
                           'unrealized_pnl': unrealized,
                           'unrealized_pnl_percent': (price / sequence['buy_price'] - 1) * 100,
-                          'total_pnl': total, 'total_pnl_percent': total / sequence['buy_value'] * 100})
+                          'total_pnl': total, 'total_pnl_percent': total / sequence['buy_value'] * 100,
+                          'day_pnl': sequence['held_quantity'] * (price - reference) if reference else None})
         holdings.append({**holding, 'price': price, 'market_value': holding['quantity'] * price,
                          'sequences': items, 'price_source': 'longbridge' if latest else 'snaptrade',
                          'price_timestamp': latest[0] if latest else base['positions_as_of'],
-                         'price_session': latest[2] if latest else None})
+                         'price_session': latest[2] if latest else None,
+                         'change_percent': change, 'extended_percent': ext,
+                         'day_reference_price': reference})
     market_value = sum((holding['market_value'] for holding in holdings), D(0))
     total_pnl = sum((s['total_pnl'] for h in holdings for s in h['sequences']), D(0))
+    day_values = [s['day_pnl'] for h in holdings for s in h['sequences']]
+    day_pnl = sum(day_values, D(0)) if all(value is not None for value in day_values) else None
     return {**base, 'holdings': holdings,
             'funds': {**base['funds'], 'stock_market_value': market_value,
                       'account_total': market_value + base['funds']['cash']},
-            'summary': {'pnl': total_pnl, 'pnl_percent': total_pnl / market_value * 100 if market_value else None}}
+            'summary': {'pnl': total_pnl, 'pnl_percent': total_pnl / market_value * 100 if market_value else None,
+                        'day_pnl': day_pnl}}
 
 
 class Holdings:
