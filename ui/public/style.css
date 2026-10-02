@@ -135,7 +135,6 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .holdings-table th, .holdings-table td { text-align: right; white-space: nowrap; padding: 5px 4px; }
 .holdings-table th { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: #68727f; font-size: var(--font-small); font-weight: 400; }
 .holdings-table th:first-child, .holdings-table td:first-child { text-align: left; padding-left: 16px; position: relative; }
-.holdings-table small { display: block; color: #747c87; font-size: 10px; margin-top: 2px; }
 .holdings-table tbody tr[data-holding] { cursor: pointer; }
 .holdings-table tbody tr:hover:not(.active) { background: #f3f5f8; }
 .holdings-table tbody td { border-top: 1px solid transparent; border-bottom: 1px solid transparent; }
@@ -146,11 +145,9 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .holdings-table tr.active td:first-child { border-left: 1px solid #000; border-radius: 6px 0 0 6px; }
 .holdings-table tr.active td:last-child { border-right: 1px solid #000; border-radius: 0 6px 6px 0; }
 .holdings-table tr:focus-visible { outline: 2px solid #2962ff; outline-offset: -2px; }
-.holdings-sales { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 10px; padding: 0; font-size: 10px; line-height: 16px; color: #747c87; }
-.holdings-table .holding-sale td { background: #f5f7f9; font-size: var(--font-small); }
+.holdings-trades { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 10px; padding: 0; font-size: 10px; line-height: 16px; color: #747c87; }
+.holdings-table .holding-trade td { background: #f5f7f9; font-size: var(--font-small); }
 .holdings-table tfoot td { border-top: 3px double var(--border); font-weight: 600; padding-top: 8px; }
-.holdings-footer { padding: 6px 8px; text-align: right; }
-#holdings-save { font-size: var(--font-small); border-radius: 999px; background: var(--surface-muted); padding: 5px 8px; }
 
 /* Scan reuses the Daily panel and watchlist, with a closed-day review sidebar. */
 .mode-switch, .scan-pills { display: flex; gap: 3px; align-items: center; }

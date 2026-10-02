@@ -27,7 +27,7 @@
 | http_api.py | aiohttp 静态页面、诊断 HTTP、List mutation、WebSocket/Origin 校验 |
 | ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
 | ui/src/list.ts | 统一内联搜索/新增、输入查询生命周期、拖动/快捷键移动、折叠和报价行更新 |
-| ui/src/holdings.ts | 独立十列表格、单列降序/取消、自然宽度测量、整体折叠、批次选中、实际卖价明细和PNG导出 |
+| ui/src/holdings.ts | 独立十列单行表格、单列降序/取消、自然宽度测量、整体折叠、批次选中、逐笔Buy/Sold日期/数量/实际成交价明细 |
 | ui/src/scan.ts / filters.ts / tags.ts | 日期/四列表、唯一条件匹配、Tag 草稿与保存 |
 | scripts/build_scan_mock.py | 明确指定目录的合成日 K/截面/测试名单 |
 | ui/src/chart.ts / layout.ts | Lightweight Charts、日联动、列宽和原生交互 |
@@ -36,7 +36,7 @@
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
-持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/卖出行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq整数为显示格式，后端Decimal契约不变。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout默认锁定内容所需列表宽度、双图平分余量，不读写旧列宽localStorage；手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
+持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/买卖行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq、P/L、P/L Day整数为显示格式，后端Decimal契约不变。展开直接使用既有sequence.buys/sells，所有Buy先于Sold；日期/数量/金额与买卖记录均纳入结构签名，刷新后更新明细。明细成交价为value/quantity；无副标题DOM或PNG生成/下载逻辑。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout默认锁定内容所需列表宽度、双图平分余量，不读写旧列宽localStorage；展开所需宽度增加时自动增长，收起不引起宽度抖动。手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
 
 ## 模式与上游数据
 

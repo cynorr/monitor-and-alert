@@ -1,14 +1,15 @@
 import { $ } from './types.js';
 
-type Sale = { id: string; date: string; quantity: string; value: string; holding_days: number; pnl: string; pnl_percent: string; sold_percent: string };
-type Sequence = { buy_ids: string[]; opened_on: string; holding_days: number; held_quantity: string; buy_quantity: string; sold_quantity: string; buy_price: string; market_value: string; total_pnl: string; total_pnl_percent: string; day_pnl: string | null; sold_percent: string; sells: Sale[] };
+type Trade = { id: string; date: string; quantity: string; value: string };
+type Sale = Trade & { holding_days: number; pnl: string; pnl_percent: string };
+type Sequence = { buy_ids: string[]; opened_on: string; holding_days: number; held_quantity: string; buy_price: string; market_value: string; total_pnl: string; total_pnl_percent: string; day_pnl: string | null; sold_percent: string; buys: Trade[]; sells: Sale[] };
 type Holding = { ticker: string; price_source: string; price_session: string | null; price_timestamp: string | number; change_percent: string | null; extended_percent: string | null; day_reference_price: string | null; sequences: Sequence[] };
 export type HoldingsState = { data: { fetched_at: string; positions_as_of: string; funds: { stock_market_value: string; account_total: string; cash: string }; summary: { pnl: string; pnl_percent: string | null; day_pnl: string | null }; holdings: Holding[] } | null; loading: boolean; error: string | null };
 const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const netLiq = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 const quantity = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 });
 const soldPercent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const signed = (value: string, percent = false) => `${Number(value) > 0 ? '+' : ''}${money.format(Number(value))}${percent ? '%' : ''}`;
+const signed = (value: string, percent = false) => `${Number(value) > 0 ? '+' : ''}${(percent ? money : netLiq).format(Number(value))}${percent ? '%' : ''}`;
 const pnlClass = (value: string) => Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
 const symbolFor = (ticker: string) => ticker.endsWith('.US') ? ticker : ticker + '.US';
 export type HoldingSort = 'symbol' | 'market_value' | 'holding_days' | 'total_pnl_percent' | 'total_pnl' | 'sold_percent' | 'buy_price' | 'change_percent' | 'extended_percent' | 'day_pnl';
@@ -51,16 +52,15 @@ export class HoldingsList {
         });
         $('holdings-rows').addEventListener('click', event => {
             const target = event.target as HTMLElement;
-            const toggle = target.closest<HTMLElement>('[data-sales]');
+            const toggle = target.closest<HTMLElement>('[data-trades]');
             if (toggle) {
-                const key = toggle.dataset.sales!;
+                const key = toggle.dataset.trades!;
                 this.expanded.has(key) ? this.expanded.delete(key) : this.expanded.add(key);
                 this.render(); return;
             }
             const row = target.closest<HTMLElement>('[data-holding]');
             if (row) this.choose(row.dataset.holding!);
         });
-        $('holdings-save').addEventListener('click', () => { void this.saveImage(); });
         $('holdings-table').querySelector('thead')!.addEventListener('click', event => {
             const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-holdings-sort]');
             if (!button) return;
@@ -101,15 +101,12 @@ export class HoldingsList {
 
     update(state: HoldingsState | null) { this.data = state; this.render(); }
 
-    private cell(row: HTMLTableRowElement, text: string, subtitle?: string) {
-        const cell = row.insertCell(); cell.append(document.createTextNode(text));
-        if (subtitle !== undefined) { const small = document.createElement('small'); small.textContent = subtitle; cell.append(small); }
+    private cell(row: HTMLTableRowElement, text: string) {
+        const cell = row.insertCell(); cell.textContent = text;
         return cell;
     }
-    private value(cell: Element, text: string, subtitle?: string) {
-        if (!cell.firstChild) cell.append(document.createTextNode(''));
-        cell.firstChild!.textContent = text;
-        if (subtitle !== undefined) cell.querySelector('small')!.textContent = subtitle;
+    private value(cell: Element, text: string) {
+        cell.textContent = text;
     }
 
     render() {
@@ -132,8 +129,7 @@ export class HoldingsList {
         $('holdings-account').title = data ? `Latest position value + SnapTrade cash ${money.format(Number(data.funds.cash))}` : '';
         $('holdings-empty').hidden = !!data?.holdings.length;
         $('holdings-empty').textContent = data ? 'No holdings' : this.data?.error ? 'Holdings unavailable' : 'Loading…';
-        ($('holdings-save') as HTMLButtonElement).disabled = !data;
-        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.sells])]), [...this.expanded]]);
+        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.buys, s.sells])]), [...this.expanded]]);
         if (structure !== this.structure) {
             this.structure = structure; this.rows.clear(); this.groups.clear(); this.order = ''; this.widthSignature = '';
             const body = document.createDocumentFragment();
@@ -143,27 +139,28 @@ export class HoldingsList {
                     row.dataset.holding = key; row.tabIndex = 0;
                     row.setAttribute('aria-label', `Select ${holding.ticker}, bought ${sequence.opened_on}`);
                     const label = this.cell(row, '');
-                    const toggle = document.createElement('button'); toggle.className = 'holdings-sales';
-                    toggle.textContent = this.expanded.has(key) ? '▾' : '▸'; toggle.dataset.sales = key;
-                    toggle.hidden = !sequence.sells.length; toggle.setAttribute('aria-expanded', String(this.expanded.has(key)));
-                    toggle.setAttribute('aria-label', `Toggle ${holding.ticker} sales`);
+                    const toggle = document.createElement('button'); toggle.className = 'holdings-trades';
+                    toggle.textContent = this.expanded.has(key) ? '▾' : '▸'; toggle.dataset.trades = key;
+                    toggle.setAttribute('aria-expanded', String(this.expanded.has(key)));
+                    toggle.setAttribute('aria-label', `Toggle ${holding.ticker} trades`);
                     const name = document.createElement('span'); name.className = 'ticker'; name.textContent = holding.ticker;
                     label.append(toggle, name);
-                    this.cell(row, '', ''); this.cell(row, ''); this.cell(row, ''); this.cell(row, ''); this.cell(row, '', ''); this.cell(row, '', sequence.opened_on);
-                    this.cell(row, ''); this.cell(row, ''); this.cell(row, '');
+                    for (let column = 1; column < 10; column++) this.cell(row, '');
                     body.append(row); this.rows.set(key, row);
                     const group = [row]; this.groups.set(key, group);
-                    if (this.expanded.has(key)) for (const sale of sequence.sells) {
-                        const detail = document.createElement('tr'); detail.className = 'holding-sale'; detail.dataset.holding = key;
-                        this.cell(detail, 'Sold').title = sale.id;
-                        this.cell(detail, '—'); this.cell(detail, String(sale.holding_days));
-                        this.cell(detail, signed(sale.pnl_percent, true)).className = pnlClass(sale.pnl_percent);
-                        this.cell(detail, signed(sale.pnl)).className = pnlClass(sale.pnl);
-                        this.cell(detail, `${soldPercent.format(Number(sale.sold_percent))}%`, quantity.format(Number(sale.quantity)));
-                        this.cell(detail, money.format(Number(sale.value) / Number(sale.quantity)), sale.date);
-                        this.cell(detail, ''); this.cell(detail, ''); this.cell(detail, '');
-                        body.append(detail);
-                        group.push(detail);
+                    if (this.expanded.has(key)) {
+                        for (const trade of [...sequence.buys, ...sequence.sells]) {
+                            const sale = 'pnl' in trade ? trade as Sale : null;
+                            const detail = document.createElement('tr'); detail.className = 'holding-trade'; detail.dataset.holding = key;
+                            this.cell(detail, sale ? 'Sold' : 'Buy');
+                            this.cell(detail, trade.date); this.cell(detail, sale ? String(sale.holding_days) : '');
+                            this.cell(detail, sale ? signed(sale.pnl_percent, true) : '').className = sale ? pnlClass(sale.pnl_percent) : '';
+                            this.cell(detail, sale ? signed(sale.pnl) : '').className = sale ? pnlClass(sale.pnl) : '';
+                            this.cell(detail, quantity.format(Number(trade.quantity)));
+                            this.cell(detail, money.format(Number(trade.value) / Number(trade.quantity)));
+                            this.cell(detail, ''); this.cell(detail, ''); this.cell(detail, '');
+                            body.append(detail); group.push(detail);
+                        }
                     }
                 }
             }
@@ -173,14 +170,14 @@ export class HoldingsList {
             const key = sequence.buy_ids.join(':'), row = this.rows.get(key)!;
             row.classList.toggle('active', key === this.selected);
             row.setAttribute('aria-selected', String(key === this.selected));
-            this.value(row.cells[1], netLiq.format(Number(sequence.market_value)), quantity.format(Number(sequence.held_quantity)));
+            this.value(row.cells[1], netLiq.format(Number(sequence.market_value)));
             const priceTime = new Date(typeof holding.price_timestamp === 'number' ? holding.price_timestamp * 1000 : holding.price_timestamp).toLocaleString('en-GB');
             const session = holding.price_session === 'Intraday' ? 'Regular' : holding.price_session;
             row.cells[1].title = `${holding.price_source === 'longbridge' ? 'Longbridge' : 'SnapTrade fallback'}${session ? ' · ' + session : ''} · ${priceTime}`;
             this.value(row.cells[2], String(sequence.holding_days));
             this.value(row.cells[3], signed(sequence.total_pnl_percent, true)); row.cells[3].className = pnlClass(sequence.total_pnl_percent);
             this.value(row.cells[4], signed(sequence.total_pnl)); row.cells[4].className = pnlClass(sequence.total_pnl);
-            this.value(row.cells[5], `${soldPercent.format(Number(sequence.sold_percent))}%`, `${quantity.format(Number(sequence.sold_quantity))} / ${quantity.format(Number(sequence.buy_quantity))}`);
+            this.value(row.cells[5], `${soldPercent.format(Number(sequence.sold_percent))}%`);
             this.value(row.cells[6], money.format(Number(sequence.buy_price)));
             for (const [index, value, percent, empty] of [[7, holding.change_percent, true, '—'], [8, holding.extended_percent, true, ''], [9, sequence.day_pnl, false, '—']] as const) {
                 this.value(row.cells[index], value == null ? empty : signed(value, percent));
@@ -203,7 +200,7 @@ export class HoldingsList {
             this.order = order;
             const focused = document.activeElement as HTMLElement | null;
             const focusKey = focused?.closest<HTMLElement>('[data-holding]')?.dataset.holding;
-            const salesFocus = focused?.hasAttribute('data-sales');
+            const tradesFocus = focused?.hasAttribute('data-trades');
             const body = document.createDocumentFragment(), rows = new Map<string, HTMLTableRowElement>();
             for (const { sequence } of ordered) {
                 const key = sequence.buy_ids.join(':');
@@ -212,7 +209,7 @@ export class HoldingsList {
             }
             $('holdings-rows').replaceChildren(body); this.rows = rows;
             const row = focusKey ? this.rows.get(focusKey) : null;
-            if (row) (salesFocus ? row.querySelector<HTMLButtonElement>('[data-sales]')! : row).focus({ preventScroll: true });
+            if (row) (tradesFocus ? row.querySelector<HTMLButtonElement>('[data-trades]')! : row).focus({ preventScroll: true });
         }
         if (!this.data) { this.minimumWidth = 0; this.onWidth(260); }
         else if (data) this.measureWidth();
@@ -241,21 +238,4 @@ export class HoldingsList {
         this.onWidth(this.minimumWidth);
     }
 
-    private async saveImage() {
-        const table = $('holdings-table');
-        const width = table.offsetWidth + 40, height = table.offsetHeight + 40;
-        const content = document.createElement('div'); content.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-        const style = document.createElement('style');
-        style.textContent = Array.from(document.styleSheets).flatMap(sheet => Array.from(sheet.cssRules).map(rule => rule.cssText)).join('\n');
-        content.append(style, table.cloneNode(true)); content.style.cssText = `padding:20px;width:${width}px;background:white;font:13px sans-serif;`;
-        const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(content)}</foreignObject></svg>`;
-        const image = new Image(); image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source); await image.decode();
-        const canvas = document.createElement('canvas'); canvas.width = width * 2; canvas.height = height * 2;
-        canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-        if (!blob) return;
-        const link = document.createElement('a'); link.download = `holdings-${this.data!.data!.fetched_at.slice(0,10)}.png`;
-        link.href = URL.createObjectURL(blob); document.body.append(link); link.click(); link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    }
 }

@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-10-02：Holdings 单行与 Buy/Sold 明细
+
+环境：macOS、Node 25.3.0、TypeScript 5.9.3、现有真实8765服务（Monitor）；只改前端与文档。live预先限定当前11个Holdings（LITE、IOVA、EFOR、PAYS、TXG、ABCL、VSTM、MU、PBF、MRNA、CDNA）与最多3分钟，页面交互验收实际44秒。没有新增ticker、账户/workspace写入、模式切换或服务重启；结束后关闭临时页并恢复viewport。
+
+- `npm run build --prefix ui` 与 `git diff --check` 通过；仅运行 `node --test ui/tests/holdings.test.mjs`，5项通过，确认原始数值排序精度仍保留。没有全局Node/Python测试。
+- 真实DOM确认所有主行/明细无small副标题，单行nowrap；主行26px。P/L、P/L Day和两项Total均无小数，P/L %与成交价保留原精度。Save PNG按钮、监听、SVG/canvas生成与下载代码及对应样式均移除。
+- 展开尚未卖出的LITE显示三笔Buy：2026-06-01的5股/841.75、10股/875.00及2026-06-15的10股/951.50，未合并丢失记录。IOVA先显示Buy（2026-09-02、1,000股、8.61），再显示Sold（2026-09-04、500股、8.73及2026-09-24、200股、10.36）；日期均在Net Liq对应列，股数均在Sold对应列且无百分比，无额外标题或第二行。卖出P/L为整数+60、+349。
+- P/L降序时Buy/Sold明细跟随所属主行，IOVA选择及Daily/Intraday联动保持；再次点击恢复原始主行顺序。前端控制台无error/warn。
+- 1440×1000 CSS视口主列表自然宽度557px、双图各419.5px；展开后列表自动增长到577px、双图各409.5px。1920×1080时列表保持577px、双图各649.5px；两种视口下holdings-scroll的scrollWidth等于clientWidth，完整显示十列。沿用现有自动测量逻辑，无新增固定列宽。截图 `runtime/holdings-single-line-live.png`。
+
+未覆盖：全局Scan/图表手势、后台会计/轮询、真实长时间刷新/断网、碎股现场样本、移动触屏；未新增或运行这些范围的测试。历史记录不作为本轮live证据。
+
 ## 2026-10-02：Holdings 降序切换与紧凑宽度
 
 环境：macOS、Node 25.3.0、TypeScript 5.9.3、现有真实8765服务；只改前端与文档，无后端或券商获取改动。live验收范围为当前11个Holdings，预先限定最多3分钟，实际96秒；服务原处Scan，临时切到Monitor，结束后恢复Scan。没有账户或workspace写入，没有新增ticker。

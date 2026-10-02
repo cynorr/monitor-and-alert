@@ -3,7 +3,7 @@ const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximum
 const netLiq = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 const quantity = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 });
 const soldPercent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const signed = (value, percent = false) => `${Number(value) > 0 ? '+' : ''}${money.format(Number(value))}${percent ? '%' : ''}`;
+const signed = (value, percent = false) => `${Number(value) > 0 ? '+' : ''}${(percent ? money : netLiq).format(Number(value))}${percent ? '%' : ''}`;
 const pnlClass = (value) => Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
 const symbolFor = (ticker) => ticker.endsWith('.US') ? ticker : ticker + '.US';
 export function sortedHoldingRows(holdings, sort) {
@@ -57,9 +57,9 @@ export class HoldingsList {
         });
         $('holdings-rows').addEventListener('click', event => {
             const target = event.target;
-            const toggle = target.closest('[data-sales]');
+            const toggle = target.closest('[data-trades]');
             if (toggle) {
-                const key = toggle.dataset.sales;
+                const key = toggle.dataset.trades;
                 this.expanded.has(key) ? this.expanded.delete(key) : this.expanded.add(key);
                 this.render();
                 return;
@@ -68,7 +68,6 @@ export class HoldingsList {
             if (row)
                 this.choose(row.dataset.holding);
         });
-        $('holdings-save').addEventListener('click', () => { void this.saveImage(); });
         $('holdings-table').querySelector('thead').addEventListener('click', event => {
             const button = event.target.closest('[data-holdings-sort]');
             if (!button)
@@ -114,22 +113,13 @@ export class HoldingsList {
         return first ? { symbol: symbolFor(first.holding.ticker), key: first.sequence.buy_ids.join(':') } : null;
     }
     update(state) { this.data = state; this.render(); }
-    cell(row, text, subtitle) {
+    cell(row, text) {
         const cell = row.insertCell();
-        cell.append(document.createTextNode(text));
-        if (subtitle !== undefined) {
-            const small = document.createElement('small');
-            small.textContent = subtitle;
-            cell.append(small);
-        }
+        cell.textContent = text;
         return cell;
     }
-    value(cell, text, subtitle) {
-        if (!cell.firstChild)
-            cell.append(document.createTextNode(''));
-        cell.firstChild.textContent = text;
-        if (subtitle !== undefined)
-            cell.querySelector('small').textContent = subtitle;
+    value(cell, text) {
+        cell.textContent = text;
     }
     render() {
         $('holdings').hidden = !this.data;
@@ -151,8 +141,7 @@ export class HoldingsList {
         $('holdings-account').title = data ? `Latest position value + SnapTrade cash ${money.format(Number(data.funds.cash))}` : '';
         $('holdings-empty').hidden = !!data?.holdings.length;
         $('holdings-empty').textContent = data ? 'No holdings' : this.data?.error ? 'Holdings unavailable' : 'Loading…';
-        $('holdings-save').disabled = !data;
-        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.sells])]), [...this.expanded]]);
+        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.buys, s.sells])]), [...this.expanded]]);
         if (structure !== this.structure) {
             this.structure = structure;
             this.rows.clear();
@@ -168,47 +157,41 @@ export class HoldingsList {
                     row.setAttribute('aria-label', `Select ${holding.ticker}, bought ${sequence.opened_on}`);
                     const label = this.cell(row, '');
                     const toggle = document.createElement('button');
-                    toggle.className = 'holdings-sales';
+                    toggle.className = 'holdings-trades';
                     toggle.textContent = this.expanded.has(key) ? '▾' : '▸';
-                    toggle.dataset.sales = key;
-                    toggle.hidden = !sequence.sells.length;
+                    toggle.dataset.trades = key;
                     toggle.setAttribute('aria-expanded', String(this.expanded.has(key)));
-                    toggle.setAttribute('aria-label', `Toggle ${holding.ticker} sales`);
+                    toggle.setAttribute('aria-label', `Toggle ${holding.ticker} trades`);
                     const name = document.createElement('span');
                     name.className = 'ticker';
                     name.textContent = holding.ticker;
                     label.append(toggle, name);
-                    this.cell(row, '', '');
-                    this.cell(row, '');
-                    this.cell(row, '');
-                    this.cell(row, '');
-                    this.cell(row, '', '');
-                    this.cell(row, '', sequence.opened_on);
-                    this.cell(row, '');
-                    this.cell(row, '');
-                    this.cell(row, '');
+                    for (let column = 1; column < 10; column++)
+                        this.cell(row, '');
                     body.append(row);
                     this.rows.set(key, row);
                     const group = [row];
                     this.groups.set(key, group);
-                    if (this.expanded.has(key))
-                        for (const sale of sequence.sells) {
+                    if (this.expanded.has(key)) {
+                        for (const trade of [...sequence.buys, ...sequence.sells]) {
+                            const sale = 'pnl' in trade ? trade : null;
                             const detail = document.createElement('tr');
-                            detail.className = 'holding-sale';
+                            detail.className = 'holding-trade';
                             detail.dataset.holding = key;
-                            this.cell(detail, 'Sold').title = sale.id;
-                            this.cell(detail, '—');
-                            this.cell(detail, String(sale.holding_days));
-                            this.cell(detail, signed(sale.pnl_percent, true)).className = pnlClass(sale.pnl_percent);
-                            this.cell(detail, signed(sale.pnl)).className = pnlClass(sale.pnl);
-                            this.cell(detail, `${soldPercent.format(Number(sale.sold_percent))}%`, quantity.format(Number(sale.quantity)));
-                            this.cell(detail, money.format(Number(sale.value) / Number(sale.quantity)), sale.date);
+                            this.cell(detail, sale ? 'Sold' : 'Buy');
+                            this.cell(detail, trade.date);
+                            this.cell(detail, sale ? String(sale.holding_days) : '');
+                            this.cell(detail, sale ? signed(sale.pnl_percent, true) : '').className = sale ? pnlClass(sale.pnl_percent) : '';
+                            this.cell(detail, sale ? signed(sale.pnl) : '').className = sale ? pnlClass(sale.pnl) : '';
+                            this.cell(detail, quantity.format(Number(trade.quantity)));
+                            this.cell(detail, money.format(Number(trade.value) / Number(trade.quantity)));
                             this.cell(detail, '');
                             this.cell(detail, '');
                             this.cell(detail, '');
                             body.append(detail);
                             group.push(detail);
                         }
+                    }
                 }
             }
             $('holdings-rows').replaceChildren(body);
@@ -218,7 +201,7 @@ export class HoldingsList {
                 const key = sequence.buy_ids.join(':'), row = this.rows.get(key);
                 row.classList.toggle('active', key === this.selected);
                 row.setAttribute('aria-selected', String(key === this.selected));
-                this.value(row.cells[1], netLiq.format(Number(sequence.market_value)), quantity.format(Number(sequence.held_quantity)));
+                this.value(row.cells[1], netLiq.format(Number(sequence.market_value)));
                 const priceTime = new Date(typeof holding.price_timestamp === 'number' ? holding.price_timestamp * 1000 : holding.price_timestamp).toLocaleString('en-GB');
                 const session = holding.price_session === 'Intraday' ? 'Regular' : holding.price_session;
                 row.cells[1].title = `${holding.price_source === 'longbridge' ? 'Longbridge' : 'SnapTrade fallback'}${session ? ' · ' + session : ''} · ${priceTime}`;
@@ -227,7 +210,7 @@ export class HoldingsList {
                 row.cells[3].className = pnlClass(sequence.total_pnl_percent);
                 this.value(row.cells[4], signed(sequence.total_pnl));
                 row.cells[4].className = pnlClass(sequence.total_pnl);
-                this.value(row.cells[5], `${soldPercent.format(Number(sequence.sold_percent))}%`, `${quantity.format(Number(sequence.sold_quantity))} / ${quantity.format(Number(sequence.buy_quantity))}`);
+                this.value(row.cells[5], `${soldPercent.format(Number(sequence.sold_percent))}%`);
                 this.value(row.cells[6], money.format(Number(sequence.buy_price)));
                 for (const [index, value, percent, empty] of [[7, holding.change_percent, true, '—'], [8, holding.extended_percent, true, ''], [9, sequence.day_pnl, false, '—']]) {
                     this.value(row.cells[index], value == null ? empty : signed(value, percent));
@@ -250,7 +233,7 @@ export class HoldingsList {
             this.order = order;
             const focused = document.activeElement;
             const focusKey = focused?.closest('[data-holding]')?.dataset.holding;
-            const salesFocus = focused?.hasAttribute('data-sales');
+            const tradesFocus = focused?.hasAttribute('data-trades');
             const body = document.createDocumentFragment(), rows = new Map();
             for (const { sequence } of ordered) {
                 const key = sequence.buy_ids.join(':');
@@ -262,7 +245,7 @@ export class HoldingsList {
             this.rows = rows;
             const row = focusKey ? this.rows.get(focusKey) : null;
             if (row)
-                (salesFocus ? row.querySelector('[data-sales]') : row).focus({ preventScroll: true });
+                (tradesFocus ? row.querySelector('[data-trades]') : row).focus({ preventScroll: true });
         }
         if (!this.data) {
             this.minimumWidth = 0;
@@ -294,33 +277,5 @@ export class HoldingsList {
             this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + list.offsetWidth - list.clientWidth);
         }
         this.onWidth(this.minimumWidth);
-    }
-    async saveImage() {
-        const table = $('holdings-table');
-        const width = table.offsetWidth + 40, height = table.offsetHeight + 40;
-        const content = document.createElement('div');
-        content.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-        const style = document.createElement('style');
-        style.textContent = Array.from(document.styleSheets).flatMap(sheet => Array.from(sheet.cssRules).map(rule => rule.cssText)).join('\n');
-        content.append(style, table.cloneNode(true));
-        content.style.cssText = `padding:20px;width:${width}px;background:white;font:13px sans-serif;`;
-        const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(content)}</foreignObject></svg>`;
-        const image = new Image();
-        image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source);
-        await image.decode();
-        const canvas = document.createElement('canvas');
-        canvas.width = width * 2;
-        canvas.height = height * 2;
-        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-        if (!blob)
-            return;
-        const link = document.createElement('a');
-        link.download = `holdings-${this.data.data.fetched_at.slice(0, 10)}.png`;
-        link.href = URL.createObjectURL(blob);
-        document.body.append(link);
-        link.click();
-        link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     }
 }
