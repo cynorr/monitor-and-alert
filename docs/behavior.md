@@ -10,7 +10,11 @@ Quote 统一接收和校验，regular 与 extended 按时段保存最新值，�
 
 ## Holdings
 
-Holdings为独立的只读持仓列表，位于Monitor的Focus/Wait上方，独立列头并可整体折叠。保留Symbol、Net Liq、Days、P/L %、P/L、Sold、Trade Price，最右增加Chg%、Ext、P/L Day及账户总值、Total、卖出明细和PNG导出。日期移到Trade Price下；Sold第二行只保留数量；窄三角号放在ticker左侧独立空隙中，股票名统一对齐。按买入sequence显示，允许同ticker多个买入批次，也允许与Focus/Wait重复；它不检查或修改观察名单归属，不参与新增/删除/移动/排序。点击行复用现有Daily/Intraday；名单刷新、折叠或从Focus/Wait删除同ticker不会抢走持仓选中状态。被选持仓批次消失时改选第一条持仓，持仓为空则回到观察名单。
+Holdings为独立的只读持仓列表，位于Monitor的Focus/Wait上方，独立列头并可整体折叠。保留Symbol、Net Liq、Days、P/L %、P/L、Sold、Trade Price，最右增加Chg%、Ext、P/L Day及账户总值、Total、卖出明细和PNG导出。日期移到Trade Price下；Sold第二行只保留数量；Net Liq及其Total显示整数、下方只显示股数，底层市值和盈亏精度不变；窄三角号放在ticker左侧独立空隙中，股票名统一对齐。按买入sequence显示，允许同ticker多个买入批次，也允许与Focus/Wait重复；它不检查或修改观察名单归属，不参与观察名单新增/删除/移动/排序。点击行复用现有Daily/Intraday；名单刷新、折叠或从Focus/Wait删除同ticker不会抢走持仓选中状态。被选持仓批次消失时改选第一条持仓，持仓为空则回到观察名单。
+
+持仓十列均可点击排序，只支持降序与未排序两种状态；再次点击当前列恢复账户持仓/原买入批次顺序，点击其他列替换原排序。Symbol按Z到A，其余按原始数值从大到小；Sold按出售比例，Trade Price按主行买入均价。缺失或非法值置后，相同值保持默认顺序。同ticker的买入批次独立排序，展开卖出明细始终跟随所属主行。行情更新沿用当前排序；键盘导航按显示顺序，排序不更换图表选择、不写workspace，重新打开页面恢复默认排序。
+
+默认宽度取完整持仓表格的自然内容宽度加内边距/滚动条余量，两个图表均分剩余空间；窗口加宽只扩大图表，列表不按比例变宽。内容首次加载后宽度固定，只有后续新增位数或行结构确实需要更多空间时才加宽以保证完整显示，不随报价反复缩窄。分隔条仍可临时调整，重新打开页面或双击分隔条恢复紧凑默认，不读取旧列宽偏好。小窗口保留图表最小宽度，允许工作区整体溢出。
 
 配置SnapTrade时，启动Monitor及从Scan返回Monitor立即发起刷新，首轮前不等待30秒；之后按30秒周期串行刷新。每轮请求指定账户的positions、details、balances、executed orders；activities仅无缓存或流水同步截止变化时获取并保留原分页。这是成交流水获取，与Longbridge K线禁止分页的规则无关。所有账户请求共用10次/滚动分钟预算，触及额度或慢请求时周期可能延长，不重叠请求。30秒是应用轮询频率，不保证券商持仓/资金每30秒更新；不调用付费连接refresh。
 

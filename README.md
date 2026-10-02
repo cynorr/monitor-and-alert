@@ -58,7 +58,7 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 - Monitor：5m/15m/30m/1h/2h/4h、SMA65、交易日联动、实时行情；2h/4h由5m在内存合成。
 - /搜索，回车选中或新增到Focus首位；+指定新增到Focus/Wait。Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info。保存同步落盘。
 - Monitor支持Focus/Wait拖动、Shift+上下排序、删除、折叠；Scan默认排序下也可调整Focus/Wait顺序。
-- Monitor的Holdings在Focus/Wait上方，有独立十列和整体折叠，保留买入批次/卖出明细及Save PNG；点击行显示同一Daily/Intraday。Chg%/Ext沿用观察名单口径，P/L Day按当前剩余股数与前一常规收盘价计算、跟随最新时段。日期放在Trade Price下，卖出明细展示实际卖价。允许与观察名单重复，不校验其观察名单归属、不写workspace。Longbridge最新价（含盘前/盘后/夜盘）重算市值和盈亏；缺价回退最后成功的SnapTrade价格。cash来自SnapTrade，Account Value为当前持仓市值加cash。
+- Monitor的Holdings在Focus/Wait上方，有独立十列和整体折叠，保留买入批次/卖出明细及Save PNG；点击行显示同一Daily/Intraday。点击列头只降序，再点同列取消；换列替换原排序，卖出明细随主行移动。Net Liq显示整数，下方只显示股数。页面启动按完整表格内容测量最紧凑列表宽度，剩余宽度由双图平分，不恢复旧宽度比例。Chg%/Ext沿用观察名单口径，P/L Day按当前剩余股数与前一常规收盘价计算、跟随最新时段。日期放在Trade Price下，卖出明细展示实际卖价。允许与观察名单重复，不校验其观察名单归属、不写workspace。Longbridge最新价（含盘前/盘后/夜盘）重算市值和盈亏；缺价回退最后成功的SnapTrade价格。cash来自SnapTrade，Account Value为当前持仓市值加cash。
 - ADR20 = 最近最多20根`(H-L)/L × 100`均值；ADV20 = 最近最多20根`close × volume`均值，两模式同公式。
 - Monitor Loading → 黄色Ready（Daily+5m）→ 蓝色Ready（五周期，3秒后隐藏）；Scan显示所选日期。仅OHLC上下界矛盾保留原值并追加invalid_ohlc.jsonl，不修正或告警。
 

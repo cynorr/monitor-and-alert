@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-10-02：Holdings 降序切换与紧凑宽度
+
+环境：macOS、Node 25.3.0、TypeScript 5.9.3、现有真实8765服务；只改前端与文档，无后端或券商获取改动。live验收范围为当前11个Holdings，预先限定最多3分钟，实际96秒；服务原处Scan，临时切到Monitor，结束后恢复Scan。没有账户或workspace写入，没有新增ticker。
+
+- 仅运行 `node --test ui/tests/holdings.test.mjs`：5项通过。覆盖全部九个数值列降序与负数、Symbol Z–A、切列与恢复默认数组、缺失/非法值置后、稳定同值、同ticker不同批次及附属卖出数据、Net Liq按未取整数值排序；原数据不变。没有全局Node/Python测试。
+- `npm run build --prefix ui` 与 `git diff --check` 通过。Net Liq主行/Total显示整数，股数副标题无shares；实际市值与后端Decimal精度不变。
+- 真实浏览器点击Net Liq后金额降序；改点Days仅Days为descending，天数123、93、30、24、18、17、15、3、2、1、1；再次点击Days所有列恢复none，行顺序与点击前一致。
+- 1440×1000与1920×1080 CSS视口均完整显示十列，holdings-scroll的scrollWidth等于clientWidth。列表实测约621–633px，视口加宽只增加两个图表且双图宽度相等。键盘调整分隔条后列表645px，重载恢复按当前内容测量的紧凑宽度621px及等宽双图，未恢复旧比例。
+- IOVA选中与Daily保持；展开两条卖出后再排序，卖出紧随所属主行，实际卖价/日期保留。前端控制台无error/warn。截图 `runtime/holdings-sort-compact-live.png`。排序标记随后改为列名下方3px三角，补充只读验收预先限定60秒、页面操作约5秒；同样完整显示所有列、双图等宽，保存最终截图并通过GET /health确认回到Scan。临时页面关闭并恢复viewport；没有重启正式服务。
+
+未覆盖：全局Scan/图表手势、PNG导出、真实长时间行情更新/断网、移动触屏；极端长数字或新持仓宽度增长路径未做真实验收。仅验证本轮排序、宽度与Net Liq显示，历史数据记录不作为本轮live证据。
+
 ## 2026-10-02：Holdings 十列与实际卖价
 
 环境：macOS、Python 3.13.1、现有Longbridge SDK 5.0.0、Node 25.3.0、TypeScript 5.9.3。用户明确授权使用正在运行的真实服务并重启；沿用当前Focus/Wait与已接受Holdings范围，未增加ticker。真实只读验收窗口约07:28–07:37 ET，服务在验收结束后按用户要求继续运行。

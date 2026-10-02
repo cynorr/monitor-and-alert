@@ -14,7 +14,7 @@ let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, 
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource: 'watchlist' | 'holdings' = 'watchlist', holdingKey = '';
 const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), applyList);
-const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings');
+const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (!rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
