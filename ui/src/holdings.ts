@@ -6,13 +6,14 @@ type Sequence = { buy_ids: string[]; opened_on: string; holding_days: number; he
 type Holding = { ticker: string; price_source: string; price_session: string | null; price_timestamp: string | number; change_percent: string | null; extended_percent: string | null; day_reference_price: string | null; sequences: Sequence[] };
 export type HoldingsState = { data: { fetched_at: string; positions_as_of: string; funds: { stock_market_value: string; account_total: string; cash: string }; summary: { pnl: string; pnl_percent: string | null; day_pnl: string | null }; holdings: Holding[] } | null; loading: boolean; error: string | null };
 const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const percentage = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const netLiq = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 const quantity = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 });
 const soldPercent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const signed = (value: string, percent = false) => `${Number(value) > 0 ? '+' : ''}${(percent ? money : netLiq).format(Number(value))}${percent ? '%' : ''}`;
+const signed = (value: string, percent = false, extended = false) => `${Number(value) > 0 ? '+' : ''}${(percent ? extended ? money : percentage : netLiq).format(Number(value))}${percent ? '%' : ''}`;
 const pnlClass = (value: string) => Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
 const symbolFor = (ticker: string) => ticker.endsWith('.US') ? ticker : ticker + '.US';
-export type HoldingSort = 'symbol' | 'market_value' | 'holding_days' | 'total_pnl_percent' | 'total_pnl' | 'sold_percent' | 'buy_price' | 'change_percent' | 'extended_percent' | 'day_pnl';
+export type HoldingSort = 'symbol' | 'market_value' | 'holding_days' | 'total_pnl_percent' | 'total_pnl' | 'sold_percent' | 'change_percent' | 'extended_percent' | 'day_pnl';
 export function sortedHoldingRows(holdings: Holding[], sort: HoldingSort | null) {
     const rows = holdings.flatMap(holding => holding.sequences.map(sequence => ({ holding, sequence })));
     if (!sort) return rows;
@@ -41,6 +42,7 @@ export class HoldingsList {
     private widthSignature = '';
     private minimumWidth = 0;
     private collapsed = false;
+    private regularSession = false;
 
     constructor(private onSelect: (symbol: string, key: string) => void, private isActive: () => boolean,
         private onWidth: (width: number) => void) {
@@ -99,7 +101,15 @@ export class HoldingsList {
         return first ? { symbol: symbolFor(first.holding.ticker), key: first.sequence.buy_ids.join(':') } : null;
     }
 
-    update(state: HoldingsState | null) { this.data = state; this.render(); }
+    update(state: HoldingsState | null, regularSession?: boolean) {
+        this.data = state;
+        if (regularSession !== undefined) this.regularSession = regularSession;
+        this.render();
+    }
+    setRegularSession(regularSession: boolean) {
+        if (this.regularSession === regularSession) return;
+        this.regularSession = regularSession; this.render();
+    }
 
     private cell(row: HTMLTableRowElement, text: string) {
         const cell = row.insertCell(); cell.textContent = text;
@@ -115,6 +125,12 @@ export class HoldingsList {
         $('holdings-toggle').setAttribute('aria-expanded', String(!this.collapsed));
         $('holdings-arrow').textContent = this.collapsed ? '▸' : '▾';
         const data = this.data?.data;
+        const table = $('holdings-table');
+        if (table.classList.contains('holdings-regular') !== this.regularSession) {
+            table.classList.toggle('holdings-regular', this.regularSession);
+            this.minimumWidth = 0; this.widthSignature = '';
+        }
+        if (this.regularSession && this.sort === 'extended_percent') this.sort = null;
         for (const button of Array.from($('holdings-table').querySelectorAll<HTMLButtonElement>('[data-holdings-sort]'))) {
             const active = button.dataset.holdingsSort === this.sort;
             button.closest('th')!.setAttribute('aria-sort', active ? 'descending' : 'none');
@@ -129,7 +145,7 @@ export class HoldingsList {
         $('holdings-account').title = data ? `Latest position value + SnapTrade cash ${money.format(Number(data.funds.cash))}` : '';
         $('holdings-empty').hidden = !!data?.holdings.length;
         $('holdings-empty').textContent = data ? 'No holdings' : this.data?.error ? 'Holdings unavailable' : 'Loading…';
-        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.buys, s.sells])]), [...this.expanded]]);
+        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
         if (structure !== this.structure) {
             this.structure = structure; this.rows.clear(); this.groups.clear(); this.order = ''; this.widthSignature = '';
             const body = document.createDocumentFragment();
@@ -141,14 +157,15 @@ export class HoldingsList {
                     const label = this.cell(row, '');
                     const toggle = document.createElement('button'); toggle.className = 'holdings-trades';
                     toggle.textContent = this.expanded.has(key) ? '▾' : '▸'; toggle.dataset.trades = key;
+                    toggle.hidden = Number(sequence.sold_percent) === 0;
                     toggle.setAttribute('aria-expanded', String(this.expanded.has(key)));
                     toggle.setAttribute('aria-label', `Toggle ${holding.ticker} trades`);
                     const name = document.createElement('span'); name.className = 'ticker'; name.textContent = holding.ticker;
                     label.append(toggle, name);
-                    for (let column = 1; column < 10; column++) this.cell(row, '');
+                    for (let column = 1; column < 9; column++) this.cell(row, '');
                     body.append(row); this.rows.set(key, row);
                     const group = [row]; this.groups.set(key, group);
-                    if (this.expanded.has(key)) {
+                    if (this.expanded.has(key) && Number(sequence.sold_percent) > 0) {
                         for (const trade of [...sequence.buys, ...sequence.sells]) {
                             const sale = 'pnl' in trade ? trade as Sale : null;
                             const detail = document.createElement('tr'); detail.className = 'holding-trade'; detail.dataset.holding = key;
@@ -158,7 +175,7 @@ export class HoldingsList {
                             this.cell(detail, sale ? signed(sale.pnl) : '').className = sale ? pnlClass(sale.pnl) : '';
                             this.cell(detail, quantity.format(Number(trade.quantity)));
                             this.cell(detail, money.format(Number(trade.value) / Number(trade.quantity)));
-                            this.cell(detail, ''); this.cell(detail, ''); this.cell(detail, '');
+                            this.cell(detail, ''); this.cell(detail, '');
                             body.append(detail); group.push(detail);
                         }
                     }
@@ -177,14 +194,14 @@ export class HoldingsList {
             this.value(row.cells[2], String(sequence.holding_days));
             this.value(row.cells[3], signed(sequence.total_pnl_percent, true)); row.cells[3].className = pnlClass(sequence.total_pnl_percent);
             this.value(row.cells[4], signed(sequence.total_pnl)); row.cells[4].className = pnlClass(sequence.total_pnl);
-            this.value(row.cells[5], `${soldPercent.format(Number(sequence.sold_percent))}%`);
-            this.value(row.cells[6], money.format(Number(sequence.buy_price)));
-            for (const [index, value, percent, empty] of [[7, holding.change_percent, true, '—'], [8, holding.extended_percent, true, ''], [9, sequence.day_pnl, false, '—']] as const) {
-                this.value(row.cells[index], value == null ? empty : signed(value, percent));
+            const sold = Number(sequence.sold_percent), soldText = soldPercent.format(sold);
+            this.value(row.cells[5], sold === 0 ? '' : soldText === '0' ? '<1%' : `${soldText}%`);
+            for (const [index, value, percent, empty] of [[6, holding.change_percent, true, '—'], [7, holding.extended_percent, true, ''], [8, sequence.day_pnl, false, '—']] as const) {
+                this.value(row.cells[index], value == null ? empty : signed(value, percent, index === 7));
                 row.cells[index].className = value == null ? '' : pnlClass(value);
             }
-            row.cells[8].title = holding.extended_percent != null ? `${session}: change from regular close` : '';
-            row.cells[9].title = holding.day_reference_price != null ?
+            row.cells[7].title = holding.extended_percent != null ? `${session}: change from regular close` : '';
+            row.cells[8].title = holding.day_reference_price != null ?
                 `${quantity.format(Number(sequence.held_quantity))} shares × (latest price − ${money.format(Number(holding.day_reference_price))} previous regular close) · ${session} · ${priceTime}` : 'Daily P/L unavailable: missing Longbridge price or previous regular close';
         }
         $('holdings-total-value').textContent = data ? netLiq.format(Number(data.funds.stock_market_value)) : '—';
@@ -219,9 +236,9 @@ export class HoldingsList {
         const table = $('holdings-table') as HTMLTableElement;
         // Numeric fonts are tabular: measure again only when content gains digits
         // or the row structure changes, rather than cloning on each quote update.
-        const lengths = Array.from({ length: 10 }, (_, index) => Math.max(0, ...Array.from(table.rows, row => {
+        const lengths = Array.from({ length: table.tHead!.rows[0].cells.length }, (_, index) => Math.max(0, ...Array.from(table.rows, row => {
             const cell = row.cells[index];
-            return cell ? Math.max(...Array.from(cell.childNodes, node => node.textContent?.length ?? 0)) : 0;
+            return cell && getComputedStyle(cell).display !== 'none' ? Math.max(...Array.from(cell.childNodes, node => node.textContent?.length ?? 0)) : 0;
         })));
         const signature = JSON.stringify(lengths);
         if (signature !== this.widthSignature) {
