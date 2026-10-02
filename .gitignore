@@ -12,3 +12,6 @@ build/
 dist/
 
 ui/node_modules/
+
+# Imported reference project; its source/data are migrated into maintained paths.
+/qull-scan-workspace/

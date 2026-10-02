@@ -1,5 +1,7 @@
 # List Module V0 — Development Specification
 
+历史需求记录：2026-10-02 合并后，以 [behavior.md](behavior.md)、[development.md](development.md)、[ui.md](ui.md) 为准。旧路径及旧 hidden 写入边界不再作为当前契约。
+
 确认并实现：2026-09-24。本文保留本轮需求规格；当前运行行为、实现契约和 UI 维护分别见 [behavior.md](behavior.md)、[development.md](development.md)、[ui.md](ui.md)，验收见 [validation.md](validation.md)。
 
 ## 0. Goal

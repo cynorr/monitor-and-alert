@@ -118,3 +118,47 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .search-result strong { color: #2962ff; }
 .search-result .security-name { grid-column: 1 / -1; color: #747c87; font-size: var(--font-small); }
 .search-result:disabled { opacity: .6; cursor: wait; }
+
+/* Scan reuses the Daily panel and watchlist, with a closed-day review sidebar. */
+.mode-switch, .scan-pills { display: flex; gap: 3px; align-items: center; }
+.mode-switch { background: var(--surface-muted); border-radius: 999px; padding: 3px; }
+.mode-switch button, .scan-pills button { border-radius: 999px; padding: 5px 9px; font-size: var(--font-row); white-space: nowrap; }
+.mode-switch .active, .scan-pills .active { background: #242c38; color: white; }
+button:disabled { cursor: default; opacity: .45; }
+#mock-data { margin-left: auto; background: #fff1cc; color: #876211; }
+.scan-controls { padding: 8px 10px; flex-shrink: 0; max-height: 58vh; overflow: auto; border-bottom: 1px solid var(--border); }
+.scan-date-row, .tag-row, .scan-batch, .scan-move { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.scan-date-row select, .scan-batch select { background: var(--surface-muted); border: 0; border-radius: 999px; padding: 6px 8px; }
+#scan-result-count { margin-left: auto; color: #747c87; }
+.scan-pills { margin-bottom: 7px; overflow-x: auto; }
+.tag-row #scan-tags { margin-bottom: 0; flex: 1; }
+.tag-row > button { border-radius: 50%; background: var(--surface-muted); font-size: 20px; width: 26px; height: 26px; }
+#filter-editor { margin-bottom: 10px; }
+#filter-editor summary { cursor: pointer; padding: 7px 0; }
+#filter-count { color: #747c87; margin-left: 8px; font-size: var(--font-small); }
+#tag-unsaved { color: #b88700; margin-left: 8px; }
+.tag-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding-bottom: 10px; }
+.tag-editor input { width: 120px; border: 0; border-radius: 999px; background: var(--surface-muted); padding: 6px 8px; }
+.tag-editor button, .scan-move button, #scan-refresh { background: var(--surface-muted); border-radius: 999px; padding: 5px 8px; }
+#scan-error { padding: 3px 0; color: #b33; }
+.filter-rules { display: flex; flex-direction: column; gap: 8px; }
+.filter-group { border: 1px solid #d6dce4; border-radius: 10px; overflow: hidden; }
+.filter-group h3 { margin: 0; font-size: var(--font-row); padding: 7px 9px; border-bottom: 1px solid #d6dce4; }
+.filter-rule { padding: 6px 8px; display: grid; grid-template-columns: minmax(90px,1fr) auto; align-items: center; gap: 5px; }
+.rule-label { font-size: var(--font-small); }
+.rule-choices { display: flex; gap: 2px; flex-wrap: wrap; justify-content: end; }
+.rule-choices button { font-size: var(--font-small); border-radius: 999px; padding: 4px 6px; }
+.rule-choices button.active { background: #242c38; color: white; }
+.rule-tracks { grid-column: 1 / -1; display: flex; gap: 8px; }
+.slider-value { display: flex; gap: 6px; align-items: center; min-width: 0; flex: 1; }
+.slider-value input { min-width: 40px; flex: 1; width: 100%; height: 2px; accent-color: #555f6c; }
+.slider-value output { font-size: var(--font-small); min-width: 52px; text-align: right; }
+.rule-any .rule-tracks { opacity: .5; }
+.scan-batch { font-size: var(--font-row); }
+.scan-batch select { margin-left: auto; }
+.scan-move { font-size: var(--font-small); }
+.workspace[data-mode="scan"] .symbol-row { height: 46px; grid-template-rows: 25px 17px; }
+.workspace[data-mode="scan"] .symbol-row > .delete-ticker { grid-column: 5; grid-row: 1 / 3; }
+.scan-symbol { display: flex; gap: 5px; align-items: center; min-width: 0; }
+.scan-symbol input { margin: 0; accent-color: #242c38; }
+.scan-row-detail { grid-column: 1 / 5; grid-row: 2; color: #747c87; padding-left: 18px; overflow: hidden; text-overflow: ellipsis; font-size: var(--font-small); }

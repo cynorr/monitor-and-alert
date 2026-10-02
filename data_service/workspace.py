@@ -6,6 +6,8 @@ import json
 import logging
 import re
 from copy import deepcopy
+from dataclasses import dataclass
+from typing import Any
 from datetime import date
 from pathlib import Path
 
@@ -14,8 +16,11 @@ from watchdog.observers import Observer
 
 from .config import workspace_tickers
 
-DAYS = Path.home() / 'qull-scan-workspace' / 'days'
+DAYS = Path(__file__).resolve().parents[1] / 'runtime' / 'days'
 SECTIONS = ('focus', 'wait')
+ORDERED_STATUSES = ('focus', 'wait', 'hidden')
+WORKSPACE_VERSION = 2
+HIDDEN_DAYS = 7
 log = logging.getLogger(__name__)
 
 
@@ -37,6 +42,204 @@ def normalize_ticker(value: str) -> str:
     return ticker
 
 
+
+def empty_workspace() -> dict[str, Any]:
+    return {
+        "version": WORKSPACE_VERSION,
+        "carried": [],
+        "statuses": {},
+        "orders": {status: [] for status in ORDERED_STATUSES},
+    }
+
+def _parse_date(value: str) -> date:
+    return date.fromisoformat(value)
+
+def _status_age(selected_date: str, status_at: str) -> int:
+    return (
+        _parse_date(selected_date)
+        - _parse_date(status_at)
+    ).days
+
+def _workspace_orders(workspace: dict[str, Any]) -> dict[str, list[str]]:
+    """Return complete, de-duplicated orders for all saved statuses."""
+
+    statuses = workspace.get("statuses", {})
+    stored = workspace.get("orders", {})
+    result: dict[str, list[str]] = {}
+
+    for status in ORDERED_STATUSES:
+        members = {
+            ticker
+            for ticker, state in statuses.items()
+            if state.get("status") == status
+        }
+        order: list[str] = []
+        stored_order = (
+            stored.get(status, [])
+            if isinstance(stored, dict)
+            else []
+        )
+        for ticker in stored_order:
+            if ticker in members and ticker not in order:
+                order.append(ticker)
+
+        missing = members - set(order)
+        order.extend(sorted(
+            missing,
+            key=lambda ticker: (
+                statuses[ticker].get("status_at", ""),
+                ticker,
+            ),
+            reverse=status != "hidden",
+        ))
+        result[status] = order
+
+    return result
+
+def _remove_from_orders(
+    orders: dict[str, list[str]],
+    ticker: str,
+) -> None:
+    for status in ORDERED_STATUSES:
+        orders[status] = [item for item in orders[status] if item != ticker]
+
+def inherit_workspace(
+    previous: dict[str, Any] | None,
+    previous_candidates: set[str],
+    current_candidates: set[str],
+    selected_date: str,
+) -> dict[str, Any]:
+    """Create a day once; later Pulls reuse it without re-inheritance."""
+
+    if previous is None:
+        return empty_workspace()
+
+    previous_statuses = previous.get("statuses", {})
+    focus_wait = {
+        ticker: deepcopy(state)
+        for ticker, state in previous_statuses.items()
+        if state.get("status") in {"focus", "wait"}
+    }
+    inherited_hidden = {
+        ticker: deepcopy(state)
+        for ticker, state in previous_statuses.items()
+        if (
+            state.get("status") == "hidden"
+            and ticker in previous_candidates
+            and ticker in current_candidates
+            and _status_age(selected_date, state["status_at"]) <= HIDDEN_DAYS
+        )
+    }
+
+    inherited = {
+        "version": WORKSPACE_VERSION,
+        "carried": sorted(focus_wait),
+        "statuses": {
+            **focus_wait,
+            **inherited_hidden,
+        },
+        "orders": deepcopy(previous.get("orders", {})),
+    }
+    inherited["orders"] = _workspace_orders(inherited)
+    return inherited
+
+@dataclass(frozen=True)
+class DayView:
+    date: str
+    candidates: frozenset[str]
+    carried: frozenset[str]
+    discover: tuple[str, ...]
+    focus: tuple[str, ...]
+    wait: tuple[str, ...]
+    hidden: tuple[str, ...]
+    new: frozenset[str]
+    returned: frozenset[str]
+    statuses: dict[str, dict[str, str]]
+
+    @property
+    def tickers(self) -> tuple[str, ...]:
+        return tuple(sorted(set().union(
+            self.discover,
+            self.focus,
+            self.wait,
+            self.hidden,
+        )))
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "date": self.date,
+            "candidates": sorted(self.candidates),
+            "carried": sorted(self.carried),
+            "lists": {
+                "discover": list(self.discover),
+                "focus": list(self.focus),
+                "wait": list(self.wait),
+                "hidden": list(self.hidden),
+            },
+            "new": sorted(self.new),
+            "returned": sorted(self.returned),
+            "statuses": deepcopy(self.statuses),
+        }
+
+def derive_day_view(
+    selected_date: str,
+    candidates: set[str],
+    previous_candidates: set[str],
+    workspace: dict[str, Any],
+) -> DayView:
+    carried = set(workspace.get("carried", []))
+    statuses = workspace.get("statuses", {})
+
+    focus = {
+        ticker
+        for ticker, state in statuses.items()
+        if state.get("status") == "focus"
+    }
+    wait = {
+        ticker
+        for ticker, state in statuses.items()
+        if state.get("status") == "wait"
+    }
+    hidden_statuses = {
+        ticker: _status_age(selected_date, state["status_at"])
+        for ticker, state in statuses.items()
+        if state.get("status") == "hidden"
+    }
+
+    hidden = {
+        ticker
+        for ticker, age in hidden_statuses.items()
+        if age < HIDDEN_DAYS
+    }
+    returned = {
+        ticker
+        for ticker, age in hidden_statuses.items()
+        if ticker in candidates and age == HIDDEN_DAYS
+    }
+
+    discover = (candidates | carried) - focus - wait
+    discover -= hidden
+    discover -= {
+        ticker
+        for ticker in hidden_statuses
+        if ticker not in candidates
+    }
+    orders = _workspace_orders(workspace)
+
+    return DayView(
+        date=selected_date,
+        candidates=frozenset(candidates),
+        carried=frozenset(carried),
+        discover=tuple(sorted(discover)),
+        focus=tuple(ticker for ticker in orders["focus"] if ticker in focus),
+        wait=tuple(ticker for ticker in orders["wait"] if ticker in wait),
+        hidden=tuple(ticker for ticker in orders["hidden"] if ticker in hidden),
+        new=frozenset(candidates - previous_candidates),
+        returned=frozenset(returned),
+        statuses=deepcopy(statuses),
+    )
+
+
 class Workspace:
     def __init__(self, path: Path | None = None, *, root: Path = DAYS):
         self.root = root.resolve()
@@ -46,6 +249,10 @@ class Workspace:
         self.on_change = lambda: None
         self.observer = None
         self.error = None
+
+    @property
+    def date(self):
+        return self.path.parent.name if re.fullmatch(r'\d{4}-\d{2}-\d{2}', self.path.parent.name) else date.today().isoformat()
 
     def tickers(self):
         return workspace_tickers(self.data)
@@ -70,8 +277,10 @@ class Workspace:
         if self.section(ticker):
             return False
         previous = deepcopy(self.data)
+        for group in ORDERED_STATUSES:
+            self.data.get('orders', {}).setdefault(group, [])[:] = [item for item in self.data.get('orders', {}).get(group, []) if item != ticker]
         self.data.setdefault('orders', {}).setdefault(section, []).insert(0, ticker)
-        self.data['statuses'].setdefault(ticker, {}).update(status=section, status_at=date.today().isoformat())
+        self.data['statuses'].setdefault(ticker, {}).update(status=section, status_at=self.date)
         self.save(previous)
         return True
 
@@ -79,7 +288,7 @@ class Workspace:
         if not self.section(ticker):
             raise ValueError('Ticker is not in Focus or Wait')
         previous = deepcopy(self.data)
-        for section in SECTIONS:
+        for section in ORDERED_STATUSES:
             items = self.data.get('orders', {}).get(section, [])
             items[:] = [item for item in items if item != ticker]
         del self.data['statuses'][ticker]
@@ -97,7 +306,34 @@ class Workspace:
             items = orders.setdefault(group, [])
             items[:] = [item for item in items if item != ticker]
         orders[section].insert(min(index, len(orders[section])), ticker)
-        self.data['statuses'][ticker].update(status=section, status_at=date.today().isoformat())
+        self.data['statuses'][ticker].update(status=section, status_at=self.date)
+        self.save(previous)
+
+    def move_members(self, tickers, source, target, candidates, previous_candidates):
+        if source == target or target not in ('discover', *ORDERED_STATUSES):
+            raise ValueError('Choose a different destination list')
+        if not tickers or len(set(tickers)) != len(tickers):
+            raise ValueError('Select unique tickers')
+        view = derive_day_view(self.date, candidates, previous_candidates, self.data)
+        if not set(tickers) <= set(view.as_dict()['lists'].get(source, [])):
+            raise ValueError('Selection has changed; select again')
+        previous = deepcopy(self.data)
+        orders = _workspace_orders(self.data)
+        moving = set(tickers)
+        for group in orders:
+            orders[group] = [ticker for ticker in orders[group] if ticker not in moving]
+        priority = [ticker for ticker in self.data.get('discover_order', []) if ticker not in moving]
+        if target == 'discover':
+            self.data['discover_order'] = tickers + priority
+            self.data['carried'] = sorted(set(self.data.get('carried', [])) | moving)
+            for ticker in tickers:
+                self.data['statuses'].pop(ticker, None)
+        else:
+            self.data['discover_order'] = priority
+            orders[target] = tickers + orders[target]
+            for ticker in tickers:
+                self.data['statuses'].setdefault(ticker, {}).update(status=target, status_at=self.date)
+        self.data['orders'] = orders
         self.save(previous)
 
     def reload(self):

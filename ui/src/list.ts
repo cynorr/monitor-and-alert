@@ -1,20 +1,15 @@
-import { $, money, extendedQuote, type Ticker } from './types.js';
+import { $, money, compact, extendedQuote, type Ticker } from './types.js';
+import type { ScanControls } from './scan.js';
+import type { Preferences } from './tags.js';
+import { post } from './api.js';
 
-export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; workspace_error?: string | null; notice?: string };
+export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string };
 
 type Candidate = { ticker: string; name: string };
 type Search = { section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };
 
-async function listRequest<T>(payload: object, signal?: AbortSignal): Promise<T> {
-    const response = await fetch('/v1/list', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal,
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error ?? 'Request failed');
-    return data as T;
-}
-
 export class Watchlist {
+    scan?: ScanControls;
     tickers: Ticker[] = [];
     selected = '';
     private editable = false;
@@ -30,7 +25,7 @@ export class Watchlist {
     private dragStart: { ticker: string; x: number; y: number } | null = null;
     private suppressClick = false;
 
-    constructor(private onSelect: (symbol: string) => void) {
+    constructor(private onSelect: (symbol: string) => void, private onUpdate: (data: ListState) => void) {
         this.input.addEventListener('focus', () => { if (!this.search) this.beginSearch(); });
         this.input.addEventListener('input', () => this.changeSearch());
         $('symbols').addEventListener('click', event => {
@@ -47,15 +42,20 @@ export class Watchlist {
             }
             const row = target.closest<HTMLElement>('[data-symbol]');
             if (!row) return;
+            if (target.matches('[data-check]')) { this.scan?.toggle(row.dataset.symbol!); return; }
             if (target.closest('.delete-ticker')) {
-                void this.mutate({ action: 'delete', ticker: row.dataset.ticker });
+                const item = this.tickers.find(t => t.symbol === row.dataset.symbol)!;
+                if (this.scan?.enabled && ['discover','hidden'].includes(item.status))
+                    void this.mutate({ action: 'move', tickers: [item.ticker], source: item.status, target: item.status === 'hidden' ? 'discover' : 'hidden' });
+                else void this.mutate({ action: 'delete', ticker: row.dataset.ticker });
             } else if (this.search) this.endSearch(row.dataset.symbol!);
             else this.onSelect(row.dataset.symbol!);
         });
         $('symbols').addEventListener('pointerdown', event => {
             const target = event.target as HTMLElement;
             const row = target.closest<HTMLElement>('[data-symbol]');
-            if (!row || target.closest('.delete-ticker') || !this.editable || this.busy || event.button !== 0) return;
+            if (!row || target.closest('.delete-ticker,input') || !this.editable || this.busy || event.button !== 0 ||
+                (this.scan?.enabled && (!['focus','wait'].includes(this.scan.activeList) || !this.scan.manualOrder))) return;
             this.dragStart = { ticker: row.dataset.ticker!, x: event.clientX, y: event.clientY };
         });
         $('symbols').addEventListener('pointermove', event => {
@@ -104,6 +104,9 @@ export class Watchlist {
             if (event.key === '/') {
                 event.preventDefault(); this.beginSearch(); return;
             }
+            if (event.key === ' ' && this.scan?.enabled && this.selected && this.editable && !(event.target as HTMLElement).closest('input,textarea,select,button')) {
+                event.preventDefault(); this.scan.toggle(this.selected); return;
+            }
             if (this.search && ['Escape', 'Enter'].includes(event.key)) {
                 event.preventDefault();
                 if (event.key === 'Escape') this.endSearch(); else void this.commitSearch();
@@ -124,7 +127,8 @@ export class Watchlist {
     }
 
     private query() { return this.input.value.trim().toUpperCase(); }
-    private matches() { return this.tickers.filter(t => t.ticker.includes(this.query())); }
+    private visible() { return this.scan?.enabled ? this.scan.visible(this.tickers) : this.tickers; }
+    private matches() { return this.visible().filter(t => t.ticker.includes(this.query())); }
 
     private cancelLookup() {
         clearTimeout(this.lookupTimer);
@@ -155,7 +159,7 @@ export class Watchlist {
         if (!this.editable) return Promise.resolve(null);
         search.message = 'Searching…'; this.render();
         this.lookupController = new AbortController();
-        search.lookup = listRequest<Candidate>({ action: 'lookup', ticker: term }, this.lookupController.signal)
+        search.lookup = post<Candidate>('list', { action: 'lookup', ticker: term }, this.lookupController.signal)
             .then(candidate => {
                 if (this.search !== search) return null;
                 search.candidate = candidate; search.message = '';
@@ -200,7 +204,7 @@ export class Watchlist {
     }
 
     private async swapSelected(direction: number) {
-        if (!this.editable || this.busy || this.search) return;
+        if (!this.editable || this.busy || this.search || (this.scan?.enabled && (!this.scan.manualOrder || !['focus','wait'].includes(this.scan.activeList)))) return;
         const ticker = this.tickers.find(t => t.symbol === this.selected);
         if (!ticker) return;
         const items = this.tickers.filter(t => t.status === ticker.status);
@@ -216,8 +220,9 @@ export class Watchlist {
         $('symbol-count').textContent = String(this.tickers.length);
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
-        if (!this.tickers.some(t => t.symbol === this.selected) && (this.selected || this.tickers.length))
-            this.onSelect(this.tickers[0]?.symbol ?? '');
+        const visible = this.visible();
+        if (!visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
+            this.onSelect(visible[0]?.symbol ?? '');
         this.render();
     }
 
@@ -238,8 +243,8 @@ export class Watchlist {
         $('list-notice').textContent = '';
         this.render();
         try {
-            const data = await listRequest<ListState>(payload);
-            this.update(data);
+            const data = await post<ListState>('list', payload);
+            this.onUpdate(data);
             if (!this.search) $('list-notice').textContent = data.notice ?? '';
             return data;
         } catch (error) {
@@ -253,12 +258,13 @@ export class Watchlist {
     }
 
     render() {
-        const visible = this.search ? this.matches() : this.tickers;
+        const visible = this.search ? this.matches() : this.visible();
+        const scan = this.scan?.enabled;
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.tickers.some(t => t.ticker === candidate.ticker);
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search) $('list-notice').textContent = this.search.message;
-        const key = JSON.stringify([visible.map(t => [t.symbol, t.status]), [...this.collapsed], this.editable,
+        const key = JSON.stringify([visible.map(t => [t.symbol, t.status]), scan, [...this.collapsed], this.editable,
             this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
             this.key = key; this.rows.clear();
@@ -270,7 +276,7 @@ export class Watchlist {
                 const company = document.createElement('span'); company.className = 'security-name'; company.textContent = candidate.name;
                 result.append(name, action, company); fragment.append(result);
             }
-            for (const group of ['focus', 'wait']) {
+            for (const group of scan ? [this.scan!.activeList] : ['focus', 'wait']) {
                 const items = visible.filter(t => t.status === group);
                 if (this.search && !items.length) continue;
                 const section = document.createElement('section'); section.dataset.section = group;
@@ -279,10 +285,11 @@ export class Watchlist {
                 const arrow = document.createElement('span'); arrow.className = 'section-arrow';
                 const collapsed = !this.search && this.collapsed.has(group);
                 arrow.textContent = collapsed ? '▸' : '▾'; arrow.setAttribute('aria-hidden', 'true');
-                toggle.append(arrow, group === 'focus' ? 'Focus' : 'Wait');
+                toggle.append(arrow, group[0].toUpperCase() + group.slice(1));
                 toggle.setAttribute('aria-expanded', String(!collapsed));
                 const add = document.createElement('button'); add.dataset.add = group; add.textContent = '+';
                 add.setAttribute('aria-label', `Add ticker to ${group === 'focus' ? 'Focus' : 'Wait'}`); add.disabled = !this.editable;
+                add.hidden = !['focus','wait'].includes(group);
                 heading.append(toggle, add); section.append(heading);
                 if (!collapsed) {
                     for (const ticker of items) {
@@ -295,6 +302,14 @@ export class Watchlist {
                         remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
                         remove.setAttribute('aria-label', `Delete ${ticker.ticker}`); remove.title = `Delete ${ticker.ticker}`; remove.hidden = !this.editable;
                         row.append(name, document.createElement('span'), document.createElement('span'), document.createElement('span'), remove);
+                        if (scan) {
+                            const symbolCell = document.createElement('div'); symbolCell.className = 'scan-symbol';
+                            const check = document.createElement('input'); check.type = 'checkbox'; check.dataset.check = ticker.symbol; check.setAttribute('aria-label', `Select ${ticker.ticker} for move`); check.disabled = !this.editable;
+                            symbolCell.append(check, name); row.prepend(symbolCell);
+                            const detail = document.createElement('small'); detail.className = 'scan-row-detail'; row.append(detail);
+                            if (group === 'discover') { remove.title = `Hide ${ticker.ticker}`; remove.setAttribute('aria-label', remove.title); }
+                            if (group === 'hidden') { remove.title = `Return ${ticker.ticker} to Discover`; remove.setAttribute('aria-label', remove.title); }
+                        }
                         section.append(row); this.rows.set(ticker.symbol, row);
                     }
                     if (!items.length) {
@@ -315,6 +330,17 @@ export class Watchlist {
             const errors = [...(ticker.errors ?? []), ...(ticker.quote?.error ? ['Quote: ' + ticker.quote.error] : [])];
             const mark = row.querySelector<HTMLElement>('.warn')!; mark.hidden = !errors.length; mark.title = errors.join('\n');
             const regular = ticker.quote?.regular, extended = extendedQuote(ticker.quote);
+            if (scan) {
+                const check = row.querySelector('[data-check]') as HTMLInputElement;
+                check.checked = this.scan!.selected.has(ticker.symbol); check.disabled = !this.editable || this.scan!.busy;
+                (row.querySelector('.delete-ticker') as HTMLButtonElement).disabled = this.busy || this.scan!.busy;
+                row.children[1].textContent = money(ticker.close);
+                row.children[2].textContent = ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%';
+                row.children[3].textContent = ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20);
+                row.querySelector('.scan-row-detail')!.textContent = (ticker.is_new ? 'NEW · ' : ticker.is_returned ? 'RETURNED · ' : '') +
+                    ['rfl1m','rfl3m','rfl6m'].map((field,index) => `${[1,3,6][index]}M ${typeof ticker[field] === 'number' ? (ticker[field] as number).toFixed(0) + '%' : '—'}`).join(' · ');
+                continue;
+            }
             const change = regular?.prev_close ? (regular.last_price / regular.prev_close - 1) * 100 : null;
             const ext = extended && regular?.last_price ? (extended.last_price / regular.last_price - 1) * 100 : null;
             row.children[1].textContent = money(regular?.last_price);

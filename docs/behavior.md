@@ -1,26 +1,42 @@
 # 看盘服务运行逻辑
 
-更新：2026-09-24。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
+更新：2026-10-02。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
 
 ## 启动与接收
 
-启动选择 `~/qull-scan-workspace/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus/wait，开始接收当前名单的 Quote，同时加载历史。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
+Monitor 启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus/wait，开始接收当前名单的 Quote，同时加载历史。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
 
 Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 只显示最新价格。页面选股不改变券商订阅范围。关闭网页不停止后端。
 
+## Scan 与互斥模式
+
+启动默认 Monitor，可用 --mode scan。页面在列表面板内切换模式，整个进程同时只有一种模式；所有浏览器会话跟随这个选择。进入 Scan 前确认已有截面；停止并等待 Monitor 下载/Quote 任务结束，取消订阅，释放 SDK context。Scan 不读凭证、不请求券商；切回 Monitor 才按最新 Focus/Wait 创建行情连接。
+
+Scan 读取上游 runtime/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus/Wait 在Scan中也使用该上游来源；切回Monitor才使用runtime/bars.sqlite3与实时Quote。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
+
+两种来源统一使用 NoAdjust 原始价格与原始成交量；入库、指标及图表没有后续复权，也不读取 adjust table。拆股前后真实价格跳变会进入均线、ATR、RFL 等计算，这是当前选择的口径。上游已复权数据不能仅改表结构或元信息后视为 NoAdjust。
+
+全市场完成日期必须显式发布。scan --date D 或 Scan 模式下 POST /v1/scan 生成一份截面，页面Refresh重算当前选择日；GET和图表选择不生成。候选要求Price≥5、ADR20≥5%、ADV20≥$5M，再取RFL1M/3M/6M任一排名前50；排名仅在eligible截面执行，不因Tag或列表改变。
+
+同日生成保留名单；新日期第一次生成才继承Focus/Wait。Discover由candidate与carried派生，Hidden按7个自然日：小于7天隐藏，等于7天且仍是candidate返回Discover并标记Returned；后续新日清除过期状态。Hidden继承要求前后两日candidate交集。NEW是当前候选减上一份截面的候选。
+
+Scan提供四列表、RFL排序和38项Filters。数值支持≥/≤/范围；条件之间AND，同一分类选项OR；有条件的缺失值不匹配，Any不排除缺失。Tag是保存的条件集合，Default常驻、最多10个；修改即时预览，Save才持久化，Cancel恢复保存值，失败保留草稿。RFL不作为过滤条件，Tag不自动修改名单。
+
+复选与当前图表行独立，全选只选可见结果；日期/条件/列表切换清空勾选。整批移动一次保存，按提交顺序插入目标顶部。Focus/Wait共享同一workspace；Discover/Hidden只在Scan显示。历史日期名单只读，Monitor始终使用最新名单。Mock使用独立runtime与MOCK标记，真实上游契约见upstream-daily-data.md。
+
 ## Focus / Wait 列表
 
-需求来源：[List Module V0](list-module-v0.md)。
+原始需求记录：[List Module V0](list-module-v0.md)，当前行为以本文为准。
 
 Monitor 与 Scan 共用当前 workspace.json，保留 schema 和 version。Focus、Wait 固定顺序，可折叠；数组顺序就是显示顺序。搜索与新增共用列表上方输入框，没有新增弹窗。按 / 随时进入搜索并清空输入，默认新增到 Focus；Section 右侧 + 进入同一搜索模式，只把新增目标改为该 Section。再次按 / 会清空并重置为 Focus。Esc 退出、清空输入并恢复完整列表。
 
-输入 ticker 时先过滤现有名单；输入停止 1 秒后，若无完全匹配 ticker，则通过同一 Longbridge context 的 static_info 查询美国证券，候选直接显示在列表中。查询不写 workspace、不订阅、不下载。回车选中完全匹配的现有 ticker（否则选当前显示的首个现有匹配）；若显示的是有效新候选，回车才验证、加入目标 Section 首位并选中。无现有结果时提前按回车会立即发起或等待同一候选查询。选中后退出搜索、展开对应 Section 并显示双图；已有 ticker 不改变位置、状态或日期。候选查不到或验证失败不添加；输入变化或退出后忽略旧查询结果。
+输入 ticker 时先过滤现有名单；输入停止 1 秒后，若无完全匹配 ticker，Monitor 则通过同一 Longbridge context 的 static_info 查询美国证券；Scan 只查询本地上游 SQLite，候选直接显示在列表中。查询不写 workspace、不订阅、不下载。回车选中完全匹配的现有 ticker（否则选当前显示的首个现有匹配）；若显示的是有效新候选，回车才验证、加入目标 Section 首位并选中。无现有结果时提前按回车会立即发起或等待同一候选查询。选中后退出搜索、展开对应 Section 并显示双图；已有 ticker 不改变位置、状态或日期。候选查不到或验证失败不添加；输入变化或退出后忽略旧查询结果。
 
 搜索框始终提示 Search；搜索时只显示有匹配项的 Section，全部无结果时留白，不显示 No matches。Longbridge 新候选使用蓝色 symbol，右侧只显示 Add，不再显示新增目标或回车提示。请求/保存失败仍显示错误。regular 时段 Ext 单元格留空，不用横线占位。
 
-可拖动排序或跨 Section 移动；正常列表模式下，Shift+上/下将选中 ticker 与当前 Section 相邻项交换，保持该 ticker 选中，Section 边界不跨组。快捷键复用现有移动保存规则。删除直接移出数组并删除对应 statuses 记录。新增、移动和排序只更新主动操作 ticker 的 status_at，使用本机本地日期；被动移位 ticker 不变。所有操作同步直接写回文件，完成即保存，无 debounce、队列、原子替换或文件锁。
+可拖动排序或跨 Section 移动；正常列表模式下，Shift+上/下将选中 ticker 与当前 Section 相邻项交换，保持该 ticker 选中，Section 边界不跨组。快捷键复用现有移动保存规则。删除直接移出数组并删除对应 statuses 记录。新增、移动和排序只更新主动操作 ticker 的 status_at，使用当前 workspace 的交易日日期；被动移位 ticker 不变。所有操作同步直接写回文件，完成即保存，无 debounce、队列、原子替换或文件锁。
 
-不读取 hidden 的成员来决定行为，不修改 orders.hidden 或 carried。即使 ticker 在 hidden 数组内，也可正常加入 Focus/Wait；保留 statuses 记录的其他字段。
+新增到 Focus/Wait 时从旧 hidden 顺序移除该 ticker；保留 statuses 的其他字段。删除清除该 ticker 的保存归属和各组排序；如果仍是 candidate/carried，Scan 的 Discover 会再次显示它。需要隐藏时使用明确的 Hide 动作。
 
 一个 watchdog 原生文件事件 watcher 递归监听 days：Scan 修改当前文件后自动重读；出现更大日期的 workspace.json 自动切换。外部更新只读、不回写，无轮询、合并或并发冲突处理。读取/保存失败显示简单错误。
 
@@ -44,7 +60,7 @@ SDK 负责底层连接恢复；应用保留 30 秒 snapshot、开市无全名单
 
 如果价格正数且有限，但 Open/Close 超出 Low/High，或 High 小于 Low，原值仍入库和绘图。上下界检测只追加到 runtime/invalid_ohlc.jsonl：ticker、周期、交易时段、bar 起止 Unix 秒与 ET、获取时间、原始 OHLCV。每次获取重复追加，不去重、不修复、不回补、不显示感叹号。
 
-不使用 max/min 强制修正官方 OHLC。非数字、非法时间戳、负 volume 等无法正常使用的数据仍被拒绝；必要位置没有可用 bar 时按缺失恢复。成交额缺失可用于估算 ADV，价格不变。
+不使用 max/min 强制修正官方 OHLC。非数字、非法时间戳、负 volume 等无法正常使用的数据仍被拒绝；必要位置没有可用 bar 时按缺失恢复。turnover 缺失不影响日 K；ADV 统一使用 close × volume。
 
 ## 图表周期与指标
 
@@ -56,9 +72,9 @@ SDK 负责底层连接恢复；应用保留 30 秒 snapshot、开市无全名单
 
 合成只改变周期，不扩展历史时间跨度：1000 根 5m 约覆盖 13 个普通交易日，2h/4h 也只有这段历史。均线样本不足时不显示该线。
 
-两个图保留 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。Intraday active volume = 本根内已闭合部分的量 + 当前 5m 内 Quote 累计量的增量。已闭合部分优先按 1h → 30m → 15m → 5m 无重叠拼接，只使用完整落在本根起点到当前 5m 起点之间的官方 bar。结果缓存为标量，Quote 更新不重新求和。不能用全天 Quote 累计量减历史 K 线总量，因为两者累计差异会全部堆到 active。盘中启动、恢复、跳过时间桶或累计量回退时，没有可靠起点的 active volume 暂空；跨入下一连续 5m 后恢复。Daily 仍使用官方累计量。active 是按 Quote 观测时刻估算的临时量，收盘后由官方 K 线替换。上下界矛盾也可能体现在图表及派生指标中，因为本版保留官方原值。
+两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 `close × volume` 均值；停牌/稀疏记录按实际根数取窗口，不使用 turnover 改变公式。Intraday active volume = 本根内已闭合部分的量 + 当前 5m 内 Quote 累计量的增量。已闭合部分优先按 1h → 30m → 15m → 5m 无重叠拼接，只使用完整落在本根起点到当前 5m 起点之间的官方 bar。结果缓存为标量，Quote 更新不重新求和。不能用全天 Quote 累计量减历史 K 线总量，因为两者累计差异会全部堆到 active。盘中启动、恢复、跳过时间桶或累计量回退时，没有可靠起点的 active volume 暂空；跨入下一连续 5m 后恢复。Daily 仍使用官方累计量。active 是按 Quote 观测时刻估算的临时量，收盘后由官方 K 线替换。上下界矛盾也可能体现在图表及派生指标中，因为本版保留官方原值。
 
-## 页面状态
+## Monitor 页面状态
 
 - Loading：Daily + 5m 尚未完成。
 - 黄色 Ready：Daily + 5m 验证通过，保持到五周期完成。

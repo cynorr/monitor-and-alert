@@ -1,62 +1,91 @@
 # Market Monitor
 
-个人美股看盘工作台：Daily + Intraday 双图、实时行情与指标。单进程 Python、SQLite、同源 WebSocket。Price Alert 和下单不在范围。
+个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘。两个模式互斥，共用 Focus/Wait、日 K 图表和指标。单进程 Python、SQLite、同源 WebSocket。
 
-[运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [布局/样式/交互](docs/ui.md) · [验证记录](docs/validation.md) · [List V0 规格](docs/list-module-v0.md)
+[运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [布局/交互](docs/ui.md) · [验证记录](docs/validation.md) · [合并方案](docs/scan-merge-plan.md) · **[上游数据交付要求](docs/upstream-daily-data.md)**
 
 ## 启动
 
-| 模式 | 命令 | 地址 | 数据 |
-| --- | --- | --- | --- |
-| 真实行情 | `.venv/bin/python -m data_service serve` | http://127.0.0.1:8765/ | runtime/bars.sqlite3 |
-| 模拟 | `./simulator/start.command --speed 30` | http://127.0.0.1:18765/ | 临时库，退出删除 |
-
-每条命令都同时启动数据服务和网页，不需要再启动前端。模拟页面带 SIM 标签，不读凭证、不自动切换真实行情。首次安装需 Python 3.11+：
+首次安装需 Python 3.11+：
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test]'
 ```
 
-启动选择 `~/qull-scan-workspace/days/YYYY-MM-DD/workspace.json` 中最新日期，仅 statuses 为 focus/wait 的 ticker 可请求/订阅；orders 只排序。原生文件事件自动重读当前文件并跟随新日期，名单变化同步调整行情范围。真实凭证从 longbridge-token.txt 读取，使用既有 App Key / App Secret / App Token 格式，不输出到日志。默认官方 .cn；`--region global` 切换接入点。可指定 `--workspace` 固定使用某个文件；其他选项包括 `--credentials`、`--runtime`、`--port`。同一 runtime 只允许一个实例；账户只使用一个正式行情连接。
+| 启动方式 | 命令 | 数据 |
+| --- | --- | --- |
+| Monitor（默认） | `.venv/bin/python -m data_service serve` | 当前 Focus/Wait 的 Longbridge 行情，runtime/bars.sqlite3 |
+| Scan | `.venv/bin/python -m data_service serve --mode scan` | 上游全市场 runtime/daily.sqlite3，需先生成完成日 |
+| Scan Mock | `.venv/bin/python -m data_service serve --mode scan --runtime runtime/scan-mock --mock-scan` | 独立合成日 K 和测试名单，MOCK 标记 |
+| Monitor 模拟器 | `./simulator/start.command --speed 30` | 临时库/名单，SIM 标记 |
 
-## 看盘
+前三种在 http://127.0.0.1:8765/ 打开；模拟器在 http://127.0.0.1:18765/ 。命令同时启动后端和网页，不需另起前端。停止使用 Ctrl+C，关闭网页不停止后端。同一 runtime 只允许一个实例。
 
-- 三栏、双图、拖动列宽、搜索与键盘选股、自由十字线和交易日联动。
-- / 进入统一搜索/新增：回车选中或添加到 Focus 首位，Esc 退出；Section 的 + 共用搜索并指定新增目标。停输 1 秒查询 Longbridge 候选。支持删除、拖动、Shift+上下同组换序和折叠；修改立即同步写回 Scan workspace，不管理 hidden/carried。
-- Intraday：5m/15m/30m/1h/2h/4h。2h/4h 永远由 5m 合成，官方 15m/30m/1h 未到时也可由 5m 临时显示。
-- Daily 约九个月初始范围；短历史靠右、保持 candle 宽度。5m 合成的大周期仅覆盖已有 5m 的时间范围。
-- EMA10/20、Daily SMA50、Intraday SMA65、ADR20/ADV20；计算在 Python。
-- Loading → 黄色 Ready（Daily+5m）→ 蓝色 Ready（五周期，3 秒后隐藏）。缺失/请求失败重试耗尽显示原因；正常不反复提示。
-- 官方 OHLC 上下界矛盾保留原值，不报警、不补数据，仅追加 runtime/invalid_ohlc.jsonl 供人工对照。
-- 官方 closed bars 落库，Quote、活跃 candle 和合成数据只在内存。extended 只显示价格。
+本轮已生成 `runtime/scan-mock`。新环境首次创建 Mock：
 
-所有历史请求均使用最近 K 线：启动/恢复/补缺 count=1000，正常 closed 更新 count=2。过滤未收盘后可能不足 1000 根；没有翻页或历史查缺口。全局 10 请求/秒、5 并发；后台历史最多 8 请求/秒、3 并发，为点选保留两个请求与并发位置。
+```bash
+.venv/bin/python scripts/build_scan_mock.py
+```
+
+Mock 生成器要求目标目录没有现成 daily.sqlite3；重复试验用 `--output runtime/scan-mock-2`。包含48只合成证券、两天截面和短历史样本，名单独立于正式runtime。Scan Mock启动与选股不读凭证；页面主动切换Monitor会按该runtime的Focus/Wait启用Longbridge。完整离线实时模拟使用独立模拟器。
+
+正式 Scan 接入：按 [上游契约](docs/upstream-daily-data.md) 放置 SQLite，全市场交易日写入完成后运行：
+
+```bash
+.venv/bin/python -m data_service scan --date 2026-09-30
+.venv/bin/python -m data_service serve --mode scan
+```
+
+服务运行时改用 `POST /v1/scan` 触发生成；图表查询不触发下载或计算。日期必须是明确完成的美东交易日。`--daily-db` 可指定其他上游文件位置。
+
+`serve` 不带参数默认进入 Monitor；`--mode scan` 才直接进入 Scan。放置 SQLite 后仍需先运行 `scan --date D`，生成 `runtime/days/D/scan.json`，页面才能切入 Scan。只有 workspace.json 或 SQLite 时，切换会报错。上游文件名即使叫 bars.sqlite3，也应交付到 `runtime/daily.sqlite3`；不要覆盖 Monitor 的 `runtime/bars.sqlite3`，或将 `--daily-db` 指向同一个 Monitor 运行库。
+
+默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。当前真实使用的旧目录已一次复制到runtime，源文件保留：15份名单、7个Tag，最新2026-09-30，Focus34/Wait20。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
+
+Monitor凭证来自longbridge-token.txt，沿用App Key/Secret/Token，不输出到日志。默认官方.cn，`--region global`切换接入点。只请求/订阅当前Focus/Wait；历史库、Discover、Hidden不决定券商白名单。
+
+## 使用
+
+- 列表面板内切换Scan/Monitor；切回Scan时停止Monitor任务和订阅。两个SQLite来源共用读取/计算，不拼接历史。
+- Scan：选交易日、Discover/Focus/Wait/Hidden、38项Filters、保存的Tags、RFL排序。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，同日Refresh保留人工状态。
+- Focus/Wait跨日保留；Hidden按7个自然日，仍是候选时第7天返回Discover并标记Returned。新候选标记NEW。删除Focus/Wait解除归属；Hide明确隐藏七天。
+- 共用Daily日 K：九个月初始范围、EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、缩放/十字线。Scan为所选日的closed数据；Monitor增加Quote活跃日 K。
+- Monitor：5m/15m/30m/1h/2h/4h、SMA65、交易日联动、实时行情；2h/4h由5m在内存合成。
+- /搜索，回车选中或新增到Focus首位；+指定新增到Focus/Wait。Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info。保存同步落盘。
+- Monitor支持Focus/Wait拖动、Shift+上下排序、删除、折叠；Scan默认排序下也可调整Focus/Wait顺序。
+- ADR20 = 最近最多20根`(H-L)/L × 100`均值；ADV20 = 最近最多20根`close × volume`均值，两模式同公式。
+- Monitor Loading → 黄色Ready（Daily+5m）→ 蓝色Ready（五周期，3秒后隐藏）；Scan显示所选日期。仅OHLC上下界矛盾保留原值并追加invalid_ohlc.jsonl，不修正或告警。
+
+Monitor启动/恢复/补缺仅请求最近1000根，closed更新count=2，过滤未收盘；接受短历史，不分页或查历史缺口。全局10请求/秒、5并发；后台历史最多8请求/秒、3并发。
 
 ## 命令与接口
 
 ```bash
 .venv/bin/python -m data_service universe
-.venv/bin/python -m data_service reconcile  # 本轮有界历史同步
-.venv/bin/python -m data_service verify     # 不联网的当前窗口诊断
-.venv/bin/python -m data_service serve --symbols PAYS --duration 60
+.venv/bin/python -m data_service reconcile
+.venv/bin/python -m data_service verify
 .venv/bin/python -m pytest -q
+npm run check --prefix ui
 npm run build --prefix ui
+npm run test --prefix ui
 ```
 
-示例 ticker 必须仍属于当前 focus/wait。有限命令退出码：0 为五个官方周期窗口检查通过，2 为存在缺失/不可用数据，1 为启动失败。停止后端使用 Ctrl+C；关闭网页不停止后端。
+reconcile是有界真实历史同步，verify不联网。live验收需明确当前Focus/Wait子集与时限，见开发文档。有限Monitor命令：0检查通过、2存在缺失、1启动失败；scan成功为0。
 
 | 接口 | 内容 |
 | --- | --- |
-| GET /health | mode、Quote 连接、推送数、待处理任务、耗尽错误 |
-| GET /v1/universe | 当前白名单 |
-| POST /v1/list | 候选查询（不写入）；新增、删除、排序/跨组移动（同步保存） |
-| GET /v1/quotes?symbol=PAYS.US | 最新 regular/extended |
-| GET /v1/bars?symbol=PAYS.US&timeframe=5m&limit=1000 | 官方 closed 数据，只支持五个官方周期 |
-| GET /v1/readiness?symbol=PAYS.US | 简单 status + 详细周期诊断 |
-| GET /v1/chart?symbol=PAYS.US&timeframe=4h | 只读完整图表快照 |
-| WS /v1/stream | UI 唯一图表数据通道 |
+| GET /health | 当前模式、Quote连接、待处理任务/错误 |
+| GET /v1/scan | 当前名单、日期、偏好和模式 |
+| POST /v1/mode | `{"mode":"scan"}` 或 `{"mode":"monitor"}` |
+| POST /v1/scan | 选择日期`{"date":"D"}`；生成`{"date":"D","generate":true}` |
+| POST /v1/preferences | 同步保存完整Tag/显示偏好 |
+| GET /v1/filter-catalog | 唯一38字段目录 |
+| POST /v1/list | 查询、新增、删除、拖动；Scan支持批量四列表移动 |
+| GET /v1/chart?symbol=PAYS.US&timeframe=4h | 只读图表；Scan只含Daily |
+| GET /v1/universe、/v1/quotes、/v1/bars、/v1/readiness | Monitor诊断 |
+| WS /v1/stream | 唯一图表/名单更新通道 |
 
-WS 选择：`{"type":"select","symbol":"PAYS.US","timeframe":"4h","request_id":1}`。切换、重连完整快照；常规发实时预览与状态，历史改变再发历史。status 为 `{stage: "loading" | "basic" | "full", errors: []}`，替代旧 readiness v2 多布尔字段。HTTP 图表查询不改变选择优先级。
+WS选择含`type=select`、symbol、timeframe、request_id、mode。模式/日期切换及重连发送完整快照；日 K未变时只发预览/状态。状态仅loading/basic/full与errors。
 
-UI 构建产物与本地 Lightweight Charts 已随仓库提供，正常启动不需 npm/CDN；开发时 `cd ui && npm ci && npm run build`。模拟器详见 [simulator/README.md](simulator/README.md)。显式 live 检查使用 `scripts/live_check.py`，范围与证据规则见开发文档。
+UI构建产物和Lightweight Charts已随仓库提供，正常启动无需npm/CDN。模拟器详见 [simulator/README.md](simulator/README.md)。不增加Price Alert、下单、消息中间件或通用适配框架。

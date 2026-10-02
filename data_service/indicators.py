@@ -1,26 +1,60 @@
 """Pure calculations. Live previews always start from closed-bar state."""
 from __future__ import annotations
 
-from datetime import datetime
+import numpy as np
+import pandas as pd
 
-from .calendar import ET
+
+def ema_step(previous, close, period):
+    return close if previous is None else 2 / (period + 1) * close + (1 - 2 / (period + 1)) * previous
+
+
+def moving_averages(close: pd.Series, sma_period=50) -> pd.DataFrame:
+    values = {10: [], 20: []}
+    for value in close:
+        for period, sequence in values.items():
+            sequence.append(ema_step(sequence[-1] if sequence else None, value, period))
+    return pd.DataFrame({'ema10': values[10], 'ema20': values[20],
+                         f'sma{sma_period}': close.rolling(sma_period).mean()}, index=close.index)
+
+
+def true_range(history):
+    previous = history['close'].shift()
+    return pd.concat([history['high'] - history['low'], (history['high'] - previous).abs(),
+                      (history['low'] - previous).abs()], axis=1).max(axis=1)
+
+
+def wilder_atr(tr, period=20):
+    seed = tr.where(np.arange(len(tr)) >= period, tr.rolling(period).mean())
+    return seed.ewm(alpha=1 / period, adjust=False).mean()
+
+
+def add_indicators(history):
+    result = history.copy()
+    result[['ema10', 'ema20', 'sma50']] = moving_averages(result['close'])
+    result['tr'] = true_range(result)
+    result['atr20'] = wilder_atr(result['tr'])
+    return result
+
+
+def daily_metrics(history):
+    recent = history.tail(20)
+    result = {'adr20': ((recent['high'] - recent['low']) / recent['low'] * 100).mean(),
+              'adv20': (recent['close'] * recent['volume']).mean()}
+    for name, window in (('rfl1m', 21), ('rfl3m', 63), ('rfl6m', 126)):
+        result[name] = (history['close'].iloc[-1] / history['low'].tail(window).min() - 1) * 100
+    return result
 
 
 def series(rows: list[dict], sma_period: int = 50) -> dict:
     result = {'ema10': [], 'ema20': [], f'sma{sma_period}': []}
-    previous = {10: None, 20: None}
-    closes = []
-    for row in rows:
-        close = row['close']
-        closes.append(close)
-        for period in previous:
-            alpha = 2 / (period + 1)
-            value = close if previous[period] is None else alpha * close + (1 - alpha) * previous[period]
-            previous[period] = value
-            if len(closes) >= period:
-                result[f'ema{period}'].append({'time': row['time'], 'value': value})
-        if len(closes) >= sma_period:
-            result[f'sma{sma_period}'].append({'time': row['time'], 'value': sum(closes[-sma_period:]) / sma_period})
+    closes = [row['close'] for row in rows]
+    averages = moving_averages(pd.Series(closes, dtype=float), sma_period)
+    previous = {period: averages[f'ema{period}'].iloc[-1] if rows else None for period in (10,20)}
+    for index, row in enumerate(rows):
+        for name, period in (('ema10',10), ('ema20',20), (f'sma{sma_period}',sma_period)):
+            if index + 1 >= period:
+                result[name].append({'time': row['time'], 'value': float(averages[name].iloc[index])})
     return {'series': result, 'ema': previous, 'tail': closes[-(sma_period - 1):], 'count': len(closes), 'sma_period': sma_period}
 
 
@@ -31,7 +65,7 @@ def preview(base: dict, active: dict | None) -> dict:
     values = {}
     for period in (10, 20):
         old = base['ema'][period]
-        value = close if old is None else 2 / (period + 1) * close + (1 - 2 / (period + 1)) * old
+        value = ema_step(old, close, period)
         if count >= period:
             values[f'ema{period}'] = {'time': active['time'], 'value': value}
     period = base.get('sma_period', 50)
@@ -41,12 +75,9 @@ def preview(base: dict, active: dict | None) -> dict:
 
 
 def daily_summary(bars, calendar, now):
-    days = set(calendar.completed_days(now, 20))
-    rows = [b for b in bars if datetime.fromtimestamp(b.ts, ET).date() in days]
+    rows = [b for b in bars if calendar.bar_end(b.ts, '1d') <= now][-20:]
     if not rows:
-        return {'adr20': None, 'adv20': None, 'samples': 0, 'estimated': False}
-    estimated = any(b.turnover is None for b in rows)
-    return {'adr20': sum((b.high - b.low) / b.low for b in rows) / len(rows) * 100,
-            'adv20': sum(b.turnover if b.turnover is not None else b.volume * (b.open + b.close) / 2
-                         for b in rows) / len(rows),
-            'samples': len(rows), 'estimated': estimated}
+        return {'adr20': None, 'adv20': None, 'samples': 0}
+    metrics = daily_metrics(pd.DataFrame({'high': [b.high for b in rows], 'low': [b.low for b in rows],
+                                         'close': [b.close for b in rows], 'volume': [b.volume for b in rows]}))
+    return {key: metrics[key] for key in ('adr20', 'adv20')} | {'samples': len(rows)}

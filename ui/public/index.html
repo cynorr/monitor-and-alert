@@ -32,10 +32,22 @@
   <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
   <aside class="watchlist" aria-label="Watchlist">
     <div class="list-header">
-    <div class="list-heading"><strong>Watchlist</strong><span id="symbol-count"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span></div>
+    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button></div><span id="symbol-count"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
     <div id="list-columns" class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span><span aria-hidden="true"></span></div>
     </div>
+    <section id="scan-controls" class="scan-controls" hidden aria-label="Scan controls">
+      <div class="scan-date-row"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button><span id="scan-result-count"></span></div>
+      <div id="scan-lists" class="scan-pills" role="group" aria-label="Scan list"><button data-list="discover">Discover</button><button data-list="focus">Focus</button><button data-list="wait">Wait</button><button data-list="hidden">Hidden</button></div>
+      <div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div><button id="tag-add" aria-label="Create Tag">+</button></div>
+      <details id="filter-editor"><summary>Filters <span id="filter-count"></span><span id="tag-unsaved" hidden>Unsaved</span></summary>
+        <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
+        <div id="filter-rules" class="filter-rules"></div>
+      </details>
+      <div class="scan-batch"><label><input type="checkbox" id="scan-select-all"> Select all results</label><select id="scan-sort" aria-label="Scan sort"><option value="default">Default order</option><option value="rfl1m">RFL 1M</option><option value="rfl3m">RFL 3M</option><option value="rfl6m">RFL 6M</option></select></div>
+      <div id="scan-move" class="scan-move"><span>Move to</span><button data-target="discover">Discover</button><button data-target="focus">Focus</button><button data-target="wait">Wait</button><button data-target="hidden">Hidden</button></div>
+      <div id="scan-error" class="list-message" role="alert"></div>
+    </section>
     <div id="workspace-error" class="list-message" role="alert"></div>
     <div id="list-notice" class="list-message" role="status"></div>
     <nav id="symbols" aria-label="Symbols"></nav>

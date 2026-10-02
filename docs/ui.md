@@ -1,14 +1,26 @@
 # Chart layout and interactions
 
-Updated: 2026-09-24. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
+Updated: 2026-10-02. Approved interaction specification and maintenance reference. The product UI is English only. No localization layer.
 
 ## Layout
 
-- Three full-height columns: Daily, Intraday, watchlist. The two charts start at equal widths; the list is narrower (38% / 38% / 24%).
+- Monitor has three full-height columns: Daily, Intraday, watchlist. The two charts start at equal widths; the list is narrower (38% / 38% / 24%).
 - Two draggable vertical dividers resize adjacent columns. Minimum widths keep charts and the four list columns usable. Remember widths locally; double-click a divider restores the equal-chart default.
 - No application header, brand, description, global instrument banner or footer. Daily owns the enlarged symbol; Intraday owns the equally styled headline price and ET clock. Both charts show OHLC.
 - White floating chart cards with generous corners on a neutral background. Black section boundaries and divider handles; the main/volume separator is gray and price-scale vertical borders are hidden.
 - Search, period selector and its selected button, price-session tags and resize handles are pills. The list count is plain text.
+
+## Scan mode
+
+- Mode buttons live inside the watchlist panel. Switching changes the global backend mode and all open clients. Monitor shows Daily/Intraday/Focus/Wait; Scan shows the same Daily Panel plus a wider list, with Intraday and its divider hidden.
+- Scan uses upstream closed Daily bars up to the selected trading date. Focus/Wait rows use this same source while in Scan. No live candle, intraday periods, broker lookup or realtime Ready state; the selected date appears in chart status.
+- Date selector and Refresh Scan appear above Discover/Focus/Wait/Hidden buttons. Refresh recomputes the selected completed day and retains its manual list state. Historical dates are read-only for list edits.
+- Scan row columns are Symbol, Price, ADR20, ADV20. A second line shows RFL1M/3M/6M and NEW/RETURNED. Membership checkbox is independent of the chart selection. Hide moves Discover to Hidden; Return moves Hidden to Discover; Focus/Wait Delete removes its saved status.
+- Filters have 38 fields, grouped by Market, MA arrangement and atomic feature families. Numeric Any/≥/≤/range and classification options use the one catalog. Conditions are AND, choices within a classification are OR, and missing values only match Any or the explicit Missing classification.
+- Tags preserve filters. Default always exists; maximum ten, unique names. Create clones saved filters; edit previews immediately; Save persists and folds the editor, Cancel restores saved values. Unsaved tag switching needs an explicit discard action. Failed save keeps the draft.
+- List/sort preference writes preserve unsaved filter drafts. RFL1M/3M/6M sorting changes display only; Default order uses saved list order or Discover priority/rank order. Manual Focus/Wait ordering is available only under Default sort.
+- Select all checks visible filtered results; destination buttons move that selection as a single block at the top. Date/list/filter changes clear checkboxes. Read-only history disables membership controls. Search and chart keyboard navigation reuse the same list implementation.
+- Synthetic Scan data carries a MOCK badge. The standalone Monitor simulator uses SIM and disables mode switching. Neither fixture is a live validation result.
 
 ## Chart settings
 
@@ -24,7 +36,7 @@ Updated: 2026-09-24. Approved interaction specification and maintenance referenc
 ## Chart information
 
 - Both chart headers and the watchlist header share a 120px height and one bottom border, aligning all three panels. The watchlist column labels have no top border. Daily shows only the symbol at top-left (no Daily tag); Intraday shows the current price there with the same 28px size, weight and color. Its ET clock is 15px. The extended-session pill sits immediately to the clock’s left, both 26px high; regular sessions show no pill. Period controls sit on the next row.
-- Only Daily displays ADR20 and ADV20. Intraday displays the current price and any extended-session pill. Available Sell/Bid and Buy/Ask quotes remain optional.
+- Only Daily displays ADR20 and ADV20, using the same formulas in both modes: recent up to20 closed records, mean (H-L)/L×100 and mean close×volume. Intraday displays the current price and any extended-session pill. Available Sell/Bid and Buy/Ask quotes remain optional.
 - EMA/SMA legends pair colored line swatches with concise labels: EMA 10, EMA 20, and SMA 50 for Daily or SMA 65 for Intraday. They do not show current indicator values.
 - OHLC sits immediately below the aligned black horizontal border on each chart, at 15px; ADR/ADV also use 15px. OHLC fields stay together and wrap on narrow panels. Native chart axes use 12px. Shared CSS font variables keep other small labels at 11px, list values at 12px and body text at 13px. Add Range = (H-L)/L × 100%; H/L values and Range value are black, other labels/values retain their original color.
 - Intraday active volume uses a cached official closed portion plus the current 5m Quote-counter delta. Missing initialization after startup/recovery shows no volume until a usable boundary; closed official bars replace estimates. Daily retains the regular cumulative volume.
@@ -53,7 +65,7 @@ Updated: 2026-09-24. Approved interaction specification and maintenance referenc
 - The placeholder is always Search. Filter existing tickers immediately; during search show only sections with matches, with no empty sections or No matches message. Hide quote column labels when no local rows match. With no exact local ticker, one second of idle input triggers a static_info lookup. Show a valid candidate (blue ticker, security name, Add) directly above any matching list sections; omit destination and keyboard hints. Do not save on lookup. Discard results belonging to previous input or an exited search.
 - Enter selects an exact existing ticker, otherwise the first displayed local result. A displayed new candidate takes precedence over partial local matches; Enter validates and inserts it first in the destination section, selects it, then exits search. Enter with no local match can start the lookup immediately or await the same pending request. Clicking a candidate uses the same commit action. A ticker not found leaves the results blank; request/save failures retain an inline error. Existing tickers are never moved by searching.
 - Outside search, Focus and Wait remain visible, including when empty. Their order is fixed. Search temporarily reveals matching collapsed sections; selecting a result expands its section so the selected row is visible. Market suffixes are not displayed.
-- Drag a row within or between sections. A line shows before/after row placement; dropping on a header inserts first, and an empty section accepts drops. Search uses visible rows as anchors into the full list. Mouse release submits immediately; no delayed persistence. Only the dragged ticker receives a new local status date.
+- Drag a row within or between sections. A line shows before/after row placement; dropping on a header inserts first, and an empty section accepts drops. Search uses visible rows as anchors into the full list. Mouse release submits immediately; no delayed persistence. Only the dragged ticker receives the current workspace date as status_at.
 - The selected row has a rounded black inset border and no background change; only unselected hovered rows get a gray background. Each row has a round Delete button with a line-drawn trash icon, revealed on hover or keyboard focus. Delete removes it from Focus/Wait; it never moves to hidden. If the selection disappears, select the first remaining ticker; an empty list clears both charts and keeps both + controls available.
 - Incoming workspace changes and new trading-day files refresh the list automatically. No refresh button. Editing is disabled for bounded --symbols sessions. Simulator edits a temporary copy and labels successful additions as simulated, without broker validation.
 - Use the Loading / yellow Ready / blue Ready / error-icon rules below; no multi-line banner. Keep details in hover text.
@@ -61,8 +73,8 @@ Updated: 2026-09-24. Approved interaction specification and maintenance referenc
 
 ## Data and simulator boundaries
 
-- One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics; POST /v1/list performs edits. Independent list messages on the existing WebSocket refresh membership even without a chart selection. A chart GET must not change selection priority.
-- Keep request_id and socket identity checks. Switching periods preserves the selected trading day and native viewport behavior. Indicators are calculated only in Python.
+- One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics; POST /v1/list performs edits. POST /v1/mode, /v1/scan and /v1/preferences handle mode, generation/date and saved tags. Independent list messages on the existing WebSocket refresh membership even without a chart selection. A chart GET must not change selection priority.
+- Keep mode, request_id and socket identity checks. Mode/date changes reset chart context; backend run_id changes force full history. Switching periods preserves the selected trading day and native viewport behavior. Indicators are calculated only in Python.
 - 2h/4h are always converted from official closed 5m bars. Missing official 15m/30m/1h history uses the same 5m conversion; official rows replace the display at the next stream update. All conversions remain in memory.
 - 5m history spans roughly 13 full sessions at the 1000-response limit. Larger derived periods share that time coverage; insufficient SMA65 history means the line is absent.
 - Simulator uses the same UI, scheduler, validation and conversion against temporary data, with an instance exchange clock. It never reads credentials or falls back to a broker.

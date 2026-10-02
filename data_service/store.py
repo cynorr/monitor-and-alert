@@ -10,6 +10,12 @@ from pathlib import Path
 
 from .calendar import PHASES, TradingCalendar
 
+BAR_SCHEMA = '''CREATE TABLE bars (
+    symbol TEXT NOT NULL, timeframe TEXT NOT NULL, ts INTEGER NOT NULL,
+    open REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL,
+    close REAL NOT NULL, volume INTEGER NOT NULL, turnover REAL,
+    PRIMARY KEY(symbol, timeframe, ts));'''
+
 
 @dataclass(frozen=True)
 class Bar:
@@ -66,13 +72,7 @@ class BarStore:
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('PRAGMA synchronous=NORMAL')
-        self.db.executescript('''
-            CREATE TABLE IF NOT EXISTS bars (
-                symbol TEXT NOT NULL, timeframe TEXT NOT NULL, ts INTEGER NOT NULL,
-                open REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL,
-                close REAL NOT NULL, volume INTEGER NOT NULL,
-                PRIMARY KEY(symbol, timeframe, ts)
-            );
+        self.db.executescript(BAR_SCHEMA.replace('CREATE TABLE bars', 'CREATE TABLE IF NOT EXISTS bars') + '''
             CREATE TABLE IF NOT EXISTS batches (
                 symbol TEXT NOT NULL, timeframe TEXT NOT NULL,
                 run_id TEXT NOT NULL, as_of INTEGER NOT NULL, payload TEXT NOT NULL,
@@ -128,15 +128,7 @@ class BarStore:
     def bars(self, symbol: str, timeframe: str, start: int = 0, end: int = 2**62,
              limit: int | None = None) -> list[Bar]:
         self.check(symbol)
-        sql = 'SELECT * FROM bars WHERE symbol=? AND timeframe=? AND ts BETWEEN ? AND ? ORDER BY ts'
-        args = [symbol, timeframe, start, end]
-        if limit is not None:
-            sql += ' DESC LIMIT ?'
-            args.append(limit)
-        rows = list(self.db.execute(sql, args))
-        if limit is not None:
-            rows.reverse()
-        return [Bar(**dict(row)) for row in rows]
+        return read_bars(self.db, symbol, timeframe, start, end, limit)
 
     def batch(self, symbol: str, timeframe: str) -> dict | None:
         self.check(symbol)
@@ -151,3 +143,15 @@ class BarStore:
 
     def close(self) -> None:
         self.db.close()
+
+
+def read_bars(db, symbol, timeframe, start=0, end=2**62, limit=1000):
+    sql = 'SELECT * FROM bars WHERE symbol=? AND timeframe=? AND ts BETWEEN ? AND ? ORDER BY ts'
+    args = [symbol, timeframe, start, end]
+    if limit is not None:
+        sql += ' DESC LIMIT ?'
+        args.append(limit)
+    rows = list(db.execute(sql, args))
+    if limit is not None:
+        rows.reverse()
+    return [Bar(**dict(row)) for row in rows]

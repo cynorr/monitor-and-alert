@@ -45,11 +45,15 @@ export type Quote = {
     error: string | null;
 };
 export type Ticker = {
+    [key: string]: unknown;
     symbol: string;
     ticker: string;
     status: string;
     quote?: Quote;
     errors?: string[];
+    close?: number | null;
+    adr20?: number | null;
+    adv20?: number | null;
 };
 export type View = {
     type?: string;
@@ -59,13 +63,15 @@ export type View = {
     server_time: number;
     run_id: string;
     mode?: string;
+    app_mode?: 'scan' | 'monitor';
+    mock?: boolean;
+    date?: string;
     charts: Record<string, ChartData>;
     quote: Quote;
     summary: {
         adr20: number | null;
         adv20: number | null;
         samples: number;
-        estimated: boolean;
     };
     status: {
         stage: 'loading' | 'basic' | 'full';
