@@ -64,6 +64,7 @@ def create_app(service, cors_origin=None):
         await ws.prepare(request)
         sockets.add(ws)
         symbol, tf = service.focus
+        source = 'watchlist'
         request_id = 0
         revisions = {}
         context = service.run_id
@@ -79,7 +80,7 @@ def create_app(service, cors_origin=None):
                         await ws.send_json({'type': 'list', **service.list_state()})
                         last_board = asyncio.get_running_loop().time()
                     if symbol in service.symbols:
-                        view = service.view(symbol, tf, revisions)
+                        view = service.view(symbol, tf, revisions, source=source)
                         revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
                         message = {'type': 'view', 'request_id': request_id, **view}
                         await ws.send_json(message, dumps=lambda v: json.dumps(v, allow_nan=False))
@@ -101,11 +102,14 @@ def create_app(service, cors_origin=None):
                         if payload.get('type') != 'select':
                             raise ValueError('Expected select message')
                         new_symbol, new_tf = payload['symbol'], payload['timeframe']
+                        new_source = payload.get('source', 'watchlist')
+                        if new_source not in ('watchlist', 'holdings'):
+                            raise ValueError('Unknown selection source')
                         if payload.get('mode') and payload['mode'] != ('scan' if service.mode == 'scan' else 'monitor'):
                             raise ValueError('Selection belongs to a previous mode')
                         new_id = int(payload['request_id'])
-                        service.select(new_symbol, new_tf)
-                        symbol, tf, request_id = new_symbol, new_tf, new_id
+                        service.select(new_symbol, new_tf, source=new_source)
+                        symbol, tf, source, request_id = new_symbol, new_tf, new_source, new_id
                         revisions = {}
                     except (ValueError, TypeError, KeyError, AttributeError) as exc:
                         await ws.send_json({'type': 'error', 'error': str(exc)})

@@ -1,8 +1,9 @@
-import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress } from './types.js';
+import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
+import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
 const layout = initLayout();
@@ -17,7 +18,7 @@ const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), ap
 const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode = 'monitor', scanDate = '', modePending = false;
 let listRegularSession = false;
-const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (!rows.some(row => row.symbol === symbol))
+const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
 function applyList(data) {
@@ -57,7 +58,7 @@ function applyList(data) {
         if (first)
             select(first.symbol, timeframe, 'holdings', first.key);
         else
-            select(data.board[0]?.symbol ?? '', timeframe, 'watchlist');
+            select(scan.visible(data.board)[0]?.symbol ?? '', timeframe, 'watchlist');
     }
     else if (!symbol && holdings.first()) {
         const first = holdings.first();
@@ -76,8 +77,10 @@ function state(text, kind = '') {
     }
 }
 function showState(view) {
-    if (appMode === 'scan') {
-        state(view.date ?? '');
+    if (appMode === 'scan' || view.read_only_daily) {
+        $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
+        $('intraday-state').textContent = '';
+        document.querySelectorAll('.quality').forEach(node => { node.hidden = !view.status.errors.length; node.title = view.status.errors.join('\n'); });
         return;
     }
     const errors = [...view.status.errors, ...(view.quote.error ? ['Quote: ' + view.quote.error] : [])];
@@ -103,12 +106,17 @@ function apply(view) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
+    document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
         holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
     daily.render(view.charts['1d']);
-    if (appMode === 'monitor') {
+    if (appMode === 'monitor' && !view.read_only_daily) {
         intraday.render(view.charts[timeframe]);
         dayLink.restore();
+    }
+    else if (view.read_only_daily) {
+        intraday.reset('review/' + symbol);
+        $('intraday-empty').textContent = 'Add to Focus for live data';
     }
     const extended = extendedQuote(view.quote), quote = extended ?? view.quote.regular;
     document.querySelectorAll('.last-price').forEach(node => node.textContent = money(quote?.last_price));
@@ -130,6 +138,8 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
     timeframe = tf;
     ++epoch;
     currentView = null;
+    const preview = appMode === 'monitor' && isReviewSelection(watchlist.tickers.find(row => row.symbol === next), source);
+    document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = preview; });
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
@@ -148,7 +158,7 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
 }
 function sendSelection() {
     if (symbol && socket?.readyState === WebSocket.OPEN)
-        socket.send(JSON.stringify({ type: 'select', symbol, timeframe, request_id: epoch, mode: appMode }));
+        socket.send(JSON.stringify(selectionRequest(symbol, timeframe, epoch, appMode, selectionSource)));
 }
 function connect() {
     clearTimeout(reconnectTimer);

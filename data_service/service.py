@@ -107,28 +107,35 @@ class DataService:
                 'workspace_error': self.workspace.error if self.workspace else None}
 
     async def list_action(self, payload):
-        from .workspace import normalize_ticker, SECTIONS
+        from .workspace import normalize_ticker
         if self.workspace is None or self.workspace_subset is not None:
             raise ValueError('List editing unavailable for this session')
         action, ticker = payload.get('action'), normalize_ticker(payload.get('ticker', ''))
         section = payload.get('section')
         if action in {'lookup', 'add'}:
             if action == 'add':
-                if section not in SECTIONS:
-                    raise ValueError('Invalid section')
-                if self.workspace.section(ticker):
-                    return {**self.list_state(), 'notice': 'Ticker already in Focus or Wait'}
+                if payload.get('list_name', 'focus') != 'focus':
+                    raise ValueError('Add new tickers to Focus')
+                if self.workspace.section(ticker) == 'focus':
+                    self.workspace.keep_ticker(ticker)
+                    return {**self.list_state(), 'notice': 'Ticker already in Focus'}
             if self.broker is None:
                 raise ValueError('Ticker validation unavailable')
             info = await self.broker.validate_ticker(ticker)
             if action == 'lookup':
                 return {'ticker': ticker, 'name': info['name']}
-            self.workspace.add_ticker(ticker, section)
+            self.workspace.add_ticker(ticker, 'focus')
+            if section not in (None, 'focus', 'wait', 'unclassified'):
+                self.workspace.move_ticker(ticker, section, 0)
             return {**self.list_state(), 'notice': f"Added {ticker} · {info['name']}"}
         if action == 'delete':
             self.workspace.delete_ticker(ticker)
         elif action == 'move':
-            self.workspace.move_ticker(ticker, section, payload.get('index'))
+            self.workspace.move_ticker(ticker, section, payload.get('index'), list_name=payload.get('list_name', 'focus'))
+        elif action == 'keep':
+            self.workspace.add_ticker(ticker, 'focus')
+        elif action == 'tag':
+            self.workspace.set_manual_tags(ticker, payload.get('tags', []))
         else:
             raise ValueError('Unknown list action')
         return self.list_state()
@@ -136,7 +143,7 @@ class DataService:
     def validate(self, symbol, now=None):
         return self.validator.validate(symbol, int(self.now()) if now is None else now)
 
-    def select(self, symbol, timeframe):
+    def select(self, symbol, timeframe, source='watchlist'):
         self.store.check(symbol)
         if timeframe not in INTRADAY:
             raise ValueError('Invalid intraday timeframe')
@@ -273,7 +280,7 @@ class DataService:
             result['regular'] = {**regular, 'prev_close': previous or regular.get('prev_close')}
         return result
 
-    def view(self, symbol, tf, revisions=None):
+    def view(self, symbol, tf, revisions=None, source='watchlist'):
         self.store.check(symbol)
         if tf not in INTRADAY:
             raise ValueError('Invalid chart timeframe')
@@ -292,7 +299,8 @@ class DataService:
         result = []
         for ticker in self.tickers:
             state = self.status(ticker.symbol, now)
-            result.append({**asdict(ticker), 'quote': self.quote(ticker.symbol, now),
+            member = self.workspace.data['statuses'].get(ticker.ticker, {}) if self.workspace else {}
+            result.append({**member, **asdict(ticker), 'quote': self.quote(ticker.symbol, now),
                            'errors': state['errors']})
         return result
 

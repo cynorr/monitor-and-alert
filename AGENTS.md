@@ -1,9 +1,9 @@
 # 项目入口：Market Monitor
 
-先读 [README.md](README.md)；开发读 [docs/development.md](docs/development.md)，产品逻辑读 [docs/behavior.md](docs/behavior.md)，UI 改动另读 [docs/ui.md](docs/ui.md)。这些是唯一维护入口，用户当前要求优先于文档。
+先读 [README.md](README.md)；开发读 [docs/development.md](docs/development.md)，产品逻辑读 [docs/behavior.md](docs/behavior.md)，List/Tag/Filter 另读 [docs/list-design.md](docs/list-design.md)，UI 改动另读 [docs/ui.md](docs/ui.md)。这些是唯一维护入口，用户当前要求优先于文档。
 
 - 单进程 Python + SQLite + 本机 WebSocket + TypeScript；不新增服务、消息中间件或通用适配框架。
-- 每次启动重读 workspace；只请求/订阅 focus、wait 与 SnapTrade 当前 holdings。Holdings 归属独立，同 ticker 仅底层行情去重；不以历史报告中的 ticker 作为白名单。
+- 每次启动重读 workspace；只请求/订阅 focus 与 SnapTrade 当前 holdings；Discover 和 Excluded（含 Review）只用本地 Massive Daily。Holdings 归属独立，同 ticker 仅底层行情去重；不以历史报告中的 ticker 作为白名单。
 - 唯一正式 SDK 入口是 broker.py。只订阅 Quote；UI 不调用券商。
 - Longbridge bars 只存官方 NoAdjust、regular、closed 的五个周期；Massive Daily 单独存库，采用拆股复权与 HALF_UP 整数成交量，保留供应商 Daily 时段口径。共用 Bar、指标和显示，不拼接或交叉验证来源。2h/4h 及其他合成数据只在内存。
 - OHLC 正数有限值与基本结构必须验证；仅上下界矛盾保留官方原值，追加 invalid_ohlc.jsonl，不修正、不告警、不重试。

@@ -202,3 +202,20 @@ button:disabled { cursor: default; opacity: .45; }
 .holdings-table th[aria-sort="descending"] button { color: #161b22; }
 .holdings-table th[aria-sort="descending"] button::after { content: ""; position: absolute; left: 50%; top: calc(100% + 1px); transform: translateX(-50%); border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 3px solid currentColor; }
 .holdings-table.holdings-measure { position: absolute; visibility: hidden; pointer-events: none; width: max-content; min-width: 0; left: 0; top: 0; }
+
+/* One ticker row owns compact multi-Tag details and a single primary section. */
+.symbol-row { height: 44px; grid-template-rows: 26px 16px; }
+.symbol-row > .delete-ticker { grid-column: 5; grid-row: 1 / 3; }
+.row-detail { display: flex; align-items: center; gap: 6px; padding-left: 0; min-width: 0; }
+.workspace[data-mode="scan"] .row-detail { padding-left: 18px; }
+.row-tags { display: inline-flex; gap: 3px; overflow: hidden; flex-shrink: 1; }
+.row-tag { border-radius: 4px; padding: 0 4px; color: #58616c; background: #edf0f4; font-size: 10px; }
+.row-tag.manual { color: #2d5d96; background: #eaf2ff; }
+.rfl-detail { overflow: hidden; text-overflow: ellipsis; }
+.tag-edit { font-size: 10px; color: #747c87; padding: 0 2px; margin-left: auto; opacity: 0; }
+.symbol-row:hover .tag-edit, .symbol-row:focus-within .tag-edit { opacity: 1; }
+.manual-tag-editor { padding: 4px 8px 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+.manual-tag-editor button { border: 1px solid #d6dce4; padding: 3px 6px; border-radius: 999px; font-size: var(--font-small); }
+.manual-tag-editor button[aria-pressed="true"] { color: #2d5d96; background: #eaf2ff; border-color: #abc9ee; }
+.tag-editor select { border: 0; border-radius: 999px; background: var(--surface-muted); padding: 6px 8px; }
+.review-section { border-top: 1px solid var(--border); }

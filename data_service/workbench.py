@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import sqlite3
 import time
 import uuid
 from contextlib import closing
@@ -11,9 +13,12 @@ from copy import deepcopy
 from .calendar import TradingCalendar
 from .paths import RuntimePaths
 from .preferences import DEFAULT, validate_preferences
-from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date
+from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot
 from .service import DataService
 from .workspace import derive_day_view, normalize_ticker
+from .store import atomic_json
+
+log = logging.getLogger(__name__)
 
 
 class Workbench:
@@ -35,10 +40,39 @@ class Workbench:
         self.snapshot_cache, self.chart_cache, self.previous_cache = {}, {}, {}
         self.switching = self.generating = False
         self.preferences_path = runtime / 'preferences.json'
-        self.preferences = json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(DEFAULT)
+        self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(DEFAULT))
+        self.list_context = self._list_context()
         workspace.on_change = self.workspace_changed
 
+    def _list_context(self):
+        states = self.workspace.data['statuses']
+        return (self.workspace.date, frozenset(ticker for ticker, state in states.items() if state.get('status') == 'focus'),
+                frozenset(ticker for ticker, state in states.items() if state.get('status') == 'excluded' and state.get('section') == 'review'))
+
+    async def prepare_lists(self):
+        """Refresh saved classifications from local Daily; never download on reads."""
+        value = self.workspace.date
+        if not self.has_snapshot(value):
+            return
+        tracked, hidden = workspace_scope(self.workspace.root, value)
+        snapshot = self.snapshot(value)
+        if self.daily_path.is_file():
+            updated = await asyncio.to_thread(enrich_snapshot, self.daily_path, snapshot, self.calendar,
+                                             tracked_tickers=tracked, hidden_tickers=hidden,
+                                             log_path=self.runtime / 'invalid_ohlc.jsonl')
+            if updated != snapshot:
+                atomic_json(self.workspace.root / value / 'scan.json', updated)
+                self.snapshot_cache.pop(value, None)
+                self.chart_cache.clear()
+                snapshot = updated
+        if self.workspace.date == value:
+            self.workspace.reclassify(snapshot, self.preferences)
+
     def workspace_changed(self):
+        context = self._list_context()
+        if context != self.list_context:
+            self.list_context = context
+            self.run_id = uuid.uuid4().hex
         if self.selected_date == self.latest_date:
             self.selected_date = self.workspace.date
         self.latest_date = self.workspace.date
@@ -88,6 +122,12 @@ class Workbench:
             self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
 
     async def start_background(self):
+        if self.only is None:
+            try:
+                await self.prepare_lists()
+            except (OSError, ValueError, sqlite3.Error):
+                self.workspace.error = 'Could not refresh List from local Daily'
+                log.warning('Local List preparation failed; keeping the saved workspace')
         if not self.mock or self.mode == 'monitor':
             self.start_monitor()
         if self.pipeline and self.pipeline_task is None:
@@ -99,6 +139,8 @@ class Workbench:
         self.snapshot_cache.clear()
         self.chart_cache.clear()
         self.previous_cache.clear()
+        if self.has_snapshot(self.workspace.date):
+            self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences)
         self.run_id = uuid.uuid4().hex
 
     async def stop_monitor(self):
@@ -164,22 +206,41 @@ class Workbench:
                 self.run_id = uuid.uuid4().hex
         return self.snapshot_cache[value][1]
 
-    def scan_board(self):
-        if not self.has_snapshot():
+    def scan_board(self, value=None):
+        value = value or self.selected_date
+        if not self.has_snapshot(value):
             return []
-        snapshot = self.snapshot()
-        data = self.workspace.data if self.selected_date == self.workspace.date else json.loads((self.workspace.root / self.selected_date / 'workspace.json').read_text())
-        view = derive_day_view(self.selected_date, candidates(snapshot), self.previous(), data)
+        snapshot = self.snapshot(value)
+        data = self.workspace.data if value == self.workspace.date else json.loads((self.workspace.root / value / 'workspace.json').read_text())
+        prior = previous_candidates(self.workspace.root, value) if value != self.selected_date else self.previous()
+        view = derive_day_view(value, candidates(snapshot), prior, data)
         rows = {row['symbol']: row for row in snapshot['rows']}
         priority = {ticker: index for index,ticker in enumerate(data.get('discover_order', []))}
         result = []
         for group, members in view.as_dict()['lists'].items():
             for index, ticker in enumerate(members):
                 symbol = ticker + '.US'
-                result.append({**rows.get(symbol, {}), 'symbol': symbol, 'ticker': ticker,
+                state = view.statuses.get(ticker, {})
+                result.append({**rows.get(symbol, {}), **state, 'symbol': symbol, 'ticker': ticker,
                                'status': group, 'order_index': index, 'discover_priority': priority.get(ticker),
                                'is_new': ticker in view.new, 'is_returned': ticker in view.returned})
         return result
+
+    def monitor_board(self):
+        local = {row['symbol']: row for row in self.scan_board(self.workspace.date)}
+        result = []
+        for row in self.monitor.board() if self.monitor else []:
+            state = self.workspace.data['statuses'].get(row['ticker'], {})
+            result.append({**local.get(row['symbol'], {}), **state, **row,
+                           'section': state.get('section', 'unclassified'), 'tags': state.get('tags', []),
+                           'manual_tags': state.get('manual_tags', []) if state.get('manual_tags_date') == self.workspace.date else []})
+        if self.only is None:
+            result.extend(row for row in local.values() if row['status'] == 'excluded' and row.get('section') == 'review')
+        return result
+
+    def is_review(self, symbol):
+        state = self.workspace.data['statuses'].get(symbol.removesuffix('.US'), {})
+        return state.get('status') == 'excluded' and state.get('section') == 'review'
 
     def previous(self):
         if self.selected_date not in self.previous_cache:
@@ -188,7 +249,10 @@ class Workbench:
 
     @property
     def symbols(self):
-        return (self.monitor.symbols if self.monitor else []) if self.mode == 'monitor' else [row['symbol'] for row in self.scan_board()]
+        if self.mode == 'monitor':
+            return list(dict.fromkeys((self.monitor.symbols if self.monitor else []) +
+                                     [row['symbol'] for row in self.scan_board(self.workspace.date) if self.only is None and row['status'] == 'excluded' and row.get('section') == 'review']))
+        return [row['symbol'] for row in self.scan_board()]
 
     @property
     def scan_mock(self):
@@ -196,62 +260,88 @@ class Workbench:
 
     def list_state(self):
         massive = self.pipeline.state() if self.pipeline else None
-        return {'board': self.monitor.board() if self.mode == 'monitor' and self.monitor else self.scan_board() if self.mode == 'scan' else [],
+        return {'board': self.monitor_board() if self.mode == 'monitor' else self.scan_board(),
                 'mode': self.monitor.mode if self.mode == 'monitor' and self.monitor else self.mode, 'app_mode': self.mode,
                 'editable': self.only is None and (self.mode == 'monitor' or (self.has_snapshot() and self.selected_date == self.workspace.date)),
-                'workspace_error': self.workspace.error, 'date': self.selected_date,
+                'workspace_error': self.workspace.error, 'date': self.workspace.date if self.mode == 'monitor' else self.selected_date,
                 'dates': sorted((p.parent.name for p in self.workspace.root.glob('*/scan.json')), reverse=True),
                 'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False,
                 'holdings': self.holdings_state(), 'massive': massive,
                 'scan_running': self.generating or bool(massive and massive['running'])}
 
-    def select(self, symbol, timeframe):
+    def select(self, symbol, timeframe, source='watchlist'):
         if self.mode == 'monitor':
-            self.monitor.select(symbol, timeframe)
+            if symbol not in self.symbols:
+                raise ValueError('Ticker is outside this Monitor workspace')
+            if source == 'holdings' or not self.is_review(symbol):
+                self.monitor.select(symbol, timeframe)
         elif symbol not in self.symbols:
             raise ValueError('Ticker is outside this Scan workspace')
         self.focus = symbol, timeframe
 
-    def view(self, symbol, tf, revisions=None):
-        if self.mode == 'monitor':
+    def view(self, symbol, tf, revisions=None, source='watchlist'):
+        review = self.mode == 'monitor' and source != 'holdings' and self.is_review(symbol)
+        if self.mode == 'monitor' and not review:
             return {**self.monitor.view(symbol, tf, revisions), 'app_mode': 'monitor'}
-        key = self.selected_date, symbol
+        value = self.workspace.date if review else self.selected_date
+        key = value, symbol
         if key not in self.chart_cache:
-            self.chart_cache[key] = daily_chart(self.daily_path, symbol, self.selected_date, self.calendar)
+            self.chart_cache[key] = daily_chart(self.daily_path, symbol, value, self.calendar)
         chart, summary = self.chart_cache[key]
         if revisions and revisions.get('1d') == chart['revision']:
             chart = {key:value for key,value in chart.items() if key not in ('bars','indicators')}
-        return {'symbol': symbol, 'timeframe': tf, 'app_mode': 'scan', 'mode': 'scan', 'mock': self.scan_mock,
-                'date': self.selected_date, 'run_id': self.run_id, 'server_time': int(time.time()),
+        return {'symbol': symbol, 'timeframe': tf, 'app_mode': self.mode, 'mode': self.mode, 'mock': self.scan_mock,
+                'read_only_daily': review, 'date': value, 'run_id': self.run_id, 'server_time': int(time.time()),
                 'charts': {'1d': chart}, 'summary': summary, 'status': {'stage': 'full','errors': []},
                 'quote': {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}}
 
     async def list_action(self, payload):
         if not self.list_state()['editable']:
             raise ValueError('List editing unavailable for this session')
-        if self.mode == 'monitor':
-            # Existing mutations share the same Workspace and its single callback.
-            self.monitor.workspace = self.workspace
-            return {**await self.monitor.list_action(payload), **self.list_state()}
         action = payload['action']
         if action in ('lookup','add'):
             ticker = normalize_ticker(payload['ticker'])
-            with closing(connect_daily(self.daily_path)) as db:
-                exists = db.execute("SELECT 1 FROM bars WHERE symbol=? AND timeframe='1d' LIMIT 1", (ticker + '.US',)).fetchone()
-            if not exists:
-                raise ValueError('US ticker not found')
+            if self.mode == 'monitor':
+                info = await self.monitor.broker.validate_ticker(ticker)
+            else:
+                with closing(connect_daily(self.daily_path)) as db:
+                    exists = db.execute("SELECT 1 FROM bars WHERE symbol=? AND timeframe='1d' LIMIT 1", (ticker + '.US',)).fetchone()
+                if not exists:
+                    raise ValueError('US ticker not found')
+                info = {'name': 'Daily database'}
             if action == 'lookup':
-                return {'ticker': ticker, 'name': 'Daily database'}
-            self.workspace.add_ticker(ticker, payload['section'])
+                return {'ticker': ticker, 'name': info['name']}
+            if payload.get('list_name', 'focus') != 'focus':
+                raise ValueError('Add new tickers to Focus')
+            section = payload.get('section', 'unclassified')
+            section = 'unclassified' if section in ('focus', 'wait') else section
+            sections = {'unclassified'} | {tag['id'] for tag in self.preferences['tags'] if tag['role'] == 'setup'}
+            if section not in sections:
+                raise ValueError('Unknown setup section')
+            self.workspace.add_ticker(ticker, 'focus')
+            if section != 'unclassified':
+                self.workspace.move_ticker(ticker, section, 0)
         elif action == 'delete':
             self.workspace.delete_ticker(normalize_ticker(payload['ticker']))
-        elif action == 'move' and payload.get('section') in ('focus','wait') and not payload.get('tickers'):
-            self.workspace.move_ticker(normalize_ticker(payload['ticker']), payload['section'], payload['index'])
+        elif action == 'keep':
+            self.workspace.keep_ticker(normalize_ticker(payload['ticker']))
+        elif action == 'tag':
+            if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags'] if tag['id'] != 'default'}:
+                raise ValueError('Unknown Tag')
+            self.workspace.set_manual_tags(normalize_ticker(payload['ticker']), payload['tags'])
+        elif action == 'move' and not payload.get('tickers'):
+            sections = {'unclassified', 'focus', 'wait'} | {tag['id'] for tag in self.preferences['tags'] if tag['role'] == 'setup'}
+            if payload['section'] not in sections:
+                raise ValueError('Unknown setup section')
+            self.workspace.move_ticker(normalize_ticker(payload['ticker']), payload['section'], payload['index'],
+                                      list_name=payload.get('list_name', 'focus'))
         elif action == 'move':
-            self.workspace.move_members(payload['tickers'], payload['source'], payload['target'], candidates(self.snapshot()),
-                                        self.previous())
+            snapshot = self.snapshot(self.workspace.date)
+            self.workspace.move_members(payload['tickers'], payload['source'], payload['target'], candidates(snapshot),
+                                        previous_candidates(self.workspace.root, snapshot['date']))
         else:
             raise ValueError('Unknown list action')
+        await self.prepare_lists()
         return self.list_state()
 
     async def action(self, resource, payload):
@@ -277,8 +367,10 @@ class Workbench:
                             self.selected_date = snapshot['date']
                     else:
                         value = payload.get('date') or latest_completed_date(self.daily_path)
+                        tracked, hidden = workspace_scope(self.workspace.root, value)
                         snapshot = await asyncio.to_thread(build_day, self.daily_path, value, self.calendar,
-                                                            log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.mock)
+                                                            log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.mock,
+                                                            tracked_tickers=tracked, hidden_tickers=hidden)
                         publish_day(self.workspace.root, snapshot)
                         self.scan_published()
                         self.selected_date = snapshot['date']
@@ -289,6 +381,7 @@ class Workbench:
             updated = validate_preferences(deepcopy(payload))
             self.preferences_path.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + '\n')
             self.preferences = updated
+            await self.prepare_lists()
             return self.list_state()
         raise ValueError('Unknown action')
 
@@ -307,6 +400,8 @@ class Workbench:
         if path == '/v1/filter-catalog':
             from .preferences import CATALOG
             return CATALOG
+        if path == '/v1/chart' and self.mode == 'monitor' and self.is_review(query['symbol'][0]):
+            return self.view(query['symbol'][0], query.get('timeframe', ['5m'])[0], source=query.get('source', ['watchlist'])[0])
         if self.mode == 'monitor':
             return await self.monitor.api(path, query)
         if path == '/v1/chart':

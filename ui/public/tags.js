@@ -1,4 +1,5 @@
-export const tagChanged = (saved, draft) => saved.name !== draft.name || JSON.stringify(saved.filters) !== JSON.stringify(draft.filters);
+export const tagRole = (tag) => tag.role ?? (tag.id === 'default' ? 'label' : ['extended', 'broken'].includes(tag.name.toLowerCase()) ? tag.name.toLowerCase() : 'setup');
+export const tagChanged = (saved, draft) => saved.name !== draft.name || tagRole(saved) !== tagRole(draft) || JSON.stringify(saved.filters) !== JSON.stringify(draft.filters);
 export function withSavedTag(tags, draft) {
     const name = draft.name.trim();
     if (!name || name.length > 24 || tags.some(tag => tag.id !== draft.id && tag.name.toLowerCase() === name.toLowerCase()))

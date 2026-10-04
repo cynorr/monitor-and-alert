@@ -60,12 +60,12 @@ def test_hidden_calendar_boundary_inheritance_and_carried():
             'CARRY': {'status':'focus','status_at':'2026-09-23'}},
             'orders': {'focus':['CARRY'], 'wait':[], 'hidden':['A']}}
     hidden = derive_day_view('2026-09-29', {'A','NEW'}, {'A'}, data)
-    assert hidden.hidden == ('A',) and hidden.new == {'NEW'}
+    assert hidden.excluded == ('A',) and hidden.new == {'NEW'}
     returned = derive_day_view('2026-09-30', {'A'}, {'A'}, data)
-    assert returned.returned == {'A'} and 'A' in returned.discover and not returned.hidden
+    assert returned.returned == {'A'} and 'A' in returned.discover and not returned.excluded
     inherited = inherit_workspace(data, {'A'}, {'A'}, '2026-10-01')
     assert set(inherited['statuses']) == {'CARRY'} and inherited['carried'] == ['CARRY']
-    assert 'A' not in inherit_workspace(data, set(), {'A'}, '2026-09-29')['statuses']
+    assert 'A' in inherit_workspace(data, set(), {'A'}, '2026-09-29')['statuses']
 
 
 def test_batch_move_once_and_same_day_generation_keeps_manual_state(app_data):
@@ -85,9 +85,9 @@ def test_batch_move_once_and_same_day_generation_keeps_manual_state(app_data):
     publish_day(ws.root, snapshot)
     assert ws.path.read_bytes() == before
     ws.move_members(['PAYS'], 'focus', 'hidden', members, set())
-    assert 'PAYS' in derive_day_view(ws.date, members, set(), ws.data).hidden
+    assert 'PAYS' in derive_day_view(ws.date, members, set(), ws.data).excluded
     ws.move_members(['PAYS'], 'hidden', 'discover', members, set())
-    assert 'PAYS' in ws.data['carried'] and ws.data['discover_order'][0] == 'PAYS'
+    assert 'PAYS' not in ws.data['statuses'] and 'PAYS' not in ws.data['orders']['discover']
 
 
 class FakeBroker:
@@ -147,7 +147,7 @@ def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):
         await asyncio.sleep(.1)
         first, task = brokers[0], app.monitor_task
         assert row['symbol'] in app.monitor.symbols
-        assert all(row['status'] in ('focus','wait') for row in app.list_state()['board'])
+        assert all(row['status'] == 'focus' for row in app.list_state()['board'])
         assert any(call[0]=='context' for call in first.calls)
         await app.switch_mode('scan')
         assert app.monitor is None and app.monitor_task is None and task.done() and first.closed
@@ -358,6 +358,102 @@ def test_mock_and_bounded_background_never_run_massive(app_data):
                 assert not brokers
             else:
                 assert brokers[0].allowed == {'NVDA.US'}
+            await app.close()
+    asyncio.run(scenario())
+
+
+def test_startup_classifies_local_lists_and_keeps_hidden_out_of_matching(app_data):
+    async def scenario():
+        app, brokers = make_app(app_data, mock=False)
+        app.preferences['tags'].append({'id': 'ext', 'name': 'Extended', 'role': 'extended',
+                                        'filters': {'adr20': {'min': 0}}})
+        app.workspace.data['statuses']['AAPL'] = {'status': 'excluded', 'section': 'hidden',
+                                                 'excluded_at': app.workspace.date, 'status_at': app.workspace.date}
+        app.workspace.data['orders']['excluded'] = ['AAPL']
+        await app.start_background()
+        try:
+            assert app.monitor is not None and brokers
+            assert app.workspace.data['statuses']['NVDA']['section'] == 'extended'
+            assert app.workspace.data['statuses']['NVDA']['status'] == 'excluded'
+            assert app.workspace.data['statuses']['AAPL']['section'] == 'hidden'
+            assert app.workspace.data['statuses']['AAPL']['tags'] == []
+            assert not app.monitor.symbols
+            assert all(row['status'] == 'excluded' for row in app.scan_board())
+        finally:
+            await app.close()
+    asyncio.run(scenario())
+
+
+def test_review_preview_holdings_source_and_focus_admission_share_only_intended_quotes(app_data):
+    async def scenario():
+        app, brokers = make_app(app_data)
+        app.workspace.data['statuses']['AAPL'] = {'status': 'excluded', 'section': 'review',
+                                                 'status_at': app.workspace.date, 'tags': []}
+        app.workspace.data['orders']['excluded'] = ['AAPL']
+        await app.prepare_lists()
+        await app.switch_mode('monitor')
+        try:
+            assert any(row['ticker'] == 'AAPL' and row['section'] == 'review' for row in app.list_state()['board'])
+            assert 'AAPL.US' in app.symbols and 'AAPL.US' not in app.monitor.symbols
+            before = list(brokers[0].calls)
+            app.select('AAPL.US', '5m')
+            preview = app.view('AAPL.US', '5m')
+            assert preview['read_only_daily'] and set(preview['charts']) == {'1d'}
+            assert brokers[0].calls == before and 'AAPL.US' not in brokers[0].allowed
+
+            app.monitor.update_holdings(['AAPL.US'])
+            app.select('AAPL.US', '5m', source='holdings')
+            live = app.view('AAPL.US', '5m', source='holdings')
+            assert not live.get('read_only_daily') and '5m' in live['charts']
+            assert app.view('AAPL.US', '5m')['read_only_daily']
+            assert not (await app.api('/v1/chart', {'symbol': ['AAPL.US'], 'source': ['holdings']})).get('read_only_daily')
+
+            old_run = app.run_id
+            await app.list_action({'action': 'move', 'source': 'excluded', 'target': 'focus', 'tickers': ['AAPL']})
+            assert app.run_id != old_run
+            assert app.workspace.data['statuses']['AAPL']['status'] == 'focus'
+            assert 'AAPL.US' in app.monitor.symbols
+            assert not app.view('AAPL.US', '5m').get('read_only_daily')
+        finally:
+            await app.close()
+    asyncio.run(scenario())
+
+
+def test_shared_actions_save_primary_section_manual_tags_and_daily_exclusion(app_data):
+    async def scenario():
+        app, brokers = make_app(app_data)
+        app.preferences['tags'].extend([
+            {'id': 'setup', 'name': 'Surf', 'role': 'setup', 'filters': {'below_days': {'max': -1}}},
+            {'id': 'ext', 'name': 'Extended', 'role': 'extended', 'filters': {'extended_k': {'min': 10000}}},
+        ])
+        await app.prepare_lists()
+        await app.list_action({'action': 'add', 'ticker': 'TSLA', 'list_name': 'focus', 'section': 'setup'})
+        assert app.workspace.data['statuses']['TSLA']['section'] == 'setup'
+        assert app.workspace.data['orders']['focus'][0] == 'TSLA'
+        await app.list_action({'action': 'tag', 'ticker': 'TSLA', 'tags': ['setup']})
+        row = next(row for row in app.scan_board() if row['ticker'] == 'TSLA')
+        assert row['tags'] == ['setup'] and row['manual_tags'] == ['setup']
+        await app.list_action({'action': 'tag', 'ticker': 'NVDA', 'tags': ['ext']})
+        assert app.workspace.data['statuses']['NVDA']['section'] == 'extended'
+        await app.list_action({'action': 'delete', 'ticker': 'TSLA'})
+        assert app.workspace.data['statuses']['TSLA']['section'] == 'hidden'
+        assert not brokers
+    asyncio.run(scenario())
+
+
+def test_failed_local_list_preparation_preserves_workspace_and_starts_monitor(app_data, monkeypatch):
+    async def scenario():
+        app, brokers = make_app(app_data, mock=False)
+        before = json.loads(json.dumps(app.workspace.data))
+        def failed(*args, **kwargs):
+            raise ValueError('Incomplete local daily')
+        monkeypatch.setattr('data_service.workbench.enrich_snapshot', failed)
+        await app.start_background()
+        try:
+            assert app.workspace.data == before
+            assert app.workspace.error == 'Could not refresh List from local Daily'
+            assert app.monitor is not None and len(brokers) == 1
+        finally:
             await app.close()
     asyncio.run(scenario())
 

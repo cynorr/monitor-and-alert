@@ -134,7 +134,7 @@ def main(argv=None):
             return 0 if state['ready'] else 2
         if args.command == 'scan':
             from .calendar import TradingCalendar
-            from .scan import build_day, publish_day, latest_completed_date
+            from .scan import build_day, publish_day, latest_completed_date, workspace_scope
             args.date = args.date or latest_completed_date(args.daily_db)
             args.runtime.mkdir(parents=True, exist_ok=True)
             with (args.runtime / 'service.lock').open('a') as lock:
@@ -142,8 +142,10 @@ def main(argv=None):
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
                     raise ValueError('A service already uses this runtime; generate through POST /v1/scan') from None
+                tracked, hidden = workspace_scope(args.days, args.date)
                 snapshot = build_day(args.daily_db, args.date, TradingCalendar(),
-                                     log_path=args.runtime / 'invalid_ohlc.jsonl', mock=args.mock_scan)
+                                     log_path=args.runtime / 'invalid_ohlc.jsonl', mock=args.mock_scan,
+                                     tracked_tickers=tracked, hidden_tickers=hidden)
                 publish_day(args.days, snapshot)
             print(f"{snapshot['date']}: {sum(row['candidate'] for row in snapshot['rows'])} candidates")
             return 0

@@ -4,11 +4,12 @@ import type { MassiveState } from './types.js';
 import type { Preferences } from './tags.js';
 import { post } from './api.js';
 import type { HoldingsState } from './holdings.js';
+import { collapseKey, listSections, rowTags, sectionKey } from './board.js';
 
 export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null; massive?: MassiveState | null; scan_running?: boolean };
 
 type Candidate = { ticker: string; name: string };
-type Search = { section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };
+type Search = { list: string; section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };
 
 export class Watchlist {
     scan?: ScanControls;
@@ -16,7 +17,9 @@ export class Watchlist {
     selected = '';
     keyboardEnabled = true;
     private editable = false;
-    private collapsed = new Set<string>();
+    private collapsed = new Set<string>(['monitor:excluded:review']);
+    private manualEditor = '';
+    private preferences?: Preferences;
     private rows = new Map<string, HTMLElement>();
     private key = '';
     private dragged = '';
@@ -35,7 +38,18 @@ export class Watchlist {
             if (this.suppressClick) return;
             const target = event.target as HTMLElement;
             const add = target.closest<HTMLElement>('[data-add]');
-            if (add) { this.beginSearch(add.dataset.add!); return; }
+            if (add) { this.beginSearch(add.dataset.add!, add.dataset.list ?? 'focus'); return; }
+            const edit = target.closest<HTMLElement>('[data-tag-edit]');
+            if (edit) { this.manualEditor = this.manualEditor === edit.dataset.tagEdit ? '' : edit.dataset.tagEdit!; this.render(); return; }
+            const tagToggle = target.closest<HTMLElement>('[data-manual-tag]');
+            if (tagToggle) {
+                const item = this.tickers.find(t => t.ticker === tagToggle.dataset.ticker)!;
+                const tags = new Set(item.manual_tags ?? []);
+                if (tags.has(tagToggle.dataset.manualTag!)) tags.delete(tagToggle.dataset.manualTag!); else tags.add(tagToggle.dataset.manualTag!);
+                void this.mutate({ action: 'tag', ticker: item.ticker, tags: [...tags] }); return;
+            }
+            const focus = target.closest<HTMLElement>('[data-to-focus]');
+            if (focus) { void this.mutate({ action: 'move', source: focus.dataset.source, target: 'focus', tickers: [focus.dataset.toFocus] }); return; }
             if (target.closest('[data-candidate]')) { void this.commitSearch(); return; }
             const toggle = target.closest<HTMLElement>('[data-toggle]');
             if (toggle) {
@@ -48,17 +62,17 @@ export class Watchlist {
             if (target.matches('[data-check]')) { this.scan?.toggle(row.dataset.symbol!); return; }
             if (target.closest('.delete-ticker')) {
                 const item = this.tickers.find(t => t.symbol === row.dataset.symbol)!;
-                if (this.scan?.enabled && ['discover','hidden'].includes(item.status))
-                    void this.mutate({ action: 'move', tickers: [item.ticker], source: item.status, target: item.status === 'hidden' ? 'discover' : 'hidden' });
-                else void this.mutate({ action: 'delete', ticker: row.dataset.ticker });
+                if (item.status === 'excluded')
+                    void this.mutate({ action: 'move', tickers: [item.ticker], source: 'excluded', target: 'discover' });
+                else void this.mutate({ action: 'delete', ticker: item.ticker });
             } else if (this.search) this.endSearch(row.dataset.symbol!);
             else this.onSelect(row.dataset.symbol!);
         });
         $('symbols').addEventListener('pointerdown', event => {
             const target = event.target as HTMLElement;
             const row = target.closest<HTMLElement>('[data-symbol]');
-            if (!row || target.closest('.delete-ticker,input') || !this.editable || this.busy || event.button !== 0 ||
-                (this.scan?.enabled && (!['focus','wait'].includes(this.scan.activeList) || !this.scan.manualOrder))) return;
+            if (!row || target.closest('button:not(.ticker),input,.manual-tag-editor') || !this.editable || this.busy || event.button !== 0 ||
+                !this.scan?.manualOrder || row.dataset.list === 'excluded') return;
             this.dragStart = { ticker: row.dataset.ticker!, x: event.clientX, y: event.clientY };
         });
         $('symbols').addEventListener('pointermove', event => {
@@ -78,7 +92,7 @@ export class Watchlist {
             const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
             const section = target?.closest<HTMLElement>('[data-section]');
             this.clearDrop();
-            if (!section) return;
+            if (!section || section.dataset.list === 'excluded') return;
             const row = target?.closest<HTMLElement>('[data-symbol]');
             if (row) row.classList.add(event.clientY < row.getBoundingClientRect().top + row.offsetHeight / 2 ? 'drop-before' : 'drop-after');
             else section.classList.add('drop-section');
@@ -91,15 +105,16 @@ export class Watchlist {
             this.suppressClick = true;
             window.setTimeout(() => { this.suppressClick = false; }, 0);
             const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
-            const section = target?.closest<HTMLElement>('[data-section]')?.dataset.section;
+            const group = target?.closest<HTMLElement>('[data-section]');
+            const section = group?.dataset.section, list = group?.dataset.list;
             const row = target?.closest<HTMLElement>('[data-symbol]');
             this.endDrag();
-            if (!section || row?.dataset.ticker === ticker) return;
-            const items = this.tickers.filter(t => t.status === section && t.ticker !== ticker);
+            if (!section || !list || list === 'excluded' || row?.dataset.ticker === ticker) return;
+            const items = this.tickers.filter(t => t.status === list && (t.section ?? 'unclassified') === section && t.ticker !== ticker);
             let index = items.length;
             if (row) index = items.findIndex(t => t.symbol === row.dataset.symbol) + (event.clientY >= row.getBoundingClientRect().top + row.offsetHeight / 2 ? 1 : 0);
             else if (target?.closest('.group')) index = 0;
-            void this.mutate({ action: 'move', ticker, section, index });
+            void this.mutate({ action: 'move', ticker, list_name: list, section, index });
         });
         $('symbols').addEventListener('pointercancel', () => this.endDrag());
         document.addEventListener('keydown', event => {
@@ -130,7 +145,7 @@ export class Watchlist {
     }
 
     private query() { return this.input.value.trim().toUpperCase(); }
-    private visible() { return this.scan?.enabled ? this.scan.visible(this.tickers) : this.tickers; }
+    private visible() { return this.scan ? this.scan.visible(this.tickers) : this.tickers; }
     private matches() { return this.visible().filter(t => t.ticker.includes(this.query())); }
 
     private cancelLookup() {
@@ -139,16 +154,16 @@ export class Watchlist {
         this.lookupController = undefined;
     }
 
-    private beginSearch(section = 'focus') {
+    private beginSearch(section = 'unclassified', list = 'focus') {
         this.endDrag();
         this.input.value = '';
-        this.changeSearch(section);
+        this.changeSearch(section, list);
         this.input.focus();
     }
 
-    private changeSearch(section = this.search?.section ?? 'focus') {
+    private changeSearch(section = this.search?.section ?? 'unclassified', list = this.search?.list ?? 'focus') {
         this.cancelLookup();
-        const search: Search = { section, message: '' };
+        const search: Search = { list, section, message: '' };
         this.search = search;
         this.render();
         const term = this.query();
@@ -185,7 +200,7 @@ export class Watchlist {
         this.input.value = ''; this.input.blur();
         $('list-notice').textContent = '';
         const ticker = this.tickers.find(t => t.symbol === symbol);
-        if (ticker) this.collapsed.delete(ticker.status);
+        if (ticker) this.collapsed.delete(collapseKey(this.scan?.enabled === true, sectionKey(ticker)));
         this.render();
         if (symbol) this.onSelect(symbol);
         this.rows.get(symbol ?? this.selected)?.scrollIntoView({ block: 'nearest' });
@@ -199,7 +214,7 @@ export class Watchlist {
         if (local) { this.endSearch(local.symbol); return; }
         const candidate = search.candidate ?? await this.lookup(search, term);
         if (this.search !== search || !candidate) return;
-        const result = await this.mutate({ action: 'add', ticker: candidate.ticker, section: search.section });
+        const result = await this.mutate({ action: 'add', ticker: candidate.ticker, list_name: search.list, section: search.section });
         if (result && this.search === search) {
             const added = result.board.find(t => t.ticker === candidate.ticker);
             if (added) this.endSearch(added.symbol);
@@ -207,20 +222,20 @@ export class Watchlist {
     }
 
     private async swapSelected(direction: number) {
-        if (!this.editable || this.busy || this.search || (this.scan?.enabled && (!this.scan.manualOrder || !['focus','wait'].includes(this.scan.activeList)))) return;
+        if (!this.editable || this.busy || this.search || !this.scan?.manualOrder) return;
         const ticker = this.tickers.find(t => t.symbol === this.selected);
-        if (!ticker) return;
-        const items = this.tickers.filter(t => t.status === ticker.status);
+        if (!ticker || ticker.status === 'excluded') return;
+        const items = this.tickers.filter(t => sectionKey(t) === sectionKey(ticker));
         const index = items.indexOf(ticker) + direction;
         if (index < 0 || index >= items.length) return;
-        await this.mutate({ action: 'move', ticker: ticker.ticker, section: ticker.status, index });
+        await this.mutate({ action: 'move', ticker: ticker.ticker, list_name: ticker.status, section: ticker.section ?? 'unclassified', index });
         this.rows.get(this.selected)?.scrollIntoView({ block: 'nearest' });
     }
 
     update(data: ListState, maintainSelection = true) {
-        this.tickers = data.board;
+        this.tickers = data.board; this.preferences = data.preferences ?? this.preferences;
         this.editable = data.editable;
-        $('symbol-count').textContent = String(this.tickers.length);
+        $('symbol-count').textContent = String(this.visible().length);
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
         const visible = this.visible();
@@ -262,13 +277,16 @@ export class Watchlist {
 
     render() {
         const visible = this.search ? this.matches() : this.visible();
-        const scan = this.scan?.enabled;
+        const scan = this.scan?.enabled === true;
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.tickers.some(t => t.ticker === candidate.ticker);
+        const tags = this.preferences?.tags ?? [];
+        const tagNames = new Map(tags.map(tag => [tag.id, tag.name]));
+        const sections = listSections(scan, this.scan?.activeList ?? 'focus', tags);
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search) $('list-notice').textContent = this.search.message;
-        const key = JSON.stringify([visible.map(t => [t.symbol, t.status]), scan, [...this.collapsed], this.editable,
-            this.search?.section, showCandidate ? candidate : null]);
+        const key = JSON.stringify([visible.map(t => [t.symbol, t.status, t.section, rowTags(t), t.manual_tags]), scan, [...this.collapsed], this.editable,
+            tags, this.manualEditor, this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
             this.key = key; this.rows.clear();
             const fragment = document.createDocumentFragment();
@@ -279,41 +297,71 @@ export class Watchlist {
                 const company = document.createElement('span'); company.className = 'security-name'; company.textContent = candidate.name;
                 result.append(name, action, company); fragment.append(result);
             }
-            for (const group of scan ? [this.scan!.activeList] : ['focus', 'wait']) {
-                const items = visible.filter(t => t.status === group);
+            for (const group of sections) {
+                const items = visible.filter(t => sectionKey(t) === group.key);
                 if (this.search && !items.length) continue;
-                const section = document.createElement('section'); section.dataset.section = group;
+                const section = document.createElement('section'); section.dataset.section = group.id; section.dataset.list = group.list;
+                section.className = group.id === 'review' ? 'review-section' : '';
                 const heading = document.createElement('div'); heading.className = 'group';
-                const toggle = document.createElement('button'); toggle.dataset.toggle = group;
+                const foldKey = collapseKey(scan, group.key);
+                const toggle = document.createElement('button'); toggle.dataset.toggle = foldKey;
                 const arrow = document.createElement('span'); arrow.className = 'section-arrow';
-                const collapsed = !this.search && this.collapsed.has(group);
+                const collapsed = !this.search && this.collapsed.has(foldKey);
                 arrow.textContent = collapsed ? '▸' : '▾'; arrow.setAttribute('aria-hidden', 'true');
-                toggle.append(arrow, group[0].toUpperCase() + group.slice(1));
+                toggle.append(arrow, `${group.name} ${items.length}`);
                 toggle.setAttribute('aria-expanded', String(!collapsed));
-                const add = document.createElement('button'); add.dataset.add = group; add.textContent = '+';
-                add.setAttribute('aria-label', `Add ticker to ${group === 'focus' ? 'Focus' : 'Wait'}`); add.disabled = !this.editable;
-                add.hidden = !['focus','wait'].includes(group);
+                if (group.id === 'review') toggle.title = 'Local Daily preview; Add to Focus starts live monitoring';
+                const add = document.createElement('button'); add.dataset.add = group.id; add.dataset.list = group.list; add.textContent = '+';
+                add.setAttribute('aria-label', `Add ticker to ${group.name}`); add.disabled = !this.editable;
+                add.hidden = group.list !== 'focus';
                 heading.append(toggle, add); section.append(heading);
                 if (!collapsed) {
                     for (const ticker of items) {
                         const row = document.createElement('div'); row.className = 'symbol-row';
-                        row.dataset.symbol = ticker.symbol; row.dataset.ticker = ticker.ticker;
+                        row.dataset.symbol = ticker.symbol; row.dataset.ticker = ticker.ticker; row.dataset.list = ticker.status;
                         const name = document.createElement('button'); name.className = 'ticker'; name.textContent = ticker.ticker.replace(/\.US$/, '');
                         name.setAttribute('aria-label', `Select ${ticker.ticker}`);
                         const mark = document.createElement('span'); mark.className = 'warn'; mark.textContent = '!'; mark.hidden = true; name.append(mark);
-                        const remove = document.createElement('button'); remove.className = 'delete-ticker icon-button';
-                        remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
-                        remove.setAttribute('aria-label', `Delete ${ticker.ticker}`); remove.title = `Delete ${ticker.ticker}`; remove.hidden = !this.editable;
-                        row.append(name, document.createElement('span'), document.createElement('span'), document.createElement('span'), remove);
+                        const symbolCell = document.createElement('div'); symbolCell.className = 'scan-symbol';
                         if (scan) {
-                            const symbolCell = document.createElement('div'); symbolCell.className = 'scan-symbol';
-                            const check = document.createElement('input'); check.type = 'checkbox'; check.dataset.check = ticker.symbol; check.setAttribute('aria-label', `Select ${ticker.ticker} for move`); check.disabled = !this.editable;
-                            symbolCell.append(check, name); row.prepend(symbolCell);
-                            const detail = document.createElement('small'); detail.className = 'scan-row-detail'; row.append(detail);
-                            if (group === 'discover') { remove.title = `Hide ${ticker.ticker}`; remove.setAttribute('aria-label', remove.title); }
-                            if (group === 'hidden') { remove.title = `Return ${ticker.ticker} to Discover`; remove.setAttribute('aria-label', remove.title); }
+                            const check = document.createElement('input'); check.type = 'checkbox'; check.dataset.check = ticker.symbol;
+                            check.setAttribute('aria-label', `Select ${ticker.ticker} for move`); symbolCell.append(check);
                         }
-                        section.append(row); this.rows.set(ticker.symbol, row);
+                        symbolCell.append(name);
+                        const action = document.createElement('button'); action.className = 'delete-ticker icon-button'; action.hidden = !this.editable;
+                        if (group.id === 'review') {
+                            action.dataset.toFocus = ticker.ticker; action.dataset.source = 'excluded'; action.textContent = '+';
+                            action.title = `Add ${ticker.ticker} to Focus`;
+                        } else if (ticker.status === 'excluded') {
+                            action.textContent = '↩'; action.title = `Release ${ticker.ticker} to Discover`;
+                        } else {
+                            action.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+                            action.title = `Exclude ${ticker.ticker} for 7 days`;
+                        }
+                        action.setAttribute('aria-label', action.title);
+                        row.append(symbolCell, document.createElement('span'), document.createElement('span'), document.createElement('span'), action);
+                        const detail = document.createElement('small'); detail.className = 'scan-row-detail row-detail';
+                        const badges = document.createElement('span'); badges.className = 'row-tags';
+                        for (const id of rowTags(ticker)) {
+                            const badge = document.createElement('span'); badge.className = 'row-tag'; badge.textContent = tagNames.get(id) ?? id;
+                            if (ticker.manual_tags?.includes(id)) { badge.classList.add('manual'); badge.title = 'Manual · today only'; }
+                            badges.append(badge);
+                        }
+                        detail.append(badges);
+                        if (scan) { const metrics = document.createElement('span'); metrics.className = 'rfl-detail'; detail.append(metrics); }
+                        const edit = document.createElement('button'); edit.dataset.tagEdit = ticker.ticker; edit.className = 'tag-edit'; edit.textContent = 'Tags';
+                        edit.title = 'Add manual Tags for today'; edit.disabled = !this.editable;
+                        edit.setAttribute('aria-expanded', String(this.manualEditor === ticker.ticker)); detail.append(edit);
+                        row.append(detail); section.append(row); this.rows.set(ticker.symbol, row);
+                        if (this.manualEditor === ticker.ticker && this.editable) {
+                            const editor = document.createElement('div'); editor.className = 'manual-tag-editor';
+                            for (const tag of tags.filter(tag => tag.id !== 'default')) {
+                                const button = document.createElement('button'); button.dataset.manualTag = tag.id; button.dataset.ticker = ticker.ticker;
+                                button.textContent = tag.name; button.setAttribute('aria-pressed', String(ticker.manual_tags?.includes(tag.id) ?? false));
+                                button.title = 'Manual · today only'; editor.append(button);
+                            }
+                            section.append(editor);
+                        }
                     }
                     if (!items.length) {
                         const empty = document.createElement('div'); empty.className = 'empty-list'; empty.textContent = 'No symbols'; section.append(empty);
@@ -325,33 +373,36 @@ export class Watchlist {
         }
         const result = $('symbols').querySelector<HTMLButtonElement>('[data-candidate]');
         if (result) result.disabled = this.busy;
+        $('symbols').querySelectorAll<HTMLButtonElement>('[data-manual-tag]').forEach(button => { button.disabled = this.busy; });
         for (const ticker of visible) {
             const row = this.rows.get(ticker.symbol);
             if (!row) continue;
             row.classList.toggle('active', ticker.symbol === this.selected);
-            row.querySelector('button')!.setAttribute('aria-pressed', String(ticker.symbol === this.selected));
+            row.querySelector('.ticker')!.setAttribute('aria-pressed', String(ticker.symbol === this.selected));
             const errors = [...(ticker.errors ?? []), ...(ticker.quote?.error ? ['Quote: ' + ticker.quote.error] : [])];
             const mark = row.querySelector<HTMLElement>('.warn')!; mark.hidden = !errors.length; mark.title = errors.join('\n');
+            (row.querySelector('.delete-ticker') as HTMLButtonElement).disabled = this.busy || this.scan?.busy === true;
             const regular = ticker.quote?.regular, extended = extendedQuote(ticker.quote);
             if (scan) {
                 const check = row.querySelector('[data-check]') as HTMLInputElement;
                 check.checked = this.scan!.selected.has(ticker.symbol); check.disabled = !this.editable || this.scan!.busy;
-                (row.querySelector('.delete-ticker') as HTMLButtonElement).disabled = this.busy || this.scan!.busy;
                 row.children[1].textContent = money(ticker.close);
                 row.children[2].textContent = ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%';
                 row.children[3].textContent = ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20);
-                row.querySelector('.scan-row-detail')!.textContent = (ticker.is_new ? 'NEW · ' : ticker.is_returned ? 'RETURNED · ' : '') +
+                row.querySelector('.rfl-detail')!.textContent = (ticker.is_new ? 'NEW · ' : ticker.is_returned ? 'RETURNED · ' : '') +
                     ['rfl1m','rfl3m','rfl6m'].map((field,index) => `${[1,3,6][index]}M ${typeof ticker[field] === 'number' ? (ticker[field] as number).toFixed(0) + '%' : '—'}`).join(' · ');
                 continue;
             }
+            const preview = ticker.status === 'excluded';
             const change = regular?.prev_close ? (regular.last_price / regular.prev_close - 1) * 100 : null;
             const ext = extended && regular?.last_price ? (extended.last_price / regular.last_price - 1) * 100 : null;
-            row.children[1].textContent = money(regular?.last_price);
+            row.children[1].textContent = money(preview ? ticker.close : regular?.last_price);
             for (const [index, value] of [[2, change], [3, ext]] as const) {
                 const cell = row.children[index];
-                cell.textContent = value == null ? (index === 3 ? '' : '—') : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+                cell.textContent = preview ? '' : value == null ? (index === 3 ? '' : '—') : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
                 cell.className = value == null ? '' : value >= 0 ? 'positive' : 'negative';
             }
+            (row.children[1] as HTMLElement).title = preview ? 'Latest completed Massive Daily close' : 'Regular last price';
             (row.children[3] as HTMLElement).title = extended ? `${extended.trade_session}: change from regular close` : '';
         }
     }

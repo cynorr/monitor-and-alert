@@ -1,8 +1,9 @@
-import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, type View } from './types.js';
+import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest, type View } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist, type ListState } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
+import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
 const layout = initLayout();
@@ -17,7 +18,7 @@ const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), ap
 const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 let listRegularSession = false;
-const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (!rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
+const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
 
 function applyList(data: ListState) {
@@ -47,7 +48,7 @@ function applyList(data: ListState) {
     if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
         const first = holdings.first();
         if (first) select(first.symbol, timeframe, 'holdings', first.key);
-        else select(data.board[0]?.symbol ?? '', timeframe, 'watchlist');
+        else select(scan.visible(data.board)[0]?.symbol ?? '', timeframe, 'watchlist');
     } else if (!symbol && holdings.first()) {
         const first = holdings.first()!; select(first.symbol, timeframe, 'holdings', first.key);
     }
@@ -61,7 +62,12 @@ function state(text: string, kind = '') {
     }
 }
 function showState(view: View) {
-    if (appMode === 'scan') { state(view.date ?? ''); return; }
+    if (appMode === 'scan' || view.read_only_daily) {
+        $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
+        $('intraday-state').textContent = '';
+        document.querySelectorAll<HTMLElement>('.quality').forEach(node => { node.hidden = !view.status.errors.length; node.title = view.status.errors.join('\n'); });
+        return;
+    }
     const errors = [...view.status.errors, ...(view.quote.error ? ['Quote: ' + view.quote.error] : [])];
     if (view.quote.connection_health === 'DISCONNECTED' || socket?.readyState !== WebSocket.OPEN)
         errors.push('Connection lost');
@@ -79,10 +85,12 @@ function apply(view: View) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
+    document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
         holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
     daily.render(view.charts['1d']);
-    if (appMode === 'monitor') { intraday.render(view.charts[timeframe]); dayLink.restore(); }
+    if (appMode === 'monitor' && !view.read_only_daily) { intraday.render(view.charts[timeframe]); dayLink.restore(); }
+    else if (view.read_only_daily) { intraday.reset('review/' + symbol); $('intraday-empty').textContent = 'Add to Focus for live data'; }
     const extended = extendedQuote(view.quote), quote = extended ?? view.quote.regular;
     document.querySelectorAll<HTMLElement>('.last-price').forEach(node => node.textContent = money(quote?.last_price));
     document.querySelectorAll<HTMLElement>('.session').forEach(node => { node.hidden = !extended; node.textContent = extended?.trade_session.toUpperCase() ?? ''; });
@@ -94,7 +102,7 @@ function apply(view: View) {
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
 }
-function select(next: string, tf: string, source = selectionSource, key = holdingKey) {
+function select(next: string, tf: string, source: 'watchlist' | 'holdings' = selectionSource, key = holdingKey) {
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
@@ -103,6 +111,8 @@ function select(next: string, tf: string, source = selectionSource, key = holdin
     timeframe = tf;
     ++epoch;
     currentView = null;
+    const preview = appMode === 'monitor' && isReviewSelection(watchlist.tickers.find(row => row.symbol === next), source);
+    document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.disabled = preview; });
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll<HTMLElement>('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
@@ -120,7 +130,7 @@ function select(next: string, tf: string, source = selectionSource, key = holdin
 }
 function sendSelection() {
     if (symbol && socket?.readyState === WebSocket.OPEN)
-        socket.send(JSON.stringify({ type: 'select', symbol, timeframe, request_id: epoch, mode: appMode }));
+        socket.send(JSON.stringify(selectionRequest(symbol, timeframe, epoch, appMode, selectionSource)));
 }
 function connect() {
     clearTimeout(reconnectTimer);

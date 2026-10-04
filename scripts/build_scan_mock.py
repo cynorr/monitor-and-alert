@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data_service.calendar import TradingCalendar
-from data_service.scan import build_day, publish_day
+from data_service.scan import build_day, publish_day, workspace_scope
 from data_service.store import BAR_SCHEMA
 
 
@@ -44,12 +44,17 @@ def build_mock(root, end='2026-09-30', count=48):
             db.executemany('INSERT INTO bars VALUES (?,?,?,?,?,?,?,?,?)', records)
     folder = root / 'days'
     for day in days[-2:]:
-        snapshot = build_day(path, day.isoformat(), calendar, now=calendar.session(days[-1])[1], mock=True)
+        tracked, hidden = workspace_scope(folder, day.isoformat())
+        snapshot = build_day(path, day.isoformat(), calendar, now=calendar.session(days[-1])[1], mock=True,
+                             tracked_tickers=tracked, hidden_tickers=hidden)
         publish_day(folder, snapshot)
     workspace_path = folder / end / 'workspace.json'
     workspace = json.loads(workspace_path.read_text())
-    workspace['statuses'] = {'PAYS': {'status':'focus','status_at':end},'NVDA': {'status':'wait','status_at':end}}
-    workspace['orders']['focus'], workspace['orders']['wait'] = ['PAYS'], ['NVDA']
+    for ticker in ('PAYS', 'NVDA'):
+        workspace['statuses'][ticker] = {'status': 'focus', 'section': 'unclassified', 'tags': [], 'status_at': end}
+        for order in workspace['orders'].values():
+            order[:] = [member for member in order if member != ticker]
+    workspace['orders']['focus'] = ['PAYS', 'NVDA']
     workspace_path.write_text(json.dumps(workspace, indent=2) + '\n')
     return path
 

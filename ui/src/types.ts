@@ -78,6 +78,11 @@ export type Ticker = {
     symbol: string;
     ticker: string;
     status: string;
+    section?: string;
+    tags?: string[];
+    tag_ids?: string[];
+    manual_tags?: string[];
+    excluded_at?: string;
     quote?: Quote;
     errors?: string[];
     close?: number | null;
@@ -95,6 +100,7 @@ export type View = {
     app_mode?: 'scan' | 'monitor';
     mock?: boolean;
     date?: string;
+    read_only_daily?: boolean;
     charts: Record<string, ChartData>;
     quote: Quote;
     summary: {
@@ -113,3 +119,6 @@ export function extendedQuote(quote?: Quote) {
     const regular = quote.regular;
     return Object.values(quote.extended).filter(q => !regular || q.timestamp > regular.timestamp).sort((a, b) => b.timestamp - a.timestamp)[0];
 }
+
+export const selectionRequest = (symbol: string, timeframe: string, request_id: number, mode: 'scan' | 'monitor', source: 'watchlist' | 'holdings') =>
+    ({ type: 'select', symbol, timeframe, request_id, mode, source });

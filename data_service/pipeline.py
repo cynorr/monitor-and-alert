@@ -13,7 +13,7 @@ import aiohttp
 from .calendar import TradingCalendar
 from .massive import daily, splits, build
 from .network import create_session, proxy_url, read_massive_token
-from .scan import build_day, publish_day
+from .scan import build_day, publish_day, workspace_scope
 from .store import atomic_json
 
 RETRY_DELAYS = (2, 5, 10)
@@ -223,8 +223,10 @@ class MassivePipeline:
             revision = self._data['bars']['input_revision']
             if (self._data['features']['status'] != 'ready' or self._data['features']['input_revision'] != revision):
                 async def prepare_features():
+                    tracked, hidden = workspace_scope(self.paths.days, target.isoformat())
                     result = await complete_thread(build_day, self.paths.daily_db, target.isoformat(), self.calendar,
-                                                   log_path=self.paths.root / 'invalid_ohlc.jsonl')
+                                                   log_path=self.paths.root / 'invalid_ohlc.jsonl',
+                                                   tracked_tickers=tracked, hidden_tickers=hidden)
                     if await complete_thread(build.input_revision, self.paths, target) != revision:
                         raise ValueError('Massive inputs changed before feature publication')
                     result.update(input_revision=revision, updated_at=updated_at())

@@ -5,6 +5,7 @@ import json
 import logging
 import sqlite3
 import time
+from copy import deepcopy
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -18,7 +19,9 @@ from .features.screening import apply_filter, add_rank, mark_candidate
 from .features.snapshot import feature_row, feature_frame
 from .indicators import series, daily_summary, adr_adv, return_from_low
 from .store import atomic_json, read_bars
-from .workspace import inherit_workspace
+from .workspace import inherit_workspace, migrate_workspace, is_hidden
+from .preferences import DEFAULT, validate_preferences
+from .list_rules import apply_rules
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +60,43 @@ def previous_candidates(days, value):
     return candidates(json.loads(previous.read_text())) if previous else set()
 
 
+def workspace_scope(days, value):
+    """Use the current day or its predecessor; Hidden keeps only light screening."""
+    days = Path(days)
+    path = days / value / 'workspace.json'
+    if not path.exists():
+        path = max((p for p in days.glob('*/workspace.json') if p.parent.name < value), default=None)
+    if path is None:
+        return set(), set()
+    data = migrate_workspace(json.loads(path.read_text()), value)
+    tracked, hidden = set(), set()
+    for ticker, state in data['statuses'].items():
+        if is_hidden(state, value):
+            hidden.add(ticker)
+        elif state['status'] in ('focus', 'excluded'):
+            tracked.add(ticker)
+    return tracked, hidden
+
+
+def _symbols(tickers):
+    return {ticker.removesuffix('.US') + '.US' for ticker in tickers}
+
+
+def _feature_row(history):
+    frame = pd.DataFrame([vars(bar) for bar in history])
+    frame['date'] = pd.to_datetime(frame['ts'], unit='s', utc=True).dt.tz_convert(ET).dt.tz_localize(None).dt.normalize()
+    return feature_row(frame)
+
+
+def _feature_updates(rows):
+    if not rows:
+        return {}
+    # Full-history features must not change eligibility, market ranks or light RFL.
+    features = feature_frame(rows).drop(columns=['date', 'open', 'high', 'low', 'close', 'volume',
+                                                 'adr20', 'adv20', 'rfl1m', 'rfl3m', 'rfl6m'])
+    return {row['symbol']: row for row in json.loads(features.to_json(orient='records', double_precision=15))}
+
+
 def checked_history(db, symbol, cutoff, calendar, now, limit, log_path, log_before=None):
     history = read_bars(db, symbol, '1d', end=cutoff, limit=limit)
     if not symbol.endswith('.US'):
@@ -72,7 +112,7 @@ def checked_history(db, symbol, cutoff, calendar, now, limit, log_path, log_befo
     return history
 
 
-def build_day(path, value, calendar, now=None, log_path=None, mock=False):
+def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tracked_tickers=(), hidden_tickers=()):
     started = time.perf_counter()
     cutoff = day_start(calendar, value)
     now = int(time.time()) if now is None else now
@@ -106,38 +146,61 @@ def build_day(path, value, calendar, now=None, log_path=None, mock=False):
                 screen.at[index, name] = value_
         screen = mark_candidate(add_rank(screen))
         selected = screen.loc[screen['candidate'], 'symbol'].tolist()
+        feature_symbols = sorted(((set(selected) | _symbols(tracked_tickers)) & set(symbols)) - _symbols(hidden_tickers))
         screened = time.perf_counter()
         feature_rows = []
-        # Only candidates need full history to retain EMA/ATR seeds and atomic events.
-        for symbol in selected:
+        # Candidates and retained members need atomic features; Hidden is skipped.
+        for symbol in feature_symbols:
             history = checked_history(db, symbol, cutoff, calendar, now, 1000,
                                       log_path, log_before=window_starts[symbol])
-            history_frame = pd.DataFrame([vars(bar) for bar in history])
-            history_frame['date'] = pd.to_datetime(history_frame['ts'], unit='s', utc=True).dt.tz_convert(ET).dt.tz_localize(None).dt.normalize()
-            feature_rows.append(feature_row(history_frame))
-    # Retain light market metrics for Focus/Wait/carried rows outside today's candidates.
+            feature_rows.append(_feature_row(history))
     records = json.loads(screen.to_json(orient='records', double_precision=15))
-    if feature_rows:
-        features = feature_frame(feature_rows).drop(columns=['date', 'open', 'high', 'low', 'volume'])
-        by_symbol = {row['symbol']: row for row in json.loads(features.to_json(orient='records', double_precision=15))}
-        for row in records:
-            row.update(by_symbol.get(row['symbol'], {}))
+    by_symbol = _feature_updates(feature_rows)
+    for row in records:
+        row.update(by_symbol.get(row['symbol'], {}))
     finished = time.perf_counter()
     log.info('Scan %s: symbols=%d candidates=%d screening=%.3fs features=%.3fs total=%.3fs',
              value, len(symbols), len(selected), screened - started, finished - screened, finished - started)
-    return {'date': value, 'mock': mock, 'rows': records}
+    return {'date': value, 'mock': mock, 'rows': records, 'feature_scope': feature_symbols}
+
+
+def enrich_snapshot(path, snapshot, calendar, *, tracked_tickers=(), hidden_tickers=(), log_path=None):
+    """Complete a local snapshot's missing features without rescreening the market."""
+    result = deepcopy(snapshot)
+    rows = {row['symbol']: row for row in result['rows']}
+    existing = set(result.get('feature_scope', ())) | {symbol for symbol, row in rows.items() if 'ema10' in row}
+    requested = ({symbol for symbol, row in rows.items() if row['candidate']} | _symbols(tracked_tickers)) - _symbols(hidden_tickers)
+    pending = sorted((requested & set(rows)) - existing)
+    feature_rows = []
+    if pending:
+        cutoff = day_start(calendar, result['date'])
+        with closing(connect_daily(path)) as db:
+            for symbol in pending:
+                history = checked_history(db, symbol, cutoff, calendar, int(time.time()), 1000, log_path)
+                if history and history[-1].ts == cutoff:
+                    feature_rows.append(_feature_row(history))
+    updates = _feature_updates(feature_rows)
+    for symbol, feature in updates.items():
+        rows[symbol].update(feature)
+    result['feature_scope'] = sorted(existing | set(updates))
+    return result
 
 
 def publish_day(days, snapshot):
+    days = Path(days)
     folder = days / snapshot['date']
     folder.mkdir(parents=True, exist_ok=True)
     workspace = folder / 'workspace.json'
-    if not workspace.exists():
+    if workspace.exists():
+        data = json.loads(workspace.read_text())
+    else:
         previous = max((p for p in days.glob('*/workspace.json') if p.parent.name < snapshot['date']), default=None)
         data = inherit_workspace(json.loads(previous.read_text()) if previous else None,
                                  previous_candidates(days, snapshot['date']), candidates(snapshot), snapshot['date'])
-    if not workspace.exists():
-        atomic_json(workspace, data)
+    preferences_path = days.parent / 'preferences.json'
+    preferences = validate_preferences(json.loads(preferences_path.read_text()) if preferences_path.exists() else deepcopy(DEFAULT))
+    data = apply_rules(data, snapshot, preferences)
+    atomic_json(workspace, data)
     atomic_json(folder / 'scan.json', snapshot)
 
 
