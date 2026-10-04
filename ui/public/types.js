@@ -10,6 +10,18 @@ export function defaultTimeframe(now = Date.now()) {
     const period = [5, 15, 30, 60].find(minutes => elapsed < minutes) ?? 60;
     return period === 60 ? '1h' : `${period}m`;
 }
+export function scanProgress(value) {
+    const labels = { daily: 'Downloading daily', splits: 'Updating splits', bars: 'Building daily bars', features: 'Preparing scan' };
+    const stages = Object.entries(labels);
+    const ready = value.features.date;
+    const completed = value.features.updated_at ? new Date(value.features.updated_at) : null;
+    const stamp = completed && Number.isFinite(completed.getTime()) ? ' · ' + nyTime.format(completed) + ' ET' : '';
+    const errors = [value.error, ...stages.map(([key]) => value[key].error)].filter((error) => !!error);
+    const active = stages.find(([key]) => value[key].status === 'running');
+    const progress = active?.[1] ?? (value.running ? 'Preparing scan' : errors.length ? 'Refresh failed' : !ready ? 'Scan not ready' : '');
+    const text = [ready ? 'Scan Ready ' + ready + stamp : '', progress].filter(Boolean).join(' · ');
+    return { text, error: errors.length > 0, title: errors.join('\n') || 'Latest completed scan; target ' + value.target_date };
+}
 export function extendedQuote(quote) {
     if (!quote)
         return undefined;

@@ -1,10 +1,11 @@
 import { $, money, compact, extendedQuote, type Ticker } from './types.js';
 import type { ScanControls } from './scan.js';
+import type { MassiveState } from './types.js';
 import type { Preferences } from './tags.js';
 import { post } from './api.js';
 import type { HoldingsState } from './holdings.js';
 
-export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null };
+export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null; massive?: MassiveState | null; scan_running?: boolean };
 
 type Candidate = { ticker: string; name: string };
 type Search = { section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };

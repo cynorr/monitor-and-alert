@@ -1,6 +1,8 @@
-# Scan 合并方案与落地记录
+# Scan 合并方案与历史落地记录
 
-更新：2026-10-02。用户已确认 NoAdjust 与 Scan/Monitor 互斥模式。本次已完成代码合并、独立 Mock、当前名单/Tag 的一次复制及离线验收；已追加真实拆股复权库的核心计算测试，正式 NoAdjust 上游交付和 Longbridge live 验收尚未完成。
+历史记录：2026-10-02。2026-10-03起的Massive拆股复权、独立来源路径及持续后台任务规则以development/behavior/ui和upstream-daily-data为准；下面的NoAdjust/互斥模式描述不再是当前要求。
+
+用户已确认 NoAdjust 与 Scan/Monitor 互斥模式。本次已完成代码合并、独立 Mock、当前名单/Tag 的一次复制及离线验收；已追加真实拆股复权库的核心计算测试，正式 NoAdjust 上游交付和 Longbridge live 验收尚未完成。
 
 目标是一个应用、一套日 K 图表、一份人工名单、一套指标和原子特征。上游只提供全市场日 K；本项目负责候选生成、人工筛选和实时监控。
 

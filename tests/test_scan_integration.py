@@ -123,18 +123,18 @@ class FakeBroker:
     def close(self): self.closed = True
 
 
-def make_app(root):
+def make_app(root, *, mock=True, pipeline=None):
     cal = TradingCalendar(date(2026,9,30))
     brokers = []
     def factory(allowed):
         broker = FakeBroker(allowed, cal)
         brokers.append(broker)
         return broker
-    app = Workbench(Workspace(root=root / 'days'), root, root / 'daily.sqlite3', factory, calendar=cal, mock=True)
+    app = Workbench(Workspace(root=root / 'days'), root, root / 'daily.sqlite3', factory, calendar=cal, mock=mock, pipeline=pipeline)
     return app, brokers
 
 
-def test_modes_are_exclusive_and_scan_mutations_do_not_connect(app_data):
+def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):
     async def scenario():
         app, brokers = make_app(app_data)
         assert not brokers and app.monitor is None
@@ -231,20 +231,15 @@ def test_scan_rejects_forming_day_and_keeps_range_anomalies(app_data):
     assert chart['bars'][-1]['high'] == original[1]
 
 
-def test_failed_source_switch_and_preferences_save_preserve_state(app_data):
+def test_missing_first_scan_is_a_readonly_view_and_failed_preferences_keep_state(app_data):
     async def scenario():
-        app, brokers = make_app(app_data)
+        app, brokers = make_app(app_data, mock=False)
         await app.switch_mode('monitor')
-        source = app.daily_path
-        app.daily_path = app_data / 'missing.sqlite3'
-        with pytest.raises(sqlite3.OperationalError):
-            await app.switch_mode('scan')
-        assert app.mode == 'monitor' and not brokers[0].closed
-        app.daily_path = source
+        task, broker = app.monitor_task, brokers[0]
         (app.workspace.root / app.selected_date / 'scan.json').unlink()
-        with pytest.raises(FileNotFoundError):
-            await app.switch_mode('scan')
-        assert app.mode == 'monitor' and not brokers[0].closed and app.monitor_task
+        data = await app.switch_mode('scan')
+        assert data['app_mode'] == 'scan' and data['board'] == [] and not data['editable']
+        assert app.monitor_task is task and not task.done() and not broker.closed
         before = json.loads(json.dumps(app.preferences))
         updated = json.loads(json.dumps(before))
         updated['sort'] = 'rfl3m'
@@ -255,3 +250,149 @@ def test_failed_source_switch_and_preferences_save_preserve_state(app_data):
         await app.close()
         assert brokers[0].closed
     asyncio.run(scenario())
+
+
+class FakePipeline:
+    def __init__(self, root):
+        self.root, self.calls, self.closed = root, [], False
+        self.release = asyncio.Event()
+        stage = {'status': 'ready', 'target': '2026-10-01', 'updated_at': '2026-09-30T22:15:01+00:00', 'error': None}
+        self.value = {'target_date': '2026-10-01', 'ready': False, 'running': False,
+                      **{name: dict(stage) for name in ('daily', 'splits', 'bars', 'features')}}
+        self.value['features'].update(date='2026-09-30', input_revision='old')
+        self.value['bars']['input_revision'] = 'old'
+
+    def state(self):
+        return self.value
+
+    async def run(self, force=False, on_publish=None):
+        self.calls.append(force)
+        self.value['running'] = True
+        self.value['features']['status'] = 'running'
+        try:
+            await self.release.wait()
+            snapshot = read_snapshot(self.root / 'days', '2026-09-30')
+            snapshot['date'] = '2026-10-01'
+            publish_day(self.root / 'days', snapshot)
+            self.value['features'].update(status='ready', date='2026-10-01', updated_at='2026-10-01T22:15:02+00:00')
+            self.value['ready'] = True
+            if on_publish:
+                on_publish(snapshot)
+            return snapshot
+        finally:
+            self.value['running'] = False
+
+    async def close(self):
+        self.closed = True
+
+
+def test_real_scan_keeps_background_market_and_preparation_does_not_lock_modes_or_history(app_data):
+    async def scenario():
+        pipeline = FakePipeline(app_data)
+        app, brokers = make_app(app_data, mock=False, pipeline=pipeline)
+        await app.start_background()
+        await asyncio.sleep(.05)
+        monitor, task = app.monitor, app.monitor_task
+        assert len(brokers) == 1 and pipeline.calls == [False]
+        assert app.list_state()['scan_running'] and app.list_state()['massive']['features']['date'] == '2026-09-30'
+        await app.switch_mode('monitor')
+        await app.switch_mode('scan')
+        assert app.monitor is monitor and app.monitor_task is task and not brokers[0].closed
+        row = next(row for row in app.scan_board() if row['status'] == 'discover')
+        app.select(row['symbol'], '5m')
+        assert row['symbol'] not in monitor.symbols  # Scan selection alone never expands subscriptions.
+        await app.list_action({'action': 'move', 'source': 'discover', 'target': 'focus', 'tickers': [row['ticker']]})
+        assert row['symbol'] in monitor.symbols and row['symbol'] in brokers[0].allowed
+        await app.action('scan', {'date': '2026-09-29'})
+        pipeline.release.set()
+        await app.pipeline_task
+        assert app.mode == 'scan' and app.selected_date == '2026-09-29'
+        assert app.workspace.date == '2026-10-01'
+        await app.switch_mode('monitor')
+        assert app.monitor is monitor and len(brokers) == 1
+        assert monitor.store.path == app_data / 'longbridge' / 'bars.sqlite3'
+        await app.close()
+        assert pipeline.closed and task.done() and brokers[0].closed
+    asyncio.run(scenario())
+
+
+def test_first_scan_without_snapshot_can_stream_preparation_and_switch_monitor(app_data):
+    async def scenario():
+        pipeline = FakePipeline(app_data)
+        app, brokers = make_app(app_data, mock=False, pipeline=pipeline)
+        (app.workspace.root / app.selected_date / 'scan.json').unlink()
+        await app.start_background()
+        runner = web.AppRunner(create_app(app))
+        await runner.setup()
+        await (site := web.TCPSite(runner, '127.0.0.1', 0)).start()
+        base = f'http://127.0.0.1:{site._server.sockets[0].getsockname()[1]}'
+        try:
+            async with ClientSession() as client, client.ws_connect(base + '/v1/stream') as stream:
+                message = await stream.receive_json(timeout=2)
+                assert message['type'] == 'list' and message['board'] == [] and message['scan_running']
+                assert message['massive']['features']['date'] == '2026-09-30'
+                response = await client.post(base + '/v1/mode', json={'mode': 'monitor'})
+                assert response.status == 200 and (await response.json())['app_mode'] == 'monitor'
+                assert len(brokers) == 1
+        finally:
+            await runner.cleanup()
+            await app.close()
+    asyncio.run(scenario())
+
+
+def test_mock_and_bounded_background_never_run_massive(app_data):
+    async def scenario():
+        class ForbiddenPipeline:
+            def state(self): raise AssertionError('Pipeline should not be constructed into this session')
+            async def run(self, **kwargs): raise AssertionError('Real Massive must stay disabled')
+        for options in ({'mock': True}, {'mock': False, 'only': ['NVDA']}):
+            brokers = []
+            def factory(allowed):
+                brokers.append(FakeBroker(allowed, TradingCalendar()))
+                return brokers[-1]
+            app = Workbench(Workspace(root=app_data / 'days'), app_data, app_data / 'daily.sqlite3', factory,
+                            pipeline=ForbiddenPipeline(), **options)
+            await app.start_background()
+            assert app.pipeline is None and app.list_state()['massive'] is None
+            if options['mock']:
+                assert not brokers
+            else:
+                assert brokers[0].allowed == {'NVDA.US'}
+            await app.close()
+    asyncio.run(scenario())
+
+
+def test_massive_cli_works_without_workspace_or_longbridge_credentials(tmp_path, monkeypatch, capsys):
+    import sys
+    from data_service import __main__ as cli
+    calls = []
+    class ReadyPipeline:
+        def __init__(self, paths, **kwargs):
+            calls.append(paths.root)
+        async def run(self, force=False):
+            calls.append(force)
+        def state(self):
+            return {'ready': True}
+        async def close(self):
+            calls.append('closed')
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Massive CLI must not load workspace or construct a broker')
+    monkeypatch.setitem(sys.modules, 'data_service.pipeline', SimpleNamespace(MassivePipeline=ReadyPipeline))
+    monkeypatch.setattr(cli, 'load_tickers', forbidden)
+    monkeypatch.setattr(cli, 'resolve_latest_workspace', forbidden)
+    monkeypatch.setattr(cli, 'run', forbidden)
+    assert cli.main(['massive', '--runtime', str(tmp_path), '--force']) == 0
+    assert calls == [tmp_path, True, 'closed']
+    assert json.loads(capsys.readouterr().out) == {'ready': True}
+
+
+def test_massive_cli_uses_the_same_runtime_lock(tmp_path, monkeypatch):
+    import fcntl
+    import sys
+    from data_service import __main__ as cli
+    def forbidden(*args, **kwargs):
+        raise AssertionError('A busy runtime must not start another pipeline')
+    monkeypatch.setitem(sys.modules, 'data_service.pipeline', SimpleNamespace(MassivePipeline=forbidden))
+    with (tmp_path / 'service.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert cli.main(['massive', '--runtime', str(tmp_path)]) == 1

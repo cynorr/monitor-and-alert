@@ -1,10 +1,10 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-02。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
+更新：2026-10-03。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
 
 ## 启动与接收
 
-Monitor 启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus/wait，开始接收当前名单的 Quote，同时加载历史；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
+正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus/wait，开始接收当前名单的 Quote，同时加载历史；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
 
 Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 更新最新价格与持仓估值。页面选股不改变券商订阅范围。关闭网页不停止后端。
 
@@ -16,7 +16,7 @@ Holdings为独立的只读持仓列表，位于Monitor的Focus/Wait上方，独�
 
 默认宽度取完整持仓表格的自然内容宽度加内边距/滚动条余量，两个图表均分剩余空间；窗口加宽只扩大图表，列表不按比例变宽。内容首次加载后宽度固定，只有后续新增位数或行结构确实需要更多空间时才加宽以保证完整显示，不随报价反复缩窄。分隔条仍可临时调整，重新打开页面或双击分隔条恢复紧凑默认，不读取旧列宽偏好。小窗口保留图表最小宽度，允许工作区整体溢出。
 
-配置SnapTrade时，启动Monitor及从Scan返回Monitor立即发起刷新，首轮前不等待30秒；之后按30秒周期串行刷新。每轮请求指定账户的positions、details、balances、executed orders；activities仅无缓存或流水同步截止变化时获取并保留原分页。这是成交流水获取，与Longbridge K线禁止分页的规则无关。所有账户请求共用10次/滚动分钟预算，触及额度或慢请求时周期可能延长，不重叠请求。30秒是应用轮询频率，不保证券商持仓/资金每30秒更新；不调用付费连接refresh。
+配置SnapTrade时，正式服务启动立即发起刷新，首轮前不等待30秒；之后按30秒周期串行刷新，Scan/Monitor切换不停止或重建任务。每轮请求指定账户的positions、details、balances、executed orders；activities仅无缓存或流水同步截止变化时获取并保留原分页。这是成交流水获取，与Longbridge K线禁止分页的规则无关。所有账户请求共用10次/滚动分钟预算，触及额度或慢请求时周期可能延长，不重叠请求。30秒是应用轮询频率，不保证券商持仓/资金每30秒更新；不调用付费连接refresh。
 
 成功获取并完成原买卖归属核对后，整体替换持仓与唯一原始缓存。网络失败、规则错误、歧义或数量不一致均保留上次成功的列表、时间戳与行情范围，提示刷新失败，下一周期再获取；不终止Monitor、不猜测买卖归属。保持单账户USD股票/ETF多头、同日买入先于卖出、明确TXT关联优先、税费前成交价及Decimal计算。持仓天数仍计算到positions快照日期，已结清批次不返回。
 
@@ -24,17 +24,21 @@ Longbridge按quote时间戳取regular/pre/post/overnight最新有效价格，重
 
 Chg%与Focus/Wait共用修正后的前一已完成Daily收盘价，计算regular涨跌幅。Holdings的Ext仅显示比regular更新的扩展时段相对regular收盘价的涨跌幅，盘中隐藏整列（含列头和Total占位），并重新测量紧凑列表宽度；若原先按Ext排序则取消排序。离开盘中后恢复整列。常规时段使用服务已有current_regular_session标记，不根据旧盘前报价推断。P/L Day = 当前剩余股数 ×（最新Longbridge价 − 前一常规收盘价）：盘前/夜盘使用最近regular收盘价作基准，盘中/盘后使用regular对应的前一交易日收盘价；盘后保留整个常规交易日以来的变动。该列衡量当前剩余仓位的价格变动，不包含已卖出部分、现金或手续费。缺报价/基准时显示—；总计只有所有批次都有有效值时才显示合计，不输出部分总额。SnapTrade兜底仍用于原市值/P/L，不编造当天盈亏。
 
-底层Longbridge范围为Focus/Wait与已接受Holdings的并集，同ticker共用一个Quote订阅与一份五周期任务。只有从两类来源都移除才退订/撤下任务；UI和workspace归属仍完全独立。HTTP/WS读取不触发SnapTrade刷新或扩展下载。进入Scan停止持仓轮询与Monitor行情，离开Scan恢复并立即刷新；Scan Mock、独立模拟器与`--symbols`有界验收不读SnapTrade凭证、不获取真实账户。
+底层Longbridge范围为Focus/Wait与已接受Holdings的并集，同ticker共用一个Quote订阅与一份五周期任务。只有从两类来源都移除才退订/撤下任务；UI和workspace归属仍完全独立。HTTP/WS读取不触发SnapTrade刷新或扩展下载。进入Scan继续持仓轮询与Monitor行情，切回Monitor直接使用已有状态；Scan Mock、独立模拟器与`--symbols`有界验收不读SnapTrade凭证、不获取真实账户。
 
-## Scan 与互斥模式
+## Scan 与后台数据任务
 
-启动默认 Monitor，可用 --mode scan。页面在列表面板内切换模式，整个进程同时只有一种模式；所有浏览器会话跟随这个选择。进入 Scan 前确认已有截面；停止持仓轮询并等待 Monitor 下载/Quote 任务结束，取消订阅，释放 SDK context。Scan 不读凭证、不请求券商；切回 Monitor 才按最新 Focus/Wait及已接受Holdings创建行情连接，并立即更新持仓。
+启动默认 Monitor，可用 --mode scan。页面在列表面板内切换展示，所有浏览器会话跟随这个选择。正式服务的Longbridge与SnapTrade任务仅在整体退出时停止；Scan使用Massive数据，后台仍只跟踪最新Focus/Wait及已接受Holdings。切回Monitor复用连接、任务和缓存。Mock Scan仍离线；只有明确切入Monitor才启用Longbridge，回到Mock Scan时停止。
 
-Scan 读取上游 runtime/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus/Wait 在Scan中也使用该上游来源；切回Monitor才使用runtime/bars.sqlite3与实时Quote。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
+Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus/Wait 在Scan中也使用该上游来源；切回Monitor才使用runtime/longbridge/bars.sqlite3与实时Quote。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
 
-两种来源统一使用 NoAdjust 原始价格与原始成交量；入库、指标及图表没有后续复权，也不读取 adjust table。拆股前后真实价格跳变会进入均线、ATR、RFL 等计算，这是当前选择的口径。上游已复权数据不能仅改表结构或元信息后视为 NoAdjust。
+Massive在入库时按split快照做拆股复权，成交量按HALF_UP四舍五入为整数，Daily保留供应商时段口径。Longbridge仍显式请求NoAdjust、regular并保存整数成交量。读取、指标和图表不再做复权；两源共享格式与计算，但不拼接或交叉验证。Longbridge复权不在本版本范围。
 
-全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 和不带 --date 的 scan 命令生成并打开最新完成日，按钮不重算日期下拉框当前选中的旧日。显式 scan --date D 或 POST /v1/scan 指定 date 仍可重算指定日；GET和图表选择不生成。更新 SQLite 本身不自动生成截面；日期下拉框仅显示已生成的日期。
+全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 和不带 --date 的 scan 命令生成并打开最新完成日，按钮不重算日期下拉框当前选中的旧日。显式 scan --date D 或 POST /v1/scan 指定 date 仍可重算指定日；GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读。日期下拉框仅显示已生成的日期。
+
+正式服务启动触发一次Massive后台准备，依次完成Daily、split、SQLite和features；已有目标日及匹配输入版本的完整产物则跳过。失败阶段最多四次，间隔2/5/10秒；耗尽后保留上次完整产物和Ready日期，显示错误。没有定时轮询。手动脚本与页面Refresh复用同一流程，GET、图表和切页不触发下载；同一时刻仅一份准备任务。
+
+Daily已有有效文件不覆盖，最近14个自然日仅补文件缺失；目标日按XNYS日历及美东18点门槛确定。split保留原两年窗口完整分页覆盖逻辑，窗口之前的历史保留，成功才原子替换。状态统一写runtime/pipeline-status.json，移除旧extended字段；Daily、split、bars、features分别记录当前状态和成功产物。Scan Ready以features完成日及匹配的输入版本为准，完成时间显示到秒。自动完成只让跟随最新日的页面继续跟随，历史日期保持不变；后台忙不阻止展示切换。
 
 候选仅要求 ADR20≥5%、ADV20≥$5M，再取RFL1M/3M/6M任一排名前50，不设Price≥5门槛。排名仅在eligible截面执行，不因Tag或列表改变。全市场先计算ADR/ADV，通过初筛的股票再计算RFL，最终候选才计算EMA/SMA/ATR及原子特征。非候选Focus/Wait/carried保留成员、日 K和ADR/ADV，原子特征为空；未通过初筛的成员RFL也为空。有原子条件的Tag按既有缺失值规则筛选这些成员。
 

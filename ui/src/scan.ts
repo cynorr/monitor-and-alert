@@ -19,6 +19,7 @@ export class ScanControls {
     private editable = false;
     private panel?: FilterPanel;
     private pending = false;
+    private serverRunning = false;
     private discard?: () => void;
     private deleting = false;
 
@@ -83,6 +84,7 @@ export class ScanControls {
 
     update(data: ListState) {
         this.enabled = data.app_mode === 'scan'; this.rows = data.board; this.editable = data.editable;
+        this.serverRunning = data.scan_running === true;
         $('scan-controls').hidden = !this.enabled;
         if (!this.enabled || !data.preferences) return;
         const key = JSON.stringify(data.preferences);
@@ -181,7 +183,7 @@ export class ScanControls {
         const all = $('scan-select-all') as HTMLInputElement, count = filtered.filter(row => this.selected.has(row.symbol)).length;
         all.checked = !!filtered.length && count === filtered.length; all.indeterminate = count > 0 && count < filtered.length; all.disabled = !this.editable || this.pending || !filtered.length;
         $('scan-move').querySelectorAll<HTMLButtonElement>('[data-target]').forEach(button => { button.disabled = !this.editable || this.pending || !count || button.dataset.target === this.activeList; });
-        ($('scan-refresh') as HTMLButtonElement).disabled = this.pending;
+        ($('scan-refresh') as HTMLButtonElement).disabled = this.pending || this.serverRunning;
         for (const id of ['scan-date', 'scan-sort', 'tag-name', 'tag-cancel', 'tag-delete', 'clear-filters'])
             ($(id) as HTMLInputElement | HTMLButtonElement).disabled = this.pending;
     }

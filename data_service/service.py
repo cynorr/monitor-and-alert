@@ -32,7 +32,7 @@ class SyncState:
 
 
 class DataService:
-    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None):
+    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None):
         self.tickers = tickers
         self.holdings_symbols = []
         self.symbols = [t.symbol for t in tickers]
@@ -40,7 +40,7 @@ class DataService:
         self.now = clock or time.time
         self.mode = 'live'
         self.calendar = calendar or TradingCalendar()
-        self.store = BarStore(runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
+        self.store = BarStore(bars_path or runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
         self.validator = DataValidator(self.store, self.calendar)
         self.charts = ChartCache(self.store, self.calendar)
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None

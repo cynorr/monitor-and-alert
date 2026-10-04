@@ -1,4 +1,4 @@
-import { $, money, compact, nyTime, extendedQuote, defaultTimeframe } from './types.js';
+import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
@@ -32,6 +32,14 @@ function applyList(data) {
         button.disabled = modePending || (data.mode === 'simulation' && !data.app_mode);
     });
     $('mock-data').hidden = !data.mock;
+    const progress = $('scan-progress');
+    progress.hidden = !data.massive;
+    if (data.massive) {
+        const status = scanProgress(data.massive);
+        progress.textContent = status.text;
+        progress.title = status.title;
+        progress.classList.toggle('error', status.error);
+    }
     scan.update(data);
     if (changed) {
         symbol = '';

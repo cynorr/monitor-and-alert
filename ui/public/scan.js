@@ -18,6 +18,7 @@ export class ScanControls {
     editable = false;
     panel;
     pending = false;
+    serverRunning = false;
     discard;
     deleting = false;
     constructor(updateList, changed) {
@@ -116,6 +117,7 @@ export class ScanControls {
         this.enabled = data.app_mode === 'scan';
         this.rows = data.board;
         this.editable = data.editable;
+        this.serverRunning = data.scan_running === true;
         $('scan-controls').hidden = !this.enabled;
         if (!this.enabled || !data.preferences)
             return;
@@ -253,7 +255,7 @@ export class ScanControls {
         all.indeterminate = count > 0 && count < filtered.length;
         all.disabled = !this.editable || this.pending || !filtered.length;
         $('scan-move').querySelectorAll('[data-target]').forEach(button => { button.disabled = !this.editable || this.pending || !count || button.dataset.target === this.activeList; });
-        $('scan-refresh').disabled = this.pending;
+        $('scan-refresh').disabled = this.pending || this.serverRunning;
         for (const id of ['scan-date', 'scan-sort', 'tag-name', 'tag-cancel', 'tag-delete', 'clear-filters'])
             $(id).disabled = this.pending;
     }

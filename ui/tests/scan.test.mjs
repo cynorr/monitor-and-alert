@@ -3,7 +3,28 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { matchesFilters, sliderValues } from '../public/filters.js';
 import { withSavedTag, tagChanged } from '../public/tags.js';
+import { scanProgress } from '../public/types.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
+
+test('scan progress keeps last ready date and seconds visible during preparation or errors', () => {
+    const stage = { status: 'ready', target: '2026-10-02', updated_at: null, error: null };
+    const state = { target_date: '2026-10-02', running: false, ready: true,
+        daily: { ...stage }, splits: { ...stage }, bars: { ...stage, input_revision: 'old' },
+        features: { ...stage, date: '2026-10-01', input_revision: 'old', updated_at: '2026-10-01T23:01:02+00:00' } };
+    assert.equal(scanProgress(state).text, 'Scan Ready 2026-10-01 · 19:01:02 ET');
+    state.running = true;
+    state.daily.status = 'running';
+    assert.match(scanProgress(state).text, /Scan Ready 2026-10-01.*Downloading daily/);
+    state.running = false;
+    state.daily.status = 'error';
+    state.daily.error = 'daily: Massive HTTP 503';
+    assert.ok(scanProgress(state).error);
+    assert.equal(scanProgress(state).title, state.daily.error);
+    state.daily.error = null;
+    state.error = 'Pipeline status could not be saved';
+    assert.match(scanProgress(state).text, /Refresh failed/);
+    assert.equal(scanProgress(state).title, state.error);
+});
 
 test('all 38 conditions have unique fields and numeric slider stops', () => {
     assert.equal(catalog.length, 38);

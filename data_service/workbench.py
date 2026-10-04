@@ -1,4 +1,4 @@
-"""Application lifecycle: one active Scan or Monitor mode, one Workspace."""
+"""One workspace and background data tasks, with a global Scan/Monitor view."""
 from __future__ import annotations
 
 import asyncio
@@ -9,6 +9,7 @@ from contextlib import closing
 from copy import deepcopy
 
 from .calendar import TradingCalendar
+from .paths import RuntimePaths
 from .preferences import DEFAULT, validate_preferences
 from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date
 from .service import DataService
@@ -17,10 +18,13 @@ from .workspace import derive_day_view, normalize_ticker
 
 class Workbench:
     def __init__(self, workspace, runtime, daily_path, broker_factory, *, calendar=None, mock=False, only=None,
-                 holdings_factory=None):
+                 holdings_factory=None, pipeline=None, bars_path=None):
         self.workspace, self.runtime, self.daily_path = workspace, runtime, daily_path
         self.broker_factory, self.calendar = broker_factory, calendar or TradingCalendar()
         self.mock, self.only = mock, only
+        self.bars_path = bars_path or RuntimePaths(runtime).bars_db
+        self.pipeline = pipeline if not mock and only is None else None
+        self.pipeline_task = None
         self.mode, self.monitor, self.monitor_task = 'scan', None, None
         self.holdings_factory = holdings_factory if not mock and only is None else None
         self.holdings, self.holdings_task = None, None
@@ -48,27 +52,16 @@ class Workbench:
     async def switch_mode(self, mode):
         if mode not in ('scan', 'monitor'):
             raise ValueError('Choose Scan or Monitor')
-        if self.switching or self.generating:
-            raise ValueError('Mode switch or Scan generation in progress')
+        if self.switching:
+            raise ValueError('Mode switch in progress')
         if mode == self.mode:
             return self.list_state()
         self.switching = True
         try:
             if mode == 'monitor':
-                tickers = self.workspace.tickers()
-                broker = self.broker_factory({ticker.symbol for ticker in tickers})
-                self.monitor = DataService(tickers, self.runtime, broker, self.calendar)
-                self.workspace_changed()
-                self.monitor_task = asyncio.create_task(self.monitor.run())
-                if self.holdings_factory:
-                    if self.holdings is None:
-                        self.holdings = self.holdings_factory()
-                    self.holdings_changed()
-                    self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
-            else:
-                self.snapshot()  # Verify the local source before stopping the current mode.
-                with closing(connect_daily(self.daily_path)) as db:
-                    db.execute('SELECT symbol,timeframe,ts,open,high,low,close,volume,turnover FROM bars LIMIT 0')
+                self.start_monitor()
+            elif self.mock:
+                # Mock Scan stays offline; only an explicit Monitor switch may connect.
                 await self.stop_monitor()
             self.mode = mode
             self.run_id = uuid.uuid4().hex
@@ -76,6 +69,37 @@ class Workbench:
             return self.list_state()
         finally:
             self.switching = False
+
+    def start_monitor(self):
+        if self.monitor is not None:
+            return
+        tickers = self.workspace.tickers()
+        if self.only:
+            wanted = {s if s.endswith('.US') else s + '.US' for s in self.only}
+            tickers = [t for t in tickers if t.symbol in wanted]
+        broker = self.broker_factory({ticker.symbol for ticker in tickers})
+        self.monitor = DataService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path)
+        self.workspace_changed()
+        self.monitor_task = asyncio.create_task(self.monitor.run())
+        if self.holdings_factory:
+            if self.holdings is None:
+                self.holdings = self.holdings_factory()
+            self.holdings_changed()
+            self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
+
+    async def start_background(self):
+        if not self.mock or self.mode == 'monitor':
+            self.start_monitor()
+        if self.pipeline and self.pipeline_task is None:
+            self.pipeline_task = asyncio.create_task(self.pipeline.run(on_publish=self.scan_published))
+
+    def scan_published(self, *_):
+        # reload follows a new day only when the user was already following latest.
+        self.workspace.reload()
+        self.snapshot_cache.clear()
+        self.chart_cache.clear()
+        self.previous_cache.clear()
+        self.run_id = uuid.uuid4().hex
 
     async def stop_monitor(self):
         if self.holdings_task:
@@ -107,13 +131,26 @@ class Workbench:
         return self.holdings.state(quotes)
 
     async def close(self):
+        if self.pipeline_task:
+            self.pipeline_task.cancel()
+            await asyncio.gather(self.pipeline_task, return_exceptions=True)
+            self.pipeline_task = None
+        if self.pipeline:
+            await self.pipeline.close()
         await self.stop_monitor()
 
     async def run(self):
         while True:
-            if self.monitor_task and self.monitor_task.done():
-                self.monitor_task.result()
+            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task)):
+                if task and task.done():
+                    task.result()
+                    raise RuntimeError(f'{name} task stopped unexpectedly')
+            if self.pipeline_task and self.pipeline_task.done():
+                self.pipeline_task.result()
             await asyncio.sleep(.2)
+
+    def has_snapshot(self, value=None):
+        return (self.workspace.root / (value or self.selected_date) / 'scan.json').is_file()
 
     def snapshot(self, value=None):
         value = value or self.selected_date
@@ -128,6 +165,8 @@ class Workbench:
         return self.snapshot_cache[value][1]
 
     def scan_board(self):
+        if not self.has_snapshot():
+            return []
         snapshot = self.snapshot()
         data = self.workspace.data if self.selected_date == self.workspace.date else json.loads((self.workspace.root / self.selected_date / 'workspace.json').read_text())
         view = derive_day_view(self.selected_date, candidates(snapshot), self.previous(), data)
@@ -149,20 +188,22 @@ class Workbench:
 
     @property
     def symbols(self):
-        return self.monitor.symbols if self.mode == 'monitor' else [row['symbol'] for row in self.scan_board()]
+        return (self.monitor.symbols if self.monitor else []) if self.mode == 'monitor' else [row['symbol'] for row in self.scan_board()]
 
     @property
     def scan_mock(self):
-        return self.mock or self.snapshot()['mock']
+        return self.mock or (self.has_snapshot() and self.snapshot()['mock'])
 
     def list_state(self):
-        return {'board': self.monitor.board() if self.mode == 'monitor' else self.scan_board(),
-                'mode': self.monitor.mode if self.mode == 'monitor' else 'scan', 'app_mode': self.mode,
-                'editable': self.only is None and (self.mode == 'monitor' or self.selected_date == self.workspace.date),
+        massive = self.pipeline.state() if self.pipeline else None
+        return {'board': self.monitor.board() if self.mode == 'monitor' and self.monitor else self.scan_board() if self.mode == 'scan' else [],
+                'mode': self.monitor.mode if self.mode == 'monitor' and self.monitor else self.mode, 'app_mode': self.mode,
+                'editable': self.only is None and (self.mode == 'monitor' or (self.has_snapshot() and self.selected_date == self.workspace.date)),
                 'workspace_error': self.workspace.error, 'date': self.selected_date,
                 'dates': sorted((p.parent.name for p in self.workspace.root.glob('*/scan.json')), reverse=True),
                 'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False,
-                'holdings': self.holdings_state()}
+                'holdings': self.holdings_state(), 'massive': massive,
+                'scan_running': self.generating or bool(massive and massive['running'])}
 
     def select(self, symbol, timeframe):
         if self.mode == 'monitor':
@@ -225,20 +266,22 @@ class Workbench:
                 self.selected_date = payload['date']
                 self.run_id = uuid.uuid4().hex
             elif payload.get('generate'):
-                if self.generating:
+                if self.generating or (self.pipeline_task and not self.pipeline_task.done()):
                     raise ValueError('Scan generation in progress')
                 self.generating = True
                 try:
-                    value = payload.get('date') or latest_completed_date(self.daily_path)
-                    snapshot = await asyncio.to_thread(build_day, self.daily_path, value, self.calendar,
-                                                        log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.scan_mock)
-                    publish_day(self.workspace.root, snapshot)
-                    self.workspace.reload()
-                    self.selected_date = snapshot['date']
-                    self.snapshot_cache.pop(snapshot['date'], None)
-                    self.chart_cache.clear()
-                    self.previous_cache.clear()
-                    self.run_id = uuid.uuid4().hex
+                    if self.pipeline and 'date' not in payload:
+                        self.pipeline_task = asyncio.create_task(self.pipeline.run(force=True, on_publish=self.scan_published))
+                        snapshot = await self.pipeline_task
+                        if snapshot:
+                            self.selected_date = snapshot['date']
+                    else:
+                        value = payload.get('date') or latest_completed_date(self.daily_path)
+                        snapshot = await asyncio.to_thread(build_day, self.daily_path, value, self.calendar,
+                                                            log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.mock)
+                        publish_day(self.workspace.root, snapshot)
+                        self.scan_published()
+                        self.selected_date = snapshot['date']
                 finally:
                     self.generating = False
             return self.list_state()
@@ -256,7 +299,9 @@ class Workbench:
             monitor = await self.monitor.api(path, query) if self.monitor else {}
             return {**monitor, 'service': 'running', 'mode': self.mode, 'broker_active': self.monitor is not None,
                     'quote_health': monitor.get('quote_health', 'OFFLINE'),
-                    'mock': self.scan_mock if self.mode == 'scan' else False}
+                    'mock': self.scan_mock if self.mode == 'scan' else False,
+                    'massive': self.pipeline.state() if self.pipeline else None,
+                    'holdings_task_active': bool(self.holdings_task and not self.holdings_task.done())}
         if path == '/v1/scan':
             return self.list_state()
         if path == '/v1/filter-catalog':

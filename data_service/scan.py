@@ -17,7 +17,7 @@ from .downloader import ohlc_comparison, append_ohlc_log
 from .features.screening import apply_filter, add_rank, mark_candidate
 from .features.snapshot import feature_row, feature_frame
 from .indicators import series, daily_summary, adr_adv, return_from_low
-from .store import read_bars
+from .store import atomic_json, read_bars
 from .workspace import inherit_workspace
 
 log = logging.getLogger(__name__)
@@ -136,9 +136,9 @@ def publish_day(days, snapshot):
         previous = max((p for p in days.glob('*/workspace.json') if p.parent.name < snapshot['date']), default=None)
         data = inherit_workspace(json.loads(previous.read_text()) if previous else None,
                                  previous_candidates(days, snapshot['date']), candidates(snapshot), snapshot['date'])
-    (folder / 'scan.json').write_text(json.dumps(snapshot, allow_nan=False) + '\n')
     if not workspace.exists():
-        workspace.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+        atomic_json(workspace, data)
+    atomic_json(folder / 'scan.json', snapshot)
 
 
 def daily_chart(path, symbol, value, calendar):

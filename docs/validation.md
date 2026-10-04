@@ -1,5 +1,18 @@
 # 验证记录
 
+## 2026-10-03：Massive 合并、统一路径和持续后台接收
+
+环境：macOS、现有Python3.13虚拟环境及Node/TypeScript。只验证本次数据模块、代理、状态和生命周期改动；没有运行全量回归或连接真实Massive、Longbridge、SnapTrade。以下历史记录的互斥模式/NoAdjust约定已由本轮用户要求替代。
+
+- 数据/代理/生成定向离线检查共30项通过：`tests/test_massive_pipeline.py`、`tests/test_network.py`、`tests/test_scan_generation.py`。覆盖拆股生效边界、HALF_UP、原始文件保留、交易日目标、split窗口替换/旧历史保留/分页失败不覆盖、构建失败保留旧库、OHLC原值日志、Ready重启跳过凭证与网络并删除extended、阶段四次失败、输入读取失败、状态落盘失败、中断/重复任务、force更新、人工名单保留、共享代理/直连及HTTP错误脱敏。
+- Scan/Holdings只选择相关12项检查并通过，18项未运行；覆盖正式Scan启动后台任务、切页保留连接/缓存/账户任务、生成不锁定展示模式和历史日期、缺少首份截面时的HTTP/WS状态、当前名单变更、mock/有界隔离、手动Massive入口与runtime锁，以及SnapTrade签名/代理/错误/下轮重试。HTTP/WS使用临时本机端口，行情与账户均为fake。
+- `npm run build --prefix ui`通过；只运行新增Scan状态显示测试1项，核对ET精确到秒、保留最后Ready日、准备进度和状态写入失败提示。`git diff --check`通过。未跑完整Node测试或浏览器手势验收。
+- 558份本地原始文件离线重建产生6,384,627根拆股复权日K；最新完成日2026-10-01有12,594只证券，volume均为SQLite integer。重建76.947秒、特征生成2.634秒；855只eligible、96只candidate。18根代表性旧库记录的OHLC、整数volume及turnover对照通过，未做全库逐根等价检查。
+- 原始558份文件SHA-256未变，16份已有人工workspace逐文件SHA-256未变；旧runtime/daily.sqlite3未改写。split复制与原参考文件逐字节一致；全部原始参考数据和旧库保留。仅runtime/massive/splits.json被Git规则放行，原始Daily/SQLite/状态/凭证及三个参考目录均忽略；三个原已跟踪参考脚本已从索引移除，磁盘文件保留。
+- 入库及特征成功后校验Ready重启不读取凭证或联网；再以真实时钟检查当前目标与完成日均为2026-10-01。正式手动脚本在移除环境凭证且指定不存在凭证文件时返回Ready并成功退出，未构造Longbridge或SnapTrade。
+
+报告：`runtime/massive_merge_report.json`。统一状态：`runtime/pipeline-status.json`，含daily/splits/bars/features和输入版本，不含extended。未覆盖：真实供应商获取/分页/代理联通、Longbridge新库的实际初始化、账户实际刷新、物理断电/休眠与长期运行。Massive保留供应商Daily时段口径，不宣称regular-only；Longbridge继续原regular/NoAdjust契约。
+
 ## 2026-10-02：Holdings 零出售隐藏、成交价仅明细与盘中 Ext
 
 环境：macOS、现有Node/TypeScript及真实8765服务；仅前端与文档变更，未改账户/行情获取。真实只读验收预先限定当前11个Holdings（LITE、IOVA、EFOR、PAYS、TXG、ABCL、VSTM、MU、PBF、MRNA、CDNA）与最多2分钟，现场约09:56 ET处于regular。无新增ticker、账户/workspace写入、模式切换或服务重启；临时页面关闭、viewport恢复。
