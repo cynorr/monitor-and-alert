@@ -10,11 +10,9 @@ Quote 统一接收和校验，regular 与 extended 按时段保存最新值，�
 
 ## Holdings
 
-Holdings为独立的只读持仓列表，位于Monitor的Focus上方，独立列头并可整体折叠。主表九列为Symbol、Net Liq、Days、P/L %、P/L、Sold、Chg%、Ext、P/L Day及账户总值、Total和买卖明细。主行单行显示，取消股数、已卖/买入数量与日期副标题；Net Liq、P/L、P/L Day及对应Total显示整数，底层市值和盈亏精度不变；窄三角号放在ticker左侧独立空隙中，股票名统一对齐。Sold为0时留空并隐藏展开三角，不显示其买入明细；已有卖出的批次保留展开。小于0.5%的实际非零出售比例显示<1%，保持明细可访问。P/L %（主行/Total/卖出明细）与Chg%显示一位小数，Ext仍为两位；原始数值排序不取整。展开先列各笔Buy，再列各笔Sold，每笔单行，不增加明细列头；Net Liq对应列显示成交日期，Sold对应列只显示该笔股数（保留碎股），实际成交均价放在Chg%对应列；主表删除Trade Price及其排序按钮。Buy行不展示盈亏/天数，Sold行保留持有天数及已实现盈亏。PNG导出已移除。按买入sequence显示，允许同ticker多个买入批次，也允许与Focus重复；它不检查或修改观察名单归属，不参与观察名单新增/删除/移动/排序。点击行复用现有Daily/Intraday；名单刷新、折叠或从Focus删除同ticker不会抢走持仓选中状态。被选持仓批次消失时改选第一条持仓，持仓为空则回到观察名单。
+Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 ticker 多个买入批次，也允许与 Focus 重复。它不检查或修改观察名单归属，不参与名单新增、排除、移动或排序。点击持仓复用现有 Daily/Intraday；名单刷新、折叠或从 Focus 删除同 ticker 不改变持仓的选择来源。被选持仓批次消失时改选第一条持仓，持仓为空则回到观察名单。
 
-持仓可见列均可点击排序，只支持降序与未排序两种状态；再次点击当前列恢复账户持仓/原买入批次顺序，点击其他列替换原排序。Symbol按Z到A，其余按原始数值从大到小；Sold按出售比例。缺失或非法值置后，相同值保持默认顺序。同ticker的买入批次独立排序，展开买卖明细始终跟随所属主行。行情更新沿用当前排序；键盘导航按显示顺序，排序不更换图表选择、不写workspace，重新打开页面恢复默认排序。
-
-默认宽度取完整持仓表格的自然内容宽度加内边距/滚动条余量，两个图表均分剩余空间；窗口加宽只扩大图表，列表不按比例变宽。内容首次加载后宽度固定，只有后续新增位数或行结构确实需要更多空间时才加宽以保证完整显示，不随报价反复缩窄。分隔条仍可临时调整，重新打开页面或双击分隔条恢复紧凑默认，不读取旧列宽偏好。小窗口保留图表最小宽度，允许工作区整体溢出。
+持仓排序只影响当前页面，不修改账户数据或 workspace；行情更新沿用当前排序。布局、列、数值格式、排序按钮和买卖明细的唯一要求见 [ui.md 的 List UI 章节](ui.md#list-ui)。持仓表的自然内容宽度参与 Monitor 列表的最小宽度测量。
 
 配置SnapTrade时，正式服务启动立即发起刷新，首轮前不等待30秒；之后按30秒周期串行刷新，Scan/Monitor切换不停止或重建任务。每轮请求指定账户的positions、details、balances、executed orders；activities仅无缓存或流水同步截止变化时获取并保留原分页。这是成交流水获取，与Longbridge K线禁止分页的规则无关。所有账户请求共用10次/滚动分钟预算，触及额度或慢请求时周期可能延长，不重叠请求。30秒是应用轮询频率，不保证券商持仓/资金每30秒更新；不调用付费连接refresh。
 
@@ -22,7 +20,7 @@ Holdings为独立的只读持仓列表，位于Monitor的Focus上方，独立列
 
 Longbridge按quote时间戳取regular/pre/post/overnight最新有效价格，重算price、市值、浮盈亏、总P/L及其百分比。仅该ticker缺少有效Longbridge报价时，回退最后成功SnapTrade持仓快照中的price；来源/时段/时间放在市值悬停信息中。成交价仅在展开买卖明细中显示，为该笔成交金额/股数，已实现盈亏和买卖记录不随行情变化。cash保持SnapTrade最近成功值，Account Value = 当前所有持仓估值 + cash，不再直接展示details返回的账户总值。混合来源和不同更新时间可能与券商官方净值不同。
 
-Chg%与Focus共用修正后的前一已完成Daily收盘价，计算regular涨跌幅。Holdings的Ext仅显示比regular更新的扩展时段相对regular收盘价的涨跌幅，盘中隐藏整列（含列头和Total占位），并重新测量紧凑列表宽度；若原先按Ext排序则取消排序。离开盘中后恢复整列。常规时段使用服务已有current_regular_session标记，不根据旧盘前报价推断。P/L Day = 当前剩余股数 ×（最新Longbridge价 − 前一常规收盘价）：盘前/夜盘使用最近regular收盘价作基准，盘中/盘后使用regular对应的前一交易日收盘价；盘后保留整个常规交易日以来的变动。该列衡量当前剩余仓位的价格变动，不包含已卖出部分、现金或手续费。缺报价/基准时显示—；总计只有所有批次都有有效值时才显示合计，不输出部分总额。SnapTrade兜底仍用于原市值/P/L，不编造当天盈亏。
+Chg%与Focus共用修正后的前一已完成Daily收盘价，计算regular涨跌幅。Holdings的Ext仅显示比regular更新的扩展时段相对regular收盘价的涨跌幅，盘中隐藏整列（含列头和Total占位），并重新测量持仓内容的宽度下限；若原先按Ext排序则取消排序。离开盘中后恢复整列。常规时段使用服务已有current_regular_session标记，不根据旧盘前报价推断。P/L Day = 当前剩余股数 ×（最新Longbridge价 − 前一常规收盘价）：盘前/夜盘使用最近regular收盘价作基准，盘中/盘后使用regular对应的前一交易日收盘价；盘后保留整个常规交易日以来的变动。该列衡量当前剩余仓位的价格变动，不包含已卖出部分、现金或手续费。缺报价/基准时显示—；总计只有所有批次都有有效值时才显示合计，不输出部分总额。SnapTrade兜底仍用于原市值/P/L，不编造当天盈亏。
 
 底层Longbridge范围为Focus与已接受Holdings的并集，同ticker共用一个Quote订阅与一份五周期任务。只有从两类来源都移除才退订/撤下任务；UI和workspace归属仍完全独立。HTTP/WS读取不触发SnapTrade刷新或扩展下载。进入Scan继续持仓轮询与Monitor行情，切回Monitor直接使用已有状态；Scan Mock、独立模拟器与`--symbols`有界验收不读SnapTrade凭证、不获取真实账户。
 
@@ -42,7 +40,7 @@ Daily已有有效文件不覆盖，最近14个自然日仅补文件缺失；目�
 
 ## List、Tag 与 Filter
 
-需求背景与完整设计见 [list-design.md](list-design.md)，旧 [list-module-v0.md](list-module-v0.md) 仅作历史参考。
+需求背景与归属设计见 [list-design.md](list-design.md)，显示与交互的唯一规范见 [ui.md 的 List UI 章节](ui.md#list-ui)。
 
 Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus、独立 Holdings 和折叠 Review；Discover / Hidden / Extended / Broken 不订阅 Longbridge。Review 预览来自本地 Massive Daily，加入 Focus 后才实时订阅；Excluded 盘中恢复依赖下一个完成日扫描或人工加入。
 
@@ -56,7 +54,7 @@ Discover、Focus及非Hidden Excluded匹配负面规则立即进入Excluded对�
 
 Add to Focus清除排除状态并开始订阅；Exclude for 7 days（包括行删除）进入Hidden；Move to Discover/Release解除归属，仅当日候选返回Discover并立即按已有规则分类。扫描初筛和RFL排名不受Tag影响。批量操作一次同步落盘，历史日期名单只读。旧Focus/Wait合并为Focus，旧Hidden转Excluded/Hidden并保留期限。
 
-搜索仍使用列表上方Search与/入口。Monitor通过同一Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认Add才加入Focus队首。Section支持折叠、拖拽及Shift+上下组内排序；盘中可以调整section，本次不新增Quote形态规则。保存失败回退内存并显示错误。
+搜索仍使用列表上方Search与/入口。Monitor通过同一Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整 section，本次不新增 Quote 形态规则。保存失败回退内存并显示错误。
 
 一个watchdog原生事件监听days，新日期workspace出现自动跟随；Monitor始终使用最新名单，历史Scan只读。外部修改自动重读，Focus变更立即同步行情范围；已有行情状态复用，排序/主section移动不重下载。只有同时不在Focus和Holdings才退订；历史SQLite不删除。两类实时列表都为空时清空图表并保留搜索入口。`--symbols`会话始终限制指定Focus子集并禁用编辑；模拟器只写临时名单。
 

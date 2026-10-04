@@ -7,7 +7,7 @@
 - `runtime/massive/daily/*.json`：原始Massive grouped Daily，adjusted=false；累积保留、不覆盖有效文件、不加入Git。
 - `runtime/massive/splits.json`：两年窗口滚动覆盖，保留窗口之前历史；唯一可加入Git的运行数据。
 - `runtime/massive/daily.sqlite3`：Massive模块唯一构建和发布，Scan只读。
-- `runtime/longbridge/bars.sqlite3`：Longbridge唯一写入，只跟踪当前Focus/Wait与已接受Holdings的并集。
+- `runtime/longbridge/bars.sqlite3`：Longbridge唯一写入，只跟踪当前Focus与已接受Holdings的并集。
 - `runtime/pipeline-status.json`：各阶段状态及最后完整成功产物，不包含extended拉取字段。
 
 `--runtime`修改整个运行根；显式`--daily-db`消费其他已交付SQLite并禁用内置Massive获取。三份复制项目只作参考，正式运行不依赖它们。

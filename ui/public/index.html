@@ -32,7 +32,7 @@
   <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
   <aside class="watchlist" aria-label="Watchlist">
     <div class="list-header">
-    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button></div><span id="symbol-count"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
+    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
     <div id="scan-progress" class="scan-progress" role="status" hidden></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
     </div>
@@ -53,7 +53,7 @@
     <div class="list-body">
       <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
         <div class="holdings-heading">
-          <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count"></span></button>
+          <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count" class="count-badge"></span></button>
           <div class="holdings-meta"><span>Account Value <b id="holdings-account">—</b></span><time id="holdings-updated" role="status">Loading…</time></div>
         </div>
         <div id="holdings-content">
@@ -77,7 +77,7 @@
           <div id="holdings-empty" class="empty-list">Loading…</div>
         </div>
       </section>
-      <div id="list-columns" class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span><span aria-hidden="true"></span></div>
+      <div id="list-columns" class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span><span title="1M / 3M / 6M return from low">Growth</span><span>Tags</span><span aria-hidden="true"></span></div>
       <nav id="symbols" aria-label="Symbols"></nav>
     </div>
   </aside>

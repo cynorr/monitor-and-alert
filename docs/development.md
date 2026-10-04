@@ -39,7 +39,9 @@
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
-持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/买卖行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq、P/L、P/L Day整数为显示格式，后端Decimal契约不变。展开直接使用既有sequence.buys/sells，所有Buy先于Sold；日期/数量/金额与买卖记录均纳入结构签名，刷新后更新明细。Sold=0隐藏主行数值及展开箭头；已卖批次明细成交价为value/quantity，放在第七列Chg%对应位置，主表无Trade Price。P/L %/Chg%使用一位小数，Ext仍两位；无副标题DOM或PNG生成/下载逻辑。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout默认锁定内容所需列表宽度、双图平分余量，不读写旧列宽localStorage；展开所需宽度增加时自动增长，收起不引起宽度抖动。main.ts复用board与当前view中既有Quote.current_regular_session，任一为true即进入常规时段；前端不新增交易日历或券商请求。Holdings用同一CSS隐藏第八列Ext，取消隐藏列排序；时段显隐切换清空测量宽度下限，使盘中能够回收该列空间、扩展时段重新测量。手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
+持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/买卖行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq、P/L、P/L Day整数为显示格式，后端Decimal契约不变。展开直接使用既有sequence.buys/sells，所有Buy先于Sold；日期/数量/金额与买卖记录均纳入结构签名，刷新后更新明细。Sold=0隐藏主行数值及展开箭头；已卖批次明细成交价为value/quantity，放在第七列Chg%对应位置，主表无Trade Price。P/L %/Chg%使用一位小数，Ext仍两位；无副标题DOM或PNG生成/下载逻辑。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout.ts用LIST_WIDTH_RATIO=0.40决定默认占比，LIST_MIN_WIDTH=680和持仓测量值决定列表下限；两图平分余量，不读写列宽localStorage。展开所需下限增加时自动增长，收起不引起宽度抖动。main.ts复用board与当前view中既有Quote.current_regular_session，任一为true即进入常规时段；前端不新增交易日历或券商请求。Holdings用同一CSS隐藏第八列Ext，取消隐藏列排序；时段显隐切换清空测量宽度下限，在680px下限之上回收该列空间、扩展时段重新测量。手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
+
+List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局部 AI 约束见 ui/src/AGENTS.md。list.ts 保持七个行单元与 main.ts/index.html 列头一致；board.growthValue 仅格式化 RFL，原始百分比及排名不变。CSS 维护独立 Growth/Tags 列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
 
 ## 模式与上游数据
 

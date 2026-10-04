@@ -1,5 +1,7 @@
 # List 模块设计
 
+本文件定义归属与分类逻辑；显示、布局和操作细则只在 [ui.md 的 List UI 章节](ui.md#list-ui) 维护。
+
 ## 背景与目的
 
 个人美股工作流程：Scan → Tag → Monitor → Alert → Trade。本次只重构 List、Tag 与 Filter，不开发 Alert 或交易。

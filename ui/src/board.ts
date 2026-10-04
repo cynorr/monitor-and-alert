@@ -15,3 +15,12 @@ export function listSections(scan: boolean, list: string, tags: Tag[]): ListSect
     if (list !== 'excluded') return sections(list);
     return ['review', 'broken', 'extended', 'hidden'].map(id => ({ list, id, name: id[0].toUpperCase() + id.slice(1), key: `${list}:${id}` }));
 }
+
+export function growthValue(value: unknown) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+    return value >= 100 ? (1 + value / 100).toFixed(1) + 'x' : value.toFixed(1).replace(/\.0$/, '') + '%';
+}
+export function countBadge(count: number) {
+    const badge = document.createElement('span'); badge.className = 'count-badge'; badge.textContent = String(count);
+    return badge;
+}

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { matchesFilters, sliderValues } from '../public/filters.js';
 import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
 import { scanProgress, selectionRequest } from '../public/types.js';
-import { collapseKey, isReviewSelection, listSections, sectionKey } from '../public/board.js';
+import { collapseKey, growthValue, isReviewSelection, listSections, sectionKey } from '../public/board.js';
 import { matchesTag } from '../public/scan.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
 
@@ -130,4 +130,15 @@ test('Scan and Monitor fold independently; the same symbol keeps Review preview 
     assert.equal(preview.source, 'watchlist');
     assert.equal(live.source, 'holdings');
     assert.equal(live.request_id, 2);
+});
+
+test('Growth formats the raw return percentage without changing its meaning at the multiple threshold', () => {
+    assert.equal(growthValue(0), '0%');
+    assert.equal(growthValue(12), '12%');
+    assert.equal(growthValue(12.34), '12.3%');
+    assert.equal(growthValue(99.9), '99.9%');
+    assert.equal(growthValue(100), '2.0x');
+    assert.equal(growthValue(130), '2.3x');
+    assert.equal(growthValue(234), '3.3x');
+    for (const value of [null, undefined, NaN, Infinity, -Infinity, '130']) assert.equal(growthValue(value), '—');
 });

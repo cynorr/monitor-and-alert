@@ -3,7 +3,7 @@ import { post } from './api.js';
 import { FilterPanel, matchesFilters, type Field } from './filters.js';
 import { tagChanged, tagRole, withSavedTag, type Preferences, type Tag, type TagRole } from './tags.js';
 import type { ListState } from './list.js';
-import { rowTags } from './board.js';
+import { countBadge, rowTags } from './board.js';
 
 const rank = (row: Ticker, field: string) => typeof row[field] === 'number' ? row[field] as number : Infinity;
 
@@ -159,10 +159,10 @@ export class ScanControls {
     private render() {
         if (!this.preferences || !this.draft) return;
         const filtered = this.visible(this.rows);
-        $('scan-result-count').textContent = `${filtered.length} / ${this.rows.filter(row => row.status === this.activeList).length}`;
+        $('scan-result-count').replaceChildren(countBadge(filtered.length), ' / ', countBadge(this.rows.filter(row => row.status === this.activeList).length));
         $('scan-lists').querySelectorAll<HTMLButtonElement>('[data-list]').forEach(button => {
             const group = button.dataset.list!, count = this.rows.filter(row => row.status === group && matchesTag(row, this.draft!, !this.dirty())).length;
-            button.textContent = group[0].toUpperCase() + group.slice(1) + ' ' + count;
+            button.replaceChildren(group[0].toUpperCase() + group.slice(1), countBadge(count));
             button.classList.toggle('active', group === this.activeList); button.disabled = this.pending;
         });
         $('scan-tags').replaceChildren(...this.preferences.tags.map(tag => {
@@ -182,7 +182,7 @@ export class ScanControls {
         $('tag-discard').hidden = !this.discard;
         $('filter-rules').querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(node => { node.disabled = this.pending; });
         this.panel?.render(this.draft.filters, this.rows);
-        $('filter-count').textContent = String(Object.keys(this.draft.filters).length) + ' active';
+        $('filter-count').replaceChildren(countBadge(Object.keys(this.draft.filters).length), ' active');
         const all = $('scan-select-all') as HTMLInputElement, count = filtered.filter(row => this.selected.has(row.symbol)).length;
         all.checked = !!filtered.length && count === filtered.length; all.indeterminate = count > 0 && count < filtered.length; all.disabled = !this.editable || this.pending || !filtered.length;
         $('scan-move').querySelectorAll<HTMLButtonElement>('[data-target]').forEach(button => { button.disabled = !this.editable || this.pending || !count || button.dataset.target === this.activeList; });

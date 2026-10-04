@@ -1,6 +1,6 @@
 import { $, money, compact, extendedQuote } from './types.js';
 import { post } from './api.js';
-import { collapseKey, listSections, rowTags, sectionKey } from './board.js';
+import { collapseKey, countBadge, growthValue, listSections, rowTags, sectionKey } from './board.js';
 export class Watchlist {
     onSelect;
     onUpdate;
@@ -355,7 +355,7 @@ export class Watchlist {
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search)
             $('list-notice').textContent = this.search.message;
-        const key = JSON.stringify([visible.map(t => [t.symbol, t.status, t.section, rowTags(t), t.manual_tags]), scan, [...this.collapsed], this.editable,
+        const key = JSON.stringify([visible.map(t => [t.symbol, t.status, t.section, rowTags(t), t.manual_tags, t.is_new, t.is_returned]), scan, [...this.collapsed], this.editable,
             tags, this.manualEditor, this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
             this.key = key;
@@ -393,7 +393,7 @@ export class Watchlist {
                 const collapsed = !this.search && this.collapsed.has(foldKey);
                 arrow.textContent = collapsed ? '▸' : '▾';
                 arrow.setAttribute('aria-hidden', 'true');
-                toggle.append(arrow, `${group.name} ${items.length}`);
+                toggle.append(arrow, group.name, countBadge(items.length));
                 toggle.setAttribute('aria-expanded', String(!collapsed));
                 if (group.id === 'review')
                     toggle.title = 'Local Daily preview; Add to Focus starts live monitoring';
@@ -432,6 +432,13 @@ export class Watchlist {
                             symbolCell.append(check);
                         }
                         symbolCell.append(name);
+                        const label = ticker.is_new ? 'NEW' : ticker.is_returned ? 'RETURNED' : '';
+                        if (label) {
+                            const flag = document.createElement('span');
+                            flag.className = 'symbol-flag';
+                            flag.textContent = label;
+                            symbolCell.append(flag);
+                        }
                         const action = document.createElement('button');
                         action.className = 'delete-ticker icon-button';
                         action.hidden = !this.editable;
@@ -450,39 +457,47 @@ export class Watchlist {
                             action.title = `Exclude ${ticker.ticker} for 7 days`;
                         }
                         action.setAttribute('aria-label', action.title);
-                        row.append(symbolCell, document.createElement('span'), document.createElement('span'), document.createElement('span'), action);
-                        const detail = document.createElement('small');
-                        detail.className = 'scan-row-detail row-detail';
-                        const badges = document.createElement('span');
+                        const growth = document.createElement('span');
+                        growth.className = 'growth-cell';
+                        growth.title = '1M / 3M / 6M return from low';
+                        for (const [index, field] of ['rfl1m', 'rfl3m', 'rfl6m'].entries()) {
+                            if (index) {
+                                const divider = document.createElement('span');
+                                divider.className = 'growth-divider';
+                                divider.textContent = '|';
+                                growth.append(divider);
+                            }
+                            const value = document.createElement('span');
+                            value.className = 'growth-value';
+                            value.dataset.growth = field;
+                            growth.append(value);
+                        }
+                        const badges = document.createElement('div');
                         badges.className = 'row-tags';
                         for (const id of rowTags(ticker)) {
                             const badge = document.createElement('span');
                             badge.className = 'row-tag';
                             badge.textContent = tagNames.get(id) ?? id;
+                            badge.title = badge.textContent;
                             if (ticker.manual_tags?.includes(id)) {
                                 badge.classList.add('manual');
-                                badge.title = 'Manual · today only';
+                                badge.title += ' · Manual · today only';
                             }
                             badges.append(badge);
-                        }
-                        detail.append(badges);
-                        if (scan) {
-                            const metrics = document.createElement('span');
-                            metrics.className = 'rfl-detail';
-                            detail.append(metrics);
                         }
                         const edit = document.createElement('button');
                         edit.dataset.tagEdit = ticker.ticker;
                         edit.className = 'tag-edit';
                         edit.textContent = 'Tags';
                         edit.title = 'Add manual Tags for today';
-                        edit.disabled = !this.editable;
+                        edit.hidden = ticker.section === 'hidden';
+                        edit.disabled = !this.editable || edit.hidden;
                         edit.setAttribute('aria-expanded', String(this.manualEditor === ticker.ticker));
-                        detail.append(edit);
-                        row.append(detail);
+                        badges.append(edit);
+                        row.append(symbolCell, document.createElement('span'), document.createElement('span'), document.createElement('span'), growth, badges, action);
                         section.append(row);
                         this.rows.set(ticker.symbol, row);
-                        if (this.manualEditor === ticker.ticker && this.editable) {
+                        if (this.manualEditor === ticker.ticker && this.editable && ticker.section !== 'hidden') {
                             const editor = document.createElement('div');
                             editor.className = 'manual-tag-editor';
                             for (const tag of tags.filter(tag => tag.id !== 'default')) {
@@ -523,6 +538,7 @@ export class Watchlist {
             mark.hidden = !errors.length;
             mark.title = errors.join('\n');
             row.querySelector('.delete-ticker').disabled = this.busy || this.scan?.busy === true;
+            row.querySelectorAll('[data-growth]').forEach(cell => { cell.textContent = growthValue(ticker[cell.dataset.growth]); });
             const regular = ticker.quote?.regular, extended = extendedQuote(ticker.quote);
             if (scan) {
                 const check = row.querySelector('[data-check]');
@@ -531,8 +547,6 @@ export class Watchlist {
                 row.children[1].textContent = money(ticker.close);
                 row.children[2].textContent = ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%';
                 row.children[3].textContent = ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20);
-                row.querySelector('.rfl-detail').textContent = (ticker.is_new ? 'NEW · ' : ticker.is_returned ? 'RETURNED · ' : '') +
-                    ['rfl1m', 'rfl3m', 'rfl6m'].map((field, index) => `${[1, 3, 6][index]}M ${typeof ticker[field] === 'number' ? ticker[field].toFixed(0) + '%' : '—'}`).join(' · ');
                 continue;
             }
             const preview = ticker.status === 'excluded';

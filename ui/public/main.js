@@ -64,7 +64,7 @@ function applyList(data) {
         const first = holdings.first();
         select(first.symbol, timeframe, 'holdings', first.key);
     }
-    const labels = appMode === 'scan' ? ['Symbol', 'Price', 'ADR20', 'ADV20', ''] : ['Symbol', 'Last', 'Chg%', 'Ext', ''];
+    const labels = appMode === 'scan' ? ['Symbol', 'Price', 'ADR20', 'ADV20', 'Growth', 'Tags', ''] : ['Symbol', 'Last', 'Chg%', 'Ext', 'Growth', 'Tags', ''];
     Array.from($('list-columns').children).forEach((node, index) => { node.textContent = labels[index]; });
     if (changed && !symbol)
         select('', timeframe);
