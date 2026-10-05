@@ -1,46 +1,17 @@
 # UI layout and interactions
 
-Updated: 2026-10-05. This file is the only current UI specification. The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md).
+Updated: 2026-10-06. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md).
 
 ## Layout
 
 - Monitor has Daily, Intraday and List panels; Scan has Daily and List. Panel width rules are defined once in **List UI / 宽度与视觉** below.
-- No application header, brand, global instrument banner or footer. Daily owns the enlarged symbol; Intraday owns the equally styled headline price and ET clock. Both charts show OHLC.
-- White floating cards with generous corners on a neutral background. Black section boundaries and divider handles; the main/volume separator is gray and price-scale vertical borders are hidden.
+- No application header, brand, global instrument banner or footer. Chart-owned headers follow [Chart UI](chart-ui.md#headers-and-information).
+- White floating cards with generous corners on a neutral background. Black section boundaries and divider handles; internal chart panes follow [Chart UI](chart-ui.md#colors-margins-and-reference-lines).
 - Search, period selector, price-session labels and resize handles use pills.
 
-## Chart settings
+## Chart UI
 
-- Local Lightweight Charts 5.2.0. Main candlestick pane above a smaller volume pane; the built-in pane divider remains draggable.
-- No horizontal or vertical grid. Teal up candles/volume (#26a69a), red down candles/volume (#ef5350).
-- EMA10 blue (#2962ff), EMA20 yellow (#e4b400), Daily SMA50 / Intraday SMA65 red (#e53935). Indicator calculations remain in Python.
-- Daily initially shows approximately nine calendar months. Determine the initial pixel spacing from the nine-month window, then retain that spacing across symbols and column resizing. Short histories stay aligned right with blank space on the left; never fitContent to available samples. Resizing changes the number of visible candles, not candle width. User zoom changes spacing intentionally.
-- On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and [0,5) minutes → 5m, [5,15) → 15m, [15,30) → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h/4h are manual only. Controls: 5m, 15m, 30m, 1h, 2h, 4h.
-- rightOffset=1, rightBarStaysOnScroll=true. Keep about one bar between the latest candle and the price axis.
-- CrosshairMode.Normal with dashed horizontal and vertical lines; no magnet/snap mode.
-- Native pan, zoom, price scaling, pane resizing and scrollToRealTime are used. Realtime updates preserve a historical viewport.
-
-## Chart information
-
-- Chart headers are 120px high with one bottom border. Daily shows the symbol at top-left (no Daily tag), followed by the optional Nasdaq Trader Security Name in smaller 15px muted text; long names stay on one line with ellipsis and a full-name tooltip. Missing names and cleared selections hide the name. Scan, Monitor, Review and Holdings selections share the local `.US` name lookup; selecting or reading a chart never fetches names. Intraday shows the current price at top-left with the same 28px size, weight and color as the Daily symbol. Its ET clock is 15px. The extended-session pill sits immediately to the clock’s left, both 26px high; regular sessions show no pill. Period controls sit on the next row.
-- Only Daily displays ADR20 and ADV20, using the same formulas in both modes: recent up to20 closed records, mean (H-L)/L×100 and mean close×volume. Intraday displays the current price and any extended-session pill. Available Sell/Bid and Buy/Ask quotes remain optional.
-- EMA/SMA legends pair colored line swatches with concise labels: EMA 10, EMA 20, and SMA 50 for Daily or SMA 65 for Intraday. They do not show current indicator values.
-- OHLC sits immediately below the aligned black horizontal border on each chart, at 15px; ADR/ADV also use 15px. OHLC fields stay together and wrap on narrow panels. Native chart axes use 12px. Shared CSS font variables keep other small labels at 11px, list values at 12px and body text at 13px. Add Range = (H-L)/L × 100%; H/L values and Range value are black, other labels/values retain their original color.
-- Intraday active volume uses a cached official closed portion plus the current 5m Quote-counter delta. Missing initialization after startup/recovery shows no volume until a usable boundary; closed official bars replace estimates. Daily retains the regular cumulative volume.
-- Current/latest candle volume appears at a fixed top-right position within the volume pane, independently of the hovered OHLC candle. The position follows native pane resizing.
-- Hide the persistent last-price horizontal line on both charts; retain the freely moving dashed crosshair.
-- Lightweight Charts does not supply a TradingView-style instrument/OHLC header; these small DOM legends use subscribeCrosshairMove and seriesData.
-- Chart headers omit market/currency, adjustment/session metadata, bar counts and branding/footer strips. Validation sample counts remain backend diagnostics.
-- Chart branding and attribution follow [Logo / Icon](#logo--icon).
-
-## Linked trading day
-
-- Both charts share one selected New York trading day. Clicking a candle selects that day and reveals it in the peer chart while preserving each chart's zoom.
-- A period change keeps that day selected when available in the new period. Go to latest selects the latest available trading day again.
-- Hovering synchronizes the peer crosshair for the same trading day through setCrosshairPosition / clearCrosshairPosition. The mouse-driven chart remains unsnapped; peer positioning uses the corresponding candle.
-- Daily-to-Intraday maps to that day's first available intraday candle, or the previously selected intraday time on the same day. Intraday-to-Daily maps to that day's Daily candle.
-- Do not copy logical/time ranges directly between different periods. Use a reentrancy guard for programmatic crosshair updates.
-- Linking only uses loaded history. When the peer has no bars for the selected day, clear its linked crosshair; do not invent data or initiate an unbounded historical download.
+Chart layout, colors, margins, headers, volume hover, scale defaults, mouse/zoom, linked trading day and status are maintained in [chart-ui.md](chart-ui.md). All charts use the same manually adjustable default spacing; visible history depends on that spacing and panel width.
 
 ## Logo / Icon
 
@@ -74,7 +45,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 
 ### 操作与状态图标
 
-以下为当前图形及对应含义；更换绘制方式不能改变行为。名单生命周期见 [list-design.md](list-design.md)，图表错误含义见 [Chart status](#chart-status)。
+以下为当前图形及对应含义；更换绘制方式不能改变行为。名单生命周期见 [list-design.md](list-design.md)，图表错误含义见 [Chart status](chart-ui.md#chart-status)。
 
 | 场景 | 当前图形 | 含义 |
 | --- | --- | --- |
@@ -99,14 +70,14 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 
 ## List UI
 
-本章是唯一当前 List UI 规范，覆盖 Scan、Monitor 和独立 Holdings。名单分类与生命周期见 [list-design.md](list-design.md)；显示、筛选和格式化不改变名单归属或行情订阅。
+本章是唯一当前 List UI 规范，覆盖 Scan、Monitor 的观察名单；独立持仓表只在 [Holdings UI](holdings-ui.md) 维护。名单分类与生命周期见 [list-design.md](list-design.md)；显示、筛选和格式化不改变名单归属或行情订阅。
 
 ### 宽度与视觉
 
 - 扣除工作区内边距和面板分隔条后，两模式 List 默认占可用面板宽度 **32%**，最小 **680px**；每个图表最小 **320px**，Monitor 双图均分剩余空间。数值统一放在 `layout.ts`，方便单点调整比例。
 - 面板分隔条和 List 数据列间距均为 **12px**。拖动只调整相邻面板并保留最小宽度；打开页面、切换模式或双击分隔条恢复默认。小窗口保持最小宽度，允许工作区整体溢出。
-- Holdings 内容测量仅在必要时提高 Monitor 最小宽度以容纳表格，不把默认比例改成固定自然内容宽度。报价更新不能让侧栏反复缩窄或抖动。
-- List 与图表头部保持 120px 对齐。模式、总数、数据标记、Scan Ready 和 Search 均位于 List 面板内；名单列头不增加顶部分隔线。
+- Monitor 的最小宽度也接受独立持仓内容需求，具体测量和固定顶部布局见 [Holdings UI](holdings-ui.md#位置折叠与宽度)。
+- List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Scan Ready 和 Search 均位于 List 面板内；名单列头不增加顶部分隔线。
 - 计数使用独立 `span.count-badge`：**10px、黑色、不加粗**，与标题留小间距。适用于列表按钮、section、symbol 总数、Holdings、Filter 与结果数。数字本身不统一加背景；选中 pill 中的数字仍为黑色，所在 pill 使用浅背景保证可读。
 
 ### 展示范围与控件
@@ -137,7 +108,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 - Growth 依次显示 **1m / 3m / 6m** 三个值，不显示周期 key，以浅色 `|` 分隔。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
 - Tags 列显示轮廓 glyph，图案、尺寸与配色统一见 [Logo / Icon](#logo--icon)。保持 **110px** 列宽下限并为编辑按钮留空隙；最多显示三个 glyph，其余用小号 `+N`，悬停列出完整剩余标签。glyph 悬停显示完整名称与人工 `today` 状态，人工补充仅当日有效，不额外使用蓝色 badge。Tags 与 `+N` 均不换行、不增加行高，不增加测宽或 ResizeObserver。
 - Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑仅修改当日人工补充，Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
-- NEW / RETURNED 使用 Symbol 旁的小标记；ticker 不显示 `.US`。Scan 的成员勾选与图表选中互相独立。
+- NEW / RETURNED 使用 Symbol 旁的小标记；NEW 使用与 EMA10 一致的蓝色 **#2962ff**，RETURNED 保持灰色。ticker 不显示 `.US`。Scan 的成员勾选与图表选中互相独立。
 - Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段或缺数据时留空。Review 显示本地 Daily close，实时涨幅列留空。
 - 选中行保留圆角黑色内边框，不改变背景；仅未选中 hover 行使用灰背景。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
 
@@ -173,14 +144,9 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 - 有效新候选位于本地匹配前，显示蓝色 ticker、公司名和 Add。Enter 优先选择精确已有 ticker；已展示的新候选优先于局部匹配，否则选择首个本地匹配或发起/等待查询。确认新候选后插入目标队首、选图并退出；已有 ticker 只选择、不移动。
 - 未找到 ticker 保持空结果，查询/保存失败保留行内错误。只支持美股正股，不新增模糊查询和其他市场入口。
 
-### 独立 Holdings 表
+### 独立 Holdings 入口
 
-- Holdings 在 Focus 上方，独立只读表、整体折叠、Account Value、刷新时间和 Total；折叠选择本地记忆。主行按买入 sequence 展示，同 ticker 的不同批次及与 Focus/Review 重复均保留，不参与名单勾选、增删、拖动或 Tag 筛选。
-- 列为 Symbol、Net Liq、Days、P/L %、P/L、Sold、Chg%、Ext、P/L Day。regular 时段隐藏整列 Ext，取消该列排序并回收测量宽度；使用已有服务端时段状态，不新增前端日历或请求。
-- 主行单行。Net Liq/P/L/P/L Day 与 Total 显示整数，P/L % 和 Chg% 一位小数，Ext 与成交价两位。Sold 显示整数百分比；零留空且无展开箭头，实际非零但四舍五入为零显示 `<1%` 并可展开。ticker 统一对齐，左侧独立箭头空隙。
-- 明细先 Buy 后 Sold，每笔单行、无新增列头：日期在 Net Liq 列、股数在 Sold 列并保留碎股、成交价在 Chg% 列。Buy 的 Days/P/L 留空，Sold 保留持有天数与已实现盈亏。
-- 列头只在降序/默认间切换，换列替换排序。Symbol Z–A，数值按原值、缺失/非有限置后、同值稳定排序。报价更新保留排序、选择和展开明细；明细跟随主行。排序仅本页面有效，重开恢复默认。
-- 点击和键盘导航选择现有图表对。选中批次消失时改选首条持仓，再无持仓才回名单。刷新失败保留上次表格与时间、显示简短状态，详情悬停查看；价格来源和 P/L Day 基准保留 tooltip，计算见 [behavior.md](behavior.md)。
+Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式、买卖明细、排序、选择和状态的唯一要求见 [Holdings UI](holdings-ui.md)。
 
 ### Scan 日期与 Ready
 
@@ -191,16 +157,8 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 ## Data and simulator boundaries
 
 - One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics; POST /v1/list performs edits. POST /v1/mode, /v1/scan and /v1/preferences handle mode, generation/date and saved Tags. Independent list messages refresh membership even without chart selection. A chart GET must not change selection priority.
-- Keep mode, request_id, source and socket identity checks. Mode/date changes reset chart context; backend run_id changes force full history. Switching periods preserves selected trading day and viewport. Indicators are calculated only in Python.
-- 2h/4h derive from official closed 5m bars. Missing official 15m/30m/1h history uses the same in-memory conversion; official data replaces it on the next update.
-- 1000 5m bars span roughly 13 full sessions; derived periods share that coverage. Insufficient SMA65 history leaves the line absent.
+- Chart context checks, local/derived history and status boundaries follow [Chart UI](chart-ui.md#data-boundaries).
 - Simulator uses the same UI, scheduler and validation against temporary data with an instance exchange clock. It never reads credentials or falls back to a broker. SIM and MOCK are offline fixtures, not live evidence.
-
-## Chart status
-
-- Live Monitor: Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all five official periods complete, hidden after three seconds. Routine closed updates do not restart the timer.
-- Exhausted history retries and connection failures use one exclamation icon with reason on hover, retaining existing charts. Finite positive OHLC range contradictions do not produce UI warnings or retries; display official values unchanged.
-- Scan and Review use their local Daily date/status rather than live five-period readiness.
 
 ## Checks
 

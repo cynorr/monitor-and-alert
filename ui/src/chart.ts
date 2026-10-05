@@ -1,6 +1,7 @@
 import type { IChartApi, ISeriesApi, UTCTimestamp, Time, CandlestickData, LineData, HistogramData } from 'lightweight-charts';
 import type * as ChartLibrary from 'lightweight-charts';
 import { $, money, compact, dayKey, type Row, type Point, type ChartData } from './types.js';
+import { BAR_SPACING, VOLUME_PANE_RATIO } from './chart-settings.js';
 declare global {
     interface Window {
         LightweightCharts: typeof ChartLibrary;
@@ -21,8 +22,7 @@ export class Panel {
     active: Row | null = null;
     key = '';
     fitted = false;
-    initialSpacing = false;
-    hovering = false;
+    hoveredTime?: number;
     precision = 2;
     onHover: (row?: Row) => void = () => { };
     onSelect: (row: Row) => void = () => { };
@@ -32,7 +32,7 @@ export class Panel {
             layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 12, attributionLogo: false, panes: { separatorColor: '#c6cbd1', separatorHoverColor: '#a8afb8' } },
             grid: { vertLines: { visible: false }, horzLines: { visible: false } },
             rightPriceScale: { borderVisible: false, minimumWidth: 55, scaleMargins: { top: 0.07, bottom: 0.05 } },
-            timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: 6, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t: Time, type: number) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },
+            timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: BAR_SPACING, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t: Time, type: number) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },
             localization: { locale: 'en-US', timeFormatter: (t: Time) => daily ? dayKey(Number(t)) : `${dayKey(Number(t))} ${timeFormat.format(dateOf(t))}` },
             crosshair: { mode: L.CrosshairMode.Normal, vertLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
         });
@@ -41,8 +41,8 @@ export class Panel {
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
         this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
-        this.chart.panes()[0].setStretchFactor(1);
-        this.chart.panes()[1].setStretchFactor(0.22);
+        this.chart.panes()[0].setStretchFactor(1 - VOLUME_PANE_RATIO);
+        this.chart.panes()[1].setStretchFactor(VOLUME_PANE_RATIO);
         const volumePosition = () => {
             const label = $(id + '-volume');
             label.style.top = `${this.chart.panes()[0].getHeight() + 5}px`;
@@ -56,8 +56,7 @@ export class Panel {
             const candle = param.seriesData.get(this.candles) as CandlestickData | undefined;
             const volume = param.seriesData.get(this.volume) as HistogramData | undefined;
             const row = candle ? { ...candle, time: Number(candle.time), volume: volume?.value ?? null } : undefined;
-            this.hovering = !!row;
-            this.showOHLC(row ?? this.active ?? this.rows.at(-1));
+            this.showHover(row);
             // Programmatic/refresh events must not bounce the peer's candle price
             // back onto the mouse-driven crosshair.
             if (param.sourceEvent)
@@ -65,7 +64,10 @@ export class Panel {
         });
         this.chart.subscribeClick(param => { const row = param.seriesData.get(this.candles) as CandlestickData | undefined; if (row)
             this.onSelect({ ...row, time: Number(row.time), volume: null }); });
-        $(id + '-chart').addEventListener('mouseleave', () => this.onHover());
+        $(id + '-chart').addEventListener('mouseleave', () => {
+            this.showHover();
+            this.onHover();
+        });
         $(id + '-latest').addEventListener('click', () => {
             this.chart.timeScale().scrollToRealTime();
             const latest = this.active ?? this.rows.at(-1);
@@ -81,14 +83,13 @@ export class Panel {
         this.indicators = {};
         this.active = null;
         this.fitted = false;
-        this.hovering = false;
+        this.hoveredTime = undefined;
         this.chart.clearCrosshairPosition();
         this.candles.setData([]);
         this.volume.setData([]);
         Object.values(this.lines).forEach(line => line.setData([]));
         $(this.id + '-empty').hidden = false;
-        this.showOHLC();
-        $(this.id + '-volume').textContent = 'V —';
+        this.showCandleInfo();
         for (const name of Object.keys(this.lines)) {
             const node = $(this.id + '-legend').querySelector<HTMLElement>('.' + name)!;
             node.hidden = true;
@@ -142,34 +143,30 @@ export class Panel {
                 if (value) line.update(value as LineData);
             }
         }
-        if (this.daily && !this.initialSpacing && this.rows.length && latest) {
-            const scale = this.chart.timeScale();
-            const cutoff = new Date(latest.time * 1000);
-            cutoff.setUTCMonth(cutoff.getUTCMonth() - 9);
-            const samples = this.rows[0].time * 1000 <= cutoff.getTime() ? this.rows.filter(r => r.time * 1000 >= cutoff.getTime()).length : 189;
-            scale.applyOptions({ barSpacing: Math.max(0.5, scale.width() / (samples + 2)) });
-            this.initialSpacing = true;
-        }
         if (!this.fitted && latest) {
             const scale = this.chart.timeScale();
             scale.scrollToPosition(1, false);
             this.fitted = true;
         }
         $(this.id + '-empty').hidden = !!latest;
-        $(this.id + '-volume').textContent = `V ${compact(latest?.volume)}`;
-        if (!this.hovering)
-            this.showOHLC(latest);
+        const hovered = this.hoveredTime === next?.time ? next : this.rows.find(row => row.time === this.hoveredTime);
+        this.showCandleInfo(hovered ?? latest);
         for (const name of Object.keys(this.lines)) {
             const point = data.indicator_preview[name] ?? this.indicators[name]?.at(-1);
             const node = $(this.id + '-legend').querySelector<HTMLElement>('.' + name)!;
             node.hidden = !point;
         }
     }
-    showOHLC(row?: Row) {
+    showCandleInfo(row?: Row) {
+        $(this.id + '-volume').textContent = `V ${compact(row?.volume)}`;
         const node = $(this.id + '-ohlc');
         if (!row) { node.textContent = '—'; return; }
         const range = row.low > 0 ? ((row.high - row.low) / row.low * 100).toFixed(2) + '%' : '—';
         node.innerHTML = `<span>O ${money(row.open)}</span><span>H <b>${money(row.high)}</b></span><span>L <b>${money(row.low)}</b></span><span>C ${money(row.close)}</span><span title="(H − L) / L">Range <b>${range}</b></span>`;
+    }
+    showHover(row?: Row) {
+        this.hoveredTime = row?.time;
+        this.showCandleInfo(row ?? this.active ?? this.rows.at(-1));
     }
     reveal(row: Row) {
         const index = this.rows.findIndex(r => r.time === row.time);
@@ -199,6 +196,8 @@ export function linkTradingDay(daily: Panel, intraday: Panel) {
                     peer.chart.setCrosshairPosition(match.close, match.time as UTCTimestamp, peer.candles);
                 else
                     peer.chart.clearCrosshairPosition();
+                // Lightweight Charts' programmatic crosshair API does not emit move events.
+                peer.showHover(match);
             }
             finally {
                 linking = false;

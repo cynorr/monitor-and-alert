@@ -436,7 +436,7 @@ export class Watchlist {
                         const label = ticker.is_new ? 'NEW' : ticker.is_returned ? 'RETURNED' : '';
                         if (label) {
                             const flag = document.createElement('span');
-                            flag.className = 'symbol-flag';
+                            flag.className = 'symbol-flag' + (ticker.is_new ? ' new' : '');
                             flag.textContent = label;
                             symbolCell.append(flag);
                         }

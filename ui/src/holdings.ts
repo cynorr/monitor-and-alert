@@ -249,8 +249,8 @@ export class HoldingsList {
             document.body.append(copy);
             const intrinsic = Math.ceil(copy.getBoundingClientRect().width);
             copy.remove();
-            const list = document.querySelector<HTMLElement>('.list-body')!;
-            this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + list.offsetWidth - list.clientWidth);
+            const scroll = table.closest<HTMLElement>('.holdings-scroll')!;
+            this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + scroll.offsetWidth - scroll.clientWidth);
         }
         this.onWidth(this.minimumWidth);
     }

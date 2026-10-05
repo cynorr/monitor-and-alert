@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-06。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
+更新：2026-10-06。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## 启动与接收
 
@@ -12,7 +12,7 @@ Quote 统一接收和校验，regular 与 extended 按时段保存最新值，�
 
 Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 ticker 多个买入批次，也允许与 Focus 重复。它不检查或修改观察名单归属，不参与名单新增、排除、移动或排序。点击持仓复用现有 Daily/Intraday；名单刷新、折叠或从 Focus 删除同 ticker 不改变持仓的选择来源。被选持仓批次消失时改选第一条持仓，持仓为空则回到观察名单。
 
-持仓排序只影响当前页面，不修改账户数据或 workspace；行情更新沿用当前排序。布局、列、数值格式、排序按钮和买卖明细的唯一要求见 [ui.md 的 List UI 章节](ui.md#list-ui)。持仓表的自然内容宽度参与 Monitor 列表的最小宽度测量。
+持仓排序只影响当前页面，不修改账户数据或 workspace；行情更新沿用当前排序。Holdings固定在下方名单滚动区之外，可整体折叠。布局、列、数值格式、排序按钮和买卖明细的唯一要求见 [holdings-ui.md](holdings-ui.md)。
 
 配置SnapTrade时，正式服务启动立即发起刷新，首轮前不等待30秒；之后按30秒周期串行刷新，Scan/Monitor切换不停止或重建任务。每轮请求指定账户的positions、details、balances、executed orders；activities仅无缓存或流水同步截止变化时获取并保留原分页。这是成交流水获取，与Longbridge K线禁止分页的规则无关。所有账户请求共用10次/滚动分钟预算，触及额度或慢请求时周期可能延长，不重叠请求。30秒是应用轮询频率，不保证券商持仓/资金每30秒更新；不调用付费连接refresh。
 
@@ -20,7 +20,7 @@ Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 
 
 Longbridge按quote时间戳取regular/pre/post/overnight最新有效价格，重算price、市值、浮盈亏、总P/L及其百分比。仅该ticker缺少有效Longbridge报价时，回退最后成功SnapTrade持仓快照中的price；来源/时段/时间放在市值悬停信息中。成交价仅在展开买卖明细中显示，为该笔成交金额/股数，已实现盈亏和买卖记录不随行情变化。cash保持SnapTrade最近成功值，Account Value = 当前所有持仓估值 + cash，不再直接展示details返回的账户总值。混合来源和不同更新时间可能与券商官方净值不同。
 
-Chg%与Focus共用修正后的前一已完成Daily收盘价，计算regular涨跌幅。Holdings的Ext仅显示比regular更新的扩展时段相对regular收盘价的涨跌幅，盘中隐藏整列（含列头和Total占位），并重新测量持仓内容的宽度下限；若原先按Ext排序则取消排序。离开盘中后恢复整列。常规时段使用服务已有current_regular_session标记，不根据旧盘前报价推断。P/L Day = 当前剩余股数 ×（最新Longbridge价 − 前一常规收盘价）：盘前/夜盘使用最近regular收盘价作基准，盘中/盘后使用regular对应的前一交易日收盘价；盘后保留整个常规交易日以来的变动。该列衡量当前剩余仓位的价格变动，不包含已卖出部分、现金或手续费。缺报价/基准时显示—；总计只有所有批次都有有效值时才显示合计，不输出部分总额。SnapTrade兜底仍用于原市值/P/L，不编造当天盈亏。
+Chg%与Focus共用修正后的前一已完成Daily收盘价，计算regular涨跌幅。Holdings的Ext使用比regular更新的扩展时段报价相对regular收盘价的涨跌幅；常规时段使用服务已有current_regular_session标记，不根据旧盘前报价推断，列显隐规则只在 [Holdings UI](holdings-ui.md#列与格式) 维护。P/L Day = 当前剩余股数 ×（最新Longbridge价 − 前一常规收盘价）：盘前/夜盘使用最近regular收盘价作基准，盘中/盘后使用regular对应的前一交易日收盘价；盘后保留整个常规交易日以来的变动。该列衡量当前剩余仓位的价格变动，不包含已卖出部分、现金或手续费。缺报价/基准时显示—；总计只有所有批次都有有效值时才显示合计，不输出部分总额。SnapTrade兜底仍用于原市值/P/L，不编造当天盈亏。
 
 底层Longbridge范围为Focus与已接受Holdings的并集，同ticker共用一个Quote订阅与一份五周期任务。只有从两类来源都移除才退订/撤下任务；UI和workspace归属仍完全独立。HTTP/WS读取不触发SnapTrade刷新或扩展下载。进入Scan继续持仓轮询与Monitor行情，切回Monitor直接使用已有状态；Scan Mock、独立模拟器与`--symbols`有界验收不读SnapTrade凭证、不获取真实账户。
 
@@ -82,7 +82,7 @@ SDK 负责底层连接恢复；应用保留 30 秒 snapshot、开市无全名单
 
 官方闭合数据存 SQLite。Quote 产生的临时 5m、所有合成周期和指标仅在内存。
 
-页面打开时按美东 09:30 起的开盘时长选择 Intraday 默认周期：[0,5) 分钟为 5m、[5,15) 为 15m、[15,30) 为 30m，30 分钟起为 1h；开盘前为 5m。只计算初始默认值，之后保留手动选择（切换 ticker 也保留）；2h/4h 仅手动选择。
+Intraday 初始周期按美东开盘经过时间选择，之后保留手工选择。所有chart使用统一、可人工调整的初始bar spacing；可见历史长度随间距与面板宽度变化。具体参数、周期控件、参考线和交互只在 [chart-ui.md](chart-ui.md) 维护。
 
 2h/4h 始终从 5m 合成。15m/30m/1h 缺少官方 bar 时，用相同函数合成替代；官方到达后随下一次现有 WebSocket 更新直接替换，不另等收盘。按实际开盘时间分组，不跨日，尾根按收盘时间结束。闭合合成 candle 的 5m 前缀缺失时不编造完整结果。
 
@@ -92,9 +92,6 @@ SDK 负责底层连接恢复；应用保留 30 秒 snapshot、开市无全名单
 
 ## Monitor 页面状态
 
-- Loading：Daily + 5m 尚未完成。
-- 黄色 Ready：Daily + 5m 验证通过，保持到五周期完成。
-- 蓝色 Ready：五个官方周期验证通过，3 秒后隐藏。正常每根收盘更新不会反复闪烁。
-- 感叹号：回补重试耗尽，悬停查看缺失/请求失败等原因；连接中断也明确显示。
+完成状态先要求Daily + 5m，再要求五个官方周期。回补重试耗尽或连接失败显示原因。Loading、Ready颜色与隐藏时间、图表错误图标的唯一显示规范见 [Chart status](chart-ui.md#chart-status)。
 
 2h/4h 和临时合成结果不算官方周期下载完成。错误仍在重试时保留已有图表；成功即恢复。OHLC 上下界矛盾不影响 Ready、不进入错误提示。

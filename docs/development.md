@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-06。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
+更新：2026-10-06。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准。UI 总入口为 [ui.md](ui.md)，图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -36,13 +36,15 @@
 | ui/src/scan.ts / filters.ts / tags.ts / board.ts | 日期/三列表、显示筛选、Tag 条件与外观草稿、角色与section分组 |
 | ui/src/tag-appearance.ts | 内置轮廓图案、旧 Tag 外观默认值与共用 SVG 渲染 |
 | scripts/build_scan_mock.py | 明确指定目录的合成日 K/截面/测试名单 |
-| ui/src/chart.ts / layout.ts | Lightweight Charts、日联动、列宽和原生交互 |
+| ui/src/chart.ts / chart-settings.ts / layout.ts | Lightweight Charts、共用初始图形参数、日联动、列宽和原生交互 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
-持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/买卖行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq、P/L、P/L Day整数为显示格式，后端Decimal契约不变。展开直接使用既有sequence.buys/sells，所有Buy先于Sold；日期/数量/金额与买卖记录均纳入结构签名，刷新后更新明细。Sold=0隐藏主行数值及展开箭头；已卖批次明细成交价为value/quantity，放在第七列Chg%对应位置，主表无Trade Price。P/L %/Chg%使用一位小数，Ext仍两位；无副标题DOM或PNG生成/下载逻辑。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout.ts用LIST_WIDTH_RATIO=0.32决定默认占比，LIST_MIN_WIDTH=680和持仓测量值决定列表下限；两图平分余量，不读写列宽localStorage。展开所需下限增加时自动增长，收起不引起宽度抖动。main.ts复用board与当前view中既有Quote.current_regular_session，任一为true即进入常规时段；前端不新增交易日历或券商请求。Holdings用同一CSS隐藏第八列Ext，取消隐藏列排序；时段显隐切换清空测量宽度下限，在680px下限之上回收该列空间、扩展时段重新测量。手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
+持仓显示与交互的唯一规范见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度使用同样CSS的临时隐藏副本测量，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。main.ts复用已有Quote.current_regular_session，前端不新增日历、HTTP、券商请求或后台任务，后端Decimal契约不变。
+
+图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和volume，刷新不覆盖悬停值；成交量计算仍只在后端。
 
 List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局部 AI 约束见 ui/src/AGENTS.md。list.ts 保持七个行单元与 main.ts/index.html 列头一致；board.growthValue 仅格式化 RFL，原始百分比及排名不变。CSS 维护独立 Growth/Tags 列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
 

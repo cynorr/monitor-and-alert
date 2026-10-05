@@ -24,6 +24,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 /* Shared panel layout and aligned header boundary. */
 .workspace { height: 100dvh; min-height: 480px; min-width: 1364px; display: grid; grid-template-columns: minmax(320px,1fr) 12px minmax(320px,1fr) 12px 680px; padding: 10px; }
 .chart-panel, .watchlist { background: white; border-radius: 22px; box-shadow: 0 3px 14px #1a253012; min-width: 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.watchlist { min-height: 0; overflow: clip; }
 .chart-header, .list-header { height: var(--header-height); flex: 0 0 var(--header-height); display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
 .chart-header { overflow: hidden; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 26px; height: 26px; padding: 0; border-radius: 50%; background: var(--surface-muted); }
@@ -124,7 +125,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .search-result:disabled { opacity: .6; cursor: wait; }
 
 /* Holdings owns its columns and buy-sequence rows above Focus. */
-.holdings-list { border-bottom: 1px solid var(--border); }
+.holdings-list { flex: 0 0 auto; min-width: 0; border-bottom: 1px solid var(--border); }
 .holdings-heading { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 8px; }
 #holdings-toggle { display: inline-flex; gap: 5px; align-items: center; font-weight: 600; padding: 5px 0; }
 #holdings-arrow { width: 16px; font-size: 18px; line-height: 16px; }
@@ -198,6 +199,7 @@ button:disabled { cursor: default; opacity: .45; }
 .scan-symbol input { margin: 0; accent-color: #242c38; }
 .scan-symbol .ticker { flex-shrink: 0; }
 .symbol-flag { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #8a929d; font-size: 8px; }
+.symbol-flag.new { color: #2962ff; }
 
 /* Holdings content sets a width minimum; sort markers add no width. */
 .holdings-table th button { position: relative; padding: 0; color: inherit; font: inherit; white-space: nowrap; }

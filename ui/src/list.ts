@@ -330,7 +330,7 @@ export class Watchlist {
                         }
                         symbolCell.append(name);
                         const label = ticker.is_new ? 'NEW' : ticker.is_returned ? 'RETURNED' : '';
-                        if (label) { const flag = document.createElement('span'); flag.className = 'symbol-flag'; flag.textContent = label; symbolCell.append(flag); }
+                        if (label) { const flag = document.createElement('span'); flag.className = 'symbol-flag' + (ticker.is_new ? ' new' : ''); flag.textContent = label; symbolCell.append(flag); }
                         const action = document.createElement('button'); action.className = 'delete-ticker icon-button'; action.hidden = !this.editable;
                         if (group.id === 'review') {
                             action.dataset.toFocus = ticker.ticker; action.dataset.source = 'excluded'; action.textContent = '+';
