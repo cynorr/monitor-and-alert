@@ -7,10 +7,11 @@ import logging
 import sqlite3
 import time
 import uuid
+from datetime import datetime
 from contextlib import closing
 from copy import deepcopy
 
-from .calendar import TradingCalendar
+from .calendar import TradingCalendar, ET
 from .paths import RuntimePaths
 from .preferences import DEFAULT, validate_preferences
 from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot
@@ -173,7 +174,7 @@ class Workbench:
             quote = self.monitor.quote(symbol, now)
             # Share the watchlist's official Daily-close correction for Chg%.
             quotes[symbol] = {'Intraday': quote['regular'], **quote['extended']} if quote['regular'] else quote['extended']
-        return self.holdings.state(quotes)
+        return self.holdings.state(quotes, as_of=datetime.fromtimestamp(now, ET).date().isoformat())
 
     async def close(self):
         if self.pipeline_task:

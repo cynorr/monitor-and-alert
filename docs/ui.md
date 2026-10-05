@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-06. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md).
+Updated: 2026-10-06. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 

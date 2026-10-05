@@ -14,15 +14,7 @@ Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 
 
 持仓排序只影响当前页面，不修改账户数据或 workspace；行情更新沿用当前排序。Holdings固定在下方名单滚动区之外，可整体折叠。布局、列、数值格式、排序按钮和买卖明细的唯一要求见 [holdings-ui.md](holdings-ui.md)。
 
-配置SnapTrade时，正式服务启动立即发起刷新，首轮前不等待30秒；之后按30秒周期串行刷新，Scan/Monitor切换不停止或重建任务。每轮请求指定账户的positions、details、balances、executed orders；activities仅无缓存或流水同步截止变化时获取并保留原分页。这是成交流水获取，与Longbridge K线禁止分页的规则无关。所有账户请求共用10次/滚动分钟预算，触及额度或慢请求时周期可能延长，不重叠请求。30秒是应用轮询频率，不保证券商持仓/资金每30秒更新；不调用付费连接refresh。
-
-成功获取并完成原买卖归属核对后，整体替换持仓与唯一原始缓存。网络失败、规则错误、歧义或数量不一致均保留上次成功的列表、时间戳与行情范围，提示刷新失败，下一周期再获取；不终止Monitor、不猜测买卖归属。保持单账户USD股票/ETF多头、同日买入先于卖出、明确TXT关联优先、税费前成交价及Decimal计算。持仓天数仍计算到positions快照日期，已结清批次不返回。
-
-Longbridge按quote时间戳取regular/pre/post/overnight最新有效价格，重算price、市值、浮盈亏、总P/L及其百分比。仅该ticker缺少有效Longbridge报价时，回退最后成功SnapTrade持仓快照中的price；来源/时段/时间放在市值悬停信息中。成交价仅在展开买卖明细中显示，为该笔成交金额/股数，已实现盈亏和买卖记录不随行情变化。cash保持SnapTrade最近成功值，Account Value = 当前所有持仓估值 + cash，不再直接展示details返回的账户总值。混合来源和不同更新时间可能与券商官方净值不同。
-
-Chg%与Focus共用修正后的前一已完成Daily收盘价，计算regular涨跌幅。Holdings的Ext使用比regular更新的扩展时段报价相对regular收盘价的涨跌幅；常规时段使用服务已有current_regular_session标记，不根据旧盘前报价推断，列显隐规则只在 [Holdings UI](holdings-ui.md#列与格式) 维护。P/L Day = 当前剩余股数 ×（最新Longbridge价 − 前一常规收盘价）：盘前/夜盘使用最近regular收盘价作基准，盘中/盘后使用regular对应的前一交易日收盘价；盘后保留整个常规交易日以来的变动。该列衡量当前剩余仓位的价格变动，不包含已卖出部分、现金或手续费。缺报价/基准时显示—；总计只有所有批次都有有效值时才显示合计，不输出部分总额。SnapTrade兜底仍用于原市值/P/L，不编造当天盈亏。
-
-底层Longbridge范围为Focus与已接受Holdings的并集，同ticker共用一个Quote订阅与一份五周期任务。只有从两类来源都移除才退订/撤下任务；UI和workspace归属仍完全独立。HTTP/WS读取不触发SnapTrade刷新或扩展下载。进入Scan继续持仓轮询与Monitor行情，切回Monitor直接使用已有状态；Scan Mock、独立模拟器与`--symbols`有界验收不读SnapTrade凭证、不获取真实账户。
+账户刷新、买卖归属、余仓P/L、当日建仓P/L Day基准、短期Days与当日清仓记录的唯一数据需求见 [holdings-data.md](holdings-data.md)。主行盈亏仅计剩余仓位；当天清仓仅作为当日复盘记录保留，不计入余仓Total。它与Focus共用既有行情任务和图表，数据获取仍在单进程中独立维护。
 
 ## Scan 与后台数据任务
 

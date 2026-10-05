@@ -69,12 +69,12 @@
               <th scope="col" aria-sort="none"><button data-holdings-sort="symbol">Symbol</button></th>
               <th scope="col" aria-sort="none" title="Shares held × latest price"><button data-holdings-sort="market_value">Net Liq</button></th>
               <th scope="col" aria-sort="none"><button data-holdings-sort="holding_days">Days</button></th>
-              <th scope="col" aria-sort="none" title="Row: total profit / buy cost; total: total profit / current market value"><button data-holdings-sort="total_pnl_percent">P/L %</button></th>
-              <th scope="col" aria-sort="none" title="Realized + unrealized profit"><button data-holdings-sort="total_pnl">P/L</button></th>
+              <th scope="col" aria-sort="none" title="Remaining position profit / remaining cost; closed rows show realized return"><button data-holdings-sort="total_pnl_percent">P/L %</button></th>
+              <th scope="col" aria-sort="none" title="Remaining position profit; closed rows show realized profit"><button data-holdings-sort="total_pnl">P/L</button></th>
               <th scope="col" aria-sort="none"><button data-holdings-sort="sold_percent">Sold</button></th>
               <th scope="col" aria-sort="none" title="Regular price change from previous daily close"><button data-holdings-sort="change_percent">Chg%</button></th>
               <th scope="col" aria-sort="none" title="Latest extended price change from regular close"><button data-holdings-sort="extended_percent">Ext</button></th>
-              <th scope="col" aria-sort="none" title="Shares still held × (latest price − previous regular close)"><button data-holdings-sort="day_pnl">P/L Day</button></th>
+              <th scope="col" aria-sort="none" title="Remaining shares: today's buys use entry cost, older shares use previous regular close; closed rows show realized daily profit"><button data-holdings-sort="day_pnl">P/L Day</button></th>
             </tr></thead>
             <tbody id="holdings-rows"></tbody>
             <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td></tr></tfoot>

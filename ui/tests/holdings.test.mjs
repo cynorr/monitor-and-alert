@@ -44,3 +44,27 @@ test('net liquidation sorts by original precision rather than rounded display va
     const rows = sortedHoldingRows([holding('LOW', '991.1'), holding('HIGH', '991.4')], 'market_value');
     assert.deepEqual(symbols(rows), ['HIGH', 'LOW']);
 });
+
+test('closed-today sequences always form a stable tail outside every column sort', () => {
+    const closedFirst = holding('ZZZ', '999999', 'closed-first');
+    closedFirst.sequences[0].closed_today = true;
+    const closedSecond = holding('AAA', '-999999', 'closed-second');
+    closedSecond.sequences[0].closed_today = true;
+    const data = [closedFirst, holding('OPEN_LOW', '2'), closedSecond, holding('OPEN_HIGH', '12')];
+    for (const sort of [null, 'symbol', ...fields, 'change_percent', 'extended_percent']) {
+        const rows = sortedHoldingRows(data, sort);
+        assert.deepEqual(rows.slice(-2).map(r => r.sequence.buy_ids[0]), ['closed-first', 'closed-second']);
+        assert.ok(rows.slice(0, 2).every(r => !r.sequence.closed_today));
+    }
+    assert.deepEqual(symbols(sortedHoldingRows(data, null)), ['OPEN_LOW', 'OPEN_HIGH', 'ZZZ', 'AAA']);
+});
+
+test('same ticker can have an open sequence and a closed fixed-tail sequence with trade details', () => {
+    const data = holding('XYZ', '999', 'closed');
+    data.sequences[0].closed_today = true;
+    data.sequences[0].sells.push({id:'stop-out',value:'90'});
+    data.sequences.push(holding('XYZ', '1', 'rebuy').sequences[0]);
+    const rows = sortedHoldingRows([data], 'total_pnl');
+    assert.deepEqual(rows.map(r => r.sequence.buy_ids[0]), ['rebuy', 'closed']);
+    assert.equal(rows[1].sequence.sells[0].id, 'stop-out');
+});

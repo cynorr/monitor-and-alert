@@ -2,7 +2,7 @@
 
 个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘。两个页面共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
 
-[开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [Chart UI](docs/chart-ui.md) · [Holdings UI](docs/holdings-ui.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
+[开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [Chart UI](docs/chart-ui.md) · [Holdings 数据](docs/holdings-data.md) · [Holdings UI](docs/holdings-ui.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
 
 ## 启动
 
@@ -66,7 +66,7 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 - Monitor：5m/15m/30m/1h/2h/4h、SMA65、交易日联动、实时行情；2h/4h由5m在内存合成。
 - Search 和 section 的 + 共用内联输入；Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info，确认后才保存。快捷键和新增位置见 [List UI](docs/ui.md#list-ui)。
 - Monitor与Scan共享Focus分组、Tag/Filter、拖动、Shift+上下排序与折叠。每行允许补充当日Tag；Monitor仅显示Focus与折叠Review，本地Daily预览Review不扩大实时订阅。
-- Monitor 的 Holdings 固定在下方名单滚动区之外，可整体折叠；按买入批次展示及展开 Buy/Sold 明细，允许同 ticker 多个批次与名单重复，不写 workspace。显示、排序和布局的唯一规范见 [Holdings UI](docs/holdings-ui.md)。Longbridge 最新价（含盘前/盘后/夜盘）重算市值和盈亏，缺价回退最后成功的 SnapTrade 价格；cash 来自 SnapTrade，Account Value 为当前持仓市值加 cash。
+- Monitor 的 Holdings 固定在下方名单滚动区之外，可整体折叠；按买入批次展示及展开 Buy/Sold 明细，允许同 ticker 多个批次与名单重复，不写 workspace。余仓盈亏、当天建仓基准、Days和当日清仓保留的唯一需求见 [Holdings 数据](docs/holdings-data.md)；显示、排序和布局见 [Holdings UI](docs/holdings-ui.md)。Longbridge 最新价（含盘前/盘后/夜盘）重算市值和盈亏，缺价回退最后成功的 SnapTrade 价格；cash 来自 SnapTrade，Account Value 为当前持仓市值加 cash。
 - ADR20 = 最近最多20根`(H-L)/L × 100`均值；ADV20 = 最近最多20根`close × volume`均值，两模式同公式。
 - Monitor Loading → 黄色Ready（Daily+5m）→ 蓝色Ready（五周期，3秒后隐藏）；Scan图表显示所选日期，列表显示最新Scan Ready日期与完成时间。仅OHLC上下界矛盾保留原值并追加invalid_ohlc.jsonl，不修正或告警。
 

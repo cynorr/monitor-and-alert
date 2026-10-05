@@ -1,9 +1,9 @@
 # 项目入口：Market Monitor
 
-先读 [README.md](README.md)；开发遵循 [docs/development-principles.md](docs/development-principles.md)，实现维护读 [docs/development.md](docs/development.md)，产品逻辑读 [docs/behavior.md](docs/behavior.md)，Massive 规则读 [docs/massive-data.md](docs/massive-data.md)，List/Tag/Filter 另读 [docs/list-design.md](docs/list-design.md)。UI 总入口为 [docs/ui.md](docs/ui.md)，图表需求只在 [docs/chart-ui.md](docs/chart-ui.md)、持仓 UI 只在 [docs/holdings-ui.md](docs/holdings-ui.md)、图案与图标只在 [Logo / Icon](docs/ui.md#logo--icon) 维护。这些是唯一维护入口，用户当前要求优先于文档。
+先读 [README.md](README.md)；开发遵循 [docs/development-principles.md](docs/development-principles.md)，实现维护读 [docs/development.md](docs/development.md)，产品逻辑读 [docs/behavior.md](docs/behavior.md)，Massive 规则读 [docs/massive-data.md](docs/massive-data.md)，List/Tag/Filter 另读 [docs/list-design.md](docs/list-design.md)，持仓数据需求只在 [docs/holdings-data.md](docs/holdings-data.md) 维护。UI 总入口为 [docs/ui.md](docs/ui.md)，图表需求只在 [docs/chart-ui.md](docs/chart-ui.md)、持仓 UI 只在 [docs/holdings-ui.md](docs/holdings-ui.md)、图案与图标只在 [Logo / Icon](docs/ui.md#logo--icon) 维护。这些是唯一维护入口，用户当前要求优先于文档。
 
 - 单进程 Python + SQLite + 本机 WebSocket + TypeScript；不新增服务、消息中间件或通用适配框架。
-- 每次启动重读 workspace；只请求/订阅 focus 与 SnapTrade 当前 holdings；Discover 和 Excluded（含 Review）只用本地 Massive Daily。Holdings 归属独立，同 ticker 仅底层行情去重；不以历史报告中的 ticker 作为白名单。
+- 每次启动重读 workspace；只请求/订阅 focus 与 SnapTrade 当前 holdings（含仅保留当天的已清仓批次）；Discover 和 Excluded（含 Review）只用本地 Massive Daily。Holdings 归属独立，同 ticker 仅底层行情去重；不以其他历史成交或报告中的 ticker 作为白名单。
 - Massive 完整特征覆盖候选、Focus 和全部 Excluded（含 Hidden）；继承名单不另行排名，Hidden 屏蔽期仅跳过名单规则判断。详细范围只在 [Massive 数据要求](docs/massive-data.md#名单完整特征范围) 维护。
 - 唯一正式 SDK 入口是 broker.py。只订阅 Quote；UI 不调用券商。
 - Longbridge bars 只存官方 NoAdjust、regular、closed 的五个周期；Massive Daily 单独存库，采用拆股复权与 HALF_UP 整数成交量，保留供应商 Daily 时段口径。共用 Bar、指标和显示，不拼接或交叉验证来源。2h/4h 及其他合成数据只在内存。

@@ -1,6 +1,6 @@
 # Holdings UI
 
-更新：2026-10-06。本文件是独立持仓表的唯一 UI 规范；[ui.md](ui.md) 是总入口。账户刷新、价格来源、会计与 P/L Day 计算见 [behavior.md](behavior.md#holdings)，图案与操作含义见 [Logo / Icon](ui.md#logo--icon)。产品界面仅使用英文。
+更新：2026-10-06。本文件是独立持仓表的唯一UI规范；[ui.md](ui.md) 是总入口。账户刷新、价格来源、会计、Days与P/L Day计算只在 [holdings-data.md](holdings-data.md) 维护，图案与操作含义见 [Logo / Icon](ui.md#logo--icon)。产品界面仅使用英文。
 
 ## 位置、折叠与宽度
 
@@ -18,6 +18,7 @@
 - Net Liq、P/L、P/L Day 和对应 Total 显示整数。P/L %、Chg% 使用一位小数；Ext 和成交价使用两位小数。
 - Sold 显示整数百分比。零留空且无展开箭头；实际非零但四舍五入为零时显示 `<1%`，并允许展开。
 - 缺失值显示 `—`；regular 时段的 Ext 整列隐藏。市值的价格来源、时段与时间，以及 P/L Day 基准保留 tooltip。
+- P/L Day tooltip使用各批次服务端基准，区分entry price、previous regular close和mixed weighted basis；不能把全部批次标成上一收盘价。当日清仓注明realized today，Net Liq提示没有剩余仓位。
 
 ## Buy / Sold 明细
 
@@ -29,6 +30,7 @@
 ## 排序、选择与状态
 
 - 列头只在降序/默认之间切换；换列替换当前排序。Symbol 按 Z–A；数值按原值，缺失/非有限值置后，同值稳定排序。排序只影响本页面显示，重开恢复默认。
+- 当日清仓主行固定在所有余仓之后，主行/明细为灰色；任意排序及取消排序均不改变清仓相对顺序。信息正常显示、Sold为100%，仍可展开和选图，不新增标题或分组控件，余仓Total不含这些复盘记录。
 - 报价更新保留排序、选择和展开明细。仅顺序变化时保留既有行结构与焦点，不重新选图。
 - 点击和上下方向键选择现有图表对。同 ticker 的 Holdings 使用独立实时选择来源；名单刷新、筛选、折叠或删除同 ticker 不抢走持仓选择。
 - 选中批次消失时改选首条持仓；再无持仓才回到名单。
