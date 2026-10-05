@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-05。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
+更新：2026-10-06。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
 
 ## 启动与接收
 
@@ -30,13 +30,13 @@ Chg%与Focus共用修正后的前一已完成Daily收盘价，计算regular涨�
 
 Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus 在Scan中也使用该上游来源；切回Monitor才使用runtime/longbridge/bars.sqlite3与实时Quote。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
 
-Massive在入库时按split快照做拆股复权，成交量按HALF_UP四舍五入为整数，Daily保留供应商时段口径。Longbridge仍显式请求NoAdjust、regular并保存整数成交量。读取、指标和图表不再做复权；两源共享格式与计算，但不拼接或交叉验证。Longbridge复权不在本版本范围。
+Massive 数据要求、拆股/整数成交量、来源时段与筛选配置统一见 [massive-data.md](massive-data.md)。Longbridge仍显式请求NoAdjust、regular并保存整数成交量。读取、指标和图表不再做复权；两源共享格式与计算，但不拼接或交叉验证。Longbridge复权不在本版本范围。Daily Symbol右侧可以显示本地Nasdaq目录名称，缺失正常留空，两模式共用。
 
 全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 和不带 --date 的 scan 命令生成并打开最新完成日，按钮不重算日期下拉框当前选中的旧日。显式 scan --date D 或 POST /v1/scan 指定 date 仍可重算指定日；GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读。日期下拉框仅显示已生成的日期。
 
-正式服务启动触发一次Massive后台准备，依次完成Daily、split、SQLite和features；已有目标日及匹配输入版本的完整产物则跳过。失败阶段最多四次，间隔2/5/10秒；耗尽后保留上次完整产物和Ready日期，显示错误。没有定时轮询。手动脚本与页面Refresh复用同一流程，GET、图表和切页不触发下载；同一时刻仅一份准备任务。
+正式服务启动触发一次Massive后台准备，依次完成Daily、split、SQLite和features；已有目标日及匹配行情版本的完整产物则跳过。免费Nasdaq目录由独立脚本维护；缺失/损坏或配置错误先于Massive请求失败，保留旧结果并提示。网络获取按数据要求有界重试；本地构建失败直接报错，派生SQLite删除后在下次运行重建。没有定时轮询。手动脚本与页面Refresh复用同一流程，GET、图表和切页不触发下载；同一时刻仅一份准备任务。
 
-Daily已有有效文件不覆盖，最近14个自然日仅补文件缺失；目标日按XNYS日历及美东18点门槛确定。split保留原两年窗口完整分页覆盖逻辑，窗口之前的历史保留，成功才原子替换。状态统一写runtime/pipeline-status.json，移除旧extended字段；Daily、split、bars、features分别记录当前状态和成功产物。Scan Ready以features完成日及匹配的输入版本为准，完成时间显示到秒。自动完成只让跟随最新日的页面继续跟随，历史日期保持不变；后台忙不阻止展示切换。
+Daily与split获取范围见数据要求。SQLite普通新日直接追加；旧raw或split结果变化则删除后全量重建。构建失败报错并删除不完整库，不做失败回滚。状态统一写runtime/pipeline-status.json；Daily、split、bars、features分别记录当前状态和成功产物。Scan Ready以features完成日及匹配的行情版本为准，完成时间显示到秒。候选配置/目录修改后手动刷新应用，不做自动版本重算。自动完成只让跟随最新日的页面继续跟随，历史日期保持不变；后台忙不阻止展示切换。
 
 ## List、Tag 与 Filter
 
@@ -44,7 +44,7 @@ Daily已有有效文件不覆盖，最近14个自然日仅补文件缺失；目�
 
 Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus、独立 Holdings 和折叠 Review；Discover / Hidden / Extended / Broken 不订阅 Longbridge。Review 预览来自本地 Massive Daily，加入 Focus 后才实时订阅；Excluded 盘中恢复依赖下一个完成日扫描或人工加入。
 
-候选 ADR20≥5%、ADV20≥$5M，RFL1M/3M/6M各前50取并集，不设Price门槛。完整原子特征计算范围为候选 ∪ Focus ∪ 非Hidden Excluded。Hidden跳过形态扫描，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后分类，不触发下载。新日和重算发布后更新规则结果。
+候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、Focus和全部Excluded（含Hidden）均计算完整特征与Growth所用RFL数值，即使继承成员不在候选或前50也继续计算，不为名单另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。已有人工成员不因候选门槛自动删除，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 
 Tag 保存条件与用途：Setup用于潜力section/Review，Extended和Broken用于淘汰，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可以匹配多个Tag，按Setup定义顺序选一个主section；未匹配为Unclassified。
 

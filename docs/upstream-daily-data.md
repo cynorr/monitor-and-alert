@@ -1,16 +1,14 @@
-# Massive Daily 与共用 bars 契约
+# 共用 bars 契约
 
-更新：2026-10-03。用户本轮明确：Massive采用拆股复权与四舍五入整数成交量；Longbridge保持NoAdjust、regular及整数成交量。两源只统一格式、读取、指标及显示，不拼接历史或交叉验证。此要求取代2026-10-02两源统一NoAdjust的交付约定。
+更新：2026-10-05。本文件只维护共用 Bar 表、来源边界与完成日契约。Massive 的获取、复权、ADR/ADV、ETF/历史过滤、独立配置和增量构建统一见 [massive-data.md](massive-data.md)。
 
 ## 路径与所有权
 
-- `runtime/massive/daily/*.json`：原始Massive grouped Daily，adjusted=false；累积保留、不覆盖有效文件、不加入Git。
-- `runtime/massive/splits.json`：两年窗口滚动覆盖，保留窗口之前历史；唯一可加入Git的运行数据。
-- `runtime/massive/daily.sqlite3`：Massive模块唯一构建和发布，Scan只读。
-- `runtime/longbridge/bars.sqlite3`：Longbridge唯一写入，只跟踪当前Focus与已接受Holdings的并集。
-- `runtime/pipeline-status.json`：各阶段状态及最后完整成功产物，不包含extended拉取字段。
+- `runtime/massive/daily.sqlite3`：Massive 模块唯一写入，Scan 与 Review 只读。
+- `runtime/longbridge/bars.sqlite3`：Longbridge 唯一写入，只跟踪当前 Focus 与已接受 Holdings 的并集。
+- `--runtime` 修改整个运行根；显式 `--daily-db` 只读消费外部 SQLite 并禁用内置 Massive 获取。
 
-`--runtime`修改整个运行根；显式`--daily-db`消费其他已交付SQLite并禁用内置Massive获取。三份复制项目只作参考，正式运行不依赖它们。
+两个来源共用格式、读取、指标及图表，不拼接历史或交叉验证，不在读端二次复权。三个复制项目只作参考，正式运行不依赖它们。
 
 ## 唯一共用表结构
 
@@ -30,22 +28,14 @@ CREATE TABLE bars (
 CREATE INDEX bars_by_time ON bars(timeframe, ts, symbol);
 ```
 
-Massive timeframe固定1d。Daily ts为交易日America/New_York零点转换的整数Unix秒，DST由时区处理。symbol保留Massive ticker原始标点并追加.US，不猜类别股代码映射。只有完成目标日发布后消费者才可使用，不能从MAX(ts)推断全市场Ready。
+统一使用 `.US` 标识。保留 Massive ticker 原始标点，不猜类别股映射。Daily ts 为交易日 America/New_York 零点转换的整数 Unix 秒，DST 由时区处理。输出 volume 必须是实际 SQLite integer；OHLC 必须正数有限，volume 非负，时间及闭合边界有效。
 
-Massive原始volume允许供应商小数；复权后按Decimal ROUND_HALF_UP转为非负整数，不以小数反推价格复权状态。价格与VWAP按拆股累计因子调整，成交量除同因子。turnover可用同根VWAP乘未取整量，不能用close×volume冒充真实成交额；缺可靠输入时NULL。ADV20仍使用唯一close×volume均值，turnover不参与。
+仅上下界矛盾仍保存官方原值并追加 invalid_ohlc.jsonl，不修正、不告警、不重试。原始行与转换后行继续按各来源契约校验。turnover 允许 NULL，不影响日 K 或 ADV 计算。
 
-Massive保留供应商Daily时段口径，metadata必须明确session=massive_daily，不冒充regular。Longbridge继续regular、closed、NoAdjust，成交量为官方非负整数。Longbridge未来复权不在本版本范围。所有读取与图表不再额外复权。
+## 来源与完成状态
 
-OHLC必须正数有限；上下界矛盾保留值并追加invalid_ohlc.jsonl，不修正、不告警、不重试。输出volume必须实际SQLite integer。每symbol保留截至完成日最多1000根，短历史接受，不补造交易日。Massive原始文件的累积保存不受SQLite最近窗口限制。
+Massive 使用拆股复权、HALF_UP 整数成交量及 `massive_daily` 供应商时段，规则统一在 Massive 文档。Longbridge 保持官方 NoAdjust、regular、closed 和非负整数成交量；仅保存官方 1d/5m/15m/30m/1h，2h/4h 等合成只在内存。Longbridge 后续复权不在当前版本范围。
 
-## 完成日与Ready
+全市场完成日必须由 Massive 写端明确提交 `metadata.completed_date`，不得从 MAX(ts) 推断全市场 Ready。构建成功后写完成元数据。只用普通SQLite提交，不增加并发读快照或跨构建回滚；本地写入失败直接报错、删除派生库，下次从原始JSON重建。下游特征核对行情版本，候选配置在手动生成时读取。
 
-SQLite metadata发布completed_date、input_revision、adjustment=split_adjusted、volume_rounding=half_up、source=massive_grouped_daily、session=massive_daily及turnover口径。临时库全部构建成功后才原子替换，失败保留旧库。
-
-正式启动或手动任务按Daily→split→SQLite→features执行；已Ready跳过。features发布scan.json后才记录对应完成日、输入版本和精确到秒的完成时间。状态文件是检查入口，但必须核对产物，遗留running或不同版本不能冒充Ready。失败保留上一次可用结果，重试耗尽显示错误。
-
-Scan与Monitor继续复用indicators.py和同一Daily图表。Massive复权与Longbridge原始价格差异允许存在，选择页面明确决定来源。人工workspace同日重算不覆盖，新日首次生成才继承。
-
-## 本轮迁移
-
-2026-10-03复制的558份原始日文件和split已逐文件SHA-256核对，原目录保留。旧runtime/daily.sqlite3和runtime/bars.sqlite3亦保留；后者含全市场Daily和分钟线，不直接迁入新的Longbridge运行库。历史验收不能作为本轮live证据，实际覆盖见validation.md。
+Scan 和 Monitor 复用 indicators.py 及 Daily 图表，页面选择决定来源。同日重算按既有人工名单维护，新日首次生成继承 Focus。历史迁移/验收事实见 [validation.md](validation.md)，不能作为本轮 live 证据。

@@ -17,6 +17,7 @@ from .scan import candidates, previous_candidates, read_snapshot, build_day, pub
 from .service import DataService
 from .workspace import derive_day_view, normalize_ticker
 from .store import atomic_json
+from .symbol_directory import read_directory
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ class Workbench:
         self.snapshot_cache, self.chart_cache, self.previous_cache = {}, {}, {}
         self.switching = self.generating = False
         self.preferences_path = runtime / 'preferences.json'
+        self.symbol_directory_path = RuntimePaths(runtime).symbol_directory
+        self.symbol_directory_cache = None, {}
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(DEFAULT))
         self.list_context = self._list_context()
         workspace.on_change = self.workspace_changed
@@ -54,11 +57,11 @@ class Workbench:
         value = self.workspace.date
         if not self.has_snapshot(value):
             return
-        tracked, hidden = workspace_scope(self.workspace.root, value)
+        tracked = workspace_scope(self.workspace.root, value)
         snapshot = self.snapshot(value)
         if self.daily_path.is_file():
             updated = await asyncio.to_thread(enrich_snapshot, self.daily_path, snapshot, self.calendar,
-                                             tracked_tickers=tracked, hidden_tickers=hidden,
+                                             tracked_tickers=tracked,
                                              log_path=self.runtime / 'invalid_ohlc.jsonl')
             if updated != snapshot:
                 atomic_json(self.workspace.root / value / 'scan.json', updated)
@@ -282,7 +285,8 @@ class Workbench:
     def view(self, symbol, tf, revisions=None, source='watchlist'):
         review = self.mode == 'monitor' and source != 'holdings' and self.is_review(symbol)
         if self.mode == 'monitor' and not review:
-            return {**self.monitor.view(symbol, tf, revisions), 'app_mode': 'monitor'}
+            return {**self.monitor.view(symbol, tf, revisions), 'app_mode': 'monitor',
+                    'security_name': self.security_name(symbol)}
         value = self.workspace.date if review else self.selected_date
         key = value, symbol
         if key not in self.chart_cache:
@@ -291,9 +295,28 @@ class Workbench:
         if revisions and revisions.get('1d') == chart['revision']:
             chart = {key:value for key,value in chart.items() if key not in ('bars','indicators')}
         return {'symbol': symbol, 'timeframe': tf, 'app_mode': self.mode, 'mode': self.mode, 'mock': self.scan_mock,
+                'security_name': self.security_name(symbol),
                 'read_only_daily': review, 'date': value, 'run_id': self.run_id, 'server_time': int(time.time()),
                 'charts': {'1d': chart}, 'summary': summary, 'status': {'stage': 'full','errors': []},
                 'quote': {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}}
+
+    def security_name(self, symbol):
+        """Read optional local directory names, independent of chart data and brokers."""
+        try:
+            stat = self.symbol_directory_path.stat()
+            signature = stat.st_mtime_ns, stat.st_size, stat.st_ino
+        except OSError:
+            self.symbol_directory_cache = None, {}
+            return None
+        cached_signature, symbols = self.symbol_directory_cache
+        if cached_signature != signature:
+            try:
+                symbols = read_directory(self.symbol_directory_path)['symbols']
+            except (OSError, ValueError):
+                symbols = {}
+            self.symbol_directory_cache = signature, symbols
+        name = symbols.get(symbol, {}).get('name')
+        return name.strip() or None if isinstance(name, str) else None
 
     async def list_action(self, payload):
         if not self.list_state()['editable']:
@@ -367,10 +390,11 @@ class Workbench:
                             self.selected_date = snapshot['date']
                     else:
                         value = payload.get('date') or latest_completed_date(self.daily_path)
-                        tracked, hidden = workspace_scope(self.workspace.root, value)
+                        tracked = workspace_scope(self.workspace.root, value)
                         snapshot = await asyncio.to_thread(build_day, self.daily_path, value, self.calendar,
                                                             log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.mock,
-                                                            tracked_tickers=tracked, hidden_tickers=hidden)
+                                                            tracked_tickers=tracked,
+                                                            directory_path=RuntimePaths(self.runtime).symbol_directory)
                         publish_day(self.workspace.root, snapshot)
                         self.scan_published()
                         self.selected_date = snapshot['date']
@@ -403,7 +427,10 @@ class Workbench:
         if path == '/v1/chart' and self.mode == 'monitor' and self.is_review(query['symbol'][0]):
             return self.view(query['symbol'][0], query.get('timeframe', ['5m'])[0], source=query.get('source', ['watchlist'])[0])
         if self.mode == 'monitor':
-            return await self.monitor.api(path, query)
+            result = await self.monitor.api(path, query)
+            if path == '/v1/chart':
+                result = {**result, 'security_name': self.security_name(query['symbol'][0])}
+            return result
         if path == '/v1/chart':
             symbol = query['symbol'][0]
             if symbol not in self.symbols:

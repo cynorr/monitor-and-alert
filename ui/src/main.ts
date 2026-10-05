@@ -61,6 +61,11 @@ function state(text: string, kind = '') {
         const node = $(id + '-state'); node.textContent = text; node.className = 'state ' + kind;
     }
 }
+function showSecurityName(name?: string | null) {
+    const node = $('daily-security-name'), text = name?.trim() ?? '';
+    node.textContent = node.title = text;
+    node.hidden = !text;
+}
 function showState(view: View) {
     if (appMode === 'scan' || view.read_only_daily) {
         $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
@@ -85,6 +90,7 @@ function apply(view: View) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
+    showSecurityName(view.security_name);
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
         holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
@@ -116,6 +122,7 @@ function select(next: string, tf: string, source: 'watchlist' | 'holdings' = sel
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll<HTMLElement>('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
+    showSecurityName();
     document.querySelectorAll<HTMLElement>('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
     document.querySelectorAll<HTMLElement>('.session,.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });

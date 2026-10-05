@@ -19,9 +19,11 @@ from .features.screening import apply_filter, add_rank, mark_candidate
 from .features.snapshot import feature_row, feature_frame
 from .indicators import series, daily_summary, adr_adv, return_from_low
 from .store import atomic_json, read_bars
-from .workspace import inherit_workspace, migrate_workspace, is_hidden
+from .workspace import inherit_workspace, migrate_workspace
 from .preferences import DEFAULT, validate_preferences
 from .list_rules import apply_rules
+from .massive.settings import load_config, directory_for_database
+from .symbol_directory import read_directory
 
 log = logging.getLogger(__name__)
 
@@ -61,21 +63,16 @@ def previous_candidates(days, value):
 
 
 def workspace_scope(days, value):
-    """Use the current day or its predecessor; Hidden keeps only light screening."""
+    """Include all Focus and Excluded members from this day or its predecessor."""
     days = Path(days)
     path = days / value / 'workspace.json'
     if not path.exists():
         path = max((p for p in days.glob('*/workspace.json') if p.parent.name < value), default=None)
     if path is None:
-        return set(), set()
+        return set()
     data = migrate_workspace(json.loads(path.read_text()), value)
-    tracked, hidden = set(), set()
-    for ticker, state in data['statuses'].items():
-        if is_hidden(state, value):
-            hidden.add(ticker)
-        elif state['status'] in ('focus', 'excluded'):
-            tracked.add(ticker)
-    return tracked, hidden
+    return {ticker for ticker, state in data['statuses'].items()
+            if state['status'] in ('focus', 'excluded')}
 
 
 def _symbols(tickers):
@@ -91,9 +88,9 @@ def _feature_row(history):
 def _feature_updates(rows):
     if not rows:
         return {}
-    # Full-history features must not change eligibility, market ranks or light RFL.
+    # Complete metrics, including RFL values, without changing screening or ranks.
     features = feature_frame(rows).drop(columns=['date', 'open', 'high', 'low', 'close', 'volume',
-                                                 'adr20', 'adv20', 'rfl1m', 'rfl3m', 'rfl6m'])
+                                                 'adr20', 'adv20'])
     return {row['symbol']: row for row in json.loads(features.to_json(orient='records', double_precision=15))}
 
 
@@ -112,26 +109,34 @@ def checked_history(db, symbol, cutoff, calendar, now, limit, log_path, log_befo
     return history
 
 
-def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tracked_tickers=(), hidden_tickers=()):
+def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tracked_tickers=(),
+              directory_path=None, screening_config=None):
     started = time.perf_counter()
     cutoff = day_start(calendar, value)
     now = int(time.time()) if now is None else now
     if calendar.bar_end(cutoff, '1d') > now:
         raise ValueError('Choose a completed trading date')
+    config = screening_config or load_config()
+    directory = read_directory(directory_path or directory_for_database(path))['symbols']
     rows = []
     window_starts = {}
     with closing(connect_daily(path)) as db:
         symbols = [row[0] for row in db.execute("SELECT symbol FROM bars WHERE timeframe='1d' AND ts=? ORDER BY symbol", (cutoff,))]
         if not symbols:
             raise ValueError('No daily bars on the requested date')
-        # All symbols need only ADR/ADV's 20 records before eligibility is known.
+        # Classify first, then require enough actual records for SMA50 before RFL.
         for symbol in symbols:
-            history = checked_history(db, symbol, cutoff, calendar, now, 20, log_path)
+            info = directory.get(symbol)
+            etf_pass = not config.exclude_etfs or (info is not None and not info['etf'])
+            limit = max(20, config.min_daily_bars) if etf_pass else 20
+            history = checked_history(db, symbol, cutoff, calendar, now, limit, log_path)
             window_starts[symbol] = history[0].ts
-            metrics = adr_adv({key: [getattr(bar, key) for bar in history]
+            metrics = adr_adv({key: [getattr(bar, key) for bar in history[-20:]]
                                for key in ('high', 'low', 'close', 'volume')})
-            rows.append({'symbol': symbol, 'close': history[-1].close, **metrics})
-        screen = apply_filter(pd.DataFrame(rows))
+            rows.append({'symbol': symbol, 'close': history[-1].close, **metrics,
+                         'security_name': info['name'] if info else None, 'etf': info['etf'] if info else None,
+                         'etf_pass': etf_pass, 'history_pass': len(history) >= config.min_daily_bars})
+        screen = apply_filter(pd.DataFrame(rows), config)
         for name in ('rfl1m', 'rfl3m', 'rfl6m'):
             screen[name] = float('nan')
         # Only eligible symbols need 21/63/126-record lows and cross-sectional ranks.
@@ -144,12 +149,12 @@ def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tra
                                        for key in ('low', 'close')})
             for name, value_ in metrics.items():
                 screen.at[index, name] = value_
-        screen = mark_candidate(add_rank(screen))
+        screen = mark_candidate(add_rank(screen), config)
         selected = screen.loc[screen['candidate'], 'symbol'].tolist()
-        feature_symbols = sorted(((set(selected) | _symbols(tracked_tickers)) & set(symbols)) - _symbols(hidden_tickers))
+        feature_symbols = sorted((set(selected) | _symbols(tracked_tickers)) & set(symbols))
         screened = time.perf_counter()
         feature_rows = []
-        # Candidates and retained members need atomic features; Hidden is skipped.
+        # Candidates and all retained Focus/Excluded members need complete features.
         for symbol in feature_symbols:
             history = checked_history(db, symbol, cutoff, calendar, now, 1000,
                                       log_path, log_before=window_starts[symbol])
@@ -164,12 +169,13 @@ def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tra
     return {'date': value, 'mock': mock, 'rows': records, 'feature_scope': feature_symbols}
 
 
-def enrich_snapshot(path, snapshot, calendar, *, tracked_tickers=(), hidden_tickers=(), log_path=None):
+def enrich_snapshot(path, snapshot, calendar, *, tracked_tickers=(), log_path=None):
     """Complete a local snapshot's missing features without rescreening the market."""
     result = deepcopy(snapshot)
     rows = {row['symbol']: row for row in result['rows']}
-    existing = set(result.get('feature_scope', ())) | {symbol for symbol, row in rows.items() if 'ema10' in row}
-    requested = ({symbol for symbol, row in rows.items() if row['candidate']} | _symbols(tracked_tickers)) - _symbols(hidden_tickers)
+    existing = {symbol for symbol, row in rows.items() if 'ema10' in row
+                and all(row.get(name) is not None for name in ('rfl1m', 'rfl3m', 'rfl6m'))}
+    requested = {symbol for symbol, row in rows.items() if row['candidate']} | _symbols(tracked_tickers)
     pending = sorted((requested & set(rows)) - existing)
     feature_rows = []
     if pending:

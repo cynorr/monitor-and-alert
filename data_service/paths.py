@@ -28,6 +28,10 @@ class RuntimePaths:
         return self.root / 'pipeline-status.json'
 
     @property
+    def symbol_directory(self) -> Path:
+        return self.root / 'symbol-directory.json'
+
+    @property
     def days(self) -> Path:
         return self.root / 'days'
 

@@ -12,6 +12,8 @@ import aiohttp
 
 from .calendar import TradingCalendar
 from .massive import daily, splits, build
+from .massive.settings import load_config
+from .symbol_directory import read_directory
 from .network import create_session, proxy_url, read_massive_token
 from .scan import build_day, publish_day, workspace_scope
 from .store import atomic_json
@@ -161,7 +163,8 @@ class MassivePipeline:
         if not self._save():
             stage.update(status='error', error=f'{name}: pipeline status could not be saved')
             return False, None
-        for attempt in range(len(RETRY_DELAYS) + 1):
+        attempts = 1 if name in ('bars', 'features') else len(RETRY_DELAYS) + 1
+        for attempt in range(attempts):
             try:
                 result = await operation()
             except asyncio.CancelledError:
@@ -169,9 +172,9 @@ class MassivePipeline:
                 self._save()
                 raise
             except Exception as exc:
-                reason = str(exc) if isinstance(exc, RequestFailure) else f'{type(exc).__name__}: local data or preparation failed'
+                reason = str(exc) if isinstance(exc, (RequestFailure, ValueError, FileNotFoundError)) else f'{type(exc).__name__}: {name} failed'
                 stage['error'] = f'{name}: {reason}'
-                if attempt < len(RETRY_DELAYS):
+                if attempt + 1 < attempts:
                     self._save()
                     try:
                         await asyncio.sleep(RETRY_DELAYS[attempt])
@@ -200,6 +203,13 @@ class MassivePipeline:
         split_target = date.fromisoformat(self._data['splits']['target'])
         snapshot = None
         try:
+            # The standalone directory pull is a prerequisite, never a Massive request.
+            try:
+                load_config()
+                read_directory(self.paths.symbol_directory)
+            except (ValueError, TypeError, OSError) as exc:
+                self._data['features'].update(status='error', error=f'features: {exc}')
+                return None
             if force:
                 for name in STAGES:
                     self._data[name].update(status='idle', error=None)
@@ -223,12 +233,11 @@ class MassivePipeline:
             revision = self._data['bars']['input_revision']
             if (self._data['features']['status'] != 'ready' or self._data['features']['input_revision'] != revision):
                 async def prepare_features():
-                    tracked, hidden = workspace_scope(self.paths.days, target.isoformat())
+                    tracked = workspace_scope(self.paths.days, target.isoformat())
                     result = await complete_thread(build_day, self.paths.daily_db, target.isoformat(), self.calendar,
                                                    log_path=self.paths.root / 'invalid_ohlc.jsonl',
-                                                   tracked_tickers=tracked, hidden_tickers=hidden)
-                    if await complete_thread(build.input_revision, self.paths, target) != revision:
-                        raise ValueError('Massive inputs changed before feature publication')
+                                                   tracked_tickers=tracked,
+                                                   directory_path=self.paths.symbol_directory)
                     result.update(input_revision=revision, updated_at=updated_at())
                     publish_day(self.paths.days, result)
                     return result

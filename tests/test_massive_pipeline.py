@@ -12,6 +12,7 @@ from data_service import pipeline
 from data_service.pipeline import MassivePipeline
 from data_service.scan import build_day, publish_day
 from data_service.store import atomic_json
+from data_service.symbol_directory import make_snapshot
 
 TARGET = date(2026, 10, 1)
 
@@ -29,6 +30,7 @@ def raw_day(calendar, day, *, volume=500_000.25):
 
 def inputs(tmp_path):
     paths = RuntimePaths(tmp_path)
+    atomic_json(paths.symbol_directory, make_snapshot({'TEST.US': {'name': None, 'etf': False, 'test_issue': False}}))
     calendar = TradingCalendar(TARGET)
     for day in calendar.days(TARGET - timedelta(days=14), TARGET):
         atomic_json(paths.daily_dir / f'{day}.json', raw_day(calendar, day))
@@ -104,7 +106,7 @@ def test_builder_adjusts_before_execution_rounds_volume_and_keeps_raw(tmp_path):
     assert not paths.bars_db.exists()
 
 
-def test_builder_failure_keeps_last_database_and_logs_ohlc_without_fix(tmp_path):
+def test_builder_failure_removes_derived_database_and_logs_ohlc_without_fix(tmp_path):
     paths, calendar = inputs(tmp_path)
     raw = raw_day(calendar, TARGET)
     raw['results'][0]['c'] = 13.
@@ -113,13 +115,11 @@ def test_builder_failure_keeps_last_database_and_logs_ohlc_without_fix(tmp_path)
     with sqlite3.connect(paths.daily_db) as db:
         assert db.execute('SELECT close,high FROM bars ORDER BY ts DESC LIMIT 1').fetchone() == (13., 12.)
     assert (paths.daily_db.parent / 'invalid_ohlc.jsonl').exists()
-    previous = paths.daily_db.read_bytes()
     raw['results'][0]['o'] = 0
     atomic_json(paths.daily_dir / f'{TARGET}.json', raw)
     with pytest.raises(ValueError):
         build.build(paths, TARGET, calendar, now=calendar.session(TARGET)[1])
-    assert paths.daily_db.read_bytes() == previous
-    assert not list(paths.daily_db.parent.glob('massive-*.tmp'))
+    assert not paths.daily_db.exists()
 
 
 def test_ready_restart_skips_credentials_and_network(tmp_path, monkeypatch):
@@ -149,7 +149,7 @@ def test_interrupted_status_does_not_override_artifact_readiness(tmp_path, monke
     assert app.state()['bars']['status'] == app.state()['features']['status'] == 'idle'
 
 
-def test_feature_failure_retries_only_features_then_keeps_last_ready(tmp_path, monkeypatch):
+def test_feature_failure_reports_once(tmp_path, monkeypatch):
     paths, calendar = inputs(tmp_path)
     fixed_dates(monkeypatch, calendar)
     previous = {'date': '2026-09-30', 'mock': False, 'rows': [],
@@ -168,7 +168,7 @@ def test_feature_failure_retries_only_features_then_keeps_last_ready(tmp_path, m
     app = MassivePipeline(paths, calendar)
     assert asyncio.run(app.run()) is None
     state = app.state()
-    assert called == {'bars': 1, 'features': 4}
+    assert called == {'bars': 1, 'features': 1}
     assert state['bars']['status'] == 'ready' and state['features']['status'] == 'error'
     assert state['features']['date'] == previous['date'] and state['features']['updated_at'] == previous['updated_at']
     assert 'TOP_SECRET_VALUE' not in json.dumps(state) and 'https://' not in json.dumps(state)
@@ -219,7 +219,7 @@ def test_input_read_failure_is_reported_by_bars_stage(tmp_path, monkeypatch):
     app = MassivePipeline(paths, calendar)
     calls.clear()
     assert asyncio.run(app.run()) is None
-    assert len(calls) == 5  # readiness check plus four build attempts
+    assert len(calls) == 2  # readiness check plus one build attempt
     assert app.state()['bars']['status'] == 'error'
     assert not app.state()['ready'] and not paths.daily_db.exists()
 
@@ -279,3 +279,19 @@ def test_force_refreshes_splits_but_preserves_raw_and_workspace(tmp_path, monkey
     assert app.state()['ready'] and snapshot['input_revision'] == app.state()['bars']['input_revision']
     assert workspace.read_bytes() == before
     assert raw == {p.name: p.read_bytes() for p in paths.daily_dir.glob('*.json')}
+
+
+def test_missing_directory_stops_before_massive_requests_and_keeps_previous_scan(tmp_path, monkeypatch):
+    paths, calendar = inputs(tmp_path)
+    fixed_dates(monkeypatch, calendar)
+    app = MassivePipeline(paths, calendar)
+    asyncio.run(app.run())
+    previous = (paths.days / str(TARGET) / 'scan.json').read_bytes()
+    paths.symbol_directory.unlink()
+    paths.splits_file.unlink()
+    monkeypatch.setattr(app, '_fetch_json', lambda url: pytest.fail('Directory errors must not spend Massive bandwidth'))
+    assert asyncio.run(app.run(force=True)) is None
+    assert app.state()['features']['status'] == 'error'
+    assert 'pull_symbol_directory' in app.state()['features']['error']
+    assert not app.state()['ready'] and app.session is None
+    assert (paths.days / str(TARGET) / 'scan.json').read_bytes() == previous

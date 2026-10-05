@@ -12,7 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data_service.calendar import TradingCalendar
 from data_service.scan import build_day, publish_day, workspace_scope
-from data_service.store import BAR_SCHEMA
+from data_service.store import BAR_SCHEMA, atomic_json
+from data_service.symbol_directory import make_snapshot
 
 
 def build_mock(root, end='2026-09-30', count=48):
@@ -42,11 +43,14 @@ def build_mock(root, end='2026-09-30', count=48):
                 records.append((ticker + '.US','1d',calendar.grid(day,'1d')[0][0],opened,high,low,close,volume,close*volume))
                 previous = close
             db.executemany('INSERT INTO bars VALUES (?,?,?,?,?,?,?,?,?)', records)
+    atomic_json(root / 'symbol-directory.json', make_snapshot({
+        ticker + '.US': {'name': f'{ticker} synthetic security', 'etf': False, 'test_issue': False}
+        for ticker in symbols}))
     folder = root / 'days'
     for day in days[-2:]:
-        tracked, hidden = workspace_scope(folder, day.isoformat())
+        tracked = workspace_scope(folder, day.isoformat())
         snapshot = build_day(path, day.isoformat(), calendar, now=calendar.session(days[-1])[1], mock=True,
-                             tracked_tickers=tracked, hidden_tickers=hidden)
+                             tracked_tickers=tracked)
         publish_day(folder, snapshot)
     workspace_path = folder / end / 'workspace.json'
     workspace = json.loads(workspace_path.read_text())

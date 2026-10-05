@@ -33,6 +33,8 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 /* Chart information. */
 .chart-toolbar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 12px 3px; }
 .symbol, .last-price { font-size: var(--font-title); line-height: 34px; font-weight: 700; letter-spacing: -.3px; color: #161b22; }
+.symbol { flex-shrink: 0; }
+.security-name { min-width: 0; font-size: var(--font-detail); font-weight: 400; color: #727a85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .market-clock { display: flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; }
 .clock { font-size: var(--font-detail); height: 26px; line-height: 26px; color: #67717e; }
 .session { height: 26px; font-size: var(--font-small); }

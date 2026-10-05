@@ -12,7 +12,7 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 
 | List | 用途 | Section |
 | --- | --- | --- |
-| Discover | ADR/ADV 初筛后，RFL 1m/3m/6m 各前 50 的并集，等待选入 Focus | 按潜力 Tag 分组，未匹配为 Unclassified |
+| Discover | 按 [Massive 数据要求](massive-data.md) 先完成证券与历史资格、ADR/ADV 初筛，再取 RFL 排名并集，等待选入 Focus | 按潜力 Tag 分组，未匹配为 Unclassified |
 | Focus | 正式关注、实时看盘；成员跨日保留 | 按潜力 Tag 分组，未匹配为 Unclassified |
 | Excluded | 暂不关注与机器提出的复核候选 | Broken、Extended、Hidden、Review |
 
@@ -20,7 +20,7 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 
 ## 每日规则
 
-新完成交易日 Ready 后，重算 Discover、Focus、Excluded 的 feature 与 Tag；Hidden 跳过形态计算和潜力扫描。计算范围为扫描候选与现有非 Hidden 成员的并集，即使成员掉出 RFL 前 50 也继续判断。
+新完成交易日 Ready 后，按 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 为候选及全部继承的 Focus、Excluded（含 Hidden）计算完整 feature 和 Growth 数值，即使成员掉出候选或 RFL 前 50 也继续计算，不为继承名单另行排名。Tag 与归属按下述名单规则重评；Hidden 七天内仍跳过规则判断。
 
 - Discover 与 Focus 匹配 Broken / Extended，立即进入 Excluded 对应 section；同时匹配时 Broken 优先。
 - Excluded 的非 Hidden 成员匹配负面条件，按当前规则归入 Broken / Extended；不满足负面条件且匹配潜力 Tag，进入 Review。

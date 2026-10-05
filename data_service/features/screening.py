@@ -1,14 +1,11 @@
 """Existing scan metrics and candidate selection, independent of storage."""
 
-ADR20_MIN = 5.0
-ADV20_MIN = 5_000_000
-TOP_N = 50
+def apply_filter(scan, config):
+    scan["adr_pass"] = scan["adr20"] >= config.adr20_min_pct
+    scan["adv_pass"] = scan["adv20"] >= config.adv20_min_usd
 
-def apply_filter(scan):
-    scan["adr_pass"] = scan["adr20"] >= ADR20_MIN
-    scan["adv_pass"] = scan["adv20"] >= ADV20_MIN
-
-    scan["eligible"] = scan["adr_pass"] & scan["adv_pass"]
+    scan["eligible"] = (scan["adr_pass"] & scan["adv_pass"] & scan["etf_pass"]
+                        & scan["history_pass"])
 
     return scan
 
@@ -25,9 +22,9 @@ def add_rank(scan):
     return scan
 
 
-def mark_candidate(scan):
+def mark_candidate(scan, config):
     scan["candidate"] = (
-        scan[["rfl1m_rank", "rfl3m_rank", "rfl6m_rank"]].le(TOP_N).any(axis=1)
+        scan[["rfl1m_rank", "rfl3m_rank", "rfl6m_rank"]].le(config.rfl_top_n).any(axis=1)
     )
 
     return scan

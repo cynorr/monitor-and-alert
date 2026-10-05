@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-05。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
+更新：2026-10-06。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -9,7 +9,9 @@
 | data_service/__main__.py | CLI、单实例锁、生命周期、有限运行报告 |
 | workbench.py | 同一 Workspace、Scan/Monitor展示、持续后台行情/账户及本地Scan API |
 | paths.py / network.py | 唯一runtime布局、显式共用HTTP代理/session与Massive凭证读取 |
-| massive/daily.py / splits.py / build.py | 原始Daily补文件、两年split覆盖、流式拆股复权SQLite发布 |
+| massive/daily.py / splits.py / build.py | 原始Daily补文件、两年split覆盖、新日增量追加；输入修订或失败后从raw全量重建派生SQLite |
+| symbol_directory.py / scripts/pull_symbol_directory.py | 独立免费Nasdaq目录获取/校验/原子发布；分类及可空名称均为.US |
+| massive/settings.py / config/massive.json | 直接读取候选配置，不做自动版本跟踪 |
 | pipeline.py | 一次准备任务、阶段重试、产物核对及统一Ready状态 |
 | scan.py | 上游只读连接、完成日截面/发布、Scan 日图 |
 | features/atomic.py / screening.py / snapshot.py | 原子纯算子、初筛/排名、每只一次截面组装 |
@@ -52,9 +54,9 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 同一个服务、同一个Workspace、一个全局展示模式。正式serve在HTTP可响应后启动一次Broker/DataService与Holdings；切Scan不停止它们，服务关闭才cancel/await并释放context/store/session。Mock Scan与有界--symbols禁用Massive与真实账户；Mock明确切Monitor才构造Longbridge，回到Mock Scan时释放。后台准备与展示切换分离，仅禁止重复生成，不建立第二个服务或通用source接口。
 
-bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。RuntimePaths统一所有正式路径：massive/daily原始文件、massive/splits.json、massive/daily.sqlite3、longbridge/bars.sqlite3、holdings与days；继续接受--runtime。正式Workbench和reconcile/verify注入Longbridge新路径；DataService独立/模拟器默认临时bars路径保持。两库共用BAR_SCHEMA、Bar、read_bars与指标，Daily ts为ET零点转Unix秒；不混库或拼接历史。显式--daily-db是只读外部入口，不运行内置Massive。
+Massive唯一要求见 [massive-data.md](massive-data.md)，共用bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。RuntimePaths统一所有正式路径：symbol-directory.json、massive/daily原始文件、massive/splits.json、massive/daily.sqlite3、longbridge/bars.sqlite3、holdings与days；继续接受--runtime。正式Workbench和reconcile/verify注入Longbridge新路径；DataService独立/模拟器默认临时bars路径保持。两库共用BAR_SCHEMA、Bar、read_bars与指标，Daily ts为ET零点转Unix秒；不混库或拼接历史。显式--daily-db是只读外部入口，不运行内置Massive，筛选仍消费指定runtime的本地目录。
 
-build_day仅对D当日有bar的symbol生成截面，分三步：全市场每只read_bars最多20根，用indicators.adr_adv计算ADR/ADV并初筛；仅eligible每只最多126根，用return_from_low计算三组RFL并排名；候选与Focus/非Hidden Excluded每只最多1000根，由feature_row建立EMA/SMA/ATR及原子特征。daily_metrics组合相同两个纯算子，图表与特征不重复维护公式。候选初筛只有ADR/ADV，取消Price≥5门槛；并列仍按symbol顺序、rank(method=first)，各取前50的并集。其他非候选快照只保留轻量指标；Hidden跳过完整原子特征。workspace_scope读取同日或最近前日名单，enrich_snapshot仅为缺少完整feature的本地成员补算，并记录feature_scope，不重跑全市场筛选或下载。
+build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录，按 [Massive 数据要求](massive-data.md) 完成候选筛选与全市场排名。随后对候选、Focus及全部Excluded（含Hidden）读取最多1000根建立完整特征，包含Growth使用的三种RFL数值；完整特征补算不改变资格、candidate或已有市场名次，不为继承名单另行排名。其他非候选仅保留轻量指标、资格标记及可空security_name。daily_metrics复用共用纯算子，不重复维护公式。workspace_scope读取同日或最近前日的全部Focus/Excluded；enrich_snapshot为本地成员补齐旧截面缺少的完整特征及RFL数值，记录feature_scope，不重跑全市场排名或下载。详细计算范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。
 
 每步只保留单只历史与全市场标量，避免全市场历史fetchall；读到的bar均验证闭合/结构。checked_history复用Bar.validate，OHLC范围矛盾保留原值；后续阶段仅为上一窗口起点之前的矛盾追加日志，避免一次生成内重叠窗口重复记录。阶段耗时和证券/候选数量写普通日志，不新增指标持久化或性能框架。真实样本线程对照：单线程1000只约0.46秒、四线程约1.12秒；不添加更慢的线程池。全日生成继续在现有asyncio.to_thread中执行，不阻塞HTTP/WS事件循环。
 
@@ -64,19 +66,23 @@ latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)�
 
 indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。指标只消费已选来源的价格，Massive拆股复权与Longbridge NoAdjust结果允许不同。
 
-复权契约：Longbridge broker.py继续显式请求AdjustType.NoAdjust与TradeSessions.Intraday，保持官方原始OHLC与整数成交量。Massive raw文件adjusted=false，build按split快照对事件之前的价格/VWAP乘累计split_from/split_to、成交量除同因子，最终用Decimal ROUND_HALF_UP保存整数量；turnover仅使用同根VWAP乘未取整的复权量，否则NULL。Massive metadata明确split_adjusted/half_up/massive_daily，两源不互相验证。读取、指标和图表不再复权；Longbridge未来复权未实现。pandas ewm(adjust=False)仅是加权算法参数。
+复权契约：Longbridge broker.py继续显式请求AdjustType.NoAdjust与TradeSessions.Intraday，保持官方原始OHLC与整数成交量。Massive复权/量/turnover的唯一要求见massive-data.md。两源不互相验证，读取、指标和图表不再复权；Longbridge未来复权未实现。pandas ewm(adjust=False)仅是加权算法参数。
 
 38项条件目录仅ui/src/filter-catalog.json一份，后端读取该文件验证保存契约，后端list_rules.matches_filters执行名单分类，前端filters.ts执行草稿显示筛选，二者共享相同边界/缺失语义。保存值不取整；旧maxExclusive语义保留到主动编辑。Tag草稿不写盘，Save写完整preferences后才更新内存，失败保留草稿；不建立长期多版本猜测/迁移框架。
 
 ## Massive准备与统一状态
 
-正式serve启动一次MassivePipeline.run；手动massive命令/脚本及页面Refresh复用它，无周期定时器。单任务串行执行Daily→split→bars→features；仅正在执行的阶段做首次加三次重试(2/5/10秒)，失败保留旧产物并在状态中报错。网络失败不回退直连。HTTP/WS/图表读取不安排任务。
+正式serve启动一次MassivePipeline.run；手动massive命令/脚本及页面Refresh复用它，无周期定时器。单任务串行执行Daily→split→bars→features；Daily/split网络获取保持既有有界重试；bars/features本地失败直接报错，不自动重试。网络失败不回退直连。HTTP/WS/图表读取不安排任务。
 
 network.proxy_url统一读取MARKET_PROXY，默认http://127.0.0.1:7899，显式空值直连；create_session禁用trust_env。Massive和SnapTrade显式传proxy，但各自保留限流、签名、解析和session。Massive凭证读取MASSIVE_API_KEY或单行massive-token.txt，日志不得包含值、带key的URL或任意上游响应体。
 
-Daily保持原始文件不变，最近14天只补文件缺失，ET18点之前不取当天，目标交易日由XNYS决定。Split每次完整分页获取target_end往前两年窗口，保留窗口之前记录，用本次窗口替换旧窗口，验证覆盖与唯一ID后atomic_json提交。两者共用Massive请求预算，开始请求间隔至少15秒。SQLite逐个日期解析并写临时库，复用Bar验证/原值上下界日志，保留每symbol最近最多1000根，不使用全历史DataFrame或进程池；完成日与input_revision元数据一起发布，成功才替换旧库。
+Daily/split下载、重试及复权要求集中在massive-data.md。symbol_directory独立脚本仅取两个免费文本，不由pull_massive/服务/GET触发；缺目录或坏配置在任何Massive请求之前检查。Mock构建器先写明确合成目录。开发验证遵循独立准则，优先真实数据，只做本次必要检查。
 
-pipeline-status.json仅维护daily/splits/bars/features，不保留extended字段。Ready从已提交文件、SQLite metadata及scan.json的输入版本核对，遗留running不当作成功，Ready跳过下载时也重写规范状态。input_revision标识原始文件和split快照对应版本；features与bars版本一致才是本轮Ready。Scan截面和首次继承的workspace用atomic_json发布，同日已有人工workspace不改写；普通人工编辑仍保持原直接写入流程。自动完成通过Workbench回调清缓存和重读workspace，不切展示模式，不抢历史日期；手动Refresh可以打开生成日期。features状态经现有WS list传输，UI不另起轮询或连接。首份scan缺失但有workspace时页面返回空Scan与准备状态。
+build.py保留input_revision/metadata/build入口。metadata.raw_files保存已消费文件大小/mtime，split_revision保存实际split结果摘要。旧文件清单匹配且只有较新日期、split结果未变时直接追加；已有raw修订/移除、补入较早日或split结果变化时，删除SQLite后merge全部raw。旧库没有清单也直接重建。使用普通批量写入和commit，不增加事务协调、读快照、逐ticker修复、版本迁移或输入竞态校验。写入失败删除派生库并报错，下次运行重建；原始JSON始终保留。普通日志只记录模式、处理文件数、证券数和耗时。
+
+pipeline-status.json维护daily/splits/bars/features。Ready只核对已完成日及既有行情input_revision，不维护目录/配置feature_revision。修改候选配置或目录后手动Refresh Scan，每次生成直接读取；不自动监听或重算。Scan与人工名单维持既有保存/继承流程；自动发布更新页面缓存，手动刷新打开生成日期。无新增GET下载、连接或轮询。
+
+Workbench.view及Monitor图表GET带可空security_name，来源仅为RuntimePaths.symbol_directory；按mtime/大小/inode缓存，文件变化无需bar revision变化也能刷新名称。缺失或损坏返回null，禁止名称查询扩大券商白名单或触发网络。前端用textContent显示并在清图时隐藏，具体绘制统一见ui.md。
 
 三个复制项目均只作参考，正式代码不import或执行它们。Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。旧库和原始参考数据保留；正式服务不连接或合并旧库历史，新Longbridge库按既有最近1000根流程初始化。
 
@@ -150,21 +156,8 @@ Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source
 
 前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口，唯一差别是目标Section；Scan查询本地只读SQLite，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 
-## 检查与真实测试
+## 必要验证
 
-```bash
-.venv/bin/python -m pytest -q
-npm run check --prefix ui
-npm run build --prefix ui
-npm run test --prefix ui
-```
+遵循 [development-principles.md](development-principles.md)，仅验证本轮修改。优先直接使用真实本地数据和正常运行的服务；确需停/重启时可直接执行。真实接口检查写清当前范围及结束条件，不使用历史记录代替本轮证据。
 
-默认测试全部离线，只绑定本机 HTTP/WS，覆盖白名单、日历、OHLC 原值/日志、无法绘制的输入、最近窗口、次数/5m 重试、恢复、限流、合成、指标和模拟器跨边界/交易日。测试数量会随删除旧需求测试而变化，不与历史通过数量直接比较。
-
-live 需确认没有另一正式实例占用账户连接，再明确当前 Focus 子集与时限：
-
-```bash
-.venv/bin/python scripts/live_check.py --symbols PAYS --duration 60
-```
-
-脚本使用当前白名单、一个 context、独立临时 SQLite 和 JSONL，输出 report.json 路径；只读行情，不交易。默认不会自动执行。不要把模拟通过描述成 live 通过，不把历史记录当本轮证据。
+只选有关的用例，例：`.venv/bin/python -m pytest -q tests/test_massive_incremental_build.py`。TypeScript改变后运行`npm run build --prefix ui`。不默认执行整个项目回归或全流程检查，不为罕见边界建立故障注入/并发/回放框架。已有模拟器保持隔离，不自动读凭证或回退真实API。

@@ -2,7 +2,7 @@
 
 个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘。两个页面共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
 
-[List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [布局/交互](docs/ui.md) · [验证记录](docs/validation.md) · **[数据契约](docs/upstream-daily-data.md)**
+[开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [布局/交互](docs/ui.md) · [验证记录](docs/validation.md) · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
 
 ## 启动
 
@@ -30,13 +30,16 @@ python3 -m venv .venv
 
 Mock 生成器要求目标目录没有现成 daily.sqlite3；重复试验用 `--output runtime/scan-mock-2`。包含48只合成证券、两天截面和短历史样本，名单独立于正式runtime。Scan Mock启动与选股不读凭证；页面主动切换Monitor会按该runtime的Focus启用Longbridge。完整离线实时模拟使用独立模拟器。
 
-正式服务启动后，后台执行一次 Massive 准备：检查原始 Daily 和 split → 构建拆股复权 SQLite → 生成最新日 Scan 特征；已经 Ready 则跳过。失败阶段最多尝试四次，退避 2/5/10 秒，网络请求另受共享限速约束；耗尽后显示错误并保留上次完整结果。没有周期轮询，页面切换和 GET 不触发下载。
+正式服务启动后，后台执行一次 Massive 准备：检查原始 Daily 和 split → 构建拆股复权 SQLite → 生成最新日 Scan 特征；已经 Ready 则跳过。网络获取最多尝试四次，退避 2/5/10 秒，并受共享限速约束。本地构建失败直接报错，删除不完整的派生库，下次运行从原始文件重建。没有周期轮询，页面切换和 GET 不触发下载。
 
 手动运行同一任务（不启动 Longbridge 或 SnapTrade）：
 
 ```bash
+.venv/bin/python scripts/pull_symbol_directory.py
 .venv/bin/python scripts/pull_massive.py
 ```
+
+Nasdaq 目录更新独立于 Massive，保存免费 ETF 分类和证券名称。扫描先排除 ETF、未确认类别与不足 50 根有效日 K 的证券，再做 ADR/ADV 和 RFL 排名。可编辑条件集中于 [config/massive.json](config/massive.json)，数据要求统一见 [Massive 数据要求](docs/massive-data.md)。普通新日直接追加 SQLite；旧文件或 split 变化则删除 SQLite 后全量重建。修改候选配置后手动 Refresh Scan 应用，不做自动版本跟踪。
 
 服务未运行时也可用 `.venv/bin/python -m data_service massive`，默认跳过已 Ready 的任务；加 `--force` 可重新获取 split 并重建 bars/特征，已有原始 Daily 保留。任务 Ready 返回0，阶段失败返回2。手动命令与服务共用 runtime 单实例锁；服务运行时用 Scan 的 **Refresh Scan**。显式 `--daily-db` 只读消费外部库，不启用内置 Massive 下载；可用 `scan --date D` 离线重算指定日。
 
@@ -44,7 +47,7 @@ Mock 生成器要求目标目录没有现成 daily.sqlite3；重复试验用 `--
 
 数据统一放在 `runtime/massive/`、`runtime/longbridge/`、`runtime/holdings/`，人工名单与偏好保持现有路径。Massive 原始 `daily/*.json` 累积保留且不加入 Git；`splits.json` 是唯一允许入 Git 的运行数据。split 每次完整获取两年窗口，替换窗口内记录并保留更早历史，校验成功后原子覆盖。Massive 采用拆股复权，成交量 HALF_UP 四舍五入为整数；Longbridge 仍为 regular、NoAdjust 和整数成交量，两者不拼接历史，共用指标及图表。
 
-Scan Ready 显示最新特征完成日与精确到秒的 ET 完成时间；它与当前正在查看的历史日期独立。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 生成并打开最新日。同日重算保留人工名单，新日第一次生成继承 Focus。首份截面准备中可以先打开页面。
+Scan Ready 显示最新特征完成日与精确到秒的 ET 完成时间；它与当前正在查看的历史日期独立。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 生成并打开最新日。同日重算保留人工名单，新日第一次生成继承 Focus 和 Excluded。首份截面准备中可以先打开页面。
 
 默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。当前真实使用的旧目录已一次复制到runtime，源文件保留：15份名单、7个Tag，最新2026-09-30，Focus34/Wait20。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
 
@@ -57,8 +60,8 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 ## 使用
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
-- Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。ADR20≥5%、ADV20≥$5M 初筛，三组 RFL 各取前50，任一入选即候选；不设候选 Price≥5 门槛。为候选及Focus/非Hidden Excluded建立均线/ATR/原子特征；Hidden跳过形态扫描。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，同日Refresh保留人工状态。
-- Focus跨日保留；Discover与Focus匹配负面Tag直接进入Excluded。Hidden/Extended/Broken七个自然日到期后按当前规则重新分类；Review保留待审核，无Dismiss。Hidden七天内跳过形态扫描。删除Focus移入Hidden，Release/Move to Discover明确解除归属；新入section置顶。
+- Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，同日Refresh保留人工状态。
+- Focus跨日保留；Discover与Focus匹配负面Tag直接进入Excluded。Hidden/Extended/Broken七个自然日到期后按当前规则重新分类；Review保留待审核，无Dismiss。Hidden七天内跳过名单规则判断，仍计算完整特征。删除Focus移入Hidden，Release/Move to Discover明确解除归属；新入section置顶。
 - 共用Daily日 K：九个月初始范围、EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、缩放/十字线。Scan为所选日的closed数据；Monitor增加Quote活跃日 K。
 - Monitor：5m/15m/30m/1h/2h/4h、SMA65、交易日联动、实时行情；2h/4h由5m在内存合成。
 - Search 和 section 的 + 共用内联输入；Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info，确认后才保存。快捷键和新增位置见 [List UI](docs/ui.md#list-ui)。
