@@ -1,4 +1,5 @@
 import { $, money, compact, extendedQuote } from './types.js';
+import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listSections, rowTags, sectionKey } from './board.js';
 export class Watchlist {
@@ -350,7 +351,7 @@ export class Watchlist {
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.tickers.some(t => t.ticker === candidate.ticker);
         const tags = this.preferences?.tags ?? [];
-        const tagNames = new Map(tags.map(tag => [tag.id, tag.name]));
+        const tagDefinitions = new Map(tags.map(tag => [tag.id, tag]));
         const sections = listSections(scan, this.scan?.activeList ?? 'focus', tags);
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search)
@@ -474,16 +475,18 @@ export class Watchlist {
                         }
                         const badges = document.createElement('div');
                         badges.className = 'row-tags';
-                        for (const id of rowTags(ticker)) {
-                            const badge = document.createElement('span');
-                            badge.className = 'row-tag';
-                            badge.textContent = tagNames.get(id) ?? id;
-                            badge.title = badge.textContent;
-                            if (ticker.manual_tags?.includes(id)) {
-                                badge.classList.add('manual');
-                                badge.title += ' · Manual · today only';
-                            }
-                            badges.append(badge);
+                        const ids = rowTags(ticker);
+                        for (const id of ids.slice(0, 3)) {
+                            badges.append(tagLogo(tagDefinitions.get(id) ?? { name: id }, ticker.manual_tags?.includes(id)));
+                        }
+                        if (ids.length > 3) {
+                            const more = document.createElement('span');
+                            more.className = 'tag-overflow';
+                            more.textContent = '+' + (ids.length - 3);
+                            more.title = ids.slice(3).map(id => (tagDefinitions.get(id)?.name ?? id) +
+                                (ticker.manual_tags?.includes(id) ? ' · Manual · today only' : '')).join('\n');
+                            more.setAttribute('aria-label', more.title);
+                            badges.append(more);
                         }
                         const edit = document.createElement('button');
                         edit.dataset.tagEdit = ticker.ticker;

@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-04。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
+更新：2026-10-05。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，UI 以 [ui.md](ui.md) 为准。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -13,7 +13,7 @@
 | pipeline.py | 一次准备任务、阶段重试、产物核对及统一Ready状态 |
 | scan.py | 上游只读连接、完成日截面/发布、Scan 日图 |
 | features/atomic.py / screening.py / snapshot.py | 原子纯算子、初筛/排名、每只一次截面组装 |
-| preferences.py / list_rules.py | Tag 用途和保存契约；共享字段目录；纯匹配与自动三名单分类 |
+| preferences.py / list_rules.py | Tag 用途和保存契约（含独立外观 metadata）；共享字段目录；纯匹配与自动三名单分类，外观不参与分类 |
 | config.py | 当前 Focus 解析、凭证读取、错误脱敏 |
 | workspace.py | 最新日期选择、内存 JSON、同步直接写入、单个原生文件事件 watcher |
 | broker.py | 单 SDK context、static_info 添加验证、最近 K 线、Quote 请求、全局/后台请求预算 |
@@ -31,7 +31,8 @@
 | ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
 | ui/src/list.ts | 统一内联搜索/新增、输入查询生命周期、拖动/快捷键移动、折叠和报价行更新 |
 | ui/src/holdings.ts | 独立九列/盘中八列单行表格、单列降序/取消、自然宽度测量、整体折叠、批次选中、逐笔Buy/Sold日期/数量/实际成交价明细 |
-| ui/src/scan.ts / filters.ts / tags.ts / board.ts | 日期/三列表、显示筛选、Tag 草稿、角色与section分组 |
+| ui/src/scan.ts / filters.ts / tags.ts / board.ts | 日期/三列表、显示筛选、Tag 条件与外观草稿、角色与section分组 |
+| ui/src/tag-appearance.ts | 内置轮廓图案、旧 Tag 外观默认值与共用 SVG 渲染 |
 | scripts/build_scan_mock.py | 明确指定目录的合成日 K/截面/测试名单 |
 | ui/src/chart.ts / layout.ts | Lightweight Charts、日联动、列宽和原生交互 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
@@ -39,9 +40,13 @@
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
-持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/买卖行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq、P/L、P/L Day整数为显示格式，后端Decimal契约不变。展开直接使用既有sequence.buys/sells，所有Buy先于Sold；日期/数量/金额与买卖记录均纳入结构签名，刷新后更新明细。Sold=0隐藏主行数值及展开箭头；已卖批次明细成交价为value/quantity，放在第七列Chg%对应位置，主表无Trade Price。P/L %/Chg%使用一位小数，Ext仍两位；无副标题DOM或PNG生成/下载逻辑。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout.ts用LIST_WIDTH_RATIO=0.40决定默认占比，LIST_MIN_WIDTH=680和持仓测量值决定列表下限；两图平分余量，不读写列宽localStorage。展开所需下限增加时自动增长，收起不引起宽度抖动。main.ts复用board与当前view中既有Quote.current_regular_session，任一为true即进入常规时段；前端不新增交易日历或券商请求。Holdings用同一CSS隐藏第八列Ext，取消隐藏列排序；时段显隐切换清空测量宽度下限，在680px下限之上回收该列空间、扩展时段重新测量。手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
+持仓排序仅在ui/src/holdings.ts中将原账户顺序扁平化为买入批次，按原始标量稳定降序；不修改服务器数据。仅顺序变化时移动已有主行/买卖行DOM，保留选中与焦点，键盘按显示顺序导航。Net Liq、P/L、P/L Day整数为显示格式，后端Decimal契约不变。展开直接使用既有sequence.buys/sells，所有Buy先于Sold；日期/数量/金额与买卖记录均纳入结构签名，刷新后更新明细。Sold=0隐藏主行数值及展开箭头；已卖批次明细成交价为value/quantity，放在第七列Chg%对应位置，主表无Trade Price。P/L %/Chg%使用一位小数，Ext仍两位；无副标题DOM或PNG生成/下载逻辑。表格以同样CSS的临时隐藏副本测量自然内容宽度，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。layout.ts用LIST_WIDTH_RATIO=0.32决定默认占比，LIST_MIN_WIDTH=680和持仓测量值决定列表下限；两图平分余量，不读写列宽localStorage。展开所需下限增加时自动增长，收起不引起宽度抖动。main.ts复用board与当前view中既有Quote.current_regular_session，任一为true即进入常规时段；前端不新增交易日历或券商请求。Holdings用同一CSS隐藏第八列Ext，取消隐藏列排序；时段显隐切换清空测量宽度下限，在680px下限之上回收该列空间、扩展时段重新测量。手动拖动仅本页面有效，双击/新页面恢复默认。没有新增HTTP、券商请求或后台任务。
 
 List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局部 AI 约束见 ui/src/AGENTS.md。list.ts 保持七个行单元与 main.ts/index.html 列头一致；board.growthValue 仅格式化 RFL，原始百分比及排名不变。CSS 维护独立 Growth/Tags 列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
+
+Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted',backgroundColor}`，不从显示名称反推已保存外观，也不影响 role、filters、分类与订阅。前端只为旧偏好中缺失的外观初始化默认值，下次偏好保存持久化；后端校验内置 icon、背景枚举与六位 HEX 颜色，不接收任意 SVG/URL/CSS。列表和编辑 preview 复用 `tag-appearance.ts`，无外部图标依赖。固定展示数量不引入测宽监听。Save/Cancel 检查完整 Tag 草稿，筛选预览只检查条件变化，外观编辑保留人工匹配成员。图形要求统一见 [Logo / Icon](ui.md#logo--icon)，名单排布见 [List UI](ui.md#list-ui)。
+
+后续客户端明确包含 Android 原生 App，iOS 可能接入。迁移时以 behavior/list-design 的产品语义、本文件的接口与保存契约、ui 的设计要求为入口；保留 Tag Icon ID、外观和名单操作含义，按平台重做绘制、密度与触摸交互。Web 的 DOM/CSS/SVG 和 px 仅是当前实现参考；当前不新增原生工程或通用适配层。
 
 ## 模式与上游数据
 

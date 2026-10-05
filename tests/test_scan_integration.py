@@ -212,6 +212,36 @@ def test_preferences_reject_unknown_rules_and_keep_exact_thresholds():
         validate_preferences(data)
 
 
+@pytest.mark.parametrize('background', ['transparent', 'frosted'])
+def test_preferences_appearance_roundtrip_and_legacy_compatibility(background):
+    legacy = json.loads(json.dumps(DEFAULT))
+    assert 'appearance' not in validate_preferences(legacy)['tags'][0]
+    data = json.loads(json.dumps(DEFAULT))
+    appearance = {'icon': 'surf', 'color': '#2962ff', 'background': background, 'backgroundColor': '#E4B400'}
+    data['tags'][0]['appearance'] = appearance
+    data['tags'][0]['filters'] = {'adv20': {'min': 5_123_456.75}}
+    saved = json.loads(json.dumps(validate_preferences(data)))
+    assert saved['tags'][0]['appearance'] == appearance
+    assert saved['tags'][0]['filters'] == {'adv20': {'min': 5_123_456.75}}
+    assert saved['tags'][0]['role'] == 'label'
+
+
+@pytest.mark.parametrize('invalid', [
+    None,
+    {'icon': 'surf'},
+    {'icon': '<svg/>', 'color': '#2962ff', 'background': 'transparent', 'backgroundColor': '#e4b400'},
+    {'icon': 'surf', 'color': '#fff', 'background': 'transparent', 'backgroundColor': '#e4b400'},
+    {'icon': 'surf', 'color': '#2962ff', 'background': 'url(image)', 'backgroundColor': '#e4b400'},
+    {'icon': 'surf', 'color': '#2962ff', 'background': 'frosted', 'backgroundColor': 42},
+    {'icon': 'surf', 'color': '#2962ff', 'background': 'frosted', 'backgroundColor': '#e4b400', 'svg': '<svg/>'},
+])
+def test_preferences_reject_invalid_appearance(invalid):
+    data = json.loads(json.dumps(DEFAULT))
+    data['tags'][0]['appearance'] = invalid
+    with pytest.raises(ValueError, match='appearance'):
+        validate_preferences(data)
+
+
 def test_scan_rejects_forming_day_and_keeps_range_anomalies(app_data):
     cal = TradingCalendar(date(2026, 9, 30))
     path = app_data / 'daily.sqlite3'

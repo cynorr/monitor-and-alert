@@ -2,7 +2,7 @@
 
 个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘。两个页面共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
 
-[List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [布局/交互](docs/ui.md) · [验证记录](docs/validation.md) · **[数据契约](docs/upstream-daily-data.md)**
+[List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [布局/交互](docs/ui.md) · [验证记录](docs/validation.md) · **[数据契约](docs/upstream-daily-data.md)**
 
 ## 启动
 

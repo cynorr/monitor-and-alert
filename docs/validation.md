@@ -2,6 +2,24 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-05：Logo / Icon 规范整理
+
+环境：macOS、现有项目源码。仅整理文档与 AI 维护入口：核对 Tag 图形、名单操作、折叠/排序、图表图标及品牌现状，区分通用设计和 Web 实现，记录 Android 原生与可能的 iOS 迁移约束。42 个文档链接/锚点检查及 `git diff --check` 通过；未改应用代码，未运行构建、回归、浏览器或真实 API 验收，未验证原生端。
+
+## 2026-10-05：Extended 图案微调
+
+环境：macOS、现有 Node/TypeScript。仅将 Extended SVG 改为起点更低、平缓段延长、右侧末段接近竖直上冲的单条三次曲线，同步唯一 UI 规范；`npm run build --prefix ui` 与 `git diff --check` 通过。保留原尺寸、颜色与背景，无名单/数据改动；未重复运行回归或真实 API 检查。
+
+## 2026-10-05：Tag 轮廓图形与外观编辑
+
+环境：macOS、现有 Python 虚拟环境、Node/TypeScript、Codex 浏览器。交互验收仅使用临时本机合成名单，导入正式 UI 组件和样式，POST 调用正式 preferences 校验函数；没有新建券商连接、修改正式 runtime、重启现有服务或运行全流程测试。结束后只读打开现有项目页面展示新图形，不作为 live 验收。
+
+- `npm run build --prefix ui` 与 `git diff --check` 通过；`node --test ui/tests/scan.test.mjs` 12 项通过，覆盖外观草稿保存、独立克隆、改名保持绑定，以及仅改外观时人工匹配成员继续可见、改条件后转入条件预览。
+- Python 仅选择 preferences appearance 与既有未知条件检查，10 项通过、16 项未运行；覆盖旧定义兼容、透明/毛玻璃外观往返、非法字段/图案/颜色拒绝。
+- 浏览器实测七列行高约 32px，glyph 约 16.2×10.8px，前景 MA10 蓝/MA20 黄，背景浅灰 20% alpha、无边框；680px List 内容无横向溢出。三个图案后以 `+N` 显示剩余标签，人工来源保留 tooltip，Orderly-pullback 为 steps。
+- 验证外观 preview、Cancel 恢复、Save 后折叠、刷新恢复自选图案/颜色/透明背景和改名；自选毛玻璃背景颜色呈现低 alpha，透明模式禁用背景色输入。仅改外观时，三个人工匹配成员保持可见。Scan/Monitor 使用相同图形与行高。
+- 未覆盖真实行情/账户、全局拖拽/图表手势、移动触控或长期运行。临时检查脚本和服务已清理。
+
 ## 2026-10-04：List UI 单行与独立列
 
 环境：macOS、Node 25.3.0 / TypeScript；现有本机8765服务的 Scan 页面。只改前端显示与文档，未启动、重启服务，未修改名单、Tag 规则、账户数据或行情范围。

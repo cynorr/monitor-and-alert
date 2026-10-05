@@ -2,6 +2,7 @@ import { $, money, compact, extendedQuote, type Ticker } from './types.js';
 import type { ScanControls } from './scan.js';
 import type { MassiveState } from './types.js';
 import type { Preferences } from './tags.js';
+import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import type { HoldingsState } from './holdings.js';
 import { collapseKey, countBadge, growthValue, listSections, rowTags, sectionKey } from './board.js';
@@ -281,7 +282,7 @@ export class Watchlist {
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.tickers.some(t => t.ticker === candidate.ticker);
         const tags = this.preferences?.tags ?? [];
-        const tagNames = new Map(tags.map(tag => [tag.id, tag.name]));
+        const tagDefinitions = new Map(tags.map(tag => [tag.id, tag]));
         const sections = listSections(scan, this.scan?.activeList ?? 'focus', tags);
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search) $('list-notice').textContent = this.search.message;
@@ -347,10 +348,15 @@ export class Watchlist {
                             const value = document.createElement('span'); value.className = 'growth-value'; value.dataset.growth = field; growth.append(value);
                         }
                         const badges = document.createElement('div'); badges.className = 'row-tags';
-                        for (const id of rowTags(ticker)) {
-                            const badge = document.createElement('span'); badge.className = 'row-tag'; badge.textContent = tagNames.get(id) ?? id; badge.title = badge.textContent;
-                            if (ticker.manual_tags?.includes(id)) { badge.classList.add('manual'); badge.title += ' · Manual · today only'; }
-                            badges.append(badge);
+                        const ids = rowTags(ticker);
+                        for (const id of ids.slice(0, 3)) {
+                            badges.append(tagLogo(tagDefinitions.get(id) ?? { name: id }, ticker.manual_tags?.includes(id)));
+                        }
+                        if (ids.length > 3) {
+                            const more = document.createElement('span'); more.className = 'tag-overflow'; more.textContent = '+' + (ids.length - 3);
+                            more.title = ids.slice(3).map(id => (tagDefinitions.get(id)?.name ?? id) +
+                                (ticker.manual_tags?.includes(id) ? ' · Manual · today only' : '')).join('\n');
+                            more.setAttribute('aria-label', more.title); badges.append(more);
                         }
                         const edit = document.createElement('button'); edit.dataset.tagEdit = ticker.ticker; edit.className = 'tag-edit'; edit.textContent = 'Tags';
                         edit.title = 'Add manual Tags for today'; edit.hidden = ticker.section === 'hidden'; edit.disabled = !this.editable || edit.hidden;

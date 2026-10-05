@@ -1,7 +1,7 @@
 import { $ } from './types.js';
 
 // Share the default list proportion across Scan and Monitor.
-const LIST_WIDTH_RATIO = 0.40;
+const LIST_WIDTH_RATIO = 0.32;
 const LIST_MIN_WIDTH = 680;
 const CHART_MIN_WIDTH = 320;
 const DIVIDER_WIDTH = 12;

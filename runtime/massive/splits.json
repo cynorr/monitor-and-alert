@@ -1,7 +1,7 @@
 {
   "status": "OK",
   "start_date": "2024-07-12",
-  "end_date": "2026-10-03",
+  "end_date": "2026-10-04",
   "resultsCount": 3444,
   "results": [
     {
@@ -3341,7 +3341,7 @@
       "split_to": 1.0,
       "ticker": "STKXF",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 10.0
+      "historical_adjustment_factor": 100.0
     },
     {
       "id": "E4b97a33b5c0ef69f2808a17b7e9c229852e42991e8d7bb5eb1a6446632259ec2",
@@ -13637,7 +13637,7 @@
       "split_to": 1.0,
       "ticker": "VTAK",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 19.0
+      "historical_adjustment_factor": 190.0
     },
     {
       "id": "Ed7d191692ed8dc3d82dfeac3e653a4c85601986b3073ef960d8aef37664e6db0",
@@ -16394,7 +16394,7 @@
       "historical_adjustment_factor": 238.095238
     },
     {
-      "id": "Eddddd6dec896dca093b95f4526cc5afeb762587883b6863d92914a0c1d8c8008",
+      "id": "E308f13316ea4bc6a0e142cd9d19dd4a9927c5885576f92242eb719c21feb6b1b",
       "execution_date": "2025-10-27",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -18353,7 +18353,7 @@
       "split_to": 1.0,
       "ticker": "CMND",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 400.0
+      "historical_adjustment_factor": 3200.0
     },
     {
       "id": "Efa05d8136cabcc7385fbc12ca0366266e681bda9b06a738d1c44a74851cfeb2a",
@@ -18815,7 +18815,7 @@
       "historical_adjustment_factor": 160.0
     },
     {
-      "id": "E1961d40baa5fe68e38dbb1b476fc877e6d24466738448f10316c260a4898b1ed",
+      "id": "E4287f60ce435eb25d8c0452cdbc448c5485d65a0b11b13aeb255b46173178eaa",
       "execution_date": "2025-12-23",
       "split_from": 1.0,
       "split_to": 3.0,
@@ -19121,7 +19121,7 @@
       "historical_adjustment_factor": 6.0
     },
     {
-      "id": "Ed2efadc793f49a38bff002616b5acf9e8117c8b35c270ab7c545269c6aa26928",
+      "id": "Ed26e8dac7dc7cf22ea7996fd78592034173187e7452c0b49109838f6408815a1",
       "execution_date": "2026-01-02",
       "split_from": 30.0,
       "split_to": 1.0,
@@ -20966,7 +20966,7 @@
       "historical_adjustment_factor": 4.0
     },
     {
-      "id": "E7a68da63bb96a90e8384dc894e7979f4c868890cf9c5dbff7c5f141d348ec8d2",
+      "id": "E289270da555cd577281957d24cf561229941459c2b351237e5535f06fe49db4f",
       "execution_date": "2026-02-27",
       "split_from": 1.0,
       "split_to": 1.5,
@@ -22250,7 +22250,7 @@
       "split_to": 1.0,
       "ticker": "VIVK",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 4000.0
+      "historical_adjustment_factor": 60000.0
     },
     {
       "id": "E61f6b2920824e77abc8656681871cf1c24df3f9bb34c18b93eecad082e02ea02",
@@ -23846,7 +23846,7 @@
       "historical_adjustment_factor": 25.0
     },
     {
-      "id": "Ef42e81b29689efc7e0db8f11354194b26fa825d40d3a87fcd00ee0b24384a7cf",
+      "id": "E4727fb74a1d41d26ca96d167dcf5dd266792fe2b24a38cd60dd8147f1931e312",
       "execution_date": "2026-04-30",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -24761,7 +24761,7 @@
       "split_to": 1.0,
       "ticker": "CMND",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 10.0
+      "historical_adjustment_factor": 80.0
     },
     {
       "id": "E0889b26972f47e05bfcb46dc85ecd9a8d82fe18c5f74005693710bd68f135d87",
@@ -27623,7 +27623,7 @@
       "split_to": 1.0,
       "ticker": "VIVK",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 20.0
+      "historical_adjustment_factor": 300.0
     },
     {
       "id": "Ee998bf2bd27eac07311e23b07974a094ecc014b6b55a927ce6e49ddaa52dd9ca",
@@ -30866,7 +30866,7 @@
       "historical_adjustment_factor": 12.0
     },
     {
-      "id": "Eeeaa212cd35361bed79d83b9054466eba202d6eff0fa5f7cd114fc86e89f2932",
+      "id": "E5070d9270235ff864a5e5a75b62e1cea705beed2fef511187385d98e8052cfe9",
       "execution_date": "2026-09-30",
       "split_from": 1.0,
       "split_to": 3.0,

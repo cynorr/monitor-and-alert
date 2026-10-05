@@ -1,6 +1,7 @@
 """Saved Tag definitions and the shared field contract for list classification."""
 import json
 import math
+import re
 from pathlib import Path
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'ui/src/filter-catalog.json'
@@ -8,6 +9,20 @@ CATALOG = json.loads(CATALOG_PATH.read_text())
 FIELDS = {field['key']: field for field in CATALOG}
 DEFAULT = {'activeList': 'discover', 'sort': 'default', 'activeTag': 'default',
            'tags': [{'id': 'default', 'name': 'Default', 'filters': {}, 'role': 'label'}]}
+APPEARANCE_KEYS = {'icon', 'color', 'background', 'backgroundColor'}
+TAG_ICONS = {'surf', 'bounce', 'prior-run', 'orderly-pullback', 'extended', 'broken', 'label'}
+
+
+def validate_appearance(value):
+    if not isinstance(value, dict) or set(value) != APPEARANCE_KEYS:
+        raise ValueError('Tag appearance requires icon, color, background and backgroundColor')
+    if not isinstance(value['icon'], str) or value['icon'] not in TAG_ICONS:
+        raise ValueError('Invalid Tag appearance icon')
+    if not isinstance(value['background'], str) or value['background'] not in ('transparent', 'frosted'):
+        raise ValueError('Invalid Tag appearance background')
+    for key in ('color', 'backgroundColor'):
+        if not isinstance(value[key], str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', value[key]):
+            raise ValueError('Tag appearance colors must use #RRGGBB')
 
 
 def tag_role(tag):
@@ -36,6 +51,8 @@ def validate_preferences(value):
         names.add(name.casefold())
         ids.add(tag['id'])
         tag['name'] = name
+        if 'appearance' in tag:
+            validate_appearance(tag['appearance'])
         for key, rule in tag['filters'].items():
             if key not in FIELDS:
                 raise ValueError('Unknown filter field')

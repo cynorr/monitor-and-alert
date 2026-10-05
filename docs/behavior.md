@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-04。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
+更新：2026-10-05。面向使用者；实现入口见 [development.md](development.md)，布局和交互见 [ui.md](ui.md)。
 
 ## 启动与接收
 
@@ -47,6 +47,8 @@ Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两�
 候选 ADR20≥5%、ADV20≥$5M，RFL1M/3M/6M各前50取并集，不设Price门槛。完整原子特征计算范围为候选 ∪ Focus ∪ 非Hidden Excluded。Hidden跳过形态扫描，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后分类，不触发下载。新日和重算发布后更新规则结果。
 
 Tag 保存条件与用途：Setup用于潜力section/Review，Extended和Broken用于淘汰，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可以匹配多个Tag，按Setup定义顺序选一个主section；未匹配为Unclassified。
+
+Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑定。编辑外观草稿继续使用已指派及人工补充的匹配结果，只有修改条件才进入条件预览，不因调颜色改变名单归属或订阅。
 
 Discover、Focus及非Hidden Excluded匹配负面规则立即进入Excluded对应section，Broken优先Extended；非Hidden Excluded不满足负面规则且匹配Setup进入Review。Review不强制每日清空，无Dismiss。Hidden表示人工未分类排除，七天内不参与规则判断。Hidden/Extended/Broken七个自然日到期后解除本次排除、再次按规则分类；仍匹配负面条件继续排除，无释放保护期；重复匹配不每日续期。Review保留到人工处理或新负面判断。
 

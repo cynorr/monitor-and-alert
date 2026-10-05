@@ -42,6 +42,13 @@
       <div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div><button id="tag-add" aria-label="Create Tag">+</button></div>
       <details id="filter-editor"><summary>Filters <span id="filter-count"></span><span id="tag-unsaved" hidden>Unsaved</span></summary>
         <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><select id="tag-role" aria-label="Tag role"><option value="setup">Setup</option><option value="extended">Extended</option><option value="broken">Broken</option><option value="label">Label</option></select><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
+        <div class="tag-appearance-editor" aria-label="Tag appearance">
+          <label>Icon<select id="tag-icon" aria-label="Tag icon"></select></label>
+          <label>Line color<input id="tag-color" type="color" aria-label="Tag line color"></label>
+          <label>Background<select id="tag-background" aria-label="Tag background"><option value="frosted">Frosted</option><option value="transparent">Transparent</option></select></label>
+          <label>Background color<input id="tag-background-color" type="color" aria-label="Tag background color"></label>
+          <span id="tag-preview" aria-label="Tag preview"></span>
+        </div>
         <div id="filter-rules" class="filter-rules"></div>
       </details>
       <div id="scan-batch" class="scan-batch"><label><input type="checkbox" id="scan-select-all"> Select all results</label><select id="scan-sort" aria-label="Scan sort"><option value="default">Default order</option><option value="rfl1m">RFL 1M</option><option value="rfl3m">RFL 3M</option><option value="rfl6m">RFL 6M</option></select></div>

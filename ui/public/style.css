@@ -76,7 +76,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .resizing { user-select: none; cursor: col-resize; }
 .resizing .chart-host { pointer-events: none; }
 
-/* Watchlist: seven shared columns keep metrics, Growth and stacked Tags separate. */
+/* Watchlist: seven shared columns keep metrics, Growth and Tag logos separate. */
 .list-heading { display: flex; align-items: center; gap: 8px; padding: 14px 12px 10px; }
 .list-heading strong { font-size: 14px; }
 .count-badge, #symbol-count, #holdings-count, #filter-count, #scan-result-count { color: #111; font-size: 10px; font-weight: 400; }
@@ -95,7 +95,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .group button[data-add] { justify-content: center; font-size: 21px; line-height: 16px; width: 26px; border-radius: 50%; }
 .group button:hover { background: #edf0f5; }
 .group button:disabled { opacity: .35; cursor: default; }
-.symbol-row { width: 100%; min-height: 32px; padding-top: 4px; padding-bottom: 4px; font-size: var(--font-row); text-align: left; white-space: nowrap; cursor: pointer; user-select: none; touch-action: none; }
+.symbol-row { width: 100%; height: 32px; padding-top: 4px; padding-bottom: 4px; font-size: var(--font-row); text-align: left; white-space: nowrap; cursor: pointer; user-select: none; touch-action: none; }
 .symbol-row:hover:not(.active) { background: #f3f5f8; }
 .symbol-row.active { border-radius: 6px; outline: 1px solid #000; outline-offset: -1px; }
 .ticker { text-align: left; padding: 0; font-size: inherit; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
@@ -204,16 +204,24 @@ button:disabled { cursor: default; opacity: .45; }
 .holdings-table th[aria-sort="descending"] button::after { content: ""; position: absolute; left: 50%; top: calc(100% + 1px); transform: translateX(-50%); border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 3px solid currentColor; }
 .holdings-table.holdings-measure { position: absolute; visibility: hidden; pointer-events: none; width: max-content; min-width: 0; left: 0; top: 0; }
 
-/* Each ticker owns a single grid row; only the dedicated Tag column stacks. */
+/* Tag logos remain secondary and never change the data row height. */
 .growth-cell { display: flex; justify-content: flex-end; align-items: center; gap: 4px; white-space: nowrap; }
 .growth-divider { color: #c4cbd4; }
-.row-tags { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding-right: 28px; }
-.row-tag { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; padding: 0 4px; color: #58616c; background: #edf0f4; font-size: 10px; line-height: 14px; }
-.row-tag.manual { color: #2d5d96; background: #eaf2ff; }
-.tag-edit { position: absolute; top: 0; right: 0; font-size: 10px; line-height: 12px; color: #747c87; padding: 0 2px; opacity: 0; }
+.row-tags { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 20px; padding-right: 28px; white-space: nowrap; }
+.tag-logo { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; font-size: var(--font-row); width: 1.35em; height: .9em; border: 0; border-radius: 999px; }
+.tag-logo[data-background="frosted"] { backdrop-filter: blur(3px); }
+.tag-logo svg { width: 100%; height: 100%; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.tag-logo .tag-ma { stroke-width: 1.6; }
+.tag-overflow { font-size: 10px; color: #747c87; }
+.tag-edit { position: absolute; top: 50%; transform: translateY(-50%); right: 0; font-size: 10px; line-height: 12px; color: #747c87; padding: 0 2px; opacity: 0; }
 .symbol-row:hover .tag-edit, .symbol-row:focus-within .tag-edit { opacity: 1; }
 .manual-tag-editor { padding: 4px 8px 8px; display: flex; gap: 4px; flex-wrap: wrap; }
 .manual-tag-editor button { border: 1px solid #d6dce4; padding: 3px 6px; border-radius: 999px; font-size: var(--font-small); }
 .manual-tag-editor button[aria-pressed="true"] { color: #2d5d96; background: #eaf2ff; border-color: #abc9ee; }
 .tag-editor select { border: 0; border-radius: 999px; background: var(--surface-muted); padding: 6px 8px; }
+.tag-appearance-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 8px 10px; font-size: var(--font-small); }
+.tag-appearance-editor label { display: inline-flex; align-items: center; gap: 5px; }
+.tag-appearance-editor select { font: inherit; border: 0; border-radius: 999px; padding: 5px 7px; background: var(--surface-muted); }
+.tag-appearance-editor input[type="color"] { width: 28px; height: 24px; padding: 2px; border: 0; border-radius: 5px; background: var(--surface-muted); }
+#tag-preview { display: inline-flex; align-items: center; padding: 4px; }
 .review-section { border-top: 1px solid var(--border); }

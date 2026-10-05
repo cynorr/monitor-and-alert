@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-04. This file is the only current UI specification. The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md).
+Updated: 2026-10-05. This file is the only current UI specification. The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md).
 
 ## Layout
 
@@ -31,7 +31,7 @@ Updated: 2026-10-04. This file is the only current UI specification. The product
 - Hide the persistent last-price horizontal line on both charts; retain the freely moving dashed crosshair.
 - Lightweight Charts does not supply a TradingView-style instrument/OHLC header; these small DOM legends use subscribeCrosshairMove and seriesData.
 - Chart headers omit market/currency, adjustment/session metadata, bar counts and branding/footer strips. Validation sample counts remain backend diagnostics.
-- Disable the native canvas logo; preserve third-party LICENSE/NOTICE and attribution on the separate static /licenses.html page. No chart branding/footer logic.
+- Chart branding and attribution follow [Logo / Icon](#logo--icon).
 
 ## Linked trading day
 
@@ -42,13 +42,68 @@ Updated: 2026-10-04. This file is the only current UI specification. The product
 - Do not copy logical/time ranges directly between different periods. Use a reentrancy guard for programmatic crosshair updates.
 - Linking only uses loaded history. When the peer has no bars for the selected day, clear its linked crosshair; do not invent data or initiate an unbounded historical download.
 
+## Logo / Icon
+
+本章统一维护 Tag 图案、操作/状态图标和未来主站/应用 Logo 的当前要求。Android 原生 App 是后续确定目标，iOS 也可能接入；图形含义、配色和操作语义应可复用，平台绘制与交互方式分别实现。这里不维护废弃方案，也不定义 Tag 的判定条件；规则见 [list-design.md](list-design.md)。
+
+### 通用原则
+
+- 区分度优先，图案应让人迅速联想到形态或操作；使用有代表性的轮廓，避免装饰细节。Tag 是辅助信息，不能用大面积亮色背景干扰 Symbol、价格和 Growth。
+- Tag、操作图标、品牌 Logo 属于不同用途，不强制共用尺寸或背景。小图形的可视尺寸与按钮的可操作区域分开管理。
+- 每种图案保留明确含义；完整名称、操作说明和状态不能只靠图形或颜色表达。Web 使用提示与可访问名称，原生端需提供可触摸的查看方式，不能照搬 hover。
+
+### Tag 图案与配色
+
+Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外部图标库。同一形态可以绑定多个 Tag，通过线条颜色区分所关联的 MA。
+
+| 稳定 Icon ID | 图形要求 |
+| --- | --- |
+| `surf` | 上方价格折线沿下方 MA 曲线运行；不是多条水波纹，MA 不必水平 |
+| `bounce` | V 形价格反弹，与 MA 线形成清晰关系 |
+| `prior-run` | 上升阶梯 steps |
+| `orderly-pullback` | 下降阶梯 steps，不使用下降箭头 |
+| `extended` | 单条加速增长曲线：起点低，前段平缓并向右延长，末段接近竖直上冲 |
+| `broken` | 价格向下跌破 MA 线 |
+| `label` | 中性标签轮廓，作为未绑定专用图案的默认值 |
+
+- 主景线条颜色和背景颜色可调。MA10 默认蓝 **#2962ff**，MA20 默认黄 **#e4b400**，MA50 默认红 **#e53935**，无 MA 关联默认中性 **#64748b**。例如 Surf-10 / Bounce-10 同为蓝线，Surf-20 为黄线；用户保存的颜色优先。颜色不表示人工/自动来源，也不决定分类。
+- 背景可选全透明或极浅毛玻璃；默认极浅灰 **#e5e7eb** 毛玻璃胶囊，无 border。保持低 opacity，主景线条承担识别作用；平台不支持模糊时可呈现极浅灰。
+- List 中图形容器高度为行字体的 **0.9 倍**，宽高比 **1.5**。当前 Web 字体 12px，对应高 **10.8px**、宽 **16.2px**。行内数量与列宽见 [List UI / 行与格式](#行与格式)。
+- 每个新 Tag 都绑定图案与外观；可先用 `label`，以后更换。外观独立于名称、用途和条件，改名不重新推断已保存图案。新增专用图案时更新本表与实现，保持已有 Icon ID 的含义。
+- Tag 编辑草稿提供 **Icon / Line color / Background style / Background color** 和实时 preview。与名称、用途、条件一起 Save / Cancel，不增加单独的保存流程。旧 Tag 仅在前端初始化缺失外观，下次偏好保存持久化，不因打开页面重写偏好。
+
+### 操作与状态图标
+
+以下为当前图形及对应含义；更换绘制方式不能改变行为。名单生命周期见 [list-design.md](list-design.md)，图表错误含义见 [Chart status](#chart-status)。
+
+| 场景 | 当前图形 | 含义 |
+| --- | --- | --- |
+| Discover / Focus 行操作 | 轮廓垃圾桶 | Exclude：移到 Hidden 七天，**不是永久删除股票或数据** |
+| Excluded 的 Hidden / Extended / Broken 行操作 | `↩` | Release：解除排除，随后按当前规则重新分类 |
+| Review 行操作 | `+` | Add to Focus，开始实时监控 |
+| Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
+| Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
+| Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
+| Daily / Intraday | `↦` | Go to latest，回到最新可用交易日 |
+| 图表 / 名单错误 | `!` | 提供当前错误详情，不扩展错误判断范围 |
+
+- 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
+- 操作使用完整的英文说明和可访问名称，不能仅靠垃圾桶或 `+` 猜测结果。Tag 定义的 Delete 当前是文字按钮，与名单行的垃圾桶操作不同。
+
+### 品牌与平台实现
+
+- 当前没有主站/应用品牌 Logo，不新增页头、页脚或品牌占位。未来主站 Logo、Android/iOS 应用图标的设计统一补充本章，正式需求确定后再制作。
+- 关闭图表供应商的画布 Logo；第三方 LICENSE/NOTICE 和 attribution 保留在独立静态 `/licenses.html` 页面。
+- 当前 Web 的 Tag 图案与默认外观集中在 `ui/src/tag-appearance.ts`，列表和编辑 preview 共用；样式在 `ui/public/style.css`，行操作在 `ui/src/list.ts`，持仓图标在 `ui/src/holdings.ts`，图表按钮在 `ui/public/index.html`。保存字段契约见 [development.md](development.md)。
+- SVG path、viewBox、CSS、blur 和 `title` 属于当前 Web 实现。迁移到原生端时复用图案含义、轮廓和已保存外观，按平台适配密度与触摸交互；不把 Web px、DOM 或 hover 当成原生端实现契约。
+
 ## List UI
 
 本章是唯一当前 List UI 规范，覆盖 Scan、Monitor 和独立 Holdings。名单分类与生命周期见 [list-design.md](list-design.md)；显示、筛选和格式化不改变名单归属或行情订阅。
 
 ### 宽度与视觉
 
-- 扣除工作区内边距和面板分隔条后，两模式 List 默认占可用面板宽度 **40%**，最小 **680px**；每个图表最小 **320px**，Monitor 双图均分剩余空间。数值统一放在 `layout.ts`，方便单点调整比例。
+- 扣除工作区内边距和面板分隔条后，两模式 List 默认占可用面板宽度 **32%**，最小 **680px**；每个图表最小 **320px**，Monitor 双图均分剩余空间。数值统一放在 `layout.ts`，方便单点调整比例。
 - 面板分隔条和 List 数据列间距均为 **12px**。拖动只调整相邻面板并保留最小宽度；打开页面、切换模式或双击分隔条恢复默认。小窗口保持最小宽度，允许工作区整体溢出。
 - Holdings 内容测量仅在必要时提高 Monitor 最小宽度以容纳表格，不把默认比例改成固定自然内容宽度。报价更新不能让侧栏反复缩窄或抖动。
 - List 与图表头部保持 120px 对齐。模式、总数、数据标记、Scan Ready 和 Search 均位于 List 面板内；名单列头不增加顶部分隔线。
@@ -78,9 +133,10 @@ Updated: 2026-10-04. This file is the only current UI specification. The product
 | 6 | Tags | Tags |
 | 7 | 行操作 | 行操作 |
 
-- 同 ticker 只有一行，主体数据列保持同一水平行，不再增加副标题/RFL 第二行。多个 Tag 在独立 Tags 列内竖向排列，行高随标签自然增加，不能覆盖相邻行。
+- 同 ticker 只有一行，固定行高 **32px**，主体数据列保持同一水平行；Growth、Tags 与行操作均不换行、不增加副标题。
 - Growth 依次显示 **1m / 3m / 6m** 三个值，不显示周期 key，以浅色 `|` 分隔。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
-- Tags 显示当前所有匹配标签；人工补充为蓝色、仅当前交易日有效。名称过长可省略显示，悬停保留完整名称。Tags 编辑按钮位于该单元右上角，不额外占一条数据行；展开编辑仅修改人工补充。Hidden 不提供人工 Tag 编辑。
+- Tags 列显示轮廓 glyph，图案、尺寸与配色统一见 [Logo / Icon](#logo--icon)。保持 **110px** 列宽下限并为编辑按钮留空隙；最多显示三个 glyph，其余用小号 `+N`，悬停列出完整剩余标签。glyph 悬停显示完整名称与人工 `today` 状态，人工补充仅当日有效，不额外使用蓝色 badge。Tags 与 `+N` 均不换行、不增加行高，不增加测宽或 ResizeObserver。
+- Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑仅修改当日人工补充，Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
 - NEW / RETURNED 使用 Symbol 旁的小标记；ticker 不显示 `.US`。Scan 的成员勾选与图表选中互相独立。
 - Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段或缺数据时留空。Review 显示本地 Daily close，实时涨幅列留空。
 - 选中行保留圆角黑色内边框，不改变背景；仅未选中 hover 行使用灰背景。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
@@ -100,6 +156,7 @@ Updated: 2026-10-04. This file is the only current UI specification. The product
 - 数值条件支持 Any / ≥ / ≤ / range；不同条件 AND，分类多选 OR。缺失值匹配 Any 或显式 Missing。Filter 不移动名单、不改变订阅，被筛掉的成员保留底层归属。
 - Tag 用途固定为 Setup / Extended / Broken / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Default 始终存在、用途 Label、不可改名或删除；Tag 名称唯一，最多十个。
 - 新建克隆已保存条件，用途默认 Setup。条件编辑即时预览；Save 保存并折叠，Cancel 恢复。未保存时切 Tag 需明确丢弃，保存失败保留草稿；名单/排序偏好写入不得覆盖未保存的 Filter 草稿。
+- Tag 外观编辑遵循 [Logo / Icon](#logo--icon)，与本章同一份 Tag 草稿一起保存或恢复；外观编辑保留已保存条件下的人工匹配成员，不切换到纯条件预览。
 - 已保存 Tag 的筛选包含人工补 Tag 成员；未保存条件预览只按草稿条件判断。保存规则由后端重评已有本地数据，UI 筛选不触发下载。
 
 ### 名单操作与批量移动

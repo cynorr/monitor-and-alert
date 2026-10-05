@@ -5,7 +5,8 @@ import { matchesFilters, sliderValues } from '../public/filters.js';
 import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
 import { scanProgress, selectionRequest } from '../public/types.js';
 import { collapseKey, growthValue, isReviewSelection, listSections, sectionKey } from '../public/board.js';
-import { matchesTag } from '../public/scan.js';
+import { matchesTag, ScanControls } from '../public/scan.js';
+import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
 
 test('scan progress keeps last ready date and seconds visible during preparation or errors', () => {
@@ -112,6 +113,29 @@ test('manual Tags match the saved Tag filter; unsaved rule preview still require
     assert.ok(matchesTag({ below_days: 1 }, tag, false));
     assert.equal(matchesTag({ tags: ['other'], below_days: null }, tag), false);
     assert.ok(tagChanged(tag, { ...tag, role: 'label' }));
+});
+
+test('appearance edits save independently, survive renaming, and preserve manually assigned filter members', () => {
+    const saved = { id: 'surf', name: 'Surf-20', filters: { below_days: { max: 1 } } };
+    saved.appearance = tagAppearance(saved);
+    assert.equal(saved.appearance.icon, 'surf');
+    assert.equal(saved.appearance.color, '#e4b400');
+    const draft = structuredClone(saved);
+    draft.appearance.color = '#123456';
+    draft.appearance.background = 'transparent';
+    assert.ok(tagChanged(saved, draft));
+    const result = withSavedTag([saved], { ...draft, name: 'My setup' })[0];
+    assert.deepEqual(result.appearance, draft.appearance);
+    assert.equal(tagAppearance(result).icon, 'surf');
+    assert.equal(saved.appearance.color, '#e4b400');
+    const controls = Object.create(ScanControls.prototype);
+    controls.enabled = false;
+    controls.preferences = { activeTag: saved.id, tags: [saved] };
+    controls.draft = draft;
+    const row = { status: 'focus', tags: ['surf'], manual_tags: ['surf'], below_days: 3 };
+    assert.deepEqual(controls.visible([row]), [row]);
+    draft.filters.below_days.max = 2;
+    assert.deepEqual(controls.visible([row]), []);
 });
 
 
