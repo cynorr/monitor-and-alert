@@ -2,7 +2,9 @@
 
 个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘。两个页面共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
 
-[开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [Chart UI](docs/chart-ui.md) · [Holdings 数据](docs/holdings-data.md) · [Holdings UI](docs/holdings-ui.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
+[开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [Alert 需求](docs/alert.md) · [Chart UI](docs/chart-ui.md) · [Holdings 数据](docs/holdings-data.md) · [Holdings UI](docs/holdings-ui.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
+
+Alert 与统一移入 Focus 已实现；完整需求分别见 [Alert](docs/alert.md) 与 [List 入选规则](docs/list-design.md#统一移入-focus)，模块维护入口为 [data_service/alerts/AGENTS.md](data_service/alerts/AGENTS.md)。
 
 ## 启动
 
@@ -59,6 +61,27 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 
 ## 使用
 
+macOS 系统通知使用本机原生应用。首次构建：
+
+```bash
+.venv/bin/pip install -e '.[macos]'
+scripts/build_macos_app.sh
+open 'dist/Market Monitor.app'
+```
+
+先退出使用同一 runtime 的 CLI 服务。应用沿用本工程的 runtime、workspace 和凭证；关闭网页继续监控，应用菜单 Quit 才退出。当前为本机 alias bundle，保留工程目录与 .venv，固定路径和 Bundle ID；源码修改退出再打开，资源/依赖或签名修改后重建。完整通知设置见 [Alert 权限](docs/alert.md#macos-权限与运行)。
+
+- 图表按住 **Command + Option** 左键创建，价格取鼠标水平线；点击横线选中后 **Backspace** 删除，上下拖动改价并重新激活。
+- Regular 到达/穿越后灰线与左下角卡片保留到手动关闭或跳转。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
+
+原生投递的有界检查（先退出应用；只发两条 CHECK 通知，不读凭证/数据库或启动行情）：
+
+```bash
+'dist/Market Monitor.app/Contents/MacOS/Market Monitor' --notification-check
+```
+
+检查后从应用菜单 Quit，并重新打开正式应用。
+
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
 - Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，同日Refresh保留人工状态。
 - Focus跨日保留；Discover与Focus匹配负面Tag直接进入Excluded。Hidden/Extended/Broken七个自然日到期后按当前规则重新分类；Review保留待审核，无Dismiss。Hidden七天内跳过名单规则判断，仍计算完整特征。删除Focus移入Hidden，Release/Move to Discover明确解除归属；新入section置顶。
@@ -102,4 +125,4 @@ reconcile是有界真实历史同步，verify不联网。live验收需明确当�
 
 WS选择含`type=select`、symbol、timeframe、request_id、mode。模式/日期切换及重连发送完整快照；日 K未变时只发预览/状态。状态仅loading/basic/full与errors。
 
-UI构建产物和Lightweight Charts已随仓库提供，正常启动无需npm/CDN。模拟器详见 [simulator/README.md](simulator/README.md)。不增加Price Alert、下单、消息中间件或通用适配框架。
+UI构建产物和Lightweight Charts已随仓库提供，正常启动无需npm/CDN。模拟器详见 [simulator/README.md](simulator/README.md)。Alert 以独立需求文档为准；不增加下单、消息中间件或通用适配框架。

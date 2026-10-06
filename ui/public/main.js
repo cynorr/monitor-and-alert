@@ -6,6 +6,7 @@ import { ScanControls } from './scan.js';
 import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
+import { AlertController } from './alerts.js';
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
@@ -21,6 +22,34 @@ let listRegularSession = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
+let waitingJump = null;
+let nativeEvent = location.hash.startsWith('#alert=') ? location.hash.slice(7) : '';
+const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async (selected) => {
+    const tf = timeframe;
+    if (appMode === 'scan' && scan.activeList !== 'focus')
+        await scan.showFocus();
+    applyList(await (await fetch('/v1/scan')).json());
+    if (selected)
+        select(selected, tf, selectionSource, holdingKey);
+}, jumpToAlert);
+async function jumpToAlert(event) {
+    if (!alerts.value?.eligible_symbols.includes(event.symbol))
+        throw new Error('Symbol is no longer in Focus or Holdings');
+    applyList(await post('mode', { mode: 'monitor' }));
+    await scan.showFocus();
+    if (socket?.readyState !== WebSocket.OPEN)
+        throw new Error('Chart connection unavailable');
+    const holding = holdings.forSymbol(event.symbol);
+    if (!watchlist.tickers.some(row => row.symbol === event.symbol && row.status === 'focus') && !holding)
+        throw new Error('Symbol is no longer available');
+    if (!holding)
+        watchlist.showSymbol(event.symbol);
+    select(event.symbol, timeframe, holding ? 'holdings' : 'watchlist', holding?.key ?? '');
+    await new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => { waitingJump = null; reject(new Error('Could not open chart')); }, 8000);
+        waitingJump = { symbol: event.symbol, resolve: () => { clearTimeout(timeout); waitingJump = null; resolve(); } };
+    });
+}
 function applyList(data) {
     const nextMode = data.app_mode ?? 'monitor';
     const changed = nextMode !== appMode || (nextMode === 'scan' && data.date !== scanDate);
@@ -134,11 +163,15 @@ function apply(view) {
     document.querySelectorAll('.adv').forEach(node => node.textContent = view.summary.adv20 == null ? '—' : '$' + compact(view.summary.adv20));
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
+    alerts.redraw();
+    if (waitingJump?.symbol === view.symbol && view.charts['1d'] && daily.rows.length)
+        waitingJump.resolve();
 }
 function select(next, tf, source = selectionSource, key = holdingKey) {
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
+    alerts.changeSymbol();
     selectionSource = source;
     holdingKey = source === 'holdings' ? key : '';
     timeframe = tf;
@@ -181,6 +214,17 @@ function connect() {
             const data = JSON.parse(event.data);
             if (data.type === 'list') {
                 applyList(data);
+                return;
+            }
+            if (data.type === 'alerts') {
+                alerts.update(data);
+                if (nativeEvent) {
+                    const event = alerts.value?.events.find(event => event.id === nativeEvent);
+                    if (event) {
+                        nativeEvent = '';
+                        void alerts.open(event);
+                    }
+                }
                 return;
             }
             const view = data;

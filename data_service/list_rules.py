@@ -32,6 +32,17 @@ def active_tag(tag):
                                         for rule in tag.get('filters', {}).values())
 
 
+def matched_tags(row, definitions, manual=()):
+    return [tag for tag in definitions if tag['id'] != 'default' and
+            (tag['id'] in manual or (active_tag(tag) and matches_filters(row, tag['filters'])))]
+
+
+def focus_classification(row, preferences):
+    matched = matched_tags(row, preferences['tags'])
+    return {'tags': [tag['id'] for tag in matched],
+            'section': next((tag['id'] for tag in matched if tag_role(tag) == 'setup'), 'unclassified')}
+
+
 def apply_rules(workspace, snapshot, preferences, selected_date=None):
     """Return a new workspace; only Focus is eligible for Longbridge membership."""
     selected_date = selected_date or snapshot['date']
@@ -64,7 +75,7 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
             state.pop('manual_tags', None)
             state.pop('manual_tags_date', None)
         manual = set(state.get('manual_tags', [])) & tag_ids
-        matched = [tag for tag in definitions if tag['id'] in manual or (active_tag(tag) and matches_filters(rows.get(ticker, {}), tag['filters']))]
+        matched = matched_tags(rows.get(ticker, {}), definitions, manual)
         state['tags'] = [tag['id'] for tag in matched]
         potential = [tag['id'] for tag in matched if tag_role(tag) == 'setup']
         negative = next((role for role in ('broken', 'extended') if any(tag_role(tag) == role for tag in matched)), None)

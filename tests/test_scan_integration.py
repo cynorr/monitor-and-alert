@@ -458,7 +458,8 @@ def test_shared_actions_save_primary_section_manual_tags_and_daily_exclusion(app
         ])
         await app.prepare_lists()
         await app.list_action({'action': 'add', 'ticker': 'TSLA', 'list_name': 'focus', 'section': 'setup'})
-        assert app.workspace.data['statuses']['TSLA']['section'] == 'setup'
+        # Existing Discover membership is recomputed on entry; the source/target override is discarded.
+        assert app.workspace.data['statuses']['TSLA']['section'] == 'unclassified'
         assert app.workspace.data['orders']['focus'][0] == 'TSLA'
         await app.list_action({'action': 'tag', 'ticker': 'TSLA', 'tags': ['setup']})
         row = next(row for row in app.scan_board() if row['ticker'] == 'TSLA')

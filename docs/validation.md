@@ -2,6 +2,16 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-06：Alert 需求与统一 Focus 入选文档
+
+环境：本机项目工作树；本轮仅修改 Markdown 与 AGENTS.md，不修改 Python/TypeScript、运行数据或凭证，不启动/重启服务，不调用真实行情或账户接口。
+
+- 对照本轮用户修订、quotes.py、workspace.py、list_rules.py、workbench.py、现有 List/Chart/UI/开发文档，建立独立 alert.md 和 data_service/alerts/AGENTS.md，并同步总入口及局部维护约束。新需求和新入选规则均明确标为已确认待实现。
+- 核对 Regular-only、鼠标水平线价格、到达算触发、无停机补报、symbol 共用身份、Scan Discover/全部 Excluded 创建先入 Focus，以及手动/Alert 共用清理来源 Tag、重新匹配与组首插入规则；清除旧入口中禁止开发 Alert 的过时约束。
+- 进行文档差异、相对链接/锚点与入口一致性检查。未修改 TypeScript，未运行 npm build 或产品测试；这些文档检查不是运行功能验收。
+
+未覆盖：Alert Engine、SQLite、名单入选代码改动、图表交互、真实行情触发、macOS 通知权限/投递/声音、任何平台运行兼容性。后续开发须分别取得必要证据，既有记录不能冒充本轮 live 结果。
+
 ## 2026-10-06：Holdings 余仓盈亏、当日建仓与清仓复盘
 
 环境：macOS、现有 Python3.13 虚拟环境、TypeScript 与正式 Monitor 服务。纽约市场日期为2026-10-05，本机日期为2026-10-06。真实接口验证仅限既有11只持仓、当日成交及既有Focus行情范围，成功读取并核对后结束；未修改账户、人工关联规则或名单，未请求额外历史ticker。
@@ -26,7 +36,7 @@
 环境：macOS、现有 TypeScript/Lightweight Charts 5.2.0、正式本机服务和 1280×720 浏览器窗口。仅修改前端与需求文档；服务未重启，未改行情计算、人工名单或账户数据。图表验证只选择既有 GPRO/PAYS，未扩大 Focus/Holdings 行情范围。
 
 - `npm run build --prefix ui` 通过；最终 3 项 chart 交互用例通过，覆盖旧 candle 悬停跨 Quote 更新保留、同根数据修订、active volume/缺失值、双图联动及离开恢复最新值。测试中的程序 crosshair API 按本地真实库的“不触发 move 回调”行为实现；最终代码显式同步 peer 数值。未执行全项目、全流程或并发测试。
-- 所有 Panel 使用集中 `BAR_SPACING=2` 和 `VOLUME_PANE_RATIO=0.28`。实际 Scan 日图宽 568px，完整 PAYS 历史默认约一年；短历史 USDE 保持右对齐及左侧空白。Monitor 两图默认间距一致，手动拖动成交量分界向上 30px 后 label 的 top 同步减少 30px。最终刷新恢复两图一致默认分界。
+- 所有 Panel 使用集中 `BAR_SPACING=5` 和 `VOLUME_PANE_RATIO=0.28`。实际 Scan 日图宽 568px，完整 PAYS 历史默认约一年；短历史 USDE 保持右对齐及左侧空白。Monitor 两图默认间距一致，手动拖动成交量分界向上 30px 后 label 的 top 同步减少 30px。最终刷新恢复两图一致默认分界。
 - Scan PAYS 2026-03-25 悬停显示 V 9.45M，与本地 Massive 的 9,453,218 一致；离开恢复最新日 V 862.48K，对应 862,481。Monitor GPRO 2026-09-23 日图显示 V 17.07M，联动首根 1h 显示 V 1.8M，对应本地 Longbridge 17,069,379 和 1,799,413。持续 Quote 更新保留历史悬停值；最终离开两图均恢复最新 volume。在 Intraday volume 区悬停也能读取垂直对应 candle。
 - 实际 11 条 Holdings 自然高度 407px。名单滚动 720px 后 Holdings top 仍为 220px、Filter top 仍为 130px，外层 scrollTop=0；整体折叠后持仓高度 66px，下方名单高度由 83px 增为 424px。NEW 的实际 CSS 颜色为 rgb(41,98,255)，与 EMA10 #2962ff 一致。固定容器使用 min-height:0 与 overflow:clip，避免 grid 的内容最小高度或程序 scrollIntoView 带动顶部区域。
 - 浏览器无 error/warn。验证结束恢复 Monitor 模式、Holdings 展开及空 Search；保存本轮 Scan/Monitor 截图。Chart 与 Holdings 全部 UI 要求已迁入 chart-ui.md / holdings-ui.md，List 的 NEW 要求保留 ui.md；README、AGENTS 与职责/行为入口同步。
@@ -305,3 +315,16 @@
 旧实测产物曾保存于 runtime/full-universe-http.json、full-universe-report.json、recovery-smoke.json、invariant-audit.json；文件若仍存在，仅作历史数据，正式服务不消费这些报告。
 
 移动触控、全天稳定运行和实际系统长时间休眠恢复仍未完整验收。模拟测试、短时 live 和历史记录分别标明，不相互替代。
+
+## 2026-10-06 Alert 实现与 macOS 通知
+
+环境：macOS 26.7 arm64，Python 3.13.1；PyObjC Cocoa/UserNotifications 12.2.2、py2app 0.28.10、setuptools 80.10.2；Lightweight Charts 5.2.0、TypeScript 5.9.3。原生应用固定 `dist/Market Monitor.app`，Bundle ID `local.cyno.MarketMonitor`，本地 ad-hoc designated requirement 固定 identifier；当前为 alias bundle，运行依赖原工程和 .venv。
+
+- TypeScript 构建通过；22 个现有 UI 用例通过。Python 定向运行 Alert、Workspace、List rules、Scan、Holdings integration 与 Quote/DataService，100 个通过（含重连首快照后下一次穿越）；后续 UI 跳转修改后复验 Alert/Scan 44 个通过。最终补充 Focus 已保存但 Alert 写入失败的明确部分成功响应用例，并将 Alert Quote 回调置于图表处理之前，复验 Alert/Quote/DataService 27 个通过，其中 Alert 20 个。localhost 监听与原生 watcher 用例在沙箱外运行，数据仅写临时目录。
+- 新增核心用例覆盖上/下到达与跳价、原始精度、同秒 push/旧 snapshot、相同 symbol 多条、扩展时段/闭市/新日/重启/休眠起点、旧事件与新 generation、到期和出范围、未知初始 Holdings、来源 Tag 清理和重新分类、同源 Origin 与独立 WS 快照。既有快照成交量用例继续通过；同秒快照保留 push 的价格，同时接受原有累计量更新。
+- 真实服务：停止旧 CLI 后，以原生同进程应用恢复正式 runtime；/health 为 running/CONNECTED，Focus ∪ 已接受 Holdings 为 56 个 symbols，scope_known=true。只额外读取 GPRO 的现有 Quote，不扩大订阅；实际图表验证 Command+Option 创建、Daily/Intraday 共用黑线/右箭头、拖动保存（0.96 → 1.06，generation 1 → 2）与 Backspace 删除，已清除该测试 Alert。
+- 原生首次启动暴露 Finder 的 C locale；launcher 设置 UTF-8 后 Holdings 可读取已接受缓存并刷新，未把原失败当空持仓。通知授权 authorized，alert/sound 均开启；系统设置确认 Desktop/Notification Center 开启，并将 Temporary 改为 Persistent。重启应用后权限保持；SIGTERM 进入与菜单 Quit 相同的 Cocoa terminate 路径，确认监听端口、进程和 runtime 锁释放后可重新启动。
+- 独立 `--notification-check` 只发送两条 CHECK 原生通知，不读取凭证/数据库或连接行情。UserNotifications 返回 delivered=2，提交 error=null，最终 CHECK 验证结束后清理两条测试通知；up.wav/down.wav 均为 44.1kHz 单声道 PCM 的不同短音资源，最终构建直接复制实际文件进应用包。投递/配置记录不等于人工听辨已经完成。
+- UI 卡片验收：使用现有 Scan Mock 的复制品及临时库，localhost:8767 最长300秒、结束删除临时目录。PAYS 两个 Triggered 事件显示上下穿 SVG（蓝/黑）、两位价格与 ET 日期/秒，灰线对齐、左下角 stack；卡片保持不超时。灰线拖动至11.70后为 Active generation=2，关闭旧上穿卡片没有删除新线；另一卡片跳转 Monitor 成功后处理，最终 unhandled=0，Active 新线仍保留。此验收没有读取凭证或投递系统通知。
+- 当前额外 live 检查发生于纽约 Regular 之后，没有等待下一交易日或设置自动任务；没有伪造真实穿越。尚未实机覆盖：Regular live 穿越与实际听辨两种声音、系统通知 Open/Close 的完整人工操作、Mac 重启/真实睡眠，以及 macOS 27。对应逻辑由定向用例与正常系统 API 实现，以上未覆盖项不能视为已验收。
+- 184 个 Markdown 相对链接/锚点与 git diff --check 核对，codesign 普通校验 valid on disk / satisfies Designated Requirement；未改 vendor、未加入 Atomic 算子、策略、下单、跨存储事务或回放框架。

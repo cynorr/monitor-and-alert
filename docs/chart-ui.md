@@ -1,6 +1,6 @@
 # Chart UI
 
-Updated: 2026-10-06. This is the only current specification for chart appearance and interaction. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Data and indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
+Updated: 2026-10-06. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are confirmed but not implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Data and indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
 
 ## Implementation principle
 
@@ -30,6 +30,7 @@ The default volume divider is moderately higher than before; it remains adjustab
 - Black chart boundaries and a gray main/volume divider. Hide price-scale vertical borders; retain the main price scale's 7% top and 5% bottom margins.
 - `rightOffset=1` and `rightBarStaysOnScroll=true`: keep about one blank bar between the latest candle and the right price axis.
 - Hide the persistent last-price horizontal line on candles, moving averages and volume. The reference lines are the freely moving dashed horizontal/vertical crosshair and its native axis labels; do not add a fixed price reference line.
+- User-created Alert lines are defined separately in [alert.md](alert.md); the confirmed feature may draw its saved thresholds without enabling the last-price reference line above.
 - Use `CrosshairMode.Normal`; no magnet or snap mode. The mouse-driven chart stays freely positioned even when the peer chart's crosshair is linked to a candle.
 - Chart branding and attribution follow [Logo / Icon](ui.md#logo--icon).
 
@@ -66,6 +67,10 @@ The default volume divider is moderately higher than before; it remains adjustab
 - 2h/4h derive from official closed 5m bars. Missing official 15m/30m/1h history uses the same in-memory conversion; official data replaces it on the next update.
 - 1000 5m bars span roughly 13 full sessions; derived periods share that coverage. Insufficient SMA65 history leaves the line absent.
 - Scan and Review use completed local Daily bars without an active candle or Intraday data. Review's disabled Intraday controls and Add to Focus prompt follow [List UI](ui.md#展示范围与控件).
+
+## Alert interaction
+
+Alert 在 Scan/Monitor 的创建、选择、改价、删除与跨图同步只在 [alert.md](alert.md#图表交互) 维护；图形定义见 [Logo / Icon](ui.md#alert-图形)。Alert 使用当前图表鼠标水平线对应价格，不改变两个来源的数据口径。实现为 ui/src/alerts.ts 中的公开 series primitive、pane 坐标与命中检测，保持 vendor 原样。
 
 ## Chart status
 

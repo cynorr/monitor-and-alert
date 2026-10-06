@@ -19,13 +19,16 @@ from .service import DataService
 from .workspace import derive_day_view, normalize_ticker
 from .store import atomic_json
 from .symbol_directory import read_directory
+from .alerts import AlertEngine, price_cents
+from .alerts.engine import symbol_key
+from .list_rules import focus_classification
 
 log = logging.getLogger(__name__)
 
 
 class Workbench:
     def __init__(self, workspace, runtime, daily_path, broker_factory, *, calendar=None, mock=False, only=None,
-                 holdings_factory=None, pipeline=None, bars_path=None):
+                 holdings_factory=None, pipeline=None, bars_path=None, notifier=None):
         self.workspace, self.runtime, self.daily_path = workspace, runtime, daily_path
         self.broker_factory, self.calendar = broker_factory, calendar or TradingCalendar()
         self.mock, self.only = mock, only
@@ -46,7 +49,28 @@ class Workbench:
         self.symbol_directory_cache = None, {}
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(DEFAULT))
         self.list_context = self._list_context()
+        self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, notifier=notifier) if only is None else None
+        self.refresh_alert_scope()
         workspace.on_change = self.workspace_changed
+
+    def refresh_alert_scope(self):
+        day = datetime.fromtimestamp(time.time(), ET).date().isoformat()
+        symbols = self.holdings.symbols_for(day) if self.holdings else []
+        if self.monitor:
+            self.monitor.update_holdings(symbols)
+        if self.alerts:
+            allowed = {t.symbol for t in self.workspace.tickers()} | set(symbols)
+            known = self.holdings_factory is None or (self.holdings is not None and self.holdings.base is not None)
+            self.alerts.maintain(allowed, known)
+
+    def alert_state(self):
+        return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'events': [], 'eligible_symbols': [],
+                'scope_known': True, 'notification': {'available': False, 'authorization': 'unavailable', 'sound': False,
+                                                     'error': 'Alerts are disabled for symbol-subset sessions'}, 'error': None}
+
+    def focus_classifications(self, tickers):
+        rows = {row['symbol'].removesuffix('.US'): row for row in self.snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
+        return {ticker: focus_classification(rows.get(ticker, {}), self.preferences) for ticker in tickers}
 
     def _list_context(self):
         states = self.workspace.data['statuses']
@@ -86,6 +110,7 @@ class Workbench:
                 wanted = {symbol if symbol.endswith('.US') else symbol + '.US' for symbol in self.only}
                 tickers = [ticker for ticker in tickers if ticker.symbol in wanted]
             self.monitor.update_tickers(tickers)
+        self.refresh_alert_scope()
 
     async def switch_mode(self, mode):
         if mode not in ('scan', 'monitor'):
@@ -116,7 +141,7 @@ class Workbench:
             wanted = {s if s.endswith('.US') else s + '.US' for s in self.only}
             tickers = [t for t in tickers if t.symbol in wanted]
         broker = self.broker_factory({ticker.symbol for ticker in tickers})
-        self.monitor = DataService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path)
+        self.monitor = DataService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path, alerts=self.alerts)
         self.workspace_changed()
         self.monitor_task = asyncio.create_task(self.monitor.run())
         if self.holdings_factory:
@@ -162,8 +187,7 @@ class Workbench:
             self.monitor = None
 
     def holdings_changed(self):
-        if self.monitor and self.holdings:
-            self.monitor.update_holdings(self.holdings.symbols)
+        self.refresh_alert_scope()
 
     def holdings_state(self):
         if self.mode != 'monitor' or self.holdings is None:
@@ -184,9 +208,12 @@ class Workbench:
         if self.pipeline:
             await self.pipeline.close()
         await self.stop_monitor()
+        if self.alerts:
+            self.alerts.close()
 
     async def run(self):
         while True:
+            self.refresh_alert_scope()
             for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task)):
                 if task and task.done():
                     task.result()
@@ -342,8 +369,9 @@ class Workbench:
             sections = {'unclassified'} | {tag['id'] for tag in self.preferences['tags'] if tag['role'] == 'setup'}
             if section not in sections:
                 raise ValueError('Unknown setup section')
-            self.workspace.add_ticker(ticker, 'focus')
-            if section != 'unclassified':
+            existing = self.workspace.section(ticker)
+            self.workspace.add_ticker(ticker, 'focus', classification=self.focus_classifications([ticker])[ticker])
+            if section != 'unclassified' and existing not in ('discover', 'excluded'):
                 self.workspace.move_ticker(ticker, section, 0)
         elif action == 'delete':
             self.workspace.delete_ticker(normalize_ticker(payload['ticker']))
@@ -362,13 +390,50 @@ class Workbench:
         elif action == 'move':
             snapshot = self.snapshot(self.workspace.date)
             self.workspace.move_members(payload['tickers'], payload['source'], payload['target'], candidates(snapshot),
-                                        previous_candidates(self.workspace.root, snapshot['date']))
+                                        previous_candidates(self.workspace.root, snapshot['date']),
+                                        classifications=self.focus_classifications(payload['tickers']))
         else:
             raise ValueError('Unknown list action')
         await self.prepare_lists()
         return self.list_state()
 
     async def action(self, resource, payload):
+        if resource == 'alerts':
+            if self.alerts is None:
+                raise ValueError('Alerts are disabled for symbol-subset sessions')
+            action = payload.get('action')
+            self.refresh_alert_scope()
+            if action == 'create':
+                if payload.get('mode') != self.mode:
+                    raise ValueError('Alert creation belongs to a previous mode')
+                symbol = symbol_key(payload['symbol'])
+                price_cents(payload['price'])
+                ticker = symbol.removesuffix('.US')
+                promoted = False
+                if self.workspace.section(ticker) != 'focus' and (symbol not in self.alerts.allowed or payload.get('mode') == 'scan'):
+                    # Historical Scan gestures still mutate the effective workspace.
+                    if payload.get('mode') != 'scan' or symbol not in self.symbols:
+                        raise ValueError('Choose a current Focus/Holdings symbol or a Scan chart')
+                    self.workspace.add_ticker(ticker, classification=self.focus_classifications([ticker])[ticker])
+                    promoted = True
+                try:
+                    self.alerts.create(symbol, payload['price'])
+                except sqlite3.Error:
+                    if promoted:
+                        return {**self.alert_state(), 'error': 'Added to Focus; alert was not saved', 'partial': True}
+                    raise
+            elif action == 'rearm':
+                self.alerts.rearm(payload['id'], payload['price'], payload['generation'])
+            elif action == 'delete':
+                self.alerts.delete(payload['id'])
+            elif action == 'acknowledge':
+                self.alerts.acknowledge(payload['event_id'])
+            elif action == 'notifications':
+                if self.alerts.notifier:
+                    self.alerts.notifier.request_settings()
+            else:
+                raise ValueError('Unknown alert action')
+            return self.alert_state()
         if resource == 'mode':
             return await self.switch_mode(payload['mode'])
         if resource == 'scan':
@@ -411,6 +476,8 @@ class Workbench:
         raise ValueError('Unknown action')
 
     async def api(self, path, query):
+        if path == '/v1/alerts':
+            return self.alert_state()
         if path == '/v1/holdings':
             return self.holdings_state()
         if path == '/health':
@@ -418,6 +485,8 @@ class Workbench:
             return {**monitor, 'service': 'running', 'mode': self.mode, 'broker_active': self.monitor is not None,
                     'quote_health': monitor.get('quote_health', 'OFFLINE'),
                     'mock': self.scan_mock if self.mode == 'scan' else False,
+                    'alerts': {'enabled': self.alerts is not None, 'count': len(self.alerts.alerts) if self.alerts else 0,
+                               'error': self.alerts.error if self.alerts else None},
                     'massive': self.pipeline.state() if self.pipeline else None,
                     'holdings_task_active': bool(self.holdings_task and not self.holdings_task.done())}
         if path == '/v1/scan':

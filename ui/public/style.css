@@ -230,3 +230,22 @@ button:disabled { cursor: default; opacity: .45; }
 .tag-appearance-editor input[type="color"] { width: 28px; height: 24px; padding: 2px; border: 0; border-radius: 5px; background: var(--surface-muted); }
 #tag-preview { display: inline-flex; align-items: center; padding: 4px; }
 .review-section { border-top: 1px solid var(--border); }
+
+.alert-stack { position:fixed; left:14px; bottom:14px; z-index:30; width:min(320px, calc(100vw - 28px)); display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+.alert-cards { display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow:auto; pointer-events:auto; }
+.alert-card { display:flex; align-items:stretch; background:#fff; color:#000; border:1px solid #dce0e5; border-radius:8px; box-shadow:0 3px 14px #0002; flex-shrink:0; }
+.alert-open { display:flex; align-items:center; gap:10px; flex:1; min-width:0; padding:12px; border:0; background:none; text-align:left; cursor:pointer; color:#000; }
+.alert-open span { display:flex; flex-direction:column; gap:4px; }
+.alert-open strong { font-size:14px; }
+.alert-open time { font-size:11px; color:#727b88; white-space:nowrap; }
+.alert-close { border:0; background:none; color:#727b88; padding:0 12px; font-size:20px; cursor:pointer; }
+.alert-open:hover,.alert-close:hover { background:#f6f7f9; }
+.alert-open:disabled { cursor:default; }
+.crossing-icon { width:24px; height:24px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.crossing-icon.up { color:#2962ff; }
+.crossing-icon.down { color:#000000; }
+.alert-notifications,.alert-error { pointer-events:auto; background:#fff; border:1px solid #dce0e5; border-radius:6px; padding:8px 10px; font-size:11px; color:#727b88; box-shadow:0 2px 8px #0001; }
+.alert-notifications:disabled { opacity:1; }
+.alert-error { display:flex; gap:8px; align-items:center; color:#b42318; }
+.alert-error button { border:0; background:none; color:inherit; cursor:pointer; }
+.alert-error[hidden],.alert-notifications[hidden] { display:none; }

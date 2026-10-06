@@ -116,6 +116,10 @@ export class HoldingsList {
         const first = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort)[0];
         return first ? { symbol: symbolFor(first.holding.ticker), key: first.sequence.buy_ids.join(':') } : null;
     }
+    forSymbol(symbol) {
+        const row = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort).find(row => symbolFor(row.holding.ticker) === symbol);
+        return row ? { symbol, key: row.sequence.buy_ids.join(':') } : null;
+    }
     update(state, regularSession) {
         this.data = state;
         if (regularSession !== undefined)

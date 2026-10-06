@@ -205,13 +205,14 @@ class Workspace:
         for order in self.data['orders'].values():
             order[:] = [item for item in order if item != ticker]
 
-    def _focus(self, ticker, section='unclassified'):
+    def _focus(self, ticker, classification=None):
         state = self.data['statuses'].setdefault(ticker, {})
-        state.update(status='focus', section=section, status_at=self.date, manual_focus_date=self.date)
-        state.pop('excluded_at', None)
-        state.pop('released_at', None)
+        for key in ('tags', 'manual_tags', 'manual_tags_date', 'manual_section_date', 'excluded_at', 'released_at'):
+            state.pop(key, None)
+        state.update(status='focus', section='unclassified', tags=[], status_at=self.date, manual_focus_date=self.date)
+        state.update(classification or {})
 
-    def add_ticker(self, ticker, section='focus'):
+    def add_ticker(self, ticker, section='focus', *, classification=None):
         if section not in ('focus', 'wait'):
             raise ValueError('Invalid list')
         if self.section(ticker) == 'focus':
@@ -219,7 +220,7 @@ class Workspace:
         previous = deepcopy(self.data)
         self._remove_order(ticker)
         self.data['orders']['focus'].insert(0, ticker)
-        self._focus(ticker)
+        self._focus(ticker, classification)
         self.save(previous)
         return True
 
@@ -264,7 +265,7 @@ class Workspace:
         order.insert(at, ticker)
         self.save(previous)
 
-    def move_members(self, tickers, source, target, candidates, previous_candidates):
+    def move_members(self, tickers, source, target, candidates, previous_candidates, *, classifications=None):
         source = {'wait': 'focus', 'hidden': 'excluded'}.get(source, source)
         target = {'wait': 'focus', 'hidden': 'excluded'}.get(target, target)
         if source == target or target not in ORDERED_STATUSES:
@@ -282,7 +283,7 @@ class Workspace:
                 if ticker in candidates:
                     self.data['statuses'][ticker] = {'status': 'discover', 'section': 'unclassified', 'tags': [], 'released_at': self.date}
             elif target == 'focus':
-                self._focus(ticker)
+                self._focus(ticker, (classifications or {}).get(ticker))
             else:
                 self.data['statuses'].setdefault(ticker, {}).update(status='excluded', section='hidden', tags=[], status_at=self.date, excluded_at=self.date)
                 for key in ('manual_focus_date', 'manual_section_date', 'manual_tags', 'manual_tags_date'):

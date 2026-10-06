@@ -32,7 +32,7 @@ class SyncState:
 
 
 class DataService:
-    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None):
+    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None):
         self.tickers = tickers
         self.holdings_symbols = []
         self.symbols = [t.symbol for t in tickers]
@@ -43,9 +43,11 @@ class DataService:
         self.store = BarStore(bars_path or runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
         self.validator = DataValidator(self.store, self.calendar)
         self.charts = ChartCache(self.store, self.calendar)
+        self.alerts = alerts
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
-        self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.charts.apply_quote,
-                                   on_reconnect=self.recover) if broker else None
+        self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
+                                   on_reconnect=lambda: self.recover(reset_alerts=False),
+                                   on_reset=alerts.reset if alerts else None) if broker else None
         self.run_id = uuid.uuid4().hex
         self.started_at = int(self.now())
         self.focus = (self.symbols[0] if self.symbols else '', '5m')
@@ -149,10 +151,12 @@ class DataService:
             raise ValueError('Invalid intraday timeframe')
         self.focus = (symbol, timeframe)
 
-    def recover(self):
+    def recover(self, *, reset_alerts=True):
         # A recovery cannot attribute missed Quote increments to the active bucket.
         self.charts.volume_baselines.clear()
         self.charts.quotes.clear()
+        if self.alerts and reset_alerts:
+            self.alerts.reset()
         for active in self.charts.active.values():
             active['volume'] = None
         for state in self.sync.values():
@@ -160,6 +164,11 @@ class DataService:
             state.complete = False
             state.due = state.attempt = 0
             state.limit = 4
+
+    def apply_quote(self, symbol, quote):
+        if self.alerts:
+            self.alerts.quote(symbol, quote)
+        self.charts.apply_quote(symbol, quote)
 
     def priority(self, key):
         symbol, tf = key

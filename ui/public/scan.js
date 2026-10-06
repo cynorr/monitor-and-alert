@@ -172,6 +172,15 @@ export class ScanControls {
             .sort((a, b) => (sort === 'default' ? 0 : rank(a, sort + '_rank') - rank(b, sort + '_rank')) || rank(a, 'order_index') - rank(b, 'order_index'));
     }
     get activeList() { return this.enabled ? this.preferences?.activeList ?? 'discover' : 'focus'; }
+    async showFocus() {
+        if (!this.preferences)
+            return;
+        this.preferences.activeList = 'focus';
+        this.preferences.activeTag = 'default';
+        this.resetDraft();
+        this.render();
+        await this.persist(this.preferences);
+    }
     get busy() { return this.pending; }
     get manualOrder() { return !this.enabled || this.preferences?.sort === 'default'; }
     toggle(symbol) { if (this.selected.has(symbol))

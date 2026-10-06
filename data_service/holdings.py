@@ -381,7 +381,12 @@ class Holdings:
 
     @property
     def symbols(self):
-        return list(dict.fromkeys(symbol_for(h['ticker']) for h in self.base['holdings'])) if self.base else []
+        return self.symbols_for(datetime.now(ET).date().isoformat())
+
+    def symbols_for(self, as_of):
+        return list(dict.fromkeys(symbol_for(h['ticker']) for h in self.base['holdings']
+                                  if any(not s['closed_today'] or s['sells'][-1]['last_fill_date'] == as_of
+                                         for s in h['sequences']))) if self.base else []
 
     def state(self, quotes=None, as_of=None):
         return {'data': json.loads(dumps(value_positions(self.base, quotes or {}, as_of))) if self.base else None,

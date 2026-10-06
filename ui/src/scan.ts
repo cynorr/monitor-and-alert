@@ -130,6 +130,13 @@ export class ScanControls {
     }
 
     get activeList() { return this.enabled ? this.preferences?.activeList ?? 'discover' : 'focus'; }
+    async showFocus() {
+        if (!this.preferences) return;
+        this.preferences.activeList = 'focus';
+        this.preferences.activeTag = 'default';
+        this.resetDraft(); this.render();
+        await this.persist(this.preferences);
+    }
     get busy() { return this.pending; }
     get manualOrder() { return !this.enabled || this.preferences?.sort === 'default'; }
     toggle(symbol: string) { if (this.selected.has(symbol)) this.selected.delete(symbol); else this.selected.add(symbol); this.render(); this.changed(); }

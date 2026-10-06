@@ -262,6 +262,7 @@ export class Watchlist {
             this.onSelect(symbol);
         this.rows.get(symbol ?? this.selected)?.scrollIntoView({ block: 'nearest' });
     }
+    showSymbol(symbol) { this.endSearch(symbol); }
     async commitSearch() {
         const search = this.search, term = this.query();
         if (!search || !term || this.busy)

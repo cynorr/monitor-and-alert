@@ -72,6 +72,7 @@ def create_app(service, cors_origin=None):
         async def publish():
             nonlocal revisions, context
             last_board = 0
+            last_alerts = None
             try:
                 while not ws.closed:
                     if context != service.run_id:
@@ -79,6 +80,12 @@ def create_app(service, cors_origin=None):
                     if asyncio.get_running_loop().time() - last_board >= 1:
                         await ws.send_json({'type': 'list', **service.list_state()})
                         last_board = asyncio.get_running_loop().time()
+                    if hasattr(service, 'alert_state'):
+                        alerts = service.alert_state()
+                        signature = alerts['revision'], alerts['notification'], alerts['error']
+                        if signature != last_alerts:
+                            await ws.send_json({'type': 'alerts', **alerts})
+                            last_alerts = signature
                     if symbol in service.symbols:
                         view = service.view(symbol, tf, revisions, source=source)
                         revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
@@ -126,7 +133,7 @@ def create_app(service, cors_origin=None):
 
     app.router.add_get('/v1/stream', socket)
     app.router.add_post('/v1/list', list_action)
-    app.router.add_post('/v1/{action:mode|scan|preferences}', list_action)
+    app.router.add_post('/v1/{action:mode|scan|preferences|alerts}', list_action)
     app.router.add_get('/v1/{resource}', api)
     app.router.add_get('/health', api)
     app.router.add_get('/', index)

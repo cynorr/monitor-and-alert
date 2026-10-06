@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-06. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-06. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md); that feature is confirmed but not implemented. The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -12,6 +12,10 @@ Updated: 2026-10-06. This file is the UI entry point and the only current specif
 ## Chart UI
 
 Chart layout, colors, margins, headers, volume hover, scale defaults, mouse/zoom, linked trading day and status are maintained in [chart-ui.md](chart-ui.md). All charts use the same manually adjustable default spacing; visible history depends on that spacing and panel width.
+
+## Alert UI
+
+Scan/Monitor 图表设置、横线操作、待处理 stack 与 macOS 通知的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开 series primitive、图表鼠标手势与持久事件 stack。
 
 ## Logo / Icon
 
@@ -60,6 +64,18 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
 - 操作使用完整的英文说明和可访问名称，不能仅靠垃圾桶或 `+` 猜测结果。Tag 定义的 Delete 当前是文字按钮，与名单行的垃圾桶操作不同。
+
+### Alert 图形
+
+| 场景 / 稳定 Icon ID | 图形与颜色 | 含义 |
+| --- | --- | --- |
+| Chart Alert | 黑色 **#000000** 水平横条，右端向右箭头，带价格；Triggered 时整体灰色 **#9ca3af** | Active / 已触发，生命周期以 alert.md 为准 |
+| `alert-cross-up` | 箭头从下方向上穿过一条水平线，亮蓝 **#2962ff** | 价格上穿或向上到达阈值 |
+| `alert-cross-down` | 箭头从上方向下穿过一条水平线，黑色 **#000000** | 价格下穿或向下到达阈值 |
+| Alert 卡片关闭 | `×` | 手动处理该事件 |
+| Alert 卡片跳转 | `↗` | 打开对应 Monitor 图表并处理事件 |
+
+Chart 标记与方向图形使用简单的应用层绘制/SVG，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。网页准确使用上述图形；macOS 通知保留方向含义，可附方向图片，文字颜色、位置和系统排版不由应用控制。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
 
 ### 品牌与平台实现
 
@@ -135,6 +151,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 - `Add to Focus` 清除排除状态并开始实时监控。行 Exclude 将 Discover/Focus 移到 Hidden 七天；Hidden / Extended / Broken 提供 `Release`，当前规则仍可立即重新排除。Review 只有 Add to Focus，可留待处理或规则重分类，没有 Dismiss/Delete。
 - 批量 `Move to Discover` 明确结束 Focus 归属，`Move to Excluded` 表示 Hidden。Select all 勾选当前筛选结果，移动时整块插入队首。日期/名单/Filter 改变清空勾选；Space 切换选中 Scan 行的勾选。
 - 操作即时写入，保存失败保留原名单并显示简短行内错误。workspace/新日变更自动刷新，不增加 Refresh Workspace 按钮。名单选择消失时改选首个可用成员，空名单清图但保留 Search 和新增入口。
+- 手动/Alert 入选：从 Discover/Excluded 移入 Focus 时，统一按 [List 入选规则](list-design.md#统一移入-focus) 重新匹配并插入对应 section 首位。UI 只提交动作并使用后端结果，不继承来源的 Tag/section。
 
 ### Search 与 Add
 
@@ -143,6 +160,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 - 没有精确本地 ticker 时，停输一秒发起精确查询：Scan 读本地 Daily，Monitor 经后端官方 static_info。查询不保存、不订阅；输入变化或退出后丢弃旧响应。
 - 有效新候选位于本地匹配前，显示蓝色 ticker、公司名和 Add。Enter 优先选择精确已有 ticker；已展示的新候选优先于局部匹配，否则选择首个本地匹配或发起/等待查询。确认新候选后插入目标队首、选图并退出；已有 ticker 只选择、不移动。
 - 未找到 ticker 保持空结果，查询/保存失败保留行内错误。只支持美股正股，不新增模糊查询和其他市场入口。
+- 上述指定 section 新增针对全新 symbol。已有 Discover/Excluded symbol 明确加入 Focus 时，分类以 [统一入选](list-design.md#统一移入-focus) 为准，不由 Search/section `+` 保留来源结果或强制目标组。
 
 ### 独立 Holdings 入口
 
