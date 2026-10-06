@@ -1,4 +1,4 @@
-import type { IChartApi, ISeriesApi, UTCTimestamp, Time, CandlestickData, LineData, HistogramData } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, IPriceLine, UTCTimestamp, Time, CandlestickData, LineData, HistogramData } from 'lightweight-charts';
 import type * as ChartLibrary from 'lightweight-charts';
 import { $, money, compact, dayKey, type Row, type Point, type ChartData } from './types.js';
 import { BAR_SPACING, VOLUME_PANE_RATIO } from './chart-settings.js';
@@ -24,7 +24,8 @@ export class Panel {
     fitted = false;
     hoveredTime?: number;
     precision = 2;
-    onHover: (row?: Row) => void = () => { };
+    private linkedPrice?: { series: ISeriesApi<'Candlestick'> | ISeriesApi<'Histogram'>; line: IPriceLine };
+    onHover: (row?: Row, price?: number, paneIndex?: number, time?: number) => void = () => { };
     onSelect: (row: Row) => void = () => { };
     constructor(public id: string, public daily: boolean) {
         this.chart = L.createChart($(id + '-chart'), {
@@ -34,7 +35,7 @@ export class Panel {
             rightPriceScale: { borderVisible: false, minimumWidth: 55, scaleMargins: { top: 0.07, bottom: 0.05 } },
             timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: BAR_SPACING, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t: Time, type: number) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },
             localization: { locale: 'en-US', timeFormatter: (t: Time) => daily ? dayKey(Number(t)) : `${dayKey(Number(t))} ${timeFormat.format(dateOf(t))}` },
-            crosshair: { mode: L.CrosshairMode.Normal, vertLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
+            crosshair: { mode: L.CrosshairMode.Normal, vertLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
         });
         this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false });
         const colors = { ema10: '#2962ff', ema20: '#e4b400', [daily ? 'sma50' : 'sma65']: '#e53935' };
@@ -57,10 +58,13 @@ export class Panel {
             const volume = param.seriesData.get(this.volume) as HistogramData | undefined;
             const row = candle ? { ...candle, time: Number(candle.time), volume: volume?.value ?? null } : undefined;
             this.showHover(row);
-            // Programmatic/refresh events must not bounce the peer's candle price
-            // back onto the mouse-driven crosshair.
-            if (param.sourceEvent)
-                this.onHover(row);
+            // Link the pointer's value, never the candle close or histogram value.
+            if (param.sourceEvent) {
+                const paneIndex = param.paneIndex ?? 0;
+                const series = paneIndex === 1 ? this.volume : this.candles;
+                const price = param.point ? series.coordinateToPrice(param.point.y) : null;
+                this.onHover(row, price ?? undefined, paneIndex, typeof param.time === 'number' ? param.time : undefined);
+            }
         });
         this.chart.subscribeClick(param => { const row = param.seriesData.get(this.candles) as CandlestickData | undefined; if (row)
             this.onSelect({ ...row, time: Number(row.time), volume: null }); });
@@ -84,6 +88,7 @@ export class Panel {
         this.active = null;
         this.fitted = false;
         this.hoveredTime = undefined;
+        this.clearLinkedPrice();
         this.chart.clearCrosshairPosition();
         this.candles.setData([]);
         this.volume.setData([]);
@@ -158,7 +163,7 @@ export class Panel {
         }
     }
     showCandleInfo(row?: Row) {
-        $(this.id + '-volume').textContent = `V ${compact(row?.volume)}`;
+        $(this.id + '-volume').textContent = `Vol ${compact(row?.volume)}`;
         const node = $(this.id + '-ohlc');
         if (!row) { node.textContent = '—'; return; }
         const range = row.low > 0 ? ((row.high - row.low) / row.low * 100).toFixed(2) + '%' : '—';
@@ -167,6 +172,29 @@ export class Panel {
     showHover(row?: Row) {
         this.hoveredTime = row?.time;
         this.showCandleInfo(row ?? this.active ?? this.rows.at(-1));
+    }
+    private clearLinkedPrice() {
+        if (this.linkedPrice) this.linkedPrice.series.removePriceLine(this.linkedPrice.line);
+        this.linkedPrice = undefined;
+    }
+    showLinkedHover(row?: Row, price?: number, paneIndex = 0) {
+        const series = paneIndex === 1 ? this.volume : this.candles;
+        if (row && price !== undefined) {
+            this.clearLinkedPrice();
+            this.chart.setCrosshairPosition(price, row.time as UTCTimestamp, series);
+        } else {
+            this.chart.clearCrosshairPosition();
+            if (price === undefined) this.clearLinkedPrice();
+            else {
+                if (this.linkedPrice?.series !== series) {
+                    this.clearLinkedPrice();
+                    this.linkedPrice = { series, line: series.createPriceLine({ price, color: '#737d8c', lineWidth: 1,
+                        lineStyle: L.LineStyle.LargeDashed, axisLabelColor: '#4c5667', axisLabelTextColor: '#ffffff', axisLabelVisible: true }) };
+                } else this.linkedPrice.line.applyOptions({ price });
+            }
+        }
+        // No matching date still allows a price line; OHLC/Vol stay at latest.
+        this.showHover(row);
     }
     reveal(row: Row) {
         const index = this.rows.findIndex(r => r.time === row.time);
@@ -181,23 +209,18 @@ export class Panel {
 export function linkTradingDay(daily: Panel, intraday: Panel) {
     let linking = false, selectedTime: number | undefined;
     const restored = new Map<Panel, string>();
-    function target(peer: Panel, row: Row) {
-        const items = peer.days.get(dayKey(row.time));
+    function target(peer: Panel, time: number) {
+        const items = peer.days.get(dayKey(time));
         return items?.find(item => item.time === selectedTime) ?? items?.[0];
     }
     for (const [source, peer] of [[daily, intraday], [intraday, daily]]) {
-        source.onHover = row => {
+        source.onHover = (row, price, paneIndex = 0, time = row?.time) => {
             if (linking)
                 return;
             linking = true;
             try {
-                const match = row ? target(peer, row) : undefined;
-                if (match)
-                    peer.chart.setCrosshairPosition(match.close, match.time as UTCTimestamp, peer.candles);
-                else
-                    peer.chart.clearCrosshairPosition();
-                // Lightweight Charts' programmatic crosshair API does not emit move events.
-                peer.showHover(match);
+                const match = time === undefined ? undefined : target(peer, time);
+                peer.showLinkedHover(match, price, paneIndex);
             }
             finally {
                 linking = false;
@@ -210,15 +233,15 @@ export function linkTradingDay(daily: Panel, intraday: Panel) {
                 $(panel.id + '-panel').dataset.selectedDay = day;
                 restored.set(panel, panel.key);
             }
-            const match = target(peer, row);
+            const match = target(peer, row.time);
             if (match)
                 peer.reveal(match);
-            source.onHover(row);
         };
     }
     return {
-        clear() { selectedTime = undefined; restored.clear(); for (const panel of [daily, intraday])
-            delete $(panel.id + '-panel').dataset.selectedDay; },
+        clear() { selectedTime = undefined; restored.clear(); for (const panel of [daily, intraday]) {
+            panel.showLinkedHover(); delete $(panel.id + '-panel').dataset.selectedDay;
+        } },
         restore() {
             if (selectedTime === undefined)
                 return;

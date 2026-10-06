@@ -1,12 +1,12 @@
 # Chart UI
 
-Updated: 2026-10-06. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are confirmed but not implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Data and indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
+Updated: 2026-10-06. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Data and indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
 
 ## Implementation principle
 
 1. **对 Chart 的调整优先使用 TradingView Lightweight Charts 的 built-in 参数和公开 API。为兼容后续图表库更新，切勿侵入式修改库源码。** 保持 vendor 文件原样，不修改库原型、不调用私有接口、不依赖内部 DOM 结构；库未提供的文字显示使用少量应用层 DOM，通过公开事件和数据更新，不改动库的渲染、坐标或交互实现。
 
-当前蜡烛间距使用内置 [timeScale.barSpacing](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/HorzScaleOptions#barspacing)，主图/成交量比例使用公开 [pane.setStretchFactor](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/IPaneApi#setstretchfactor)。无 grid、右侧空白、参考线、原生缩放和分界拖动均由库的选项/API 控制。右上角 Volume/OHLC 文字属于应用层显示，通过 [subscribeCrosshairMove](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/IChartApi#subscribecrosshairmove) 的 seriesData 和公开 pane 尺寸更新、定位；双图联动使用公开 setCrosshairPosition / clearCrosshairPosition，不修改库内部实现。
+当前蜡烛间距使用内置 [timeScale.barSpacing](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/HorzScaleOptions#barspacing)，主图/成交量比例使用公开 [pane.setStretchFactor](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/IPaneApi#setstretchfactor)。无 grid、右侧空白、参考线、原生缩放和分界拖动均由库的选项/API 控制。右上角 Volume/OHLC 文字属于应用层显示，通过 [subscribeCrosshairMove](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/IChartApi#subscribecrosshairmove) 的 seriesData 和公开 pane 尺寸更新、定位；双图联动使用公开 setCrosshairPosition / clearCrosshairPosition，缺少对应时间时使用公开 createPriceLine 显示独立水平线，不修改库内部实现。
 
 ## Layout and shared defaults
 
@@ -30,8 +30,9 @@ The default volume divider is moderately higher than before; it remains adjustab
 - Black chart boundaries and a gray main/volume divider. Hide price-scale vertical borders; retain the main price scale's 7% top and 5% bottom margins.
 - `rightOffset=1` and `rightBarStaysOnScroll=true`: keep about one blank bar between the latest candle and the right price axis.
 - Hide the persistent last-price horizontal line on candles, moving averages and volume. The reference lines are the freely moving dashed horizontal/vertical crosshair and its native axis labels; do not add a fixed price reference line.
-- User-created Alert lines are defined separately in [alert.md](alert.md); the confirmed feature may draw its saved thresholds without enabling the last-price reference line above.
-- Use `CrosshairMode.Normal`; no magnet or snap mode. The mouse-driven chart stays freely positioned even when the peer chart's crosshair is linked to a candle.
+- All dashed chart lines use the same thin segment pattern: **1px width, 6px segment / 6px gap**, with flat ends. Use built-in `LineStyle.LargeDashed` for horizontal/vertical crosshairs and the matching pattern for Alert primitives. Apply this to Scan, Monitor, all periods, main and volume panes; do not use dots or short dotted-looking dashes.
+- User-created Alert lines are defined separately in [alert.md](alert.md); saved thresholds do not enable the last-price reference line above.
+- Use `CrosshairMode.Normal` in both Monitor charts and Scan; no magnet or price snap. The linked peer uses the mouse-driven price or volume value, never candle close or the histogram bar's value.
 - Chart branding and attribution follow [Logo / Icon](ui.md#logo--icon).
 
 ## Headers and information
@@ -42,7 +43,7 @@ The default volume divider is moderately higher than before; it remains adjustab
 - EMA/SMA legends pair colored line swatches with concise labels: EMA 10, EMA 20, and SMA 50 for Daily or SMA 65 for Intraday. They do not show current indicator values; unavailable indicator lines and legends remain absent.
 - OHLC sits immediately below the aligned black horizontal border on each chart, at **15px**; ADR/ADV also use **15px**. OHLC fields stay together and wrap on narrow panels. Native chart axes use **12px**. Shared CSS font variables keep other small labels at **11px**, list values at **12px** and body text at **13px**.
 - Range is `(H-L)/L × 100%`. H/L values and Range value are black; other labels and values retain their original color.
-- The volume value sits at a fixed top-right position within the volume pane. Hover or a linked crosshair shows the volume of the corresponding bar, matching the OHLC bar. Leaving or clearing the crosshair restores the latest bar's volume. Quote refreshes must not replace the hovered value. The label position follows native pane resizing.
+- The volume value uses **`Vol` + compact value** (for example `Vol 1.38M`) at a fixed top-right position within the volume pane. Hover or a linked crosshair shows the volume of the corresponding bar, matching the OHLC bar. Leaving or clearing the crosshair restores the latest bar's volume. Quote refreshes must not replace the hovered value. The label position follows native pane resizing.
 - Active volume comes from the backend's estimate; missing initialization after startup/recovery remains empty until usable, and closed official bars replace estimates. Data formulas are maintained in [behavior.md](behavior.md#图表周期与指标).
 - Lightweight Charts does not supply a TradingView-style instrument/OHLC header; the small DOM legends use subscribeCrosshairMove and seriesData.
 - Headers omit market/currency, adjustment/session metadata, bar counts and branding/footer strips. Validation sample counts remain backend diagnostics.
@@ -56,10 +57,11 @@ The default volume divider is moderately higher than before; it remains adjustab
 ## Linked trading day
 
 - Both charts share one selected New York trading day. Clicking a candle selects that day and reveals it in the peer chart while preserving each chart's zoom.
-- Hover synchronizes the peer crosshair for the same trading day through setCrosshairPosition / clearCrosshairPosition. The mouse-driven chart remains unsnapped; peer positioning uses the corresponding candle.
+- Hover synchronizes time and the mouse-driven price or volume value. Convert the source pointer's pane-local y with the corresponding series' coordinateToPrice, then pass that value to the peer's main or volume series. Candle/volume data select the matching day and OHLC/Vol readout only; they never supply the crosshair's vertical value.
+- Judge the horizontal price/volume line and vertical time line independently in each chart. A missing or offscreen peer time does not hide an in-range horizontal line; an offscreen price/volume value does not hide an available, visible time line. Show each component wherever its own coordinate is within that chart's visible range, with no snap, forced pan or scale change. When only price/volume can be located, show the horizontal line and axis label without a vertical line or invented time label; keep the latest OHLC/Vol readout when there is no matching bar.
 - Daily-to-Intraday maps to that day's first available intraday candle, or the previously selected intraday time on the same day. Intraday-to-Daily maps to that day's Daily candle.
 - Do not copy logical/time ranges directly between different periods. Use a reentrancy guard for programmatic crosshair updates.
-- Linking only uses loaded history. When the peer has no bars for the selected day, clear its linked crosshair; do not invent data or initiate an unbounded historical download.
+- Linking only uses loaded history. When the peer has no bars for the selected day, omit its vertical time line and retain any in-range horizontal price/volume line; do not invent data or initiate historical downloads. Leaving or clearing hover removes both linked components.
 
 ## Data boundaries
 

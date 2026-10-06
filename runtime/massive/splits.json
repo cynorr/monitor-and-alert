@@ -2,7 +2,7 @@
   "status": "OK",
   "start_date": "2024-07-12",
   "end_date": "2026-10-05",
-  "resultsCount": 3452,
+  "resultsCount": 3453,
   "results": [
     {
       "id": "E69d6ca86b3758d1626b2a0fd5b12cefe0ac75be322fe36b805b5597178356118",
@@ -9677,7 +9677,7 @@
       "split_to": 55.15,
       "ticker": "CTPVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.946654
+      "historical_adjustment_factor": 0.921709
     },
     {
       "id": "E2770163fafdc7508c44892e300f6f7427250188be8a5267f59617ff810048a1a",
@@ -14699,7 +14699,7 @@
       "split_to": 62.4,
       "ticker": "CTPVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.964136
+      "historical_adjustment_factor": 0.938731
     },
     {
       "id": "E3d671f5a0cb37345525e7b89a1ed8e4a43d56d313acd00e64e9af2c076f970df",
@@ -16394,7 +16394,7 @@
       "historical_adjustment_factor": 238.095238
     },
     {
-      "id": "Eddddd6dec896dca093b95f4526cc5afeb762587883b6863d92914a0c1d8c8008",
+      "id": "E308f13316ea4bc6a0e142cd9d19dd4a9927c5885576f92242eb719c21feb6b1b",
       "execution_date": "2025-10-27",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -18815,7 +18815,7 @@
       "historical_adjustment_factor": 160.0
     },
     {
-      "id": "E4287f60ce435eb25d8c0452cdbc448c5485d65a0b11b13aeb255b46173178eaa",
+      "id": "E1961d40baa5fe68e38dbb1b476fc877e6d24466738448f10316c260a4898b1ed",
       "execution_date": "2025-12-23",
       "split_from": 1.0,
       "split_to": 3.0,
@@ -19121,7 +19121,7 @@
       "historical_adjustment_factor": 6.0
     },
     {
-      "id": "Ed2efadc793f49a38bff002616b5acf9e8117c8b35c270ab7c545269c6aa26928",
+      "id": "Ed26e8dac7dc7cf22ea7996fd78592034173187e7452c0b49109838f6408815a1",
       "execution_date": "2026-01-02",
       "split_from": 30.0,
       "split_to": 1.0,
@@ -23846,7 +23846,7 @@
       "historical_adjustment_factor": 25.0
     },
     {
-      "id": "E4727fb74a1d41d26ca96d167dcf5dd266792fe2b24a38cd60dd8147f1931e312",
+      "id": "Ef42e81b29689efc7e0db8f11354194b26fa825d40d3a87fcd00ee0b24384a7cf",
       "execution_date": "2026-04-30",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -24269,7 +24269,7 @@
       "historical_adjustment_factor": 15.0
     },
     {
-      "id": "E89ff98c46b815933b75a011c2ff1b494412cae95a1141669534da4fb9cf2a909",
+      "id": "E0070baa8b8586e6dfa7ec3aa4cce3d07f506b65da2113d5e3600b1d12fcefbc1",
       "execution_date": "2026-05-08",
       "split_from": 1.0,
       "split_to": 1.047337278106509,
@@ -24824,7 +24824,7 @@
       "split_to": 49.6,
       "ticker": "CTPVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.979839
+      "historical_adjustment_factor": 0.95402
     },
     {
       "id": "Ec4df2a7a5c3462097a06dd226b4a951e1bdf695e11839c10b4af753bd1c29c66",
@@ -29570,6 +29570,15 @@
       "historical_adjustment_factor": 10.0
     },
     {
+      "id": "E95c3d840d1632260c0a34ae30108bab9e978f422961a0ab5a99e1d929155a88e",
+      "execution_date": "2026-09-08",
+      "split_from": 36.95,
+      "split_to": 37.95,
+      "ticker": "CTPVF",
+      "adjustment_type": "stock_dividend",
+      "historical_adjustment_factor": 0.97365
+    },
+    {
       "id": "E0802ebc353daaf5096259280cc32d8e9a645cb759ec2c55eec0eb4918f67528e",
       "execution_date": "2026-09-08",
       "split_from": 20.0,
@@ -30866,7 +30875,7 @@
       "historical_adjustment_factor": 12.0
     },
     {
-      "id": "E5070d9270235ff864a5e5a75b62e1cea705beed2fef511187385d98e8052cfe9",
+      "id": "Eeeaa212cd35361bed79d83b9054466eba202d6eff0fa5f7cd114fc86e89f2932",
       "execution_date": "2026-09-30",
       "split_from": 1.0,
       "split_to": 3.0,

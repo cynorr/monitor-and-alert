@@ -66,6 +66,13 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .chart-host { position: relative; flex: 1; min-height: 150px; }
 .chart-empty { position: absolute; top: 52%; left: 0; right: 0; text-align: center; color: #89929c; pointer-events: none; }
 .volume-label { position: absolute; z-index: 2; right: 63px; pointer-events: none; font-size: var(--font-row); color: #000; background: #ffffffde; padding: 1px 4px; border-radius: 4px; }
+.alert-line-controls { position: absolute; z-index: 3; transform: translate(-50%,-50%); color: #000; cursor: ns-resize; user-select: none; }
+.alert-line-controls svg { fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.alert-price-capsule { display: flex; align-items: center; height: 22px; padding-left: 8px; border: 1px solid currentColor; border-radius: 999px; background: #fff; font-size: 11px; font-weight: 400; line-height: 20px; gap: 4px; }
+.alert-line-controls.triggered { color: #9ca3af; }
+.alert-line-delete { display: flex; align-items: center; justify-content: center; width: 24px; height: 20px; padding: 3px 5px; border-radius: 999px; color: #000; background: transparent; }
+.alert-line-delete svg { width: 14px; height: 14px; }
+.alert-line-delete:hover { background: #f1f3f5; }
 .period-row { display: flex; align-items: center; padding: 0 12px 4px; }
 .timeframes { display: flex; align-items: center; background: #eef0f4; border-radius: 999px; padding: 3px; gap: 1px; }
 .timeframes button { padding: 4px 6px; border-radius: 999px; font-size: var(--font-small); white-space: nowrap; }

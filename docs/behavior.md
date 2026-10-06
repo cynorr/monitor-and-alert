@@ -6,6 +6,8 @@
 
 Alert 的范围、Regular 触发、Scan/Monitor 共用、持久化、图表操作、卡片与 macOS 通知只在 [alert.md](alert.md) 维护。手动及 Alert 移入 Focus 的重新分类与 section 首位规则只在 [list-design.md](list-design.md#统一移入-focus) 维护。两项已接入现有后台；实际验证范围见 [validation.md](validation.md)。
 
+Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互](alert.md#图表交互)；图表统一线段虚线、横纵独立的自由十字线和 Vol 显示只在 [Chart UI](chart-ui.md) 维护。
+
 ## 启动与接收
 
 正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote，同时加载历史；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。

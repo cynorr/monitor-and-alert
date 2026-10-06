@@ -328,3 +328,24 @@
 - UI 卡片验收：使用现有 Scan Mock 的复制品及临时库，localhost:8767 最长300秒、结束删除临时目录。PAYS 两个 Triggered 事件显示上下穿 SVG（蓝/黑）、两位价格与 ET 日期/秒，灰线对齐、左下角 stack；卡片保持不超时。灰线拖动至11.70后为 Active generation=2，关闭旧上穿卡片没有删除新线；另一卡片跳转 Monitor 成功后处理，最终 unhandled=0，Active 新线仍保留。此验收没有读取凭证或投递系统通知。
 - 当前额外 live 检查发生于纽约 Regular 之后，没有等待下一交易日或设置自动任务；没有伪造真实穿越。尚未实机覆盖：Regular live 穿越与实际听辨两种声音、系统通知 Open/Close 的完整人工操作、Mac 重启/真实睡眠，以及 macOS 27。对应逻辑由定向用例与正常系统 API 实现，以上未覆盖项不能视为已验收。
 - 184 个 Markdown 相对链接/锚点与 git diff --check 核对，codesign 普通校验 valid on disk / satisfies Designated Requirement；未改 vendor、未加入 Atomic 算子、策略、下单、跨存储事务或回放框架。
+
+## 2026-10-06 Alert 外观与自由十字线
+
+环境：同日本机 macOS，Chrome 与正式 Safari Charts 窗口；Lightweight Charts 5.2.0、TypeScript 5.9.3。仅修改前端交互/显示，Alert Engine、行情、名单与通知契约保持原有实现。
+
+- `npm run build --prefix ui` 通过，22 项 UI 用例通过。既有双图/成交量用例补充验证鼠标价格双向传递、成交量 pane 使用对应 series、programmatic 更新不回传覆盖鼠标价格；Vol 的悬停保持、刷新与清空继续通过。
+- 使用 Scan Mock 副本、临时 SQLite 与既有 FakeBroker，localhost:8767 最长300秒。PAYS 验证细线段虚线、箭头紧贴价格轴边缘、无 Alert 价格轴标签；悬停价格胶囊包含两位小数与线性垃圾桶，拖动11.40→11.74重新激活，垃圾桶立即删除。Monitor 验证 Command+Option 创建66.45、双图共用横线、悬停胶囊与 Backspace 删除。未修改正式 Alert/名单，也未投递系统通知；临时服务、目录与浏览器页已清理。
+- Monitor 实际绘制确认 Daily→Intraday 两侧十字线显示67.33，独立于对应 candle close；超出 peer 价格范围时不吸附到可见 candle。所有图使用内置1px LargeDashed及匹配的Alert primitive线段；两张图的Vol显示正确。
+- 正式 Safari Charts 窗口已刷新加载构建，恢复刷新前 BAND 选择，确认 Daily/Intraday 均显示 Vol。没有重启或扩大真实行情订阅。
+- 需求分别同步 alert.md（悬停/删除）、chart-ui.md（共用虚线/十字线/Vol）、ui.md（图形），职责与入口同步 development.md、behavior.md。相对链接/锚点及git diff --check通过；vendor未修改。
+- 本轮未重新覆盖真实 Regular 触发、macOS 通知、全部六周期/价格轴缩放/pane resize，以及 macOS 27；这些不作为本轮浏览器验收结论。
+
+## 2026-10-06 Alert 定位与横纵独立联动
+
+环境：本机 macOS、Chrome 离线验证页和正式 Safari Charts；Lightweight Charts 5.2.0、TypeScript 5.9.3。本轮只修改 UI 与相应文档。
+
+- `npm run build --prefix ui` 通过，23 项 UI 用例通过。新增定向用例覆盖无对应日期时水平线保留与复用、重新匹配日期时切回原生十字线、价格超出范围时仍传递时间、成交量 pane、离开与清空后的移除；程序更新不回传覆盖鼠标值的既有用例继续通过。
+- 浏览器使用 Scan Mock 副本、临时 SQLite 与现有 FakeBroker，localhost:8767 限时300秒，不读取凭证或投递系统通知。Scan 验证胶囊位于绘图区约2/3处、无重复上下箭头、右箭头左侧竖边对齐原生价格标签左缘并进入价格轴。
+- Monitor 实际验证：Daily 悬停旧日期（Intraday 无该日数据），两图仍显示67.33水平线，Intraday不显示虚构时间线；同一Alert在两图可见。Intraday拖动66.46→66.68，Daily同步；Daily继续拖动66.68→67.12，Intraday同步，悬停胶囊显示相同已保存价格。另用同样临时环境限时60秒保存完整截图 `/tmp/alert-ui-final.png`，显示旧日期的Daily胶囊与Intraday独立水平线。
+- 正式 Charts 窗口已刷新加载构建并恢复刷新前BTGO选择；未重启真实服务或修改正式Alert。临时页已关闭，验证服务按时结束并清除临时库。
+- 需求和职责同步 alert.md、chart-ui.md、ui.md、development.md、behavior.md；相对链接/锚点及 `git diff --check` 通过。未修改 vendor。未重新覆盖真实Regular触发、macOS通知、全部周期/价格轴缩放/pane resize或macOS27；离线UI证据不替代这些验收。

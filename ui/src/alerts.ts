@@ -1,4 +1,4 @@
-import type { ISeriesPrimitive, IPrimitivePaneRenderer, IPrimitivePaneView, ISeriesPrimitiveAxisView, SeriesAttachedParameter, PrimitiveHoveredItem } from 'lightweight-charts';
+import type { ISeriesPrimitive, IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, PrimitiveHoveredItem } from 'lightweight-charts';
 import type { Panel } from './chart.js';
 import { $, dayKey, nyTime } from './types.js';
 import { post } from './api.js';
@@ -19,29 +19,33 @@ class AlertPrimitive implements ISeriesPrimitive {
     constructor(private layer: AlertChart) {}
     attached(parameter: SeriesAttachedParameter) { this.requestUpdate = parameter.requestUpdate; }
     detached() { this.requestUpdate = () => {}; }
+    updateAllViews() { this.layer.updateControls(); }
     private renderer: IPrimitivePaneRenderer = { draw: target => target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
         for (const alert of this.layer.rows()) {
             const y = this.layer.coordinate(alert);
             if (y == null || y < 0 || y > mediaSize.height) continue;
             const color = alert.state === 'active' ? '#000000' : '#9ca3af';
-            const selected = alert.id === this.layer.controller.selected;
             ctx.strokeStyle = ctx.fillStyle = color;
-            ctx.lineWidth = selected ? 2 : 1;
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mediaSize.width - 12, y); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(mediaSize.width - 6, y); ctx.lineTo(mediaSize.width - 14, y - 4); ctx.lineTo(mediaSize.width - 14, y + 4); ctx.closePath(); ctx.fill();
-            if (selected) { ctx.fillStyle = '#ffffff'; ctx.fillRect(mediaSize.width / 2 - 3, y - 3, 6, 6); ctx.strokeRect(mediaSize.width / 2 - 3, y - 3, 6, 6); }
+            ctx.lineWidth = 1;
+            // Match Lightweight Charts' 1px LargeDashed crosshair: 6px on / 6px off.
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mediaSize.width, y); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }) };
+    private arrowRenderer: IPrimitivePaneRenderer = { draw: target => target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+        for (const alert of this.layer.rows()) {
+            const y = this.layer.coordinate(alert);
+            if (y == null || y < 0 || y > mediaSize.height) continue;
+            ctx.fillStyle = alert.state === 'active' ? '#000000' : '#9ca3af';
+            // x=0 is the price-axis canvas edge and the native price-label edge.
+            ctx.beginPath(); ctx.moveTo(0, y - 3); ctx.lineTo(6, y); ctx.lineTo(0, y + 3); ctx.closePath(); ctx.fill();
         }
     }) };
     private view: IPrimitivePaneView = { zOrder: () => 'top', renderer: () => this.renderer };
+    private arrowView: IPrimitivePaneView = { zOrder: () => 'top', renderer: () => this.arrowRenderer };
     paneViews() { return [this.view]; }
-    priceAxisViews(): ISeriesPrimitiveAxisView[] {
-        return this.layer.rows().map(alert => ({
-            coordinate: () => this.layer.coordinate(alert) ?? -10000,
-            text: () => alertPrice(this.layer.cents(alert)), textColor: () => '#ffffff',
-            backColor: () => alert.state === 'active' ? '#000000' : '#9ca3af',
-            visible: () => this.layer.coordinate(alert) !== null, tickVisible: () => true,
-        }));
-    }
+    priceAxisPaneViews() { return [this.arrowView]; }
     hitTest(x: number, y: number): PrimitiveHoveredItem | null {
         const alert = this.layer.hits(y)[0];
         return alert ? { externalId: alert.id, zOrder: 'top', cursorStyle: 'ns-resize', distance: Math.abs(y - this.layer.coordinate(alert)!) } : null;
@@ -52,22 +56,52 @@ export class AlertChart {
     primitive = new AlertPrimitive(this);
     private drag?: { alert: PriceAlert; pointer: number; startY: number; price: number; moved: boolean };
     private suppressed = false;
+    private hovered = '';
+    private controls = document.createElement('div');
+    private priceLabel = document.createElement('span');
+    private remove = document.createElement('button');
     constructor(private panel: Panel, public controller: AlertController) {
-        panel.candles.attachPrimitive(this.primitive);
         const host = $(panel.id + '-chart');
+        this.controls.className = 'alert-line-controls';
+        this.controls.hidden = true;
+        const capsule = document.createElement('div'); capsule.className = 'alert-price-capsule';
+        this.remove.type = 'button'; this.remove.className = 'alert-line-delete';
+        this.remove.setAttribute('aria-label', 'Delete alert'); this.remove.title = 'Delete alert';
+        this.remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+        this.remove.addEventListener('click', () => { if (this.hovered) void this.controller.mutate({ action: 'delete', id: this.hovered }); });
+        capsule.append(this.priceLabel, this.remove); this.controls.append(capsule); host.append(this.controls);
+        panel.candles.attachPrimitive(this.primitive);
         host.addEventListener('pointerdown', event => this.down(event), true);
         host.addEventListener('pointermove', event => this.move(event), true);
         host.addEventListener('pointerup', event => this.up(event), true);
         host.addEventListener('pointercancel', () => this.cancel(), true);
-        host.addEventListener('lostpointercapture', () => this.cancel(), true);
+        host.addEventListener('lostpointercapture', () => { if (this.drag) this.cancel(); }, true);
+        host.addEventListener('pointerleave', () => { if (!this.drag) this.hover(''); });
         for (const name of ['mousedown', 'mouseup', 'click', 'touchstart']) host.addEventListener(name, event => {
             if (this.suppressed) { event.preventDefault(); event.stopImmediatePropagation(); if (name === 'click') this.suppressed = false; }
         }, true);
     }
     rows() { return this.controller.value?.alerts.filter(alert => alert.symbol === this.controller.symbol()) ?? []; }
-    cents(alert: PriceAlert) { return this.drag?.alert.id === alert.id ? previewCents(this.drag.price) : alert.price_cents; }
+    cents(alert: PriceAlert) { return this.controller.preview?.id === alert.id ? this.controller.preview.cents : alert.price_cents; }
     coordinate(alert: PriceAlert) { return this.panel.candles.priceToCoordinate(this.cents(alert) / 100); }
     hits(y: number) { return this.rows().filter(alert => { const point = this.coordinate(alert); return point != null && Math.abs(point - y) <= 6; }); }
+    updateControls() {
+        const alert = this.rows().find(alert => alert.id === (this.drag?.alert.id ?? this.hovered));
+        const pane = this.panel.chart.panes()[0].getHTMLElement();
+        const y = alert ? this.coordinate(alert) : null, size = this.panel.chart.paneSize(0);
+        if (!pane || !alert || y == null || y < 0 || y > size.height) { this.controls.hidden = true; return; }
+        this.controls.hidden = false;
+        const bounds = pane.getBoundingClientRect(), host = $(this.panel.id + '-chart').getBoundingClientRect();
+        this.controls.style.left = `${bounds.left - host.left + size.width * 2 / 3}px`;
+        this.controls.style.top = `${bounds.top - host.top + y}px`;
+        this.controls.classList.toggle('triggered', alert.state === 'triggered');
+        this.priceLabel.textContent = alertPrice(this.cents(alert));
+        this.remove.setAttribute('aria-label', `Delete alert ${this.priceLabel.textContent}`);
+    }
+    private hover(id: string) {
+        if (this.hovered === id) return;
+        this.hovered = id; this.primitive.requestUpdate();
+    }
     private point(event: PointerEvent) {
         const pane = this.panel.chart.panes()[0].getHTMLElement();
         if (!pane) return null;
@@ -86,21 +120,37 @@ export class AlertChart {
             if (price != null) { this.stop(event); void this.controller.create(price); }
             return;
         }
+        if (this.remove.contains(event.target as Node)) {
+            this.stop(event);
+            void this.controller.mutate({ action: 'delete', id: this.hovered });
+            return;
+        }
         const hits = this.hits(point.y);
-        if (!hits.length) { this.controller.choose(''); this.suppressed = false; return; }
+        const capsule = this.controls.contains(event.target as Node);
+        if (!hits.length && !capsule) { this.controller.choose(''); this.suppressed = false; return; }
         const previous = hits.findIndex(alert => alert.id === this.controller.selected);
-        const alert = hits[(previous + 1) % hits.length];
+        const alert = capsule ? this.rows().find(alert => alert.id === this.hovered)! : hits[(previous + 1) % hits.length];
         this.controller.choose(alert.id);
+        this.hover(alert.id);
         this.stop(event);
         this.drag = { alert, pointer: event.pointerId, startY: event.clientY, price: alert.price_cents / 100, moved: false };
+        this.controller.preview = { id: alert.id, cents: alert.price_cents };
         (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     }
     private move(event: PointerEvent) {
-        if (!this.drag || event.pointerId !== this.drag.pointer) return;
+        if (!this.drag) {
+            if (this.controls.contains(event.target as Node)) return;
+            const point = this.point(event), hits = point ? this.hits(point.y) : [];
+            const alert = hits.find(alert => alert.id === this.controller.selected) ?? hits.find(alert => alert.id === this.hovered) ?? hits[0];
+            this.hover(alert?.id ?? '');
+            return;
+        }
+        if (event.pointerId !== this.drag.pointer) return;
         this.stop(event);
         const pane = this.panel.chart.panes()[0].getHTMLElement()!;
         const price = this.panel.candles.coordinateToPrice(event.clientY - pane.getBoundingClientRect().top);
         if (price != null && Number.isFinite(price) && price > 0) this.drag.price = price;
+        this.controller.preview = { id: this.drag.alert.id, cents: previewCents(this.drag.price) };
         this.drag.moved ||= Math.abs(event.clientY - this.drag.startY) >= 3;
         this.controller.redraw();
     }
@@ -108,16 +158,18 @@ export class AlertChart {
         if (!this.drag || event.pointerId !== this.drag.pointer) return;
         this.stop(event);
         const drag = this.drag; this.drag = undefined;
+        this.controller.preview = undefined;
         (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
         if (drag.moved) void this.controller.mutate({ action: 'rearm', id: drag.alert.id, generation: drag.alert.generation, price: drag.price });
         this.controller.redraw();
     }
-    cancel() { this.drag = undefined; this.controller.redraw(); }
+    cancel() { if (this.drag) this.controller.preview = undefined; this.drag = undefined; this.hovered = ''; this.controller.redraw(); }
 }
 
 export class AlertController {
     value?: AlertState;
     selected = '';
+    preview?: { id: string; cents: number };
     private layers: AlertChart[];
     private error = '';
     private pending = new Set<string>();

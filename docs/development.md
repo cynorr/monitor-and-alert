@@ -45,7 +45,7 @@
 
 持仓数据需求只在 [holdings-data.md](holdings-data.md) 维护，显示交互见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度使用同样CSS的临时隐藏副本测量，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。main.ts复用已有Quote.current_regular_session，前端不新增日历、HTTP、券商请求或后台任务，金额仍为后端Decimal字符串，计算语义以Holdings数据需求为准。
 
-图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和volume，刷新不覆盖悬停值；成交量计算仍只在后端。
+图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
 
 List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局部 AI 约束见 ui/src/AGENTS.md。list.ts 保持七个行单元与 main.ts/index.html 列头一致；board.growthValue 仅格式化 RFL，原始百分比及排名不变。CSS 维护独立 Growth/Tags 列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
 
@@ -60,7 +60,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 - Workbench 持有唯一 Alert Engine，并在正式后台启动/关闭时创建和释放。UI → 同源 Data API → Workbench → Alert Engine → SQLite/macOS 通知；Alert 不依赖 Scan 算子或图表渲染，不建立第二个进程服务、端口或消息协议。
 - `quotes.py` 继续承担 Quote 的唯一标准化与校验入口，在现有 callback 处派发有效 Regular 最新价。Engine 只接标准化值、报价时间与接收顺序；借用现有 calendar/恢复信号判断交易窗口和重新建立起点，不直接访问 SDK。`pipeline.py` 仍只管理 Massive 准备，与 Alert 检测无关。
 - 当前 scope 由最新 workspace Focus 和按当前纽约日期有效的已接受 Holdings 提供，不能用带 Review 的 `Workbench.symbols` 或 Scan 时返回 null 的显示字段作为白名单。复用 Holdings 现有日期/批次语义，不建第二份账户归属缓存。
-- `alerts/engine.py` 直接管理状态、检测、操作和业务 SQLite，`alerts/macos.py` 管权限、通知、声音和回调；函数直接互调，不引入通用 repository、adapter、rules 或恢复框架。UI Alert 交互在 `ui/src/alerts.ts` 内维护，图表组件通过公开 API 接入。
+- `alerts/engine.py` 直接管理状态、检测、操作和业务 SQLite，`alerts/macos.py` 管权限、通知、声音和回调；函数直接互调，不引入通用 repository、adapter、rules 或恢复框架。UI Alert 交互在 `ui/src/alerts.ts` 内维护：公开 series primitive 的 paneViews 绘制虚线，priceAxisPaneViews 绘制进入价格轴的右箭头，不提供 priceAxisViews 数字标签；应用层 DOM 胶囊使用公开 pane HTMLElement/尺寸/坐标与 primitive.updateAllViews 定位。胶囊与横线共用拖动/删除动作，两图共用 controller 中的改价预览，松手提交一次；不依赖 vendor 内部 DOM。
 - RuntimePaths.alerts_db 为独立 Alert 数据库路径。Alert 与 events 两张业务表保存用户设置及处理状态；前者有独立 ID；Engine 按 symbol 建立内存索引，后者有事件 ID 及 Alert/generation 关联。模式、周期、来源、Scan 日期不参与持久化身份；UI 上下文仍使用原有 request_id/source/socket 检查。
 - SQLite 使用 WAL/FULL，所有修改在同一后台 asyncio loop 内串行提交；触发状态和事件一并提交，之后才发原生通知/WS。每份行情仅检查该 symbol 的内存 Active 集合，有实际修改才写库；不保存行情回放日志。事件保留到处理，不以 UI 暂时不可见推断已处理。
 - Workbench 的 Alert 创建动作先验证输入，再复用统一 Focus 入选动作，最后调用 Engine.create；入选清理/分类/顺序细则只在 [List 入选规则](list-design.md#统一移入-focus) 维护。`workspace.py` 管一次同步保存，`list_rules.py` 管现有匹配；手动入选和 Alert 入选不得分别实现。
