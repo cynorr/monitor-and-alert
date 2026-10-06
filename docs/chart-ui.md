@@ -78,4 +78,4 @@ Alert 在 Scan/Monitor 的创建、选择、改价、删除与跨图同步只在
 
 - Live Monitor: Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all five official periods complete, hidden after three seconds. Routine closed updates do not restart the timer.
 - Exhausted history retries and connection failures use one exclamation icon with reason on hover, retaining existing charts. Finite positive OHLC range contradictions do not produce UI warnings or retries; display official values unchanged.
-- Scan and Review use their local Daily date/status rather than live five-period readiness. Scan's separate Ready date and refresh controls follow [List UI](ui.md#scan-日期与-ready).
+- Scan and Review use their local Daily date/status rather than live five-period readiness. Scan's date, preparation status and refresh controls follow [List UI](ui.md#scan-日期与准备状态).

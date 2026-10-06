@@ -190,7 +190,7 @@ def test_scan_http_ws_historical_readonly_origin_and_refresh(app_data):
                 response = await client.post(base + '/v1/scan',json={'date':'2026-09-30'})
                 assert response.status == 200
                 before = app.workspace.path.read_bytes()
-                response = await client.post(base + '/v1/scan',json={'date':'2026-09-30','generate':True})
+                response = await client.post(base + '/v1/scan',json={'generate':True})
                 assert response.status == 200 and app.workspace.path.read_bytes()==before
                 await stream.send_json({'type':'select','symbol':symbol,'timeframe':'5m','request_id':4,'mode':'monitor'})
                 while True:
@@ -314,6 +314,35 @@ class FakePipeline:
 
     async def close(self):
         self.closed = True
+
+
+@pytest.mark.parametrize('with_pipeline', [False, True])
+def test_refresh_skips_completed_scan_and_opens_latest_date(app_data, monkeypatch, with_pipeline):
+    async def scenario():
+        pipeline = FakePipeline(app_data) if with_pipeline else None
+        if pipeline:
+            pipeline.value.update(target_date='2026-09-30', ready=True)
+            async def ready_run(force=False, on_publish=None):
+                pipeline.calls.append(force)
+                assert not force
+                return None
+            monkeypatch.setattr(pipeline, 'run', ready_run)
+        app, brokers = make_app(app_data, mock=not with_pipeline, pipeline=pipeline)
+        monkeypatch.setattr('data_service.workbench.build_day', lambda *a, **kw: pytest.fail('Completed scan must not be rebuilt'))
+        before = {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/*.json')}
+        await app.action('scan', {'date': '2026-09-29'})
+        run_id = app.run_id
+        result = await app.action('scan', {'generate': True})
+        assert result['date'] == '2026-09-30' and app.run_id != run_id
+        await app.action('scan', {'generate': True})
+        assert before == {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/*.json')}
+        if pipeline:
+            assert pipeline.calls == [False, False]
+        with pytest.raises(ValueError, match='scan --date'):
+            await app.action('scan', {'date': '2026-09-29', 'generate': True})
+        assert not brokers
+        await app.close()
+    asyncio.run(scenario())
 
 
 def test_real_scan_keeps_background_market_and_preparation_does_not_lock_modes_or_history(app_data):

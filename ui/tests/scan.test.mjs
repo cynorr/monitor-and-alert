@@ -9,19 +9,23 @@ import { matchesTag, ScanControls } from '../public/scan.js';
 import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
 
-test('scan progress keeps last ready date and seconds visible during preparation or errors', () => {
+test('scan progress hides Ready and shows only target-date preparation or errors', () => {
     const stage = { status: 'ready', target: '2026-10-02', updated_at: null, error: null };
     const state = { target_date: '2026-10-02', running: false, ready: true,
         daily: { ...stage }, splits: { ...stage }, bars: { ...stage, input_revision: 'old' },
-        features: { ...stage, date: '2026-10-01', input_revision: 'old', updated_at: '2026-10-01T23:01:02+00:00' } };
-    assert.equal(scanProgress(state).text, 'Scan Ready 2026-10-01 · 19:01:02 ET');
+        features: { ...stage, date: '2026-10-02', input_revision: 'old', updated_at: '2026-10-02T23:01:02+00:00' } };
+    assert.equal(scanProgress(state).text, '');
+    state.ready = false;
+    state.features.date = '2026-10-01';
+    assert.equal(scanProgress(state).text, 'Scan not ready · 2026-10-02');
     state.running = true;
     state.daily.status = 'running';
-    assert.match(scanProgress(state).text, /Scan Ready 2026-10-01.*Downloading daily/);
+    assert.equal(scanProgress(state).text, 'Downloading daily · 2026-10-02');
     state.running = false;
     state.daily.status = 'error';
     state.daily.error = 'daily: Massive HTTP 503';
     assert.ok(scanProgress(state).error);
+    assert.equal(scanProgress(state).text, 'Refresh failed · 2026-10-02');
     assert.equal(scanProgress(state).title, state.daily.error);
     state.daily.error = null;
     state.error = 'Pipeline status could not be saved';

@@ -115,11 +115,11 @@ Daily/split下载、重试及复权要求集中在massive-data.md。symbol_direc
 
 build.py保留input_revision/metadata/build入口。metadata.raw_files保存已消费文件大小/mtime，split_revision保存实际split结果摘要。旧文件清单匹配且只有较新日期、split结果未变时直接追加；已有raw修订/移除、补入较早日或split结果变化时，删除SQLite后merge全部raw。旧库没有清单也直接重建。使用普通批量写入和commit，不增加事务协调、读快照、逐ticker修复、版本迁移或输入竞态校验。写入失败删除派生库并报错，下次运行重建；原始JSON始终保留。普通日志只记录模式、处理文件数、证券数和耗时。
 
-pipeline-status.json维护daily/splits/bars/features。Ready只核对已完成日及既有行情input_revision，不维护目录/配置feature_revision。修改候选配置或目录后手动Refresh Scan，每次生成直接读取；不自动监听或重算。Scan与人工名单维持既有保存/继承流程；自动发布更新页面缓存，手动刷新打开生成日期。无新增GET下载、连接或轮询。
+pipeline-status.json维护daily/splits/bars/features，目标均为daily.target_date给出的成熟交易日；split覆盖包含目标日及两年窗口则Ready，不按自然日重复更新。Ready只核对已完成日及既有行情input_revision，不维护目录/配置feature_revision。启动、普通CLI和页面Refresh使用非force流程，逐步跳过已完成产物；配置/目录修改后从CLI显式重算，每次生成直接读取，不自动监听或重算。操作命令只在 [README Massive 操作](../README.md#massive-操作) 维护。内置库的scan命令保留SQLite行情input_revision与生成时间，使最新日重算后仍为Ready。Scan与人工名单维持既有保存/继承流程；自动发布更新页面缓存，手动刷新即使run返回None也从features.date打开最新可用日，并在日期变化时更新run_id。指定日生成不经POST入口。无新增GET下载、连接或轮询。
 
 Workbench.view及Monitor图表GET带可空security_name，来源仅为RuntimePaths.symbol_directory；按mtime/大小/inode缓存，文件变化无需bar revision变化也能刷新名称。缺失或损坏返回null，禁止名称查询扩大券商白名单或触发网络。前端用textContent显示并在清图时隐藏，具体绘制统一见ui.md。
 
-三个复制项目均只作参考，正式代码不import或执行它们。Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。旧库和原始参考数据保留；正式服务不连接或合并旧库历史，新Longbridge库按既有最近1000根流程初始化。
+两个Scan复制项目已完成数据与功能迁移并删除；保留的schwab-review只作参考，正式代码不import或执行它。Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。正式服务不连接或合并旧库历史，新Longbridge库按既有最近1000根流程初始化。
 
 ## Workspace 与动态名单
 

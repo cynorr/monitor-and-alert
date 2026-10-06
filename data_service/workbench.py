@@ -445,25 +445,29 @@ class Workbench:
                 self.selected_date = payload['date']
                 self.run_id = uuid.uuid4().hex
             elif payload.get('generate'):
+                if 'date' in payload:
+                    raise ValueError('Use the scan --date command to rebuild a specified date')
                 if self.generating or (self.pipeline_task and not self.pipeline_task.done()):
                     raise ValueError('Scan generation in progress')
                 self.generating = True
                 try:
-                    if self.pipeline and 'date' not in payload:
-                        self.pipeline_task = asyncio.create_task(self.pipeline.run(force=True, on_publish=self.scan_published))
-                        snapshot = await self.pipeline_task
-                        if snapshot:
-                            self.selected_date = snapshot['date']
+                    if self.pipeline:
+                        self.pipeline_task = asyncio.create_task(self.pipeline.run(on_publish=self.scan_published))
+                        await self.pipeline_task
+                        value = self.pipeline.state()['features']['date']
                     else:
-                        value = payload.get('date') or latest_completed_date(self.daily_path)
-                        tracked = workspace_scope(self.workspace.root, value)
-                        snapshot = await asyncio.to_thread(build_day, self.daily_path, value, self.calendar,
-                                                            log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.mock,
-                                                            tracked_tickers=tracked,
-                                                            directory_path=RuntimePaths(self.runtime).symbol_directory)
-                        publish_day(self.workspace.root, snapshot)
-                        self.scan_published()
-                        self.selected_date = snapshot['date']
+                        value = latest_completed_date(self.daily_path)
+                        if not self.has_snapshot(value):
+                            tracked = workspace_scope(self.workspace.root, value)
+                            snapshot = await asyncio.to_thread(build_day, self.daily_path, value, self.calendar,
+                                                                log_path=self.runtime / 'invalid_ohlc.jsonl', mock=self.mock,
+                                                                tracked_tickers=tracked,
+                                                                directory_path=RuntimePaths(self.runtime).symbol_directory)
+                            publish_day(self.workspace.root, snapshot)
+                            self.scan_published()
+                    if value and value != self.selected_date:
+                        self.selected_date = value
+                        self.run_id = uuid.uuid4().hex
                 finally:
                     self.generating = False
             return self.list_state()

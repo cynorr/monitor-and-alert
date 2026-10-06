@@ -125,7 +125,7 @@ def main(argv=None, *, notifier=None):
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
-                    raise ValueError('A service already uses this runtime; refresh through the running workbench') from None
+                    raise ValueError('Stop the service before running the Massive command') from None
                 async def prepare():
                     pipeline = MassivePipeline(paths, credentials=args.massive_credentials)
                     try:
@@ -145,12 +145,16 @@ def main(argv=None, *, notifier=None):
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
-                    raise ValueError('A service already uses this runtime; generate through POST /v1/scan') from None
+                    raise ValueError('Stop the service before rebuilding a Scan date') from None
                 tracked = workspace_scope(args.days, args.date)
                 snapshot = build_day(args.daily_db, args.date, TradingCalendar(),
                                      log_path=args.runtime / 'invalid_ohlc.jsonl', mock=args.mock_scan,
                                      tracked_tickers=tracked,
                                      directory_path=paths.symbol_directory)
+                if not args.external_daily_db and not args.mock_scan:
+                    from .massive.build import metadata
+                    from .pipeline import updated_at
+                    snapshot.update(input_revision=metadata(args.daily_db)['input_revision'], updated_at=updated_at())
                 publish_day(args.days, snapshot)
             print(f"{snapshot['date']}: {sum(row['candidate'] for row in snapshot['rows'])} candidates")
             return 0

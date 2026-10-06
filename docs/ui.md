@@ -94,7 +94,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 - 扣除工作区内边距和面板分隔条后，两模式 List 默认占可用面板宽度 **32%**，最小 **680px**；每个图表最小 **320px**，Monitor 双图均分剩余空间。数值统一放在 `layout.ts`，方便单点调整比例。
 - 面板分隔条和 List 数据列间距均为 **12px**。拖动只调整相邻面板并保留最小宽度；打开页面、切换模式或双击分隔条恢复默认。小窗口保持最小宽度，允许工作区整体溢出。
 - Monitor 的最小宽度也接受独立持仓内容需求，具体测量和固定顶部布局见 [Holdings UI](holdings-ui.md#位置折叠与宽度)。
-- List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Scan Ready 和 Search 均位于 List 面板内；名单列头不增加顶部分隔线。
+- List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Scan 准备状态和 Search 均位于 List 面板内；名单列头不增加顶部分隔线。
 - 计数使用独立 `span.count-badge`：**10px、黑色、不加粗**，与标题留小间距。适用于列表按钮、section、symbol 总数、Holdings、Filter 与结果数。数字本身不统一加背景；选中 pill 中的数字仍为黑色，所在 pill 使用浅背景保证可读。
 
 ### 展示范围与控件
@@ -167,11 +167,11 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 
 Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式、买卖明细、排序、选择和状态的唯一要求见 [Holdings UI](holdings-ui.md)。
 
-### Scan 日期与 Ready
+### Scan 日期与准备状态
 
-- Scan 使用截至所选日的完成 Daily，Focus 也用同一来源，无活跃 candle 或 Intraday。图表显示所选日期；独立 Scan Ready 显示最新 feature 完成日和精确到秒的 ET 完成时间。
-- 日期下拉仅列已生成日。Refresh Scan 准备并打开最新完成日，与正在查看的历史日期无关；自动完成保留历史选择和展示模式。同日重算保留人工状态，新日按 List 生命周期继承。
-- 准备中禁用重复 Refresh，但允许切换模式；失败/后台准备保留旧 Ready 日期，详情放悬停。GET、选图、Filter 和切页不触发下载。
+- Scan 使用截至所选日的完成 Daily，Focus 也用同一来源，无活跃 candle 或 Intraday。图表显示所选日期；正常时隐藏独立准备状态，不重复显示 Ready 日期或完成时间。
+- 日期下拉仅列已生成日。Refresh Scan 补齐并打开最新可用日，与正在查看的历史日期无关；已完成的步骤跳过，全部完成仍切回最新日。自动完成保留历史选择和展示模式，新日按 List 生命周期继承。配置变更/指定日重算仅由CLI处理。
+- 未完成、处理中或失败时才显示目标日期与当前阶段，例如 Downloading daily / Updating splits / Building daily bars / Building features，失败详情放悬停；旧日期和结果继续可查看。准备中禁用重复 Refresh，但允许切换模式。GET、选图、Filter 和切页不触发下载。
 
 ## Data and simulator boundaries
 

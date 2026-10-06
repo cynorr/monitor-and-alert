@@ -41,23 +41,49 @@ Mock 生成器要求目标目录没有现成 daily.sqlite3；重复试验用 `--
 .venv/bin/python scripts/pull_massive.py
 ```
 
-Nasdaq 目录更新独立于 Massive，保存免费 ETF 分类和证券名称。扫描先排除 ETF、未确认类别与不足 50 根有效日 K 的证券，再做 ADR/ADV 和 RFL 排名。可编辑条件集中于 [config/massive.json](config/massive.json)，数据要求统一见 [Massive 数据要求](docs/massive-data.md)。普通新日直接追加 SQLite；旧文件或 split 变化则删除 SQLite 后全量重建。修改候选配置后手动 Refresh Scan 应用，不做自动版本跟踪。
+Nasdaq 目录更新独立于 Massive，保存免费 ETF 分类和证券名称。扫描先排除 ETF、未确认类别与不足 50 根有效日 K 的证券，再做 ADR/ADV 和 RFL 排名。可编辑条件集中于 [config/massive.json](config/massive.json)，数据要求统一见 [Massive 数据要求](docs/massive-data.md)。普通新日直接追加 SQLite；旧文件或 split 变化则删除 SQLite 后全量重建。配置和目录变更由命令行重算应用，不做自动版本跟踪。
 
-服务未运行时也可用 `.venv/bin/python -m data_service massive`，默认跳过已 Ready 的任务；加 `--force` 可重新获取 split 并重建 bars/特征，已有原始 Daily 保留。任务 Ready 返回0，阶段失败返回2。手动命令与服务共用 runtime 单实例锁；服务运行时用 Scan 的 **Refresh Scan**。显式 `--daily-db` 只读消费外部库，不启用内置 Massive 下载；可用 `scan --date D` 离线重算指定日。
+服务未运行时也可用 `.venv/bin/python -m data_service massive`，与启动、页面 Refresh 共用准备流程。任务 Ready 返回0，阶段失败返回2。手动命令与服务共用 runtime 单实例锁。显式 `--daily-db` 只读消费外部库，不启用内置 Massive 下载。日常刷新与维护重算的操作见下方 [Massive 操作](#massive-操作)。
 
 默认代理为 `http://127.0.0.1:7899`，Massive 与 SnapTrade 共用；`MARKET_PROXY` 覆盖地址，显式空值关闭代理。Massive 凭证来自 `MASSIVE_API_KEY` 或 Git 忽略的 `massive-token.txt` 单行文件，不输出到日志。Longbridge SDK 的接入不由此配置改变。
 
 数据统一放在 `runtime/massive/`、`runtime/longbridge/`、`runtime/holdings/`，人工名单与偏好保持现有路径。Massive 原始 `daily/*.json` 累积保留且不加入 Git；`splits.json` 是唯一允许入 Git 的运行数据。split 每次完整获取两年窗口，替换窗口内记录并保留更早历史，校验成功后原子覆盖。Massive 采用拆股复权，成交量 HALF_UP 四舍五入为整数；Longbridge 仍为 regular、NoAdjust 和整数成交量，两者不拼接历史，共用指标及图表。
 
-Scan Ready 显示最新特征完成日与精确到秒的 ET 完成时间；它与当前正在查看的历史日期独立。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 生成并打开最新日。同日重算保留人工名单，新日第一次生成继承 Focus 和 Excluded。首份截面准备中可以先打开页面。
+Scan 正常时仅显示日期下拉，不重复显示 Ready 日期和完成时间；处理中、失败或目标日未完成时显示阶段及目标日期。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 补齐并打开最新可用日，已完成则直接打开。新日第一次生成继承 Focus 和 Excluded。首份截面准备中可以先打开页面。
 
-默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。当前真实使用的旧目录已一次复制到runtime，源文件保留：15份名单、7个Tag，最新2026-09-30，Focus34/Wait20。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
+默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。旧 Scan 数据、15份历史名单与7个Tag已迁入正式runtime，两个复制的 Scan 项目目录已删除。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
 
 Monitor凭证来自longbridge-token.txt，沿用App Key/Secret/Token，不输出到日志。默认官方.cn，`--region global`切换接入点。只请求/订阅当前Focus及Holdings；历史库、Discover、Hidden不决定券商白名单。
 
 Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，标签与值各占一行，保存在 git 忽略的 `snaptrade-token.txt`（权限600）。没有该文件时不启用持仓；`--holdings-credentials` 指定其他路径。正式服务启动立即刷新，Scan/Monitor 均每30秒获取当前USD股票/ETF多头及买卖活动；失败保留上次完整结果，下个周期再取。Scan Mock、独立模拟器、`--symbols`有界验收不获取真实持仓或 Massive 数据。
 
 买卖归属配置为 `runtime/holdings/sequences.txt` 与 `merge_buys.txt`，每次刷新重读；本机已从 `schwab-review` 复制现有规则，原项目保留。新环境需复制这两个文件（无手工关联时可留空）；`--holdings-rules` 可指定目录。单份原始缓存为 `runtime/holdings/latest.json`。SnapTrade 数据获取独立于 HTTP 和前端，正式入口仍是 `data_service serve`，无需旧8766/8000服务；旧持仓进程应停止，避免重复占用同一账户额度。
+
+## Massive 操作
+
+日常开机启动服务即可准备最新日；服务已运行但最新日还没准备好时，点击 **Refresh Scan**。四阶段均按最新成熟交易日判断，完成的步骤跳过，失败后再次点击从未完成步骤继续。已有完整产物不会重复下载或生成；正在查看历史日时，点击后打开最新可用日。
+
+目标日仍采用美东 **18:00** 门槛：之前使用上一交易日，之后才准备当天。周末和休市日沿用上一交易日，不重新拉 split 或构建派生产物。日期下拉中的日期都是已经生成的截面；失败原因在阶段提示悬停中查看。
+
+修改候选配置或证券目录后，需要主动重算。先停止 CLI 服务（Ctrl+C）或退出 Market Monitor 应用，再用已有本地 SQLite 重算最新完成日：
+
+```bash
+.venv/bin/python -m data_service scan
+```
+
+此命令只重新生成候选与特征，并按当前 Tag 规则分类，不下载 Daily/split。仅修改候选配置时，无需重新获取证券目录；需要更新目录时先运行 `scripts/pull_symbol_directory.py`。指定日重算可加日期：
+
+```bash
+.venv/bin/python -m data_service scan --date 2026-10-05
+```
+
+需要强制更新 split 并重算派生产物时，仍在服务停止后使用维护入口：
+
+```bash
+.venv/bin/python -m data_service massive --force
+```
+
+它重新获取目标交易日的两年 split 窗口、核对并按需构建 SQLite、重新生成最新日候选与特征。有效 raw Daily 保留；同日重算以人工状态为分类基础，不清空名单。完成后按原启动命令启动服务。普通 Refresh 不承担重置；Tag 在页面保存时已经本地重新分类，无需上述命令。
 
 ## 使用
 
@@ -83,7 +109,7 @@ open 'dist/Market Monitor.app'
 检查后从应用菜单 Quit，并重新打开正式应用。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
-- Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，同日Refresh保留人工状态。
+- Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，Refresh跳过已完成日。
 - Focus跨日保留；Discover与Focus匹配负面Tag直接进入Excluded。Hidden/Extended/Broken七个自然日到期后按当前规则重新分类；Review保留待审核，无Dismiss。Hidden七天内跳过名单规则判断，仍计算完整特征。删除Focus移入Hidden，Release/Move to Discover明确解除归属；新入section置顶。
 - 共用Daily日 K：所有图使用统一、可人工调整的默认bar spacing，缩放后各自保留；EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、成交量随十字线切换。可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加Quote活跃日 K。显示与集中人工参数只在 [Chart UI](docs/chart-ui.md) 维护。
 - Monitor：5m/15m/30m/1h/2h/4h、SMA65、交易日联动、实时行情；2h/4h由5m在内存合成。
@@ -91,7 +117,7 @@ open 'dist/Market Monitor.app'
 - Monitor与Scan共享Focus分组、Tag/Filter、拖动、Shift+上下排序与折叠。每行允许补充当日Tag；Monitor仅显示Focus与折叠Review，本地Daily预览Review不扩大实时订阅。
 - Monitor 的 Holdings 固定在下方名单滚动区之外，可整体折叠；按买入批次展示及展开 Buy/Sold 明细，允许同 ticker 多个批次与名单重复，不写 workspace。余仓盈亏、当天建仓基准、Days和当日清仓保留的唯一需求见 [Holdings 数据](docs/holdings-data.md)；显示、排序和布局见 [Holdings UI](docs/holdings-ui.md)。Longbridge 最新价（含盘前/盘后/夜盘）重算市值和盈亏，缺价回退最后成功的 SnapTrade 价格；cash 来自 SnapTrade，Account Value 为当前持仓市值加 cash。
 - ADR20 = 最近最多20根`(H-L)/L × 100`均值；ADV20 = 最近最多20根`close × volume`均值，两模式同公式。
-- Monitor Loading → 黄色Ready（Daily+5m）→ 蓝色Ready（五周期，3秒后隐藏）；Scan图表显示所选日期，列表显示最新Scan Ready日期与完成时间。仅OHLC上下界矛盾保留原值并追加invalid_ohlc.jsonl，不修正或告警。
+- Monitor Loading → 黄色Ready（Daily+5m）→ 蓝色Ready（五周期，3秒后隐藏）；Scan图表显示所选日期，准备状态只在未完成或失败时显示。仅OHLC上下界矛盾保留原值并追加invalid_ohlc.jsonl，不修正或告警。
 
 Monitor启动/恢复/补缺仅请求最近1000根，closed更新count=2，过滤未收盘；接受短历史，不分页或查历史缺口。全局10请求/秒、5并发；后台历史最多8请求/秒、3并发。
 
@@ -114,7 +140,7 @@ reconcile是有界真实历史同步，verify不联网。live验收需明确当�
 | GET /health | 当前模式、Quote连接、待处理任务/错误 |
 | GET /v1/scan | 当前名单、日期、偏好和模式 |
 | POST /v1/mode | `{"mode":"scan"}` 或 `{"mode":"monitor"}` |
-| POST /v1/scan | 选择日期`{"date":"D"}`；最新完成日生成`{"generate":true}`；指定日生成`{"date":"D","generate":true}` |
+| POST /v1/scan | 选择日期`{"date":"D"}`；补齐并打开最新可用日`{"generate":true}`；指定日重算只用 CLI |
 | POST /v1/preferences | 同步保存完整Tag/显示偏好 |
 | GET /v1/filter-catalog | 唯一38字段目录 |
 | POST /v1/list | 查询、新增、删除、拖动；两模式共用三列表/主section移动及当日Tag补充 |

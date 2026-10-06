@@ -4,7 +4,7 @@
 
 ## 独立配置与处理顺序
 
-候选条件集中在 [config/massive.json](../config/massive.json)，每次生成直接重读。修改配置后手动 Refresh Scan 应用；不跟踪配置/目录版本，不自动重算。配置错误直接报错。
+候选条件集中在 [config/massive.json](../config/massive.json)，每次生成直接重读。修改配置/目录后通过命令行主动重算，操作见 [Massive 操作](../README.md#massive-操作)；不跟踪配置/目录版本，不自动重算。配置错误直接报错。
 
 | 配置 | 当前值 | 含义 |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 
 `runtime/massive/daily/YYYY-MM-DD.json` 保存 grouped Daily 的 `adjusted=false&include_otc=false` 原始响应，累积保留，有效已有文件不覆盖。首次按两年交易日获取；以后仅补最近 14 个自然日范围内缺失的文件。目标按 XNYS 和 ET18点门槛确定，不请求尚未成熟的当天数据。
 
-`runtime/massive/splits.json` 每次完整分页覆盖成熟日向前两年窗口，替换该窗口记录并保留更早历史；核对覆盖、比例与唯一 ID 后才原子发布。不得根据候选列表缩减拆股覆盖。Massive 请求共享至少 15 秒的开始间隔；不在此轮增加类型/名称/IPO 查询。
+`runtime/massive/splits.json` 以 Daily 的同一成熟交易日为目标；本地覆盖包含目标日及向前两年窗口时跳过，周末/休市日不重复获取。需要获取时完整分页覆盖目标交易日向前两年窗口，替换该窗口记录并保留更早历史；核对覆盖、比例与唯一 ID 后才原子发布。不得根据候选列表缩减拆股覆盖。Massive 请求共享至少 15 秒的开始间隔；不在此轮增加类型/名称/IPO 查询。
 
 在执行日前，价格及 VWAP 乘累计 `split_from/split_to`，成交量除该因子后用 Decimal ROUND_HALF_UP 转为 SQLite 非负整数。turnover 仅由可靠同根 VWAP × 未取整的复权量得到，否则 NULL；ADV 仍采用 close × 最终整数 volume。Daily 保留 Massive 的供应商时段口径，metadata 写 `session=massive_daily`，不宣称仅 regular。与 Longbridge 不拼接历史或交叉校验，读库/计算/显示不再二次复权。
 
@@ -72,6 +72,6 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 
 metadata最终写completed_date、input_revision、split_adjusted、half_up、source、session及turnover口径。只有明确完成日是完成状态，不从MAX(ts)推断。
 
-正式启动一次Daily → split → bars → features，Ready跳过。Daily/split网络获取保持既有有界重试；bars/features本地失败只报错，不自动重试。缺目录/坏配置先于Massive请求检查。Ready只核对完成日与既有行情input_revision；候选配置和目录在手动生成时读取。`--force`重新获取split并生成特征，已有raw保留，普通新增日仍增量写库。
+正式启动、普通massive命令和页面Refresh共用Daily → split → bars → features；四阶段目标统一为最新成熟交易日，逐步跳过已完成产物，全部Ready直接跳过。失败后重试仅执行尚未完成或输入已变化的阶段。Daily/split网络获取保持既有有界重试；bars/features本地失败只报错，不自动重试。缺目录/坏配置先于Massive请求检查。Ready只核对完成日与既有行情input_revision；候选配置和目录在生成时读取。强制重算仅由CLI显式执行；`massive --force`重新获取split并生成特征，已有raw保留，SQLite按现有规则跳过/追加/重建。
 
 状态为runtime/pipeline-status.json的daily/splits/bars/features。失败显示错误；同日名单按既有人工状态维护，新日继承Focus和全部Excluded。切页、选图及GET均不下载。开发遵循 [开发准则](development-principles.md)，仅验证本次功能，优先用真实数据和现有服务。

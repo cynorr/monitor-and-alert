@@ -61,6 +61,7 @@ function applyList(data: ListState) {
     progress.hidden = !data.massive;
     if (data.massive) {
         const status = scanProgress(data.massive);
+        progress.hidden = !status.text;
         progress.textContent = status.text;
         progress.title = status.title;
         progress.classList.toggle('error', status.error);

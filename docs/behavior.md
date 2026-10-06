@@ -30,11 +30,11 @@ Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多
 
 Massive 数据要求、拆股/整数成交量、来源时段与筛选配置统一见 [massive-data.md](massive-data.md)。Longbridge仍显式请求NoAdjust、regular并保存整数成交量。读取、指标和图表不再做复权；两源共享格式与计算，但不拼接或交叉验证。Longbridge复权不在本版本范围。Daily Symbol右侧可以显示本地Nasdaq目录名称，缺失正常留空，两模式共用。
 
-全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 和不带 --date 的 scan 命令生成并打开最新完成日，按钮不重算日期下拉框当前选中的旧日。显式 scan --date D 或 POST /v1/scan 指定 date 仍可重算指定日；GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读。日期下拉框仅显示已生成的日期。
+全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 补齐并打开最新可用日，完成的步骤跳过，也不重算日期下拉框当前选中的旧日。指定日重算只由 CLI 的 scan --date D 执行；不带 --date 的 scan 命令重算本地库最新完成日。GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读，普通Refresh仅生成缺失的最新日截面。日期下拉框仅显示已生成的日期。
 
 正式服务启动触发一次Massive后台准备，依次完成Daily、split、SQLite和features；已有目标日及匹配行情版本的完整产物则跳过。免费Nasdaq目录由独立脚本维护；缺失/损坏或配置错误先于Massive请求失败，保留旧结果并提示。网络获取按数据要求有界重试；本地构建失败直接报错，派生SQLite删除后在下次运行重建。没有定时轮询。手动脚本与页面Refresh复用同一流程，GET、图表和切页不触发下载；同一时刻仅一份准备任务。
 
-Daily与split获取范围见数据要求。SQLite普通新日直接追加；旧raw或split结果变化则删除后全量重建。构建失败报错并删除不完整库，不做失败回滚。状态统一写runtime/pipeline-status.json；Daily、split、bars、features分别记录当前状态和成功产物。Scan Ready以features完成日及匹配的行情版本为准，完成时间显示到秒。候选配置/目录修改后手动刷新应用，不做自动版本重算。自动完成只让跟随最新日的页面继续跟随，历史日期保持不变；后台忙不阻止展示切换。
+Daily与split统一按最新成熟交易日判断，保留ET18点门槛；周末/休市日不重复获取或构建。获取范围见数据要求。SQLite普通新日直接追加；旧raw或split结果变化则删除后全量重建。构建失败报错并删除不完整库，不做失败回滚。状态统一写runtime/pipeline-status.json；Daily、split、bars、features分别记录当前状态和成功产物。正常时日期下拉即可表示已生成日，不重复显示Ready日期/完成时间；仅未完成、处理中或失败时提示目标日及状态。候选配置/目录修改由CLI主动重算，不做自动版本重算，操作见 [Massive 操作](../README.md#massive-操作)。自动完成只让跟随最新日的页面继续跟随，历史日期保持不变；手动Refresh即使跳过全部步骤，也打开最新可用日。后台忙不阻止展示切换。
 
 ## List、Tag 与 Filter
 

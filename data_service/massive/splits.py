@@ -53,8 +53,6 @@ def merge(existing, fresh, refresh_start, target):
     if existing is not None:
         if existing['end_date'] < refresh_start - timedelta(days=1):
             raise ValueError('Local split coverage cannot join the latest two-year window')
-        if existing['end_date'] > target:
-            raise ValueError('Local split coverage is later than the mature date')
         start = min(existing['start_date'], refresh_start)
         old = [row for row in existing['results'] if date.fromisoformat(row['execution_date']) < refresh_start]
     rows = check_rows(old + fresh, start, target)

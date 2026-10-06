@@ -20,7 +20,5 @@ macos/build/
 
 ui/node_modules/
 
-# Imported reference project; its source/data are migrated into maintained paths.
-/qull-scan-data-pipeline/
-/qull-scan-workspace/
+# Imported holdings reference project; its data are migrated into maintained paths.
 /schwab-review/

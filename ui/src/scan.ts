@@ -44,7 +44,7 @@ export class ScanControls {
         });
         $('scan-date').addEventListener('change', event => { void this.action('scan', { date: (event.target as HTMLSelectElement).value }); });
         $('scan-refresh').addEventListener('click', () => { void this.action('scan', { generate: true }); });
-        $('scan-refresh').title = 'Generate and open the latest completed trading date';
+        $('scan-refresh').title = 'Prepare and open the latest completed trading date; skip completed steps';
         $('scan-tags').addEventListener('click', event => {
             const id = (event.target as HTMLElement).closest<HTMLElement>('[data-tag]')?.dataset.tag;
             if (id) this.protectDraft(() => {
