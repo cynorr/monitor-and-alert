@@ -75,31 +75,31 @@ class BarStore:
         self.db.executescript(BAR_SCHEMA.replace('CREATE TABLE bars', 'CREATE TABLE IF NOT EXISTS bars') + '''
             CREATE TABLE IF NOT EXISTS batches (
                 symbol TEXT NOT NULL, timeframe TEXT NOT NULL,
-                run_id TEXT NOT NULL, as_of INTEGER NOT NULL, payload TEXT NOT NULL,
+                payload TEXT NOT NULL,
                 PRIMARY KEY(symbol, timeframe)
             );
         ''')
-        if 'turnover' not in {r['name'] for r in self.db.execute('PRAGMA table_info(bars)')}:
-            self.db.execute('ALTER TABLE bars ADD COLUMN turnover REAL')
         self.revisions: dict[tuple[str, str], int] = {}
-        self.quality_revisions: dict[tuple[str, str], int] = {}
 
     def check(self, symbol: str) -> None:
         if symbol not in self.allowed:
-            raise ValueError(f'Symbol outside focus/wait: {symbol}')
+            raise ValueError(f'Symbol outside Focus and Holdings: {symbol}')
 
-    def upsert(self, bars: list[Bar], now: int, batch: dict | None = None) -> None:
+    def upsert(self, bars: list[Bar], now: int, batch: dict | None = None, *, replace=False) -> None:
         for bar in bars:
             self.check(bar.symbol)
             bar.validate(self.calendar, now)
         keys = {(b.symbol, b.timeframe) for b in bars}
         if batch:
+            self.check(batch['symbol'])
             keys.add((batch['symbol'], batch['timeframe']))
         # Only changed market values invalidate chart history/indicator caches.
         changed = set()
         with self.db:
             for key in keys:
                 before = self.db.total_changes
+                if replace:
+                    self.db.execute('DELETE FROM bars WHERE symbol=? AND timeframe=?', key)
                 self.db.executemany("""INSERT INTO bars (symbol,timeframe,ts,open,high,low,close,volume,turnover)
                     VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol,timeframe,ts) DO UPDATE SET
                     open=excluded.open,high=excluded.high,low=excluded.low,
@@ -108,22 +108,15 @@ class BarStore:
                        OR bars.low IS NOT excluded.low OR bars.close IS NOT excluded.close
                        OR bars.volume IS NOT excluded.volume OR bars.turnover IS NOT excluded.turnover""",
                     [tuple(asdict(bar).values()) for bar in bars if (bar.symbol, bar.timeframe) == key])
-                if batch and key == (batch['symbol'], batch['timeframe']):
-                    self.check(batch['symbol'])
-                    # Unplottable revisions are absent; OHLC range contradictions are retained.
-                    self.db.executemany('DELETE FROM bars WHERE symbol=? AND timeframe=? AND ts=?',
-                        [(*key, r['ts']) for r in batch.get('rejected', []) if r['ts'] is not None])
                 if self.db.total_changes != before:
                     changed.add(key)
             if batch is not None:
-                self.db.execute("""INSERT INTO batches VALUES (?,?,?,?,?)
+                self.db.execute("""INSERT INTO batches VALUES (?,?,?)
                     ON CONFLICT(symbol,timeframe) DO UPDATE SET
-                    run_id=excluded.run_id,as_of=excluded.as_of,payload=excluded.payload""",
-                    (batch['symbol'], batch['timeframe'], '', batch['as_of'], json.dumps(batch)))
+                    payload=excluded.payload""",
+                    (batch['symbol'], batch['timeframe'], json.dumps(batch)))
         for key in changed:
             self.revisions[key] = self.revisions.get(key, 0) + 1
-        for key in keys:
-            self.quality_revisions[key] = self.quality_revisions.get(key, 0) + 1
 
     def bars(self, symbol: str, timeframe: str, start: int = 0, end: int = 2**62,
              limit: int | None = None) -> list[Bar]:
@@ -137,9 +130,7 @@ class BarStore:
         return json.loads(row[0]) if row else None
 
     def window(self, symbol: str, timeframe: str) -> list[Bar]:
-        batch = self.batch(symbol, timeframe)
-        start = (batch or {}).get('window_start', 0)
-        return self.bars(symbol, timeframe, start=start, limit=1000)
+        return self.bars(symbol, timeframe)
 
     def close(self) -> None:
         self.db.close()

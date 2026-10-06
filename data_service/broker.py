@@ -54,7 +54,7 @@ class Broker:
 
     def check(self, symbols: list[str]) -> None:
         if not set(symbols) <= self.allowed:
-            raise ValueError('API request outside current Focus/Wait and Holdings universe')
+            raise ValueError('API request outside current Focus and Holdings universe')
 
     def context(self):
         if self._context is None:
@@ -89,7 +89,7 @@ class Broker:
             raise ValueError('Count must be 1..1000')
         ctx = self.context()
         return await self.call(ctx.candlesticks, symbol, SDK_PERIODS[timeframe], count,
-                               AdjustType.NoAdjust, TradeSessions.Intraday, background=background, symbols=[symbol])
+                               AdjustType.ForwardAdjust, TradeSessions.Intraday, background=background, symbols=[symbol])
 
     async def subscribe(self, ctx, symbols: list[str]):
         self.check(symbols)

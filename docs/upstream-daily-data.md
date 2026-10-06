@@ -1,6 +1,6 @@
 # 共用 bars 契约
 
-更新：2026-10-05。本文件只维护共用 Bar 表、来源边界与完成日契约。Massive 的获取、复权、ADR/ADV、ETF/历史过滤、独立配置和增量构建统一见 [massive-data.md](massive-data.md)。
+更新：2026-10-05。本文件只维护共用 Bar 表、来源边界与完成日契约。Longbridge 的定位、获取与缓存规则见 [longbridge-data.md](longbridge-data.md)；Massive 的获取、复权、ADR/ADV、ETF/历史过滤、独立配置和增量构建见 [massive-data.md](massive-data.md)。
 
 ## 路径与所有权
 
@@ -8,7 +8,7 @@
 - `runtime/longbridge/bars.sqlite3`：Longbridge 唯一写入，只跟踪当前 Focus 与已接受 Holdings 的并集。
 - `--runtime` 修改整个运行根；显式 `--daily-db` 只读消费外部 SQLite 并禁用内置 Massive 获取。
 
-两个来源共用格式、读取、指标及图表，不拼接历史或交叉验证，不在读端二次复权。旧项目数据已迁入正式runtime，正式运行不依赖复制项目目录。
+两个来源共用格式、读取、指标及图表，不拼接、交叉验证或互相补缺，不在读端二次复权。
 
 ## 唯一共用表结构
 
@@ -34,7 +34,7 @@ CREATE INDEX bars_by_time ON bars(timeframe, ts, symbol);
 
 ## 来源与完成状态
 
-Massive 使用拆股复权、HALF_UP 整数成交量及 `massive_daily` 供应商时段，规则统一在 Massive 文档。Longbridge 保持官方 NoAdjust、regular、closed 和非负整数成交量；仅保存官方 1d/5m/15m/30m/1h，2h/4h 等合成只在内存。Longbridge 后续复权不在当前版本范围。
+每个来源的价格、成交量与时段由各自数据要求定义。读端直接消费所属来源已处理的 Bar，不自行改变复权口径。
 
 全市场完成日必须由 Massive 写端明确提交 `metadata.completed_date`，不得从 MAX(ts) 推断全市场 Ready。构建成功后写完成元数据。只用普通SQLite提交，不增加并发读快照或跨构建回滚；本地写入失败直接报错、删除派生库，下次从原始JSON重建。下游特征核对行情版本，候选配置在手动生成时读取。
 

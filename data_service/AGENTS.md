@@ -1,6 +1,6 @@
 # 数据模块维护入口
 
-先读项目根入口与 [开发准则](../docs/development-principles.md)；List需求以 [docs/list-design.md](../docs/list-design.md) 为准，Massive特征范围以 [docs/massive-data.md](../docs/massive-data.md#名单完整特征范围) 为准，Holdings数据需求只在 [docs/holdings-data.md](../docs/holdings-data.md) 维护。Alert 需求见 [docs/alert.md](../docs/alert.md)，模块维护另读 [alerts/AGENTS.md](alerts/AGENTS.md)。
+先读项目根入口与 [开发准则](../docs/development-principles.md)；Longbridge需求只在 [docs/longbridge-data.md](../docs/longbridge-data.md) 维护；List需求以 [docs/list-design.md](../docs/list-design.md) 为准，Massive特征范围以 [docs/massive-data.md](../docs/massive-data.md#名单完整特征范围) 为准，Holdings数据需求只在 [docs/holdings-data.md](../docs/holdings-data.md) 维护。Alert 需求见 [docs/alert.md](../docs/alert.md)，模块维护另读 [alerts/AGENTS.md](alerts/AGENTS.md)。
 
 - `workspace.py` 管三名单归属、顺序、迁移与同步保存；`list_rules.py` 只做纯条件匹配和分类，不请求行情。
 - 手动与 Alert 移入 Focus 共用 [统一入选规则](../docs/list-design.md#统一移入-focus)；不继承来源 Tag/人工 section，不由 Alert 另写分类逻辑。

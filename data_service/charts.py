@@ -14,8 +14,9 @@ def bar_row(bar):
 
 
 class ChartCache:
-    def __init__(self, store, calendar):
+    def __init__(self, store, calendar, ready=None):
         self.store, self.calendar = store, calendar
+        self.ready = ready or (lambda symbol, tf: True)
         self.active, self.quotes, self.history, self.dependencies, self.summaries = {}, {}, {}, {}, {}
         self.volume_baselines, self.volume_prefixes = {}, {}
 
@@ -45,19 +46,20 @@ class ChartCache:
     def closed(self, symbol, tf):
         key = (symbol, tf)
         source_periods = ('5m',) if tf in ('2h', '4h') else (tf, '5m') if tf not in ('1d', '5m') else (tf,)
-        dependency = tuple((self.store.revisions.get((symbol, period), 0),
-                            (self.store.batch(symbol, period) or {}).get('window_start', 0)) for period in source_periods)
+        dependency = tuple((self.store.revisions.get((symbol, period), 0), self.ready(symbol, period))
+                           for period in source_periods)
         if self.dependencies.get(key) != dependency:
             bars = [] if tf in ('2h', '4h') else self.store.window(symbol, tf)
             rows = [bar_row(b) for b in bars]
-            if tf not in ('1d', '5m'):
+            if tf in ('2h', '4h') or (tf not in ('1d', '5m')
+                                      and all(self.ready(symbol, period) for period in source_periods)):
                 five = self.closed(symbol, '5m')[1]
                 # Inputs are official closed 5m bars; the final 5m end is the conversion cutoff.
                 cutoff = self.calendar.bar_end(five[-1]['time'], '5m') if five else 0
                 converted = resample(five, tf, self.calendar, cutoff)
                 merged = {row['time']: row for row in converted}
                 merged.update({row['time']: row for row in rows})
-                rows = [merged[t] for t in sorted(merged)][-1000:]
+                rows = [merged[t] for t in sorted(merged)]
             previous = self.history.get(key)
             if previous is None or previous[1] != rows:
                 revision = previous[0] + 1 if previous else 1
@@ -66,6 +68,9 @@ class ChartCache:
         return self.history[key]
 
     def forming(self, symbol, tf, now):
+        periods = ('5m',) if tf in ('5m', '2h', '4h') else (tf, '5m')
+        if not all(self.ready(symbol, period) for period in periods):
+            return None
         start = self.calendar.active_start(tf, now)
         five_start = self.calendar.active_start('5m', now)
         active, quote = self.active.get(symbol), self.quotes.get(symbol)
@@ -89,7 +94,7 @@ class ChartCache:
     def closed_volume(self, symbol, tf, start, end):
         """Cached scalar for [start, end): cover once with the largest official bars."""
         periods = ('1h', '30m', '15m', '5m')
-        signature = (start, end, tuple(self.store.revisions.get((symbol, p), 0) for p in periods))
+        signature = (start, end, tuple((self.store.revisions.get((symbol, p), 0), self.ready(symbol, p)) for p in periods))
         key = (symbol, tf)
         cached = self.volume_prefixes.get(key)
         if cached is not None and cached[0] == signature:
@@ -97,6 +102,8 @@ class ChartCache:
         candidates = {}
         if start < end:
             for period in periods:
+                if not self.ready(symbol, period):
+                    continue
                 for bar in self.store.bars(symbol, period, start, end - 1):
                     close = self.calendar.bar_end(bar.ts, period)
                     if close <= end:

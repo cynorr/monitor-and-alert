@@ -49,7 +49,7 @@ def test_range_contradiction_is_retained_logged_and_never_retried(tmp_path, cal,
 
 
 @pytest.mark.parametrize('kind', ['nan', 'negative_volume', 'duplicate', 'extended'])
-def test_unplottable_response_does_not_leave_old_revision(store, cal, kind):
+def test_unplottable_response_preserves_old_window(store, cal, kind):
     ts = at('2026-09-18T09:30'); now = ts + 301
     store.upsert([bar(ts)], now)
     item = raw(ts)
@@ -58,8 +58,9 @@ def test_unplottable_response_does_not_leave_old_revision(store, cal, kind):
     if kind == 'extended': item.trade_session = 'Pre'
     class Fake:
         async def candles(self, *args, **kwargs): return [item, item] if kind == 'duplicate' else [item]
-    result = asyncio.run(BarDownloader(Fake(), store, cal, lambda: now).fetch('PAYS.US', '5m'))
-    assert result['rejected'] and not store.bars('PAYS.US', '5m')
+    with pytest.raises(ValueError):
+        asyncio.run(BarDownloader(Fake(), store, cal, lambda: now).fetch('PAYS.US', '5m'))
+    assert store.bars('PAYS.US', '5m') == [bar(ts)]
     assert not DataValidator(store, cal).check('PAYS.US', '5m', now)['complete']
     assert not (store.path.parent / 'invalid_ohlc.jsonl').exists()
 
@@ -133,7 +134,7 @@ def test_missing_latest_closed_target_triggers_full_retry(tmp_path, cal):
     try:
         key=('PAYS.US','5m')
         asyncio.run(service._execute(key))
-        assert 'Missing 1 bars' in service.sync[key].error
+        assert 'Missing latest closed' in service.sync[key].error
         assert service.sync[key].refresh and not service.sync[key].alert
         assert service.validator.check(*key,now)['missing'] == [start+600]
     finally: service.store.close()

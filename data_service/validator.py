@@ -12,14 +12,12 @@ class DataValidator:
     def check(self, symbol, tf, now):
         target = self.calendar.latest_closed(tf, now)
         key = (symbol, tf)
-        signature = (self.store.quality_revisions.get(key, 0), target)
+        session = self.calendar.window_session(now)
+        signature = (self.store.revisions.get(key, 0), target, session)
         if key in self.cache and self.cache[key][0] == signature:
             return self.cache[key][1]
         batch = self.store.batch(symbol, tf)
         rows = self.store.window(symbol, tf)
-        first = (batch or {}).get('window_start', rows[0].ts if rows else target)
-        if len(rows) == 1000:
-            first = max(first, rows[0].ts)
         present, errors = set(), []
         for row in rows:
             try:
@@ -30,9 +28,8 @@ class DataValidator:
         # Historical holes are accepted, including within the returned recent window.
         # Only the current closed target must exist; never bridge old gaps.
         missing = [] if target in present else [target]
-        for item in (batch or {}).get('rejected', []):
-            if item['ts'] is None or first <= item['ts'] <= target:
-                errors.append(f"{item['ts']}: {item['error']}")
+        if batch and tuple(batch['session']) != session:
+            errors.append('Waiting for current session refresh')
         if missing:
             errors.insert(0, f'Missing {len(missing)} bars; first timestamp {missing[0]}')
         result = {'complete': bool(batch) and not errors, 'target': target,

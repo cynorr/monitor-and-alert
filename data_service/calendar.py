@@ -82,6 +82,14 @@ class TradingCalendar:
         session = self.session(datetime.fromtimestamp(now, ET).date())
         return bool(session and session[0] <= now < session[1])
 
+    def window_session(self, now: int) -> tuple[str, str]:
+        day = datetime.fromtimestamp(now, ET).date()
+        session = self.session(day)
+        if session:
+            return day.isoformat(), 'pre' if now < session[0] else 'regular'
+        previous = self.days(day - timedelta(days=15), day)[-1]
+        return previous.isoformat(), 'regular'
+
     def active_start(self, timeframe: str, now: int) -> int | None:
         day = datetime.fromtimestamp(now, ET).date()
         for start, end in self.grid(day, timeframe):

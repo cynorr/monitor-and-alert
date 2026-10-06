@@ -107,7 +107,9 @@ function showState(view: View) {
         readyKey = key; lastStage = view.status.stage; readySince = Date.now();
     }
     if (errors.length) state('');
-    else if (view.quote.connection_health === 'CONNECTING' || view.status.stage === 'loading') state('Loading');
+    else if (view.quote.connection_health === 'CONNECTING') state('Loading');
+    else if (view.status.refreshing) state('Refreshing');
+    else if (view.status.stage === 'loading') state('Loading');
     else if (view.status.stage === 'basic') state('Ready', 'basic');
     else state(Date.now() - readySince < 3000 ? 'Ready' : '', 'full');
     document.querySelectorAll<HTMLElement>('.quality').forEach(node => { node.hidden = !errors.length; node.title = errors.join('\n'); });

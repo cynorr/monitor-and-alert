@@ -2,6 +2,19 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-06：Longbridge 前复权与近期窗口缓存
+
+环境：本机 macOS、Python 3.13.1、Longbridge SDK 5.0.0、TypeScript；美东 2026-10-06 Regular。使用正式 runtime、真实 49 个 Focus 与当前 Holdings，共 54 个去重行情标的；没有新增证券、修改名单或账户，没有运行 mock 验证。
+
+- 启动前确认旧服务已停止，删除正式、旧布局与 Scan Mock 的全部 Longbridge NoAdjust K 线库及 sidecar，共 6,934,826 根旧柱；同时删除旧 Longbridge OHLC 比较日志、状态文件与验收报告。Massive 原始数据及库、人工名单、持仓与 Alert 业务数据保留。新库只通过真实官方 ForwardAdjust 请求建立。
+- 11:31 ET 启动真实 Monitor，Quote 连接 54 个标的。6 个标的首轮暂缺最新 closed 5m，按原回补规则在后续实际收盘轮次恢复；11:35 ET 后 270 个窗口均完成，待处理与错误归零。Quote 与持仓刷新持续运行。
+- 11:40:08 ET 只读核验：54 个标的均为完整 Ready，270 个窗口；257,753 根存储柱逐根通过实际 Regular 时间网格、closed、OHLC 正数有限和整数成交量校验。AGEN 5m 缓存与图表都返回 1001 根且逐值一致；最新批次中54份为count=2，说明盘中增量正常追加。5秒实际WebSocket收到24份4h图表更新，首份有完整历史，后续有active；Holdings没有loading或error。
+- 重启为原生 Market Monitor.app。AGEN 5m 从真实旧窗口1001根替换为新响应999根：3个旧窗口外时间戳删除，1根新closed加入，forming未落盘。最终54个标的再次全部Ready、Quote连接正常；原生通知状态为available、authorized、sound=true，未发送测试通知。
+- 两次有界真实官方Daily读取：AGEN与GPRO各999根closed OHLCV/turnover与正式缓存逐值一致。短暂切Scan后AGEN日图独立匹配Massive自身库，active为空；3秒内后台Quote增加77次，Holdings和Alert仍启用。结束恢复Monitor，原生服务继续运行。
+- 浏览器核对实际双图、指标、报价和Holdings显示。`npm run build --prefix ui`、Python编译及`git diff --check`通过；仅同步已有用例中失效的缓存契约与移除旧迁移/撤下修订要求，没有新增或运行mock用例。Longbridge唯一完整数据要求为[longbridge-data.md](longbridge-data.md)，其他入口改为引用。
+
+未覆盖：真实连续跨交易日与开盘边界、公司行动当天、休眠/断线、供应商非法响应和物理断电；没有人为故障注入、价格触发或通知投递验证。本轮盘中成功不能替代这些场景的实际运行证据。
+
 ## 2026-10-06：Massive 状态与 Refresh 简化
 
 环境：本机 macOS，Python 3.13.1、TypeScript 5.9.3；真实输入为正式runtime的2026-10-05 Daily SQLite、raw、split和已生成截面。没有启动/重启正式服务，没有调用Massive、Longbridge或SnapTrade接口。

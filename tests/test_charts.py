@@ -1,6 +1,5 @@
 import asyncio
 import json
-import sqlite3
 import time
 from datetime import datetime
 from types import SimpleNamespace
@@ -17,7 +16,7 @@ from data_service.indicators import series, preview, daily_summary
 from data_service.service import DataService
 from data_service.store import BarStore, Bar
 from data_service.broker import RateLimiter
-from test_data_service import cal, store, at, bar, raw, install_batch
+from test_data_service import cal, store, at, bar, raw
 
 
 def quote(ts, price=11, volume=100, session='Intraday'):
@@ -89,12 +88,8 @@ def test_live_ema_uses_closed_anchor_and_sma_requires_50():
     assert len(series(rows)['series']['ema10']) == 40
 
 
-def test_turnover_migration_and_indicator_invalidation(tmp_path, cal):
-    path = tmp_path / 'old.sqlite3'
-    db = sqlite3.connect(path)
-    db.execute('CREATE TABLE bars(symbol TEXT, timeframe TEXT, ts INTEGER, open REAL, high REAL, low REAL, close REAL, volume INTEGER, PRIMARY KEY(symbol,timeframe,ts))')
-    db.close()
-    store = BarStore(path, cal, {'PAYS.US'})
+def test_turnover_and_indicator_invalidation(tmp_path, cal):
+    store = BarStore(tmp_path / 'bars.sqlite3', cal, {'PAYS.US'})
     try:
         now = at('2026-09-18T12:00')
         days = cal.completed_days(now, 20)
@@ -125,7 +120,7 @@ def test_bad_turnover_falls_back_without_rejecting_valid_ohlc(store, cal):
         async def candles(self, *args, **kwargs):
             return [SimpleNamespace(**vars(raw(ts)), turnover=float('nan'))]
     batch = asyncio.run(BarDownloader(Fake(), store, cal, clock=lambda: ts + 300).fetch('PAYS.US', '5m'))
-    assert not batch['rejected']
+    assert batch['returned_count'] == 1
     assert store.bars('PAYS.US', '5m')[0].turnover is None
 
 
@@ -190,17 +185,6 @@ def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
         service.store.close()
 
 
-def test_rejected_prefix_cannot_supply_live_volume(store, cal):
-    now = at('2026-09-18T09:41')
-    rows = install_batch(store, cal, now, count=2)
-    batch = store.batch('PAYS.US', '5m')
-    batch['rejected'] = [{'ts': rows[0].ts, 'error':'official revision invalid'}]
-    store.upsert([], now, batch)
-    cache = ChartCache(store, cal)
-    cache.apply_quote('PAYS.US', quote(now))
-    assert cache.forming('PAYS.US', '5m', now)['volume'] is None
-
-
 def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
     from data_service.quotes import QuoteService
     now = int(time.time()) - 3
@@ -215,18 +199,6 @@ def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
     assert q.values['PAYS.US']['Post']['last_price'] == 12
     assert q.values['PAYS.US']['Intraday']['cumulative_volume'] == 100
     assert q.push_count == 0
-
-
-def test_incremental_valid_revision_clears_rejection(store, cal):
-    now = at('2026-09-18T09:41')
-    rows = install_batch(store, cal, now, count=2)
-    batch = store.batch('PAYS.US', '5m')
-    batch['rejected'] = [{'ts': rows[0].ts, 'error':'invalid'}]
-    store.upsert([], now, batch)
-    class Fake:
-        async def candles(self, *args, **kwargs): return [raw(rows[0].ts)]
-    asyncio.run(BarDownloader(Fake(), store, cal, clock=lambda: now).fetch('PAYS.US', '5m', count=2))
-    assert store.batch('PAYS.US', '5m')['rejected'] == []
 
 
 def test_broker_request_budget_shared_by_all_callers():

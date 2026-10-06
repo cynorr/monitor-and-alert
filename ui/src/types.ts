@@ -109,6 +109,7 @@ export type View = {
     status: {
         stage: 'loading' | 'basic' | 'full';
         errors: string[];
+        refreshing?: boolean;
     };
 };
 export function extendedQuote(quote?: Quote) {

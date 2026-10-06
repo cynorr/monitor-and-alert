@@ -29,7 +29,7 @@ def parser():
     result.add_argument('--date', help='Completed trading date; scan defaults to upstream metadata.completed_date')
     result.add_argument('--force', action='store_true', help='Force the Massive splits/bars/features refresh; existing raw daily files are kept')
     result.add_argument('--mock-scan', action='store_true', help='Label the explicitly supplied daily data as synthetic')
-    result.add_argument('--symbols', nargs='+', help='Optional SUBSET of current focus/wait tickers')
+    result.add_argument('--symbols', nargs='+', help='Optional SUBSET of current Focus tickers')
     result.add_argument('--region', choices=('cn', 'global'), default='cn')
     result.add_argument('--port', type=int, default=8765)
     result.add_argument('--cors-origin', help='Optional exact origin of local frontend')

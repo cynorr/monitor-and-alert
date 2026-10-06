@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 import time
 import uuid
 from dataclasses import asdict, dataclass
@@ -42,7 +41,7 @@ class DataService:
         self.calendar = calendar or TradingCalendar()
         self.store = BarStore(bars_path or runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
         self.validator = DataValidator(self.store, self.calendar)
-        self.charts = ChartCache(self.store, self.calendar)
+        self.charts = ChartCache(self.store, self.calendar, ready=self.window_ready)
         self.alerts = alerts
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
         self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
@@ -50,6 +49,7 @@ class DataService:
                                    on_reset=alerts.reset if alerts else None) if broker else None
         self.run_id = uuid.uuid4().hex
         self.started_at = int(self.now())
+        self.session = self.calendar.window_session(self.started_at)
         self.focus = (self.symbols[0] if self.symbols else '', '5m')
         self.sync = {(symbol, tf): SyncState() for symbol in self.symbols for tf in PHASES}
         self.workspace = None
@@ -159,11 +159,20 @@ class DataService:
             self.alerts.reset()
         for active in self.charts.active.values():
             active['volume'] = None
+        self.refresh_windows()
+
+    def refresh_windows(self):
         for state in self.sync.values():
             state.pending = state.refresh = True
             state.complete = False
             state.due = state.attempt = 0
             state.limit = 4
+
+    def window_ready(self, symbol, tf, now=None):
+        now = int(self.now()) if now is None else now
+        if self.broker is None:
+            return self.validator.check(symbol, tf, now)['complete']
+        return self.session == self.calendar.window_session(now) and self.sync[symbol, tf].complete
 
     def apply_quote(self, symbol, quote):
         if self.alerts:
@@ -185,12 +194,15 @@ class DataService:
         count = 1000 if state.refresh else 2
         state.refresh = False
         try:
-            await self.downloader.fetch(*key, count=count, background=state.background)
+            batch = await self.downloader.fetch(*key, count=count, background=state.background)
+            if batch is None:
+                state.refresh = state.pending = True
+                state.complete = False
+                state.due = 0
+                return
             check = self.validator.check(*key, int(self.now()))
             if not check['complete']:
                 raise ValueError('; '.join(check['errors']))
-        except sqlite3.Error:
-            raise
         except Exception as exc:
             state.error = str(exc)
             state.complete = False
@@ -210,6 +222,10 @@ class DataService:
             state.attempt, state.limit, state.due = 0, 4, 0
 
     def _schedule(self, now):
+        session = self.calendar.window_session(now)
+        if session != self.session:
+            self.session = session
+            self.refresh_windows()
         targets = {tf: self.calendar.latest_closed(tf, now) for tf in PHASES}
         for (symbol, tf), state in self.sync.items():
             if state.pending or state.task is not None or state.target == targets[tf]:
@@ -273,16 +289,18 @@ class DataService:
             completed = [tf for tf, check in checks.items() if check['complete']]
             errors = [f"{tf}: {error}" for tf, check in checks.items() for error in check['errors']]
         else:
-            completed = [tf for tf in PHASES if self.sync[symbol, tf].complete]
+            completed = [tf for tf in PHASES if self.window_ready(symbol, tf, now)]
             errors = [f"{tf}: {self.sync[symbol, tf].error}" for tf in PHASES if self.sync[symbol, tf].alert]
         level = 'full' if len(completed) == len(PHASES) else 'basic' if all(tf in completed for tf in ('1d', '5m')) else 'loading'
-        return {'stage': level, 'errors': errors}
+        refreshing = level == 'loading' and any(
+            tf not in completed and self.store.batch(symbol, tf) for tf in ('1d', '5m'))
+        return {'stage': level, 'errors': errors, 'refreshing': bool(refreshing)}
 
     def quote(self, symbol, now):
         result = self.quotes.output(symbol, now) if self.quotes else {
             'symbol': symbol, 'regular': None, 'extended': {}, 'connection_health': 'DISCONNECTED', 'error': None}
         regular = result['regular']
-        if regular:
+        if regular and self.window_ready(symbol, '1d', now):
             day = datetime.fromtimestamp(regular['timestamp'], ET).date()
             previous = next((b['close'] for b in reversed(self.charts.closed(symbol, '1d')[1])
                              if datetime.fromtimestamp(b['time'], ET).date() < day), None)
@@ -343,13 +361,8 @@ class DataService:
             tf = query.get('timeframe', ['5m'])[0]
             if tf not in PHASES:
                 raise ValueError('timeframe must be 1d, 5m, 15m, 30m or 1h')
-            limit = int(query.get('limit', ['1000'])[0])
-            if not 1 <= limit <= 10000:
-                raise ValueError('limit must be 1..10000')
-            start, end = int(query.get('from', ['0'])[0]), int(query.get('to', [str(now)])[0])
-            if start > end:
-                raise ValueError('from must not exceed to')
-            return {'symbol': symbol, 'timeframe': tf, 'adjust_type': 'NoAdjust',
+            return {'symbol': symbol, 'timeframe': tf, 'adjust_type': 'ForwardAdjust',
                     'session': 'regular', 'closed_only': True,
-                    'bars': [bar_row(b) for b in self.store.bars(symbol, tf, start, end, limit)]}
+                    'current': self.window_ready(symbol, tf, now),
+                    'bars': [bar_row(b) for b in self.store.window(symbol, tf)]}
         raise KeyError(path)

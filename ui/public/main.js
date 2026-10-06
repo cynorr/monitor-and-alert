@@ -129,7 +129,11 @@ function showState(view) {
     }
     if (errors.length)
         state('');
-    else if (view.quote.connection_health === 'CONNECTING' || view.status.stage === 'loading')
+    else if (view.quote.connection_health === 'CONNECTING')
+        state('Loading');
+    else if (view.status.refreshing)
+        state('Refreshing');
+    else if (view.status.stage === 'loading')
         state('Loading');
     else if (view.status.stage === 'basic')
         state('Ready', 'basic');

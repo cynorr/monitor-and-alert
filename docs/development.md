@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-06。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-10-06。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -21,9 +21,9 @@
 | broker.py | 单 SDK context、static_info 添加验证、最近 K 线、Quote 请求、全局/后台请求预算 |
 | snaptrade.py | 独立异步签名GET、指定账户、10次/滚动分钟预算、原始快照获取与成功提交；不提供HTTP服务、不调用Longbridge |
 | holdings.py | 买卖归属、余仓与当日清仓、Decimal估值/日基准/Days、30秒刷新与失败保留；唯一数据需求见holdings-data.md |
-| calendar.py | UTC/ET、XNYS、实际闭合边界、5m 到 4h 时间网格 |
-| downloader.py | 每次一页 fetch/parse/validate/写入，追加 OHLC 比较日志 |
-| store.py | 官方 bars、最近窗口批次、事务及 revision |
+| calendar.py | UTC/ET、XNYS、交易日刷新阶段、实际闭合边界、5m 到 4h 时间网格 |
+| downloader.py | 最近窗口 fetch/parse/validate；完整响应成功后替换、增量覆盖，追加 OHLC 比较日志 |
+| store.py | 逐根官方 bars、最新成功批次、单窗口普通提交及 revision |
 | validator.py | 最近窗口完整性检查与缓存；不联网、不写状态文件 |
 | service.py | 每个 ticker/官方周期一份 SyncState，排序、执行、重试、恢复；API 组合 |
 | quotes.py | 共用 Quote 标准化入口、时段最新值、snapshot/watchdog、恢复通知 |
@@ -99,9 +99,9 @@ latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)�
 
 只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有Quote active、Intraday或Ready实时状态；Daily复用同一个Panel。
 
-indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。指标只消费已选来源的价格，Massive拆股复权与Longbridge NoAdjust结果允许不同。
+indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。指标直接消费已选来源的价格；不同供应商的结果允许不同。
 
-复权契约：Longbridge broker.py继续显式请求AdjustType.NoAdjust与TradeSessions.Intraday，保持官方原始OHLC与整数成交量。Massive复权/量/turnover的唯一要求见massive-data.md。两源不互相验证，读取、指标和图表不再复权；Longbridge未来复权未实现。pandas ewm(adjust=False)仅是加权算法参数。
+来源契约分别只在 [longbridge-data.md](longbridge-data.md) 与 [massive-data.md](massive-data.md) 维护。broker.py落实Longbridge请求口径；读取、指标和图表直接使用所属来源的数据。pandas ewm(adjust=False)仅是加权算法参数。
 
 38项条件目录仅ui/src/filter-catalog.json一份，后端读取该文件验证保存契约，后端list_rules.matches_filters执行名单分类，前端filters.ts执行草稿显示筛选，二者共享相同边界/缺失语义。保存值不取整；旧maxExclusive语义保留到主动编辑。Tag草稿不写盘，Save写完整preferences后才更新内存，失败保留草稿；不建立长期多版本猜测/迁移框架。
 
@@ -119,7 +119,7 @@ pipeline-status.json维护daily/splits/bars/features，目标均为daily.target_
 
 Workbench.view及Monitor图表GET带可空security_name，来源仅为RuntimePaths.symbol_directory；按mtime/大小/inode缓存，文件变化无需bar revision变化也能刷新名称。缺失或损坏返回null，禁止名称查询扩大券商白名单或触发网络。前端用textContent显示并在清图时隐藏，具体绘制统一见ui.md。
 
-两个Scan复制项目已完成数据与功能迁移并删除；保留的schwab-review只作参考，正式代码不import或执行它。Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。正式服务不连接或合并旧库历史，新Longbridge库按既有最近1000根流程初始化。
+两个Scan复制项目已完成数据与功能迁移并删除；保留的schwab-review只作参考，正式代码不import或执行它。Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。正式服务的Longbridge缓存按唯一数据要求初始化。
 
 ## Workspace 与动态名单
 
@@ -137,33 +137,23 @@ Holdings另由Workbench持有单个controller与轮询task，正式服务两种�
 
 DataService.tickers仍只包含workspace成员，board只输出Focus；holdings_symbols独立接收已接受余仓与当日清仓复盘批次。唯一_update_symbols按两来源并集更新store/broker.allowed、Quote范围和SyncState，同ticker保持既有任务。它不调用static_info、不检查workspace归属、不写workspace。Holdings只在账户成功刷新时重建买卖关联；约1Hz list_state读取用已有Decimal批次标量与Quote重新估值，不重复匹配流水。前端selectionSource与buy_ids批次key分离于symbol，Watchlist更新不得覆盖持仓选择，HTTP/WS图表继续用原request_id/mode/socket保护。
 
-SnapTrade固定请求配置account_id，不通过/accounts假设仅一个账户。成功核对后原始缓存只保存runtime/holdings/latest.json一份；activities分页仅属于SnapTrade成交历史，不改变K线count=1000约束。每轮重读sequences.txt/merge_buys.txt，明确关联与原错误检查不变。SnapTrade及Longbridge拥有独立额度，均在同一Python进程内运行，不新增监听端口或服务。
+SnapTrade固定请求配置account_id，不通过/accounts假设仅一个账户。成功核对后原始缓存只保存runtime/holdings/latest.json一份；activities分页仅属于SnapTrade成交历史，不改变Longbridge数据要求。每轮重读sequences.txt/merge_buys.txt，明确关联与原错误检查不变。SnapTrade及Longbridge拥有独立额度，均在同一Python进程内运行，不新增监听端口或服务。
 
-## 同步与状态
+## Longbridge 同步与缓存实现
 
-`service.sync[(symbol, timeframe)]` 是唯一任务记录。首次 pending+refresh；执行时 refresh 为 count=1000，其余 count=2。请求返回后使用同一窗口验证。正常完成记录 target，调度器发现新闭合目标时入队；跨多个闭合边界、Quote 恢复或循环暂停超过 30 秒重新请求最近 1000。
+获取、刷新时机、替换、失败与 Ready 的完整规则只在 [longbridge-data.md](longbridge-data.md) 维护。`service.sync[(symbol, timeframe)]` 是唯一任务记录；`calendar.window_session` 给出美东交易日与开盘前/开盘后刷新阶段。scheduler先处理阶段变化，再处理closed目标；同一任务在途时不重复请求，阶段变化或恢复到达不能被旧请求完成覆盖。reconcile复用调度器，所有任务完成或本轮耗尽即退出；诊断GET不改变任务。
 
-失败原地重试，首次最多 4 次请求，耗尽后下一个实际 5m 收盘+2 秒开启最多 3 次的新一轮。状态查询不改变任务。重连到达在途请求期间不能被该请求完成覆盖。reconcile 共用调度器，所有任务完成或本轮耗尽即退出。
+`downloader.fetch` 在请求前后核对刷新阶段，响应通过逐根校验及最新closed目标检查后才提交。`store.upsert(replace=True)` 用已有SQLite连接的一次普通提交替换单个symbol/周期，普通增量按主键覆盖。bars保持共用逐根结构；batches仅含symbol、timeframe和payload，payload记录成功请求的阶段、时间与数量。数据库采用WAL/NORMAL；不设行数裁剪、历史水位、迁移或备份框架。
 
-全局滑动窗口 10 次/秒、5 在途；后台历史 8 次/秒、3 在途。等待后台额度不持有 limiter 锁；后台信号量在全局信号量之前取得。调度器也不提前发起超过 3 个后台历史任务，保留两个可插队槽。Quote 请求和正常到期更新走全局预算。
+bars revision在行内容变化或窗口替换后递增。validator按revision、closed目标及刷新阶段缓存结果，不扫描历史连续性；共用Bar校验只在 [upstream-daily-data.md](upstream-daily-data.md) 定义。图表依赖revision与周期当前状态，比较最终显示序列，内容未变不重发。未刷新周期的旧窗口继续独立展示，不参与当前active、跨周期拼合和本地Daily报价基准修正。
 
-UI 契约仅 `status: {stage: loading|basic|full, errors: string[]}`。stage 根据五份任务最近的成功状态派生；每根正常新 bar 的 2 秒等待不会重置 Ready。未完成/恢复失败不宣称已验证。详细 `complete/target/latest/count/missing/errors` 只在诊断接口提供，不再暴露旧六组 readiness 标记。
-
-## 存储与数据校验
-
-Longbridge SQLite WAL/NORMAL，bars 主键 (symbol,timeframe,ts)，只允许 1d/5m/15m/30m/1h。OHLC 必须正数有限；volume 必须非负整数；必须 regular 且已经闭合。唯一range检测是`Bar.invalid_range`，用于downloader/Scan生成的JSONL追加。不得 clamp 原值。
-
-旧库保留，turnover 缺列时仅 ALTER ADD COLUMN。batches 继续使用旧表结构，run_id 列留空字符串以兼容旧表；payload 仅保存最近窗口起点、请求/返回数量、as_of 和无法使用的返回项。旧 metadata 表不再读取/维护，也不破坏已有表。旧 data_ready.json / history_symbol_usage.json 均不再读取或更新。
-
-count=1000 返回确定新的 window_start；count=2 延续窗口。实际读取最多最近 1000 根并过滤起点之前的旧记录。历史空档不检查；缺失仅检查最新应闭合目标。重复/无法绘制的修订撤下旧值，合法新值可恢复；仅 range 矛盾永不撤下。
-
-官方数据值实际改变才增加 bars revision；批次/质量变化增加质量 revision。图表比较最终显示序列，内容未变不重发。validator 按质量 revision 和当前目标缓存结果，HTTP 不重复扫描不变数据。返回数据逐根合法性检查在数据变化后执行；不建立持久化完整性水位。
+UI契约为 `status: {stage: loading|basic|full, errors: string[], refreshing: boolean}`。正常closed等待不重置Ready；刷新状态由现有任务派生。详细complete/target/latest/count/missing/errors只在诊断接口提供。显示规范见 [Chart status](chart-ui.md#chart-status)。
 
 ## 合成和时段
 
 resample 接受统一 5m 行结构，按 calendar 网格分组，O首/H最大/L最小/C末，量与额相加。闭合组必须有齐全的 5m 槽；活跃组可展示当前近似值。按交易日分组，处理 DST、提前收盘、常规尾根。2h/4h 从不读取官方 1h 作为基础，也不发额外历史请求。
 
-15m/30m/1h 显示按 timestamp 合并“5m 合成 + 官方优先”，官方到达即通过现有 revision 消息替换。5m 临时 candle 从本进程收到的第一条 Quote 起算；更大活跃 candle 也复用 resample。合成和临时 candle 绝不写入官方 bars。
+15m/30m/1h在相关来源周期完成当前阶段刷新后，按timestamp合并“5m合成 + 官方优先”，官方到达即通过现有revision消息替换。5m 临时 candle 从本进程收到的第一条 Quote 起算；更大活跃 candle 也复用 resample。合成和临时 candle 绝不写入官方 bars。
 
 Quote 接收不按 UI 选择筛选；regular/pre/post/overnight 共用 apply，按时段保留最新值。snapshot 归一化后走同一入口。倒序拒绝、旧 callback 代次保护继续保留。扩展时段只改价格展示，不改 regular candle。
 
@@ -171,7 +161,7 @@ Quote 接收不按 UI 选择筛选；regular/pre/post/overnight 共用 apply，�
 
 `ChartCache.volume_baselines[symbol]` 仅存当前 5m 的 Quote 起点累计量。跨入相邻桶时取上一条 regular Quote；每次新 Quote 做一次减法，重复推送不累加。首次盘中启动、跨桶缺失、恢复或累计量回退时清空基准；无基准显示 null，不用全天累计量兜底。恢复同时清掉旧 Quote，避免把断线期间的增量归给新桶。
 
-`closed_volume(symbol, tf, start, end)` 只算 active 所在周期内 `[start, 当前5m起点)` 的官方 closed 量，按 1h/30m/15m/5m 贪心覆盖，每段恰好使用一次，缺口不能跳过。较大周期可覆盖缺少的 5m；跨越 end 的 bar 不参与。每个 symbol/tf 缓存一个总量（或 null），签名为起止时间及四个官方周期的 store revision；新柱、修订、撤回或换桶自动失效。不为每次 Quote 读库或重算历史 sum，OHLC 的统一 resample 不重复计算这份成交量。
+`closed_volume(symbol, tf, start, end)` 只算 active 所在周期内 `[start, 当前5m起点)` 的官方 closed 量，按 1h/30m/15m/5m 贪心覆盖，每段恰好使用一次，缺口不能跳过。较大周期可覆盖缺少的 5m；跨越 end 的 bar 不参与。每个 symbol/tf 缓存一个总量（或 null），签名为起止时间及四个官方周期的store revision与当前状态，只使用已完成当前阶段的周期；新柱、修订、撤回或换桶自动失效。不为每次 Quote 读库或重算历史 sum，OHLC 的统一 resample 不重复计算这份成交量。
 
 Daily 保持累计量；2h/4h 的闭合 OHLCV 仍只由 5m 合成。这里的大周期优先只用于 active 成交量的已闭合部分。临时量基于收到的 Quote，推送跨边界合并或口径差异可能导致其与最终官方量有差别，闭合后以官方数据为准。
 

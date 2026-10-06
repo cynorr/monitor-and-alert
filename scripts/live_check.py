@@ -70,7 +70,7 @@ async def run(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--symbols', nargs='+', required=True, help='Subset of current workspace focus/wait')
+    parser.add_argument('--symbols', nargs='+', required=True, help='Subset of current workspace Focus')
     parser.add_argument('--duration', type=float, default=60)
     parser.add_argument('--port', type=int, default=28766)
     args = parser.parse_args()

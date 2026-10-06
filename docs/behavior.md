@@ -10,7 +10,7 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 ## 启动与接收
 
-正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote，同时加载历史；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。每个 ticker 获取 Daily、5m、15m、30m、1h 最近 1000 根。正在形成的 candle 被过滤，盘中可能剩 999 根；短历史照常显示。没有分页，不连接旧历史，不追查历史断档（包括返回窗口内部的旧空档）。
+正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护。
 
 Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 更新最新价格与持仓估值。页面选股不改变券商订阅范围。关闭网页不停止后端。
 
@@ -28,7 +28,7 @@ Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 
 
 Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus 在Scan中也使用该上游来源；切回Monitor才使用runtime/longbridge/bars.sqlite3与实时Quote。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
 
-Massive 数据要求、拆股/整数成交量、来源时段与筛选配置统一见 [massive-data.md](massive-data.md)。Longbridge仍显式请求NoAdjust、regular并保存整数成交量。读取、指标和图表不再做复权；两源共享格式与计算，但不拼接或交叉验证。Longbridge复权不在本版本范围。Daily Symbol右侧可以显示本地Nasdaq目录名称，缺失正常留空，两模式共用。
+Massive 数据要求、拆股/整数成交量、来源时段与筛选配置统一见 [massive-data.md](massive-data.md)。Longbridge 数据要求统一见 [longbridge-data.md](longbridge-data.md)。读取、指标和图表不再做复权；两源共享格式与计算，数据互不干涉。Daily Symbol右侧可以显示本地Nasdaq目录名称，缺失正常留空，两模式共用。
 
 全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 补齐并打开最新可用日，完成的步骤跳过，也不重算日期下拉框当前选中的旧日。指定日重算只由 CLI 的 scan --date D 执行；不带 --date 的 scan 命令重算本地库最新完成日。GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读，普通Refresh仅生成缺失的最新日截面。日期下拉框仅显示已生成的日期。
 
@@ -56,25 +56,11 @@ Add to Focus清除排除状态并开始订阅；Exclude for 7 days（包括行�
 
 搜索仍使用列表上方Search与/入口。Monitor通过同一Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整 section，本次不新增 Quote 形态规则。保存失败回退内存并显示错误。
 
-一个watchdog原生事件监听days，新日期workspace出现自动跟随；Monitor始终使用最新名单，历史Scan只读。外部修改自动重读，Focus变更立即同步行情范围；已有行情状态复用，排序/主section移动不重下载。只有同时不在Focus和Holdings才退订；历史SQLite不删除。两类实时列表都为空时清空图表并保留搜索入口。`--symbols`会话始终限制指定Focus子集并禁用编辑；模拟器只写临时名单。
+一个watchdog原生事件监听days，新日期workspace出现自动跟随；Monitor始终使用最新名单，历史Scan只读。外部修改自动重读，Focus变更立即同步行情范围；已有行情状态复用，排序/主section移动不重下载。只有同时不在Focus和Holdings才退订；已有行情缓存保留；重新加入按 Longbridge 数据要求初始化。两类实时列表都为空时清空图表并保留搜索入口。`--symbols`会话始终限制指定Focus子集并禁用编辑；模拟器只写临时名单。
 
-## 请求顺序与恢复
+## 行情同步与数据质量
 
-订阅恢复和到期 closed 更新优先；选中 ticker 的 5m、Daily 优先于其他历史，然后所选官方分钟周期。其余按 5m、Daily、15m、30m、1h 推进。
-
-全局每秒最多 10 次、最多 5 个请求在途（[官方额度](https://open.longbridge.com/docs#rate-limit)）。10 是总量，不与 5 相乘；count=2 的一次调用仍只算一个请求。后台历史最多每秒 8 次、占 3 个槽，给交互保留 2 个请求/秒和 2 个在途位置。在途请求不强制取消，同一个 ticker/周期不会重复下载。
-
-正常每根收盘后 2 秒调用最近 K 线 count=2，覆盖“最新一根还在形成”的情况；只保存已闭合数据。启动、检测到重连/休眠、跨过多个边界以及失败补缺，均使用 count=1000。没有第二个历史 API。
-
-本轮缺失或请求失败后再重试 3 次（间隔 2/5/10 秒）。仍失败则显示错误并等待下一个 5m 收盘后 2 秒，再最多尝试 3 次。每轮对每个失败周期单独执行，其他 ticker 继续运行。成功后清除错误。只要求最新应闭合的目标存在；历史空档可能来自无成交或停牌，直接接受，不扫描连续性、不触发补缺。
-
-SDK 负责底层连接恢复；应用保留 30 秒 snapshot、开市无全名单推送 watchdog。应用重新订阅成功时触发统一回补；SDK 内部不可见的短重连由 snapshot 与 closed 目标检查补足。
-
-## OHLC 原值与比较日志
-
-如果价格正数且有限，但 Open/Close 超出 Low/High，或 High 小于 Low，原值仍入库和绘图。上下界检测只追加到 runtime/invalid_ohlc.jsonl：ticker、周期、交易时段、bar 起止 Unix 秒与 ET、获取时间、原始 OHLCV。每次获取重复追加，不去重、不修复、不回补、不显示感叹号。
-
-不使用 max/min 强制修正官方 OHLC。非数字、非法时间戳、负 volume 等无法正常使用的数据仍被拒绝；必要位置没有可用 bar 时按缺失恢复。turnover 缺失不影响日 K；ADV 统一使用 close × volume。
+Longbridge 调度、重试、恢复与窗口状态统一见 [longbridge-data.md](longbridge-data.md)。各来源的共用 Bar 字段、结构校验与 OHLC 原值规则见 [upstream-daily-data.md](upstream-daily-data.md)。
 
 ## 图表周期与指标
 
@@ -84,12 +70,10 @@ Intraday 初始周期按美东开盘经过时间选择，之后保留手工选�
 
 2h/4h 始终从 5m 合成。15m/30m/1h 缺少官方 bar 时，用相同函数合成替代；官方到达后随下一次现有 WebSocket 更新直接替换，不另等收盘。按实际开盘时间分组，不跨日，尾根按收盘时间结束。闭合合成 candle 的 5m 前缀缺失时不编造完整结果。
 
-合成只改变周期，不扩展历史时间跨度：1000 根 5m 约覆盖 13 个普通交易日，2h/4h 也只有这段历史。均线样本不足时不显示该线。
+合成只改变周期，不扩展已加载窗口的时间跨度。均线样本不足时不显示该线。
 
 两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 `close × volume` 均值；停牌/稀疏记录按实际根数取窗口，不使用 turnover 改变公式。Intraday active volume = 本根内已闭合部分的量 + 当前 5m 内 Quote 累计量的增量。已闭合部分优先按 1h → 30m → 15m → 5m 无重叠拼接，只使用完整落在本根起点到当前 5m 起点之间的官方 bar。结果缓存为标量，Quote 更新不重新求和。不能用全天 Quote 累计量减历史 K 线总量，因为两者累计差异会全部堆到 active。盘中启动、恢复、跳过时间桶或累计量回退时，没有可靠起点的 active volume 暂空；跨入下一连续 5m 后恢复。Daily 仍使用官方累计量。active 是按 Quote 观测时刻估算的临时量，收盘后由官方 K 线替换。上下界矛盾也可能体现在图表及派生指标中，因为本版保留官方原值。
 
 ## Monitor 页面状态
 
-完成状态先要求Daily + 5m，再要求五个官方周期。回补重试耗尽或连接失败显示原因。Loading、Ready颜色与隐藏时间、图表错误图标的唯一显示规范见 [Chart status](chart-ui.md#chart-status)。
-
-2h/4h 和临时合成结果不算官方周期下载完成。错误仍在重试时保留已有图表；成功即恢复。OHLC 上下界矛盾不影响 Ready、不进入错误提示。
+刷新与 Ready 的数据含义见 [Longbridge 数据要求](longbridge-data.md#调度失败与状态)；Loading、Refreshing、Ready 与错误的显示只在 [Chart status](chart-ui.md#chart-status) 维护。
