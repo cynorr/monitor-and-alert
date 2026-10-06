@@ -35,12 +35,14 @@ def test_mutations_persist_order_dates_and_preserve_unowned_fields(tmp_path):
     original = copy.deepcopy(ws.data)
     ws.move_ticker('NVDA', 'focus', 0)
     saved = json.loads(path.read_text())
-    assert saved['orders']['focus'] == ['NVDA', 'PAYS']
-    assert saved['statuses']['NVDA'] == {'status': 'focus', 'status_at': date.today().isoformat(), 'extra': 1}
+    assert saved['orders']['focus'] == ['NVDA', 'PAYS', 'TSLA']
+    assert saved['statuses']['NVDA']['status'] == 'focus'
+    assert saved['statuses']['NVDA']['manual_section_date'] == date.today().isoformat()
     assert saved['statuses']['PAYS'] == original['statuses']['PAYS']
-    ws.move_ticker('NVDA', 'wait', 1)
-    assert ws.data['orders']['focus'] == ['PAYS'] and ws.data['orders']['wait'] == ['TSLA', 'NVDA']
-    assert ws.data['statuses']['NVDA']['status'] == 'wait'
+    ws.move_ticker('NVDA', 'unclassified', 2)
+    assert ws.data['orders']['focus'] == ['PAYS', 'TSLA', 'NVDA']
+    assert ws.data['statuses']['NVDA']['status'] == 'focus'
+    ws.keep_ticker('NVDA')
     before = path.read_bytes()
     assert not ws.add_ticker('NVDA', 'focus')
     assert before == path.read_bytes()
@@ -49,10 +51,12 @@ def test_mutations_persist_order_dates_and_preserve_unowned_fields(tmp_path):
     assert ws.data['statuses']['HID']['extra'] == 2
     ws.delete_ticker('HID')
     saved = json.loads(path.read_text())
-    assert 'HID' not in saved['statuses']
-    for key in ('version', 'extra', 'carried'):
+    assert saved['statuses']['HID']['status'] == 'excluded'
+    assert saved['statuses']['HID']['section'] == 'hidden'
+    assert saved['version'] == 3
+    for key in ('extra', 'carried'):
         assert saved[key] == original[key]
-    assert saved['orders']['hidden'] == []
+    assert saved['orders']['excluded'] == ['HID']
     assert saved['statuses']['TSLA'] == original['statuses']['TSLA']
 
 
@@ -270,7 +274,7 @@ def test_list_http_mutations_validation_failure_origin_and_empty_stream(tmp_path
                 response = await client.post(base + '/v1/list', json={'action': 'add', 'ticker': 'nvda', 'section': 'wait'})
                 assert response.status == 200
                 assert (await response.json())['board'][0]['ticker'] == 'NVDA'
-                assert json.loads(wsfile.path.read_text())['orders']['wait'] == ['NVDA']
+                assert json.loads(wsfile.path.read_text())['orders']['focus'] == ['NVDA']
                 message = await stream.receive_json(timeout=2)
                 assert message['board'][0]['ticker'] == 'NVDA'
                 await stream.send_json({'type': 'select', 'symbol': 'NVDA.US', 'timeframe': '5m', 'request_id': 7})

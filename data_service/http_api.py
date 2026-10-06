@@ -64,6 +64,7 @@ def create_app(service, cors_origin=None):
         await ws.prepare(request)
         sockets.add(ws)
         symbol, tf = service.focus
+        source = 'watchlist'
         request_id = 0
         revisions = {}
         context = service.run_id
@@ -71,6 +72,7 @@ def create_app(service, cors_origin=None):
         async def publish():
             nonlocal revisions, context
             last_board = 0
+            last_alerts = None
             try:
                 while not ws.closed:
                     if context != service.run_id:
@@ -78,8 +80,14 @@ def create_app(service, cors_origin=None):
                     if asyncio.get_running_loop().time() - last_board >= 1:
                         await ws.send_json({'type': 'list', **service.list_state()})
                         last_board = asyncio.get_running_loop().time()
+                    if hasattr(service, 'alert_state'):
+                        alerts = service.alert_state()
+                        signature = alerts['revision'], alerts['notification'], alerts['error']
+                        if signature != last_alerts:
+                            await ws.send_json({'type': 'alerts', **alerts})
+                            last_alerts = signature
                     if symbol in service.symbols:
-                        view = service.view(symbol, tf, revisions)
+                        view = service.view(symbol, tf, revisions, source=source)
                         revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
                         message = {'type': 'view', 'request_id': request_id, **view}
                         await ws.send_json(message, dumps=lambda v: json.dumps(v, allow_nan=False))
@@ -101,11 +109,14 @@ def create_app(service, cors_origin=None):
                         if payload.get('type') != 'select':
                             raise ValueError('Expected select message')
                         new_symbol, new_tf = payload['symbol'], payload['timeframe']
+                        new_source = payload.get('source', 'watchlist')
+                        if new_source not in ('watchlist', 'holdings'):
+                            raise ValueError('Unknown selection source')
                         if payload.get('mode') and payload['mode'] != ('scan' if service.mode == 'scan' else 'monitor'):
                             raise ValueError('Selection belongs to a previous mode')
                         new_id = int(payload['request_id'])
-                        service.select(new_symbol, new_tf)
-                        symbol, tf, request_id = new_symbol, new_tf, new_id
+                        service.select(new_symbol, new_tf, source=new_source)
+                        symbol, tf, source, request_id = new_symbol, new_tf, new_source, new_id
                         revisions = {}
                     except (ValueError, TypeError, KeyError, AttributeError) as exc:
                         await ws.send_json({'type': 'error', 'error': str(exc)})
@@ -122,7 +133,7 @@ def create_app(service, cors_origin=None):
 
     app.router.add_get('/v1/stream', socket)
     app.router.add_post('/v1/list', list_action)
-    app.router.add_post('/v1/{action:mode|scan|preferences}', list_action)
+    app.router.add_post('/v1/{action:mode|scan|preferences|alerts}', list_action)
     app.router.add_get('/v1/{resource}', api)
     app.router.add_get('/health', api)
     app.router.add_get('/', index)

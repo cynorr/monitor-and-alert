@@ -1,10 +1,12 @@
-import { $, money, compact, nyTime, extendedQuote, defaultTimeframe } from './types.js';
+import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
+import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
+import { AlertController } from './alerts.js';
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
@@ -17,9 +19,37 @@ const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), ap
 const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode = 'monitor', scanDate = '', modePending = false;
 let listRegularSession = false;
-const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (!rows.some(row => row.symbol === symbol))
+const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
+let waitingJump = null;
+let nativeEvent = location.hash.startsWith('#alert=') ? location.hash.slice(7) : '';
+const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async (selected) => {
+    const tf = timeframe;
+    if (appMode === 'scan' && scan.activeList !== 'focus')
+        await scan.showFocus();
+    applyList(await (await fetch('/v1/scan')).json());
+    if (selected)
+        select(selected, tf, selectionSource, holdingKey);
+}, jumpToAlert);
+async function jumpToAlert(event) {
+    if (!alerts.value?.eligible_symbols.includes(event.symbol))
+        throw new Error('Symbol is no longer in Focus or Holdings');
+    applyList(await post('mode', { mode: 'monitor' }));
+    await scan.showFocus();
+    if (socket?.readyState !== WebSocket.OPEN)
+        throw new Error('Chart connection unavailable');
+    const holding = holdings.forSymbol(event.symbol);
+    if (!watchlist.tickers.some(row => row.symbol === event.symbol && row.status === 'focus') && !holding)
+        throw new Error('Symbol is no longer available');
+    if (!holding)
+        watchlist.showSymbol(event.symbol);
+    select(event.symbol, timeframe, holding ? 'holdings' : 'watchlist', holding?.key ?? '');
+    await new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => { waitingJump = null; reject(new Error('Could not open chart')); }, 8000);
+        waitingJump = { symbol: event.symbol, resolve: () => { clearTimeout(timeout); waitingJump = null; resolve(); } };
+    });
+}
 function applyList(data) {
     const nextMode = data.app_mode ?? 'monitor';
     const changed = nextMode !== appMode || (nextMode === 'scan' && data.date !== scanDate);
@@ -32,6 +62,14 @@ function applyList(data) {
         button.disabled = modePending || (data.mode === 'simulation' && !data.app_mode);
     });
     $('mock-data').hidden = !data.mock;
+    const progress = $('scan-progress');
+    progress.hidden = !data.massive;
+    if (data.massive) {
+        const status = scanProgress(data.massive);
+        progress.textContent = status.text;
+        progress.title = status.title;
+        progress.classList.toggle('error', status.error);
+    }
     scan.update(data);
     if (changed) {
         symbol = '';
@@ -49,13 +87,13 @@ function applyList(data) {
         if (first)
             select(first.symbol, timeframe, 'holdings', first.key);
         else
-            select(data.board[0]?.symbol ?? '', timeframe, 'watchlist');
+            select(scan.visible(data.board)[0]?.symbol ?? '', timeframe, 'watchlist');
     }
     else if (!symbol && holdings.first()) {
         const first = holdings.first();
         select(first.symbol, timeframe, 'holdings', first.key);
     }
-    const labels = appMode === 'scan' ? ['Symbol', 'Price', 'ADR20', 'ADV20', ''] : ['Symbol', 'Last', 'Chg%', 'Ext', ''];
+    const labels = appMode === 'scan' ? ['Symbol', 'Price', 'ADR20', 'ADV20', 'Growth', 'Tags', ''] : ['Symbol', 'Last', 'Chg%', 'Ext', 'Growth', 'Tags', ''];
     Array.from($('list-columns').children).forEach((node, index) => { node.textContent = labels[index]; });
     if (changed && !symbol)
         select('', timeframe);
@@ -67,9 +105,16 @@ function state(text, kind = '') {
         node.className = 'state ' + kind;
     }
 }
+function showSecurityName(name) {
+    const node = $('daily-security-name'), text = name?.trim() ?? '';
+    node.textContent = node.title = text;
+    node.hidden = !text;
+}
 function showState(view) {
-    if (appMode === 'scan') {
-        state(view.date ?? '');
+    if (appMode === 'scan' || view.read_only_daily) {
+        $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
+        $('intraday-state').textContent = '';
+        document.querySelectorAll('.quality').forEach(node => { node.hidden = !view.status.errors.length; node.title = view.status.errors.join('\n'); });
         return;
     }
     const errors = [...view.status.errors, ...(view.quote.error ? ['Quote: ' + view.quote.error] : [])];
@@ -95,12 +140,18 @@ function apply(view) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
+    showSecurityName(view.security_name);
+    document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
         holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
     daily.render(view.charts['1d']);
-    if (appMode === 'monitor') {
+    if (appMode === 'monitor' && !view.read_only_daily) {
         intraday.render(view.charts[timeframe]);
         dayLink.restore();
+    }
+    else if (view.read_only_daily) {
+        intraday.reset('review/' + symbol);
+        $('intraday-empty').textContent = 'Add to Focus for live data';
     }
     const extended = extendedQuote(view.quote), quote = extended ?? view.quote.regular;
     document.querySelectorAll('.last-price').forEach(node => node.textContent = money(quote?.last_price));
@@ -112,19 +163,26 @@ function apply(view) {
     document.querySelectorAll('.adv').forEach(node => node.textContent = view.summary.adv20 == null ? '—' : '$' + compact(view.summary.adv20));
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
+    alerts.redraw();
+    if (waitingJump?.symbol === view.symbol && view.charts['1d'] && daily.rows.length)
+        waitingJump.resolve();
 }
 function select(next, tf, source = selectionSource, key = holdingKey) {
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
+    alerts.changeSymbol();
     selectionSource = source;
     holdingKey = source === 'holdings' ? key : '';
     timeframe = tf;
     ++epoch;
     currentView = null;
+    const preview = appMode === 'monitor' && isReviewSelection(watchlist.tickers.find(row => row.symbol === next), source);
+    document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = preview; });
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
+    showSecurityName();
     document.querySelectorAll('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
     document.querySelectorAll('.session,.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
@@ -140,7 +198,7 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
 }
 function sendSelection() {
     if (symbol && socket?.readyState === WebSocket.OPEN)
-        socket.send(JSON.stringify({ type: 'select', symbol, timeframe, request_id: epoch, mode: appMode }));
+        socket.send(JSON.stringify(selectionRequest(symbol, timeframe, epoch, appMode, selectionSource)));
 }
 function connect() {
     clearTimeout(reconnectTimer);
@@ -156,6 +214,17 @@ function connect() {
             const data = JSON.parse(event.data);
             if (data.type === 'list') {
                 applyList(data);
+                return;
+            }
+            if (data.type === 'alerts') {
+                alerts.update(data);
+                if (nativeEvent) {
+                    const event = alerts.value?.events.find(event => event.id === nativeEvent);
+                    if (event) {
+                        nativeEvent = '';
+                        void alerts.open(event);
+                    }
+                }
                 return;
             }
             const view = data;

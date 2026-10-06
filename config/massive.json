@@ -1,0 +1,7 @@
+{
+  "exclude_etfs": true,
+  "min_daily_bars": 50,
+  "adr20_min_pct": 5.0,
+  "adv20_min_usd": 5000000,
+  "rfl_top_n": 50
+}

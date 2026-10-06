@@ -1,10 +1,11 @@
 import { $ } from './types.js';
 import { post } from './api.js';
 import { FilterPanel, matchesFilters } from './filters.js';
-import { tagChanged, withSavedTag } from './tags.js';
-const groups = ['discover', 'focus', 'wait', 'hidden'];
-const rankFields = ['rfl1m_rank', 'rfl3m_rank', 'rfl6m_rank'];
+import { tagChanged, tagFiltersChanged, tagRole, withSavedTag } from './tags.js';
+import { TAG_ICONS, tagAppearance, tagLogo } from './tag-appearance.js';
+import { countBadge, rowTags } from './board.js';
 const rank = (row, field) => typeof row[field] === 'number' ? row[field] : Infinity;
+export const matchesTag = (row, tag, useAssigned = true) => (useAssigned && tag.id !== 'default' && rowTags(row).includes(tag.id)) || matchesFilters(row, tag.filters);
 export class ScanControls {
     updateList;
     changed;
@@ -18,11 +19,13 @@ export class ScanControls {
     editable = false;
     panel;
     pending = false;
+    serverRunning = false;
     discard;
     deleting = false;
     constructor(updateList, changed) {
         this.updateList = updateList;
         this.changed = changed;
+        $('tag-icon').replaceChildren(...TAG_ICONS.map(([id, name]) => new Option(name, id)));
         void fetch('/v1/filter-catalog').then(response => response.json()).then((catalog) => {
             if (!Array.isArray(catalog))
                 return; // The standalone simulator has no Scan endpoints.
@@ -65,12 +68,26 @@ export class ScanControls {
                 });
         });
         $('tag-add').addEventListener('click', () => this.protectDraft(() => {
-            this.draft = { ...structuredClone(this.savedTag()), id: crypto.randomUUID(), name: '' };
+            this.draft = { ...structuredClone(this.savedTag()), id: crypto.randomUUID(), name: '', role: 'setup' };
             $('filter-editor').open = true;
             this.render();
             $('tag-name').focus();
         }));
         $('tag-name').addEventListener('input', event => { this.draft.name = event.target.value; this.render(); });
+        $('tag-role').addEventListener('change', event => { this.draft.role = event.target.value; this.render(); });
+        for (const [id, key] of [['tag-icon', 'icon'], ['tag-color', 'color'], ['tag-background', 'background'], ['tag-background-color', 'backgroundColor']]) {
+            $(id).addEventListener(id.includes('color') ? 'input' : 'change', event => {
+                const appearance = this.draft.appearance;
+                const value = event.target.value;
+                if (key === 'icon')
+                    appearance.icon = value;
+                else if (key === 'background')
+                    appearance.background = value;
+                else
+                    appearance[key] = value;
+                this.render();
+            });
+        }
         $('tag-save').addEventListener('click', () => { void this.saveTag(); });
         $('tag-cancel').addEventListener('click', () => { this.resetDraft(); this.discard = undefined; this.deleting = false; this.render(); this.changed(); });
         $('tag-delete').addEventListener('click', () => {
@@ -102,7 +119,7 @@ export class ScanControls {
         } });
     }
     savedTag() { return this.preferences.tags.find(tag => tag.id === this.preferences.activeTag); }
-    resetDraft() { this.draft = structuredClone(this.savedTag()); }
+    resetDraft() { this.draft = { ...structuredClone(this.savedTag()), role: tagRole(this.savedTag()), appearance: tagAppearance(this.savedTag()) }; }
     dirty() { return !!this.draft && !!this.preferences && (this.draft.id !== this.savedTag().id || tagChanged(this.savedTag(), this.draft)); }
     protectDraft(proceed) {
         if (this.dirty()) {
@@ -116,15 +133,19 @@ export class ScanControls {
         this.enabled = data.app_mode === 'scan';
         this.rows = data.board;
         this.editable = data.editable;
-        $('scan-controls').hidden = !this.enabled;
-        if (!this.enabled || !data.preferences)
+        this.serverRunning = data.scan_running === true;
+        $('scan-controls').hidden = !data.preferences;
+        for (const id of ['scan-date-row', 'scan-lists', 'scan-batch', 'scan-move'])
+            $(id).hidden = !this.enabled;
+        if (!data.preferences)
             return;
-        const key = JSON.stringify(data.preferences);
+        const preferences = { ...data.preferences, tags: data.preferences.tags.map(tag => ({ ...tag, appearance: tagAppearance(tag) })) };
+        const key = JSON.stringify(preferences);
         if (key !== this.savedKey) {
-            const keepDraft = this.dirty() && this.preferences?.activeTag === data.preferences.activeTag &&
-                JSON.stringify(this.preferences.tags) === JSON.stringify(data.preferences.tags);
+            const keepDraft = this.dirty() && this.preferences?.activeTag === preferences.activeTag &&
+                JSON.stringify(this.preferences.tags) === JSON.stringify(preferences.tags);
             this.savedKey = key;
-            this.preferences = structuredClone(data.preferences);
+            this.preferences = structuredClone(preferences);
             if (!keepDraft) {
                 this.resetDraft();
                 this.selected.clear();
@@ -142,17 +163,24 @@ export class ScanControls {
         this.render();
     }
     visible(rows) {
-        if (!this.enabled || !this.preferences)
-            return rows;
-        const priority = (a, b) => rank(a, 'discover_priority') - rank(b, 'discover_priority');
-        const defaultOrder = (a, b) => this.preferences.activeList === 'discover'
-            ? priority(a, b) || rankFields.reduce((sum, field) => sum + rank(a, field), 0) - rankFields.reduce((sum, field) => sum + rank(b, field), 0) || a.symbol.localeCompare(b.symbol)
-            : rank(a, 'order_index') - rank(b, 'order_index');
-        const sort = this.preferences.sort;
-        return rows.filter(row => row.status === this.preferences.activeList && matchesFilters(row, this.draft.filters))
-            .sort((a, b) => (sort === 'default' ? 0 : rank(a, sort + '_rank') - rank(b, sort + '_rank')) || defaultOrder(a, b));
+        if (!this.preferences || !this.draft)
+            return this.enabled ? rows : rows.filter(row => row.status === 'focus' || (row.status === 'excluded' && row.section === 'review'));
+        const sort = this.enabled ? this.preferences.sort : 'default';
+        const useTags = !tagFiltersChanged(this.savedTag(), this.draft) && this.draft.id !== 'default';
+        return rows.filter(row => (this.enabled ? row.status === this.activeList : row.status === 'focus' || (row.status === 'excluded' && row.section === 'review')) &&
+            matchesTag(row, this.draft, useTags))
+            .sort((a, b) => (sort === 'default' ? 0 : rank(a, sort + '_rank') - rank(b, sort + '_rank')) || rank(a, 'order_index') - rank(b, 'order_index'));
     }
-    get activeList() { return this.preferences?.activeList ?? 'discover'; }
+    get activeList() { return this.enabled ? this.preferences?.activeList ?? 'discover' : 'focus'; }
+    async showFocus() {
+        if (!this.preferences)
+            return;
+        this.preferences.activeList = 'focus';
+        this.preferences.activeTag = 'default';
+        this.resetDraft();
+        this.render();
+        await this.persist(this.preferences);
+    }
     get busy() { return this.pending; }
     get manualOrder() { return !this.enabled || this.preferences?.sort === 'default'; }
     toggle(symbol) { if (this.selected.has(symbol))
@@ -219,10 +247,10 @@ export class ScanControls {
         if (!this.preferences || !this.draft)
             return;
         const filtered = this.visible(this.rows);
-        $('scan-result-count').textContent = `${filtered.length} / ${this.rows.filter(row => row.status === this.activeList).length}`;
+        $('scan-result-count').replaceChildren(countBadge(filtered.length), ' / ', countBadge(this.rows.filter(row => row.status === this.activeList).length));
         $('scan-lists').querySelectorAll('[data-list]').forEach(button => {
-            const group = button.dataset.list, count = this.rows.filter(row => row.status === group && matchesFilters(row, this.draft.filters)).length;
-            button.textContent = group[0].toUpperCase() + group.slice(1) + ' ' + count;
+            const group = button.dataset.list, count = this.rows.filter(row => row.status === group && matchesTag(row, this.draft, !tagFiltersChanged(this.savedTag(), this.draft))).length;
+            button.replaceChildren(group[0].toUpperCase() + group.slice(1), countBadge(count));
             button.classList.toggle('active', group === this.activeList);
             button.disabled = this.pending;
         });
@@ -239,6 +267,14 @@ export class ScanControls {
         if (name.value !== this.draft.name)
             name.value = this.draft.name;
         name.readOnly = this.draft.id === 'default';
+        const role = $('tag-role');
+        role.value = tagRole(this.draft);
+        role.disabled = this.pending || this.draft.id === 'default';
+        const appearance = this.draft.appearance;
+        for (const [id, value] of [['tag-icon', appearance.icon], ['tag-color', appearance.color], ['tag-background', appearance.background], ['tag-background-color', appearance.backgroundColor]])
+            $(id).value = value;
+        $('tag-background-color').disabled = this.pending || appearance.background === 'transparent';
+        $('tag-preview').replaceChildren(tagLogo(this.draft));
         $('tag-unsaved').hidden = !this.dirty();
         $('tag-save').disabled = this.pending || !this.dirty();
         $('tag-add').disabled = this.pending || this.preferences.tags.length >= 10;
@@ -247,14 +283,14 @@ export class ScanControls {
         $('tag-discard').hidden = !this.discard;
         $('filter-rules').querySelectorAll('input,button').forEach(node => { node.disabled = this.pending; });
         this.panel?.render(this.draft.filters, this.rows);
-        $('filter-count').textContent = String(Object.keys(this.draft.filters).length) + ' active';
+        $('filter-count').replaceChildren(countBadge(Object.keys(this.draft.filters).length), ' active');
         const all = $('scan-select-all'), count = filtered.filter(row => this.selected.has(row.symbol)).length;
         all.checked = !!filtered.length && count === filtered.length;
         all.indeterminate = count > 0 && count < filtered.length;
         all.disabled = !this.editable || this.pending || !filtered.length;
         $('scan-move').querySelectorAll('[data-target]').forEach(button => { button.disabled = !this.editable || this.pending || !count || button.dataset.target === this.activeList; });
-        $('scan-refresh').disabled = this.pending;
-        for (const id of ['scan-date', 'scan-sort', 'tag-name', 'tag-cancel', 'tag-delete', 'clear-filters'])
+        $('scan-refresh').disabled = this.pending || this.serverRunning;
+        for (const id of ['scan-date', 'scan-sort', 'tag-name', 'tag-cancel', 'tag-delete', 'clear-filters', 'tag-icon', 'tag-color', 'tag-background'])
             $(id).disabled = this.pending;
     }
 }

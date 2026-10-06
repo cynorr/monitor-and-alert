@@ -3,17 +3,24 @@ __pycache__/
 *.py[cod]
 longbridge-token.txt
 snaptrade-token.txt
+massive-token.txt
 .env
 .env.*
-runtime/
+# Runtime stays local; only the rolling split snapshot is versioned.
+/runtime/*
+!/runtime/massive/
+/runtime/massive/*
+!/runtime/massive/splits.json
 .idea/
 .pytest_cache/
 *.egg-info/
 build/
 dist/
+macos/build/
 
 ui/node_modules/
 
 # Imported reference project; its source/data are migrated into maintained paths.
+/qull-scan-data-pipeline/
 /qull-scan-workspace/
 /schwab-review/

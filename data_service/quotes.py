@@ -14,10 +14,11 @@ log = logging.getLogger(__name__)
 
 
 class QuoteService:
-    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90, on_quote=None, on_reconnect=None):
+    def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90, on_quote=None, on_reconnect=None, on_reset=None):
         self.broker, self.symbols, self.calendar = broker, symbols, calendar
         self.stale_seconds = stale_seconds
         self.on_quote, self.on_reconnect = on_quote, on_reconnect
+        self.on_reset = on_reset
         self.has_connected = False
         self.values: dict[str, dict] = {}
         self.last_push_monotonic = 0.0
@@ -80,9 +81,12 @@ class QuoteService:
             previous = entry.get(session)
             if previous and previous['timestamp'] > ts:
                 return
+            preserve_push = snapshot and previous and previous['timestamp'] == ts and previous['source'] == 'push'
+            if preserve_push:
+                price = previous['last_price']
             entry[session] = {'last_price': price, 'cumulative_volume': volume,
                               'timestamp': ts, 'trade_session': session,
-                              'received_at': int(time.time()), 'source': 'snapshot' if snapshot else 'push',
+                              'received_at': int(time.time()), 'source': 'push' if preserve_push or not snapshot else 'snapshot',
                               'trade_status': str(getattr(event, 'trade_status', 'Unknown')).split('.')[-1]}
             for field in ('prev_close', 'bid_price', 'ask_price'):
                 value = getattr(event, field, (previous or {}).get(field))
@@ -130,6 +134,9 @@ class QuoteService:
 
     async def connect(self):
         self.generation += 1
+        self.values.clear()
+        if self.on_reset:
+            self.on_reset()
         generation = self.generation
         loop = asyncio.get_running_loop()
         self.ctx = ctx = self.broker.context()

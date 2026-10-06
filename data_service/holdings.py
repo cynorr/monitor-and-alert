@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 import json
 from pathlib import Path
 import time
 
 from .config import redact
+from .calendar import ET
 
 D = Decimal
 
@@ -22,6 +23,41 @@ def dumps(value):
 def stock_positions(raw):
     return {p['instrument']['id']: p for p in raw['positions']['results']
             if p['instrument']['kind'] in ('stock', 'etf') and D(p['units']) != 0}
+
+
+def account_day(timestamp):
+    return datetime.fromisoformat(timestamp.replace('Z', '+00:00')).astimezone(ET).date().isoformat()
+
+
+def holding_days(opened, as_of):
+    start, end = date.fromisoformat(opened), date.fromisoformat(as_of)
+    elapsed = (end - start).days
+    return sum((start + timedelta(days=i)).weekday() < 5 for i in range(1, elapsed + 1)) if elapsed <= 7 else elapsed
+
+
+def display_positions(raw, as_of):
+    """Current positions plus instruments with executions selling shares today."""
+    positions = stock_positions(raw)
+    for rows, symbol_key, side_key, date_key, quantity_key, price_key in (
+        (raw['activities'], 'symbol', 'type', 'trade_date', 'units', 'price'),
+        (raw['orders'], 'universal_symbol', 'action', 'time_executed', 'filled_quantity', 'execution_price'),
+    ):
+        for row in rows:
+            symbol = row[symbol_key]
+            if (row['option_symbol'] or not symbol or row[side_key] != 'SELL'
+                    or not row[quantity_key] or D(row[quantity_key]) == 0
+                    or not row[date_key] or row[date_key][:10] != as_of):
+                continue
+            if symbol['id'] in positions:
+                continue
+            kind = symbol['type']['code']
+            if kind not in ('cs', 'ad', 'et') or symbol['currency']['code'] != 'USD':
+                continue
+            positions[symbol['id']] = {
+                'instrument': {'id': symbol['id'], 'symbol': symbol['symbol'], 'kind': 'etf' if kind == 'et' else 'stock'},
+                'units': '0', 'price': row[price_key], 'currency': 'USD',
+            }
+    return positions
 
 
 def read_rules(raw, folder):
@@ -114,16 +150,19 @@ def trades(raw, positions):
     return result
 
 
-def current_trades(rows, held):
-    """Discard prior flat-to-flat episodes before assigning sells to buys."""
+def current_trades(rows, held, as_of):
+    """Keep the current episode and preceding episodes closed today."""
     remaining, selected = held, []
-    for trade in reversed(sorted(rows, key=lambda t: (t['date'], t['side'] != 'BUY', t['id']))):
+    ordered = sorted(rows, key=lambda t: (t['date'], t['side'] != 'BUY', t['id']), reverse=True)
+    for index, trade in enumerate(ordered):
         if trade['side'] not in ('BUY', 'SELL'):
             raise ValueError(f"Unsupported side: {trade['side']}")
         remaining -= trade['quantity'] if trade['side'] == 'BUY' else -trade['quantity']
         selected.append(trade)
         if remaining == 0:
-            return list(reversed(selected))
+            if (index + 1 == len(ordered) or ordered[index + 1]['side'] != 'SELL'
+                    or ordered[index + 1]['last_fill_date'] != as_of):
+                return list(reversed(selected))
         if remaining < 0:
             raise ValueError(f"History/holdings quantity mismatch: {trade['ticker']}")
     raise ValueError('Buy origin is missing from history')
@@ -182,9 +221,10 @@ def performance(group, by_id, price, as_of):
     remaining = bought - sold
     unrealized = remaining * (price - entry)
     opened = min(t['date'] for t in buys)
+    closed = remaining == 0
     return {
         'buy_ids': group['buy_ids'], 'opened_on': opened,
-        'holding_days': (date.fromisoformat(as_of) - date.fromisoformat(opened)).days,
+        'holding_days': holding_days(opened, as_of), 'closed_today': closed,
         'buy_quantity': bought, 'buy_price': entry, 'buy_value': cost,
         'sold_quantity': sold, 'held_quantity': remaining,
         'sold_percent': sold / bought * 100, 'market_value': remaining * price,
@@ -192,29 +232,29 @@ def performance(group, by_id, price, as_of):
         'realized_pnl_percent': realized / (entry * sold) * 100 if sold else None,
         'unrealized_pnl': unrealized,
         'unrealized_pnl_percent': (price / entry - 1) * 100,
-        'total_pnl': realized + unrealized,
-        'total_pnl_percent': (realized + unrealized) / cost * 100,
+        'total_pnl': realized if closed else unrealized,
+        'total_pnl_percent': realized / cost * 100 if closed else (price / entry - 1) * 100,
         'buys': buys,
         'sells': [{**t, 'pnl': t['value'] - entry * t['quantity'],
                    'pnl_percent': (t['value'] / t['quantity'] / entry - 1) * 100,
                    'sold_percent': t['quantity'] / bought * 100,
-                   'holding_days': (date.fromisoformat(t['date']) - date.fromisoformat(opened)).days}
+                   'holding_days': holding_days(opened, t['date'])}
                   for t in sells],
     }
 
 
 def build(raw, rules):
-    positions = stock_positions(raw)
+    as_of = account_day(raw['fetched_at'])
+    positions = display_positions(raw, as_of)
     normalized = trades(raw, positions)
     by_symbol = defaultdict(list)
     for trade in normalized.values():
         by_symbol[trade['instrument_id']].append(trade)
-    as_of = raw['positions']['data_freshness']['as_of'][:10]
     holdings = []
     for sid, position in positions.items():
         ticker = position['instrument']['symbol']
         held, price = D(position['units']), D(position['price'])
-        if not held.is_finite() or held <= 0 or position['currency'] != 'USD':
+        if not held.is_finite() or held < 0 or position['currency'] != 'USD':
             raise ValueError('Scope is USD long stock/ETF positions only')
         if not price.is_finite() or price <= 0:
             raise ValueError('SnapTrade fallback price must be finite and positive')
@@ -222,14 +262,15 @@ def build(raw, rules):
                    for t in by_symbol[sid]), D(0))
         if net != held:
             raise ValueError(f'History/holdings quantity mismatch: {ticker}: {net} != {held}')
-        rows = current_trades(by_symbol[sid], held)
+        rows = current_trades(by_symbol[sid], held, as_of)
         matching_rules = [r for r in rules if r['ticker'] == ticker]
         for rule in matching_rules:
             for oid in rule['buys'] + rule['sells']:
                 if normalized[oid]['instrument_id'] != sid:
                     raise ValueError(f'Wrong ticker in sequence: {oid}')
         groups = sequences(rows, matching_rules)
-        items = sorted((performance(g, normalized, price, as_of) for g in groups if g['remaining'] > 0),
+        items = sorted((performance(g, normalized, price, as_of) for g in groups
+                        if g['remaining'] > 0 or max(normalized[i]['last_fill_date'] for i in g['sell_ids']) == as_of),
                        key=lambda s: (s['opened_on'], s['buy_ids']))
         if sum(i['held_quantity'] for i in items) != held:
             raise ValueError(f'Sequences do not reconcile with holdings: {ticker}')
@@ -237,7 +278,9 @@ def build(raw, rules):
                          'kind': position['instrument']['kind'], 'quantity': held,
                          'price': price, 'market_value': held * price, 'sequences': items})
     market_value = sum((h['market_value'] for h in holdings), D(0))
-    total_pnl = sum((s['total_pnl'] for h in holdings for s in h['sequences']), D(0))
+    open_rows = [s for h in holdings for s in h['sequences'] if not s['closed_today']]
+    total_pnl = sum((s['total_pnl'] for s in open_rows), D(0))
+    remaining_cost = sum((s['held_quantity'] * s['buy_price'] for s in open_rows), D(0))
     return {
         'fetched_at': raw['fetched_at'], 'source_timestamps': raw['source_timestamps'],
         'positions_as_of': raw['positions']['data_freshness']['as_of'],
@@ -247,7 +290,7 @@ def build(raw, rules):
             'account_total': D(raw['account']['balance']['total']['amount']),
             'cash': D(raw['cash']),
         },
-        'summary': {'pnl': total_pnl, 'pnl_percent': total_pnl / market_value * 100 if market_value else None},
+        'summary': {'pnl': total_pnl, 'pnl_percent': total_pnl / remaining_cost * 100 if remaining_cost else None},
         'holdings': holdings,
     }
 
@@ -256,10 +299,15 @@ def symbol_for(ticker):
     return ticker if ticker.endswith('.US') else ticker + '.US'
 
 
-def value_positions(base, quotes):
+def value_positions(base, quotes, as_of=None):
     """Reprice accepted positions without repeating trade matching or changing fills."""
     holdings = []
+    as_of = as_of or account_day(base['fetched_at'])
     for holding in base['holdings']:
+        sequences_today = [s for s in holding['sequences'] if not s['closed_today']
+                           or max(t['last_fill_date'] for t in s['sells']) == as_of]
+        if not sequences_today:
+            continue
         sessions = quotes.get(symbol_for(holding['ticker']), {})
         candidates = []
         for quote in sessions.values():
@@ -281,14 +329,26 @@ def value_positions(base, quotes):
         # Regular/post use the previous day's close, preserving the full day's move.
         reference = (regular_price if latest[2] in ('Pre', 'Overnight') else previous_close) if latest else None
         items = []
-        for sequence in holding['sequences']:
+        for sequence in sequences_today:
             unrealized = sequence['held_quantity'] * (price - sequence['buy_price'])
-            total = sequence['realized_pnl'] + unrealized
+            today_buys = [t for t in sequence['buys'] if t['date'] == as_of]
+            today_quantity = sum((t['quantity'] for t in today_buys), D(0))
+            old_quantity = sequence['buy_quantity'] - today_quantity
+            day_reference = ((sum((t['value'] for t in today_buys), D(0)) + (reference or D(0)) * old_quantity)
+                             / sequence['buy_quantity']) if not old_quantity or reference else None
+            closed = sequence['closed_today']
+            today_sales = [t for t in sequence['sells'] if t['last_fill_date'] == as_of]
+            day_pnl = (sum((t['value'] - t['quantity'] * day_reference for t in today_sales), D(0)) if closed else
+                       sequence['held_quantity'] * (price - day_reference)) if day_reference is not None and (closed or latest) else None
+            total = sequence['realized_pnl'] if closed else unrealized
             items.append({**sequence, 'market_value': sequence['held_quantity'] * price,
+                          'holding_days': holding_days(sequence['opened_on'], as_of),
                           'unrealized_pnl': unrealized,
                           'unrealized_pnl_percent': (price / sequence['buy_price'] - 1) * 100,
-                          'total_pnl': total, 'total_pnl_percent': total / sequence['buy_value'] * 100,
-                          'day_pnl': sequence['held_quantity'] * (price - reference) if reference else None})
+                          'total_pnl': total, 'total_pnl_percent': total / sequence['buy_value'] * 100 if closed else (price / sequence['buy_price'] - 1) * 100,
+                          'day_reference_price': day_reference,
+                          'day_reference_source': 'entry' if not old_quantity else 'mixed' if today_quantity else 'previous_close',
+                          'day_pnl': day_pnl})
         holdings.append({**holding, 'price': price, 'market_value': holding['quantity'] * price,
                          'sequences': items, 'price_source': 'longbridge' if latest else 'snaptrade',
                          'price_timestamp': latest[0] if latest else base['positions_as_of'],
@@ -296,13 +356,15 @@ def value_positions(base, quotes):
                          'change_percent': change, 'extended_percent': ext,
                          'day_reference_price': reference})
     market_value = sum((holding['market_value'] for holding in holdings), D(0))
-    total_pnl = sum((s['total_pnl'] for h in holdings for s in h['sequences']), D(0))
-    day_values = [s['day_pnl'] for h in holdings for s in h['sequences']]
+    open_rows = [s for h in holdings for s in h['sequences'] if not s['closed_today']]
+    total_pnl = sum((s['total_pnl'] for s in open_rows), D(0))
+    remaining_cost = sum((s['held_quantity'] * s['buy_price'] for s in open_rows), D(0))
+    day_values = [s['day_pnl'] for s in open_rows]
     day_pnl = sum(day_values, D(0)) if all(value is not None for value in day_values) else None
     return {**base, 'holdings': holdings,
             'funds': {**base['funds'], 'stock_market_value': market_value,
                       'account_total': market_value + base['funds']['cash']},
-            'summary': {'pnl': total_pnl, 'pnl_percent': total_pnl / market_value * 100 if market_value else None,
+            'summary': {'pnl': total_pnl, 'pnl_percent': total_pnl / remaining_cost * 100 if remaining_cost else None,
                         'day_pnl': day_pnl}}
 
 
@@ -319,10 +381,15 @@ class Holdings:
 
     @property
     def symbols(self):
-        return list(dict.fromkeys(symbol_for(h['ticker']) for h in self.base['holdings'])) if self.base else []
+        return self.symbols_for(datetime.now(ET).date().isoformat())
 
-    def state(self, quotes=None):
-        return {'data': json.loads(dumps(value_positions(self.base, quotes or {}))) if self.base else None,
+    def symbols_for(self, as_of):
+        return list(dict.fromkeys(symbol_for(h['ticker']) for h in self.base['holdings']
+                                  if any(not s['closed_today'] or s['sells'][-1]['last_fill_date'] == as_of
+                                         for s in h['sequences']))) if self.base else []
+
+    def state(self, quotes=None, as_of=None):
+        return {'data': json.loads(dumps(value_positions(self.base, quotes or {}, as_of))) if self.base else None,
                 'loading': self.loading, 'error': self.error}
 
     async def refresh(self):

@@ -67,8 +67,8 @@ def test_latest_session_reprices_only_market_values_and_unrealized_profit():
     assert sequence['market_value'] == D('1087.5')
     assert sequence['unrealized_pnl'] == D('337.5')
     assert sequence['realized_pnl'] == D('125')
-    assert sequence['total_pnl'] == D('462.5')
-    assert sequence['total_pnl_percent'] == D('46.25')
+    assert sequence['total_pnl'] == D('337.5')
+    assert sequence['total_pnl_percent'] == D(45)
     assert sequence['buy_price'] == D(10) and sequence['sells'] == original['holdings'][0]['sequences'][0]['sells']
     assert result['funds']['account_total'] == D('887.5')
     assert result['funds']['cash'] == D('-200')
@@ -137,6 +137,46 @@ def test_holdings_daily_metrics_missing_baseline_never_report_partial_total():
         result = value_positions(base, {'XYZ.US': {'Intraday': {**regular, 'prev_close': previous}}})
         assert result['holdings'][0]['change_percent'] is None
         assert result['holdings'][0]['sequences'][0]['day_pnl'] is None
+
+
+@pytest.mark.parametrize('session', ['Pre', 'Intraday', 'Post', 'Overnight'])
+def test_today_entry_daily_pnl_uses_cost_even_without_previous_close(session):
+    raw = snapshot([activity('today', 'BUY', '100', '10', '2026-09-17'),
+                    activity('sold', 'SELL', '25', '12', '2026-09-17')], '75')
+    base = build(raw, [])
+    result = value_positions(base, {'XYZ.US': {session: {'timestamp': 100, 'last_price': 11, 'trade_session': session}}})
+    sequence = result['holdings'][0]['sequences'][0]
+    assert sequence['day_reference_price'] == D(10)
+    assert sequence['day_reference_source'] == 'entry'
+    assert sequence['day_pnl'] == D(75)
+    assert sequence['total_pnl'] == D(75) and sequence['total_pnl_percent'] == D(10)
+    assert result['summary']['pnl'] == D(75) and result['summary']['day_pnl'] == D(75)
+
+
+def test_mixed_old_and_today_merged_buys_weight_daily_basis_and_reset_tomorrow():
+    raw = snapshot([activity('old', 'BUY', '100', '10', '2026-09-16'),
+                    activity('today', 'BUY', '100', '12', '2026-09-17'),
+                    activity('sale', 'SELL', '100', '13', '2026-09-17')], '100')
+    base = build(raw, [{'ticker': 'XYZ', 'buys': ['old', 'today'], 'sells': ['sale']}])
+    quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 14, 'prev_close': 13, 'trade_session': 'Intraday'}}}
+    result = value_positions(base, quotes)
+    sequence = result['holdings'][0]['sequences'][0]
+    assert sequence['day_reference_price'] == D('12.5')
+    assert sequence['day_reference_source'] == 'mixed'
+    assert sequence['day_pnl'] == D(150)
+    assert sequence['total_pnl'] == D(300)
+    tomorrow = value_positions(base, quotes, '2026-09-18')['holdings'][0]['sequences'][0]
+    assert tomorrow['day_reference_price'] == D(13) and tomorrow['day_pnl'] == D(100)
+
+
+def test_closed_today_bought_today_retains_realized_pnl_without_a_quote():
+    raw = snapshot([activity('buy', 'BUY', '10', '10', '2026-09-17'),
+                    activity('sell', 'SELL', '10', '9', '2026-09-17')], '0')
+    result = value_positions(build(raw, []), {})
+    sequence = result['holdings'][0]['sequences'][0]
+    assert sequence['closed_today'] and sequence['day_pnl'] == D(-10)
+    assert sequence['total_pnl'] == D(-10)
+    assert result['summary']['pnl'] == 0 and result['summary']['day_pnl'] == 0
 
 
 def test_holdings_uses_same_corrected_daily_close_as_watchlist(app_data):
@@ -235,7 +275,9 @@ def test_snaptrade_uses_configured_account_reuses_history_and_only_commits_succe
     asyncio.run(scenario())
 
 
-def test_signed_get_and_shared_rolling_account_budget(tmp_path):
+@pytest.mark.parametrize('configured_proxy', ['', 'http://127.0.0.1:18080'])
+def test_signed_get_and_shared_rolling_account_budget(tmp_path, monkeypatch, configured_proxy):
+    monkeypatch.setenv('MARKET_PROXY', configured_proxy)
     async def scenario():
         client = SnapTrade('test-client', 'test-key', 'acct', tmp_path / 'latest.json')
         requests, clock = [], [0.0]
@@ -245,17 +287,18 @@ def test_signed_get_and_shared_rolling_account_budget(tmp_path):
             async def __aexit__(self, *args): pass
             async def text(self): return '{"cash": 0.125}'
         class Session:
-            def get(self, url, headers):
-                requests.append((url, headers))
+            def get(self, url, headers, *, proxy):
+                requests.append((url, headers, proxy))
                 return Response()
         client.session = Session()
         async def sleep(delay): clock[0] += delay
-        with patch('data_service.snaptrade.time.monotonic', lambda: clock[0]), patch('data_service.snaptrade.asyncio.sleep', sleep):
+        with patch('data_service.snaptrade.time.monotonic', lambda: clock[0]), patch('data_service.snaptrade.asyncio.sleep', sleep), patch('data_service.snaptrade.time.time', lambda: 123):
             for _ in range(11):
                 assert (await client.get('/accounts/acct/balances'))['cash'] == D('.125')
         assert len(requests) == 11 and clock[0] >= 60.1
-        assert all(url.startswith('https://api.snaptrade.com/api/v1/accounts/acct/balances?clientId=test-client&timestamp=') for url, _ in requests)
-        assert all(headers['Signature'] and 'test-key' not in url for url, headers in requests)
+        assert all(url == 'https://api.snaptrade.com/api/v1/accounts/acct/balances?clientId=test-client&timestamp=123' for url, _, _ in requests)
+        assert all(headers['Signature'] == 'D/N/g4NherRfU6Ll/PePs6E3CL9C8XgSXUNRPq3NMEc=' and 'test-key' not in url for url, headers, _ in requests)
+        assert all(proxy == (configured_proxy or None) for _, _, proxy in requests)
     asyncio.run(scenario())
 
 
@@ -271,7 +314,7 @@ def test_bad_cache_does_not_block_startup_and_http_error_never_exposes_request(t
             async def __aexit__(self, *args): pass
             async def text(self): raise AssertionError('Do not expose an arbitrary error body')
         class Session:
-            def get(self, url, headers): return Response()
+            def get(self, url, headers, *, proxy): return Response()
         client.session = Session()
         with pytest.raises(RuntimeError, match='^SnapTrade HTTP 429$'):
             await client.get('/accounts/acct/positions/all')
@@ -316,7 +359,7 @@ def make_holdings_app(root):
     return app, client
 
 
-def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_stop(app_data):
+def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_background(app_data):
     async def scenario():
         app, client = make_holdings_app(app_data)
         original = app.workspace.path.read_bytes()
@@ -354,11 +397,13 @@ def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_stop(app_d
                     assert not await app.holdings.refresh()
                     assert app.holdings.base is previous and not app.monitor_task.done()
             assert app.workspace.path.read_bytes() == original
+            holding_task, monitor = app.holdings_task, app.monitor
             await app.switch_mode('scan')
-            assert client.closed and app.holdings_task is None and app.holdings_state() is None
+            assert not client.closed and app.holdings_task is holding_task and not holding_task.done()
+            assert app.holdings_state() is None and app.monitor is monitor
             await app.switch_mode('monitor')
             await asyncio.sleep(.01)
-            assert client.calls == 3  # startup, explicit failed refresh, immediate re-entry refresh
+            assert client.calls == 2  # startup + explicit failed refresh; a view switch does not refresh.
         finally:
             await runner.cleanup()
             await app.close()

@@ -30,7 +30,7 @@ def workspace_tickers(data: dict, only: list[str] | None = None, *, allow_empty=
         if not re.fullmatch(r'[A-Z][A-Z0-9.-]{0,19}', ticker):
             raise ValueError(f'Unsupported US ticker: {ticker}')
         symbol = ticker if ticker.endswith('.US') else ticker + '.US'
-        eligible[ticker] = Ticker(symbol, ticker, entry['status'])
+        eligible[ticker] = Ticker(symbol, ticker, 'focus')
     order = [t for group in ('focus', 'wait') for t in data.get('orders', {}).get(group, [])]
     order += list(eligible)
     result, seen = [], set()
@@ -42,10 +42,10 @@ def workspace_tickers(data: dict, only: list[str] | None = None, *, allow_empty=
     if only:
         wanted = {s if s.endswith('.US') else s + '.US' for s in only}
         if wanted - seen:
-            raise ValueError('Requested symbols outside focus/wait: ' + ', '.join(sorted(wanted - seen)))
+            raise ValueError('Requested symbols outside Focus: ' + ', '.join(sorted(wanted - seen)))
         result = [item for item in result if item.symbol in wanted]
     if not result and not allow_empty:
-        raise ValueError('No focus/wait tickers; refusing to connect')
+        raise ValueError('No Focus tickers; refusing to connect')
     return result
 
 

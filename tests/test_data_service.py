@@ -48,7 +48,7 @@ def test_tickers_status_authoritative_and_reload(tmp_path):
             'orders': {'focus': ['HIDDEN', 'UNKNOWN', 'PAYS']}, 'carried': ['CARRIED']}
     path.write_text(json.dumps(data))
     assert [t.symbol for t in load_tickers(path)] == ['PAYS.US', 'BLSH.US']
-    with pytest.raises(ValueError, match='outside focus/wait'):
+    with pytest.raises(ValueError, match='outside Focus'):
         load_tickers(path, ['HIDDEN'])
     data['statuses']['PAYS']['status'] = 'hidden'
     path.write_text(json.dumps(data))

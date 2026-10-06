@@ -2,8 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { matchesFilters, sliderValues } from '../public/filters.js';
-import { withSavedTag, tagChanged } from '../public/tags.js';
+import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
+import { scanProgress, selectionRequest } from '../public/types.js';
+import { collapseKey, growthValue, isReviewSelection, listSections, sectionKey } from '../public/board.js';
+import { matchesTag, ScanControls } from '../public/scan.js';
+import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
+
+test('scan progress keeps last ready date and seconds visible during preparation or errors', () => {
+    const stage = { status: 'ready', target: '2026-10-02', updated_at: null, error: null };
+    const state = { target_date: '2026-10-02', running: false, ready: true,
+        daily: { ...stage }, splits: { ...stage }, bars: { ...stage, input_revision: 'old' },
+        features: { ...stage, date: '2026-10-01', input_revision: 'old', updated_at: '2026-10-01T23:01:02+00:00' } };
+    assert.equal(scanProgress(state).text, 'Scan Ready 2026-10-01 · 19:01:02 ET');
+    state.running = true;
+    state.daily.status = 'running';
+    assert.match(scanProgress(state).text, /Scan Ready 2026-10-01.*Downloading daily/);
+    state.running = false;
+    state.daily.status = 'error';
+    state.daily.error = 'daily: Massive HTTP 503';
+    assert.ok(scanProgress(state).error);
+    assert.equal(scanProgress(state).title, state.daily.error);
+    state.daily.error = null;
+    state.error = 'Pipeline status could not be saved';
+    assert.match(scanProgress(state).text, /Refresh failed/);
+    assert.equal(scanProgress(state).title, state.error);
+});
 
 test('all 38 conditions have unique fields and numeric slider stops', () => {
     assert.equal(catalog.length, 38);
@@ -63,4 +87,82 @@ test('new Tags have independent filters, unique names and a ten-Tag limit', () =
     assert.throws(() => withSavedTag(result, { id: 'other', name: 'bounce', filters: {} }));
     const ten = Array.from({ length: 10 }, (_, i) => ({ id: String(i), name: String(i), filters: {} }));
     assert.throws(() => withSavedTag(ten, { id: 'new', name: 'New', filters: {} }));
+});
+
+
+test('setup sections preserve Tag order; renamed negative and helper labels remain outside setup sections', () => {
+    const tags = [
+        { id: 'default', name: 'Default', filters: {} },
+        { id: 'first', name: 'Surf-20', role: 'setup', filters: {} },
+        { id: 'negative', name: 'Too far', role: 'extended', filters: {} },
+        { id: 'helper', name: 'Higher lows', role: 'label', filters: {} },
+        { id: 'second', name: 'Bounce-10', role: 'setup', filters: {} },
+    ];
+    assert.deepEqual(listSections(true, 'focus', tags).map(section => section.id), ['first','second','unclassified']);
+    assert.deepEqual(listSections(true, 'excluded', tags).map(section => section.id), ['review','broken','extended','hidden']);
+    assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus','excluded']);
+    assert.equal(sectionKey({ status: 'focus', section: 'second', tags: ['first','second'] }), 'focus:second');
+    assert.equal(tagRole(tags[2]), 'extended');
+});
+
+test('manual Tags match the saved Tag filter; unsaved rule preview still requires the draft conditions', () => {
+    const tag = { id: 'surf', name: 'Surf', filters: { below_days: { max: 1 } } };
+    const row = { tags: ['surf'], below_days: 3 };
+    assert.ok(matchesTag(row, tag));
+    assert.equal(matchesTag(row, tag, false), false);
+    assert.ok(matchesTag({ below_days: 1 }, tag, false));
+    assert.equal(matchesTag({ tags: ['other'], below_days: null }, tag), false);
+    assert.ok(tagChanged(tag, { ...tag, role: 'label' }));
+});
+
+test('appearance edits save independently, survive renaming, and preserve manually assigned filter members', () => {
+    const saved = { id: 'surf', name: 'Surf-20', filters: { below_days: { max: 1 } } };
+    saved.appearance = tagAppearance(saved);
+    assert.equal(saved.appearance.icon, 'surf');
+    assert.equal(saved.appearance.color, '#e4b400');
+    const draft = structuredClone(saved);
+    draft.appearance.color = '#123456';
+    draft.appearance.background = 'transparent';
+    assert.ok(tagChanged(saved, draft));
+    const result = withSavedTag([saved], { ...draft, name: 'My setup' })[0];
+    assert.deepEqual(result.appearance, draft.appearance);
+    assert.equal(tagAppearance(result).icon, 'surf');
+    assert.equal(saved.appearance.color, '#e4b400');
+    const controls = Object.create(ScanControls.prototype);
+    controls.enabled = false;
+    controls.preferences = { activeTag: saved.id, tags: [saved] };
+    controls.draft = draft;
+    const row = { status: 'focus', tags: ['surf'], manual_tags: ['surf'], below_days: 3 };
+    assert.deepEqual(controls.visible([row]), [row]);
+    draft.filters.below_days.max = 2;
+    assert.deepEqual(controls.visible([row]), []);
+});
+
+
+test('Scan and Monitor fold independently; the same symbol keeps Review preview separate from Holdings live selection', () => {
+    const folded = new Set([collapseKey(false, 'excluded:review')]);
+    assert.ok(folded.has(collapseKey(false, 'excluded:review')));
+    assert.equal(folded.has(collapseKey(true, 'excluded:review')), false);
+    folded.add(collapseKey(true, 'focus:surf'));
+    assert.equal(folded.has(collapseKey(false, 'focus:surf')), false);
+    const row = { symbol: 'XYZ.US', status: 'excluded', section: 'review' };
+    assert.ok(isReviewSelection(row, 'watchlist'));
+    assert.equal(isReviewSelection(row, 'holdings'), false);
+    const preview = selectionRequest('XYZ.US', '5m', 1, 'monitor', 'watchlist');
+    const live = selectionRequest('XYZ.US', '5m', 2, 'monitor', 'holdings');
+    assert.equal(preview.symbol, live.symbol);
+    assert.equal(preview.source, 'watchlist');
+    assert.equal(live.source, 'holdings');
+    assert.equal(live.request_id, 2);
+});
+
+test('Growth formats the raw return percentage without changing its meaning at the multiple threshold', () => {
+    assert.equal(growthValue(0), '0%');
+    assert.equal(growthValue(12), '12%');
+    assert.equal(growthValue(12.34), '12.3%');
+    assert.equal(growthValue(99.9), '99.9%');
+    assert.equal(growthValue(100), '2.0x');
+    assert.equal(growthValue(130), '2.3x');
+    assert.equal(growthValue(234), '3.3x');
+    for (const value of [null, undefined, NaN, Infinity, -Infinity, '130']) assert.equal(growthValue(value), '—');
 });

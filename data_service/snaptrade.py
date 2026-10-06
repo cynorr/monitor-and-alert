@@ -13,8 +13,7 @@ from pathlib import Path
 import time
 from urllib.parse import urlencode
 
-import aiohttp
-
+from .network import create_session, proxy_url
 from .store import atomic_json
 
 
@@ -58,9 +57,10 @@ class SnapTrade:
                              sort_keys=True, separators=(',', ':')).encode()
         signature = base64.b64encode(hmac.new(self.consumer_key.encode(), payload, hashlib.sha256).digest()).decode()
         if self.session is None:
-            self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+            self.session = create_session(30)
         async with self.session.get('https://api.snaptrade.com' + path + '?' + query,
-                                    headers={'Signature': signature, 'Accept': 'application/json'}) as response:
+                                    headers={'Signature': signature, 'Accept': 'application/json'},
+                                    proxy=proxy_url()) as response:
             if response.status != 200:
                 # Never expose signed request URLs or arbitrary upstream bodies.
                 raise RuntimeError(f'SnapTrade HTTP {response.status}')

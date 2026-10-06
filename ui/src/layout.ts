@@ -1,50 +1,78 @@
 import { $ } from './types.js';
+
+// Share the default list proportion across Scan and Monitor.
+const LIST_WIDTH_RATIO = 0.32;
+const LIST_MIN_WIDTH = 680;
+const CHART_MIN_WIDTH = 320;
+const DIVIDER_WIDTH = 12;
+const WORKSPACE_PADDING = 20;
+
 export function initLayout() {
-    const root = $('workspace'), minimum = [320, 320, 600];
-    let ratios: number[] | null = null, holdingsWidth = 600;
+    const root = $('workspace');
+    let ratios: number[] | null = null, holdingsWidth = LIST_MIN_WIDTH;
+    const isScan = () => root.dataset.mode === 'scan';
+    function minimum() {
+        return isScan()
+            ? [CHART_MIN_WIDTH, LIST_MIN_WIDTH]
+            : [CHART_MIN_WIDTH, CHART_MIN_WIDTH, Math.max(LIST_MIN_WIDTH, holdingsWidth)];
+    }
     function widths() {
-        const available = root.clientWidth - 44;
+        const minima = minimum();
+        const available = Math.max(minima.reduce((a, b) => a + b, 0),
+            root.clientWidth - WORKSPACE_PADDING - DIVIDER_WIDTH * (minima.length - 1));
         if (!ratios) {
-            const chart = Math.max(minimum[0], (available - minimum[2]) / 2);
-            return [chart, chart, minimum[2]];
+            const list = Math.max(minima[minima.length - 1], Math.min(available * LIST_WIDTH_RATIO,
+                available - CHART_MIN_WIDTH * (minima.length - 1)));
+            const chart = (available - list) / (minima.length - 1);
+            return isScan() ? [chart, list] : [chart, chart, list];
         }
-        const extra = Math.max(0, available - minimum.reduce((a, b) => a + b, 0));
-        const wanted = ratios.map((r, i) => Math.max(0, r * available - minimum[i]));
+        const extra = Math.max(0, available - minima.reduce((a, b) => a + b, 0));
+        const wanted = ratios.map((r, i) => Math.max(0, r * available - minima[i]));
         const total = wanted.reduce((a, b) => a + b, 0) || 1;
-        return minimum.map((m, i) => m + extra * wanted[i] / total);
+        return minima.map((m, i) => m + extra * wanted[i] / total);
     }
     function paint(values = widths()) {
-        root.style.minWidth = `${minimum.reduce((a, b) => a + b, 0) + 44}px`;
-        root.style.gridTemplateColumns = root.dataset.mode === 'scan'
-            ? `${values[0] + values[1] + 12}px 12px ${values[2]}px`
-            : `${values[0]}px 12px ${values[1]}px 12px ${values[2]}px`;
+        const minima = minimum();
+        root.style.minWidth = `${minima.reduce((a, b) => a + b, 0) + WORKSPACE_PADDING + DIVIDER_WIDTH * (minima.length - 1)}px`;
+        root.style.gridTemplateColumns = values.map(value => `${value}px`).join(` ${DIVIDER_WIDTH}px `);
     }
     function remember(values: number[]) { const total = values.reduce((a, b) => a + b, 0); ratios = values.map(v => v / total); }
+    function resized(values: number[], index: number, delta: number) {
+        const minima = minimum();
+        const movement = Math.max(minima[index] - values[index], Math.min(values[index + 1] - minima[index + 1], delta));
+        const next = values.slice();
+        next[index] += movement; next[index + 1] -= movement;
+        remember(next); paint(next);
+    }
     for (let index = 0; index < 2; index++) {
         const handle = $('divider-' + index);
         handle.addEventListener('pointerdown', event => {
+            if (isScan() && index === 0) return;
+            const adjacent = isScan() ? 0 : index;
             const start = event.clientX, initial = widths();
             handle.setPointerCapture(event.pointerId);
             document.body.classList.add('resizing');
-            const move = (e: PointerEvent) => { const delta = Math.max(minimum[index] - initial[index], Math.min(initial[index + 1] - minimum[index + 1], e.clientX - start)); const next = initial.slice(); next[index] += delta; next[index + 1] -= delta; remember(next); paint(next); };
+            const move = (e: PointerEvent) => resized(initial, adjacent, e.clientX - start);
             const end = () => { handle.removeEventListener('pointermove', move); document.body.classList.remove('resizing'); };
             handle.addEventListener('pointermove', move);
             handle.addEventListener('lostpointercapture', end, { once: true });
         });
         handle.addEventListener('dblclick', () => { ratios = null; paint(); });
         handle.addEventListener('keydown', event => { if (!['ArrowLeft', 'ArrowRight'].includes(event.key))
-            return; event.preventDefault(); const values = widths(); const delta = Math.max(minimum[index] - values[index], Math.min(values[index + 1] - minimum[index + 1], event.key === 'ArrowRight' ? 12 : -12)); values[index] += delta; values[index + 1] -= delta; remember(values); paint(values); });
+            return;
+            if (isScan() && index === 0) return;
+            event.preventDefault(); resized(widths(), isScan() ? 0 : index, event.key === 'ArrowRight' ? 12 : -12); });
     }
     new ResizeObserver(() => paint()).observe(root);
     paint();
     return { setMode(mode: string) {
         if (root.dataset.mode === mode) return;
-        root.dataset.mode = mode; minimum[2] = mode === 'scan' ? 400 : holdingsWidth;
+        root.dataset.mode = mode; ratios = null;
         $('divider-1').setAttribute('aria-label', mode === 'scan' ? 'Resize Daily and watchlist' : 'Resize Intraday and watchlist');
         paint();
     }, setHoldingsWidth(width: number) {
         if (holdingsWidth === width) return;
         holdingsWidth = width;
-        if (root.dataset.mode !== 'scan') { minimum[2] = width; paint(); }
+        if (!isScan()) paint();
     } };
 }

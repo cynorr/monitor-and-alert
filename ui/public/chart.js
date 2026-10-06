@@ -1,4 +1,5 @@
 import { $, money, compact, dayKey } from './types.js';
+import { BAR_SPACING, VOLUME_PANE_RATIO } from './chart-settings.js';
 const L = window.LightweightCharts;
 const dateFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -16,9 +17,9 @@ export class Panel {
     active = null;
     key = '';
     fitted = false;
-    initialSpacing = false;
-    hovering = false;
+    hoveredTime;
     precision = 2;
+    linkedPrice;
     onHover = () => { };
     onSelect = () => { };
     constructor(id, daily) {
@@ -29,17 +30,17 @@ export class Panel {
             layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 12, attributionLogo: false, panes: { separatorColor: '#c6cbd1', separatorHoverColor: '#a8afb8' } },
             grid: { vertLines: { visible: false }, horzLines: { visible: false } },
             rightPriceScale: { borderVisible: false, minimumWidth: 55, scaleMargins: { top: 0.07, bottom: 0.05 } },
-            timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: 6, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t, type) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },
+            timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: BAR_SPACING, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t, type) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },
             localization: { locale: 'en-US', timeFormatter: (t) => daily ? dayKey(Number(t)) : `${dayKey(Number(t))} ${timeFormat.format(dateOf(t))}` },
-            crosshair: { mode: L.CrosshairMode.Normal, vertLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { style: L.LineStyle.Dashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
+            crosshair: { mode: L.CrosshairMode.Normal, vertLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
         });
         this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false });
         const colors = { ema10: '#2962ff', ema20: '#e4b400', [daily ? 'sma50' : 'sma65']: '#e53935' };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
         this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
-        this.chart.panes()[0].setStretchFactor(1);
-        this.chart.panes()[1].setStretchFactor(0.22);
+        this.chart.panes()[0].setStretchFactor(1 - VOLUME_PANE_RATIO);
+        this.chart.panes()[1].setStretchFactor(VOLUME_PANE_RATIO);
         const volumePosition = () => {
             const label = $(id + '-volume');
             label.style.top = `${this.chart.panes()[0].getHeight() + 5}px`;
@@ -54,19 +55,24 @@ export class Panel {
             const candle = param.seriesData.get(this.candles);
             const volume = param.seriesData.get(this.volume);
             const row = candle ? { ...candle, time: Number(candle.time), volume: volume?.value ?? null } : undefined;
-            this.hovering = !!row;
-            this.showOHLC(row ?? this.active ?? this.rows.at(-1));
-            // Programmatic/refresh events must not bounce the peer's candle price
-            // back onto the mouse-driven crosshair.
-            if (param.sourceEvent)
-                this.onHover(row);
+            this.showHover(row);
+            // Link the pointer's value, never the candle close or histogram value.
+            if (param.sourceEvent) {
+                const paneIndex = param.paneIndex ?? 0;
+                const series = paneIndex === 1 ? this.volume : this.candles;
+                const price = param.point ? series.coordinateToPrice(param.point.y) : null;
+                this.onHover(row, price ?? undefined, paneIndex, typeof param.time === 'number' ? param.time : undefined);
+            }
         });
         this.chart.subscribeClick(param => {
             const row = param.seriesData.get(this.candles);
             if (row)
                 this.onSelect({ ...row, time: Number(row.time), volume: null });
         });
-        $(id + '-chart').addEventListener('mouseleave', () => this.onHover());
+        $(id + '-chart').addEventListener('mouseleave', () => {
+            this.showHover();
+            this.onHover();
+        });
         $(id + '-latest').addEventListener('click', () => {
             this.chart.timeScale().scrollToRealTime();
             const latest = this.active ?? this.rows.at(-1);
@@ -83,14 +89,14 @@ export class Panel {
         this.indicators = {};
         this.active = null;
         this.fitted = false;
-        this.hovering = false;
+        this.hoveredTime = undefined;
+        this.clearLinkedPrice();
         this.chart.clearCrosshairPosition();
         this.candles.setData([]);
         this.volume.setData([]);
         Object.values(this.lines).forEach(line => line.setData([]));
         $(this.id + '-empty').hidden = false;
-        this.showOHLC();
-        $(this.id + '-volume').textContent = 'V —';
+        this.showCandleInfo();
         for (const name of Object.keys(this.lines)) {
             const node = $(this.id + '-legend').querySelector('.' + name);
             node.hidden = true;
@@ -145,30 +151,22 @@ export class Panel {
                     line.update(value);
             }
         }
-        if (this.daily && !this.initialSpacing && this.rows.length && latest) {
-            const scale = this.chart.timeScale();
-            const cutoff = new Date(latest.time * 1000);
-            cutoff.setUTCMonth(cutoff.getUTCMonth() - 9);
-            const samples = this.rows[0].time * 1000 <= cutoff.getTime() ? this.rows.filter(r => r.time * 1000 >= cutoff.getTime()).length : 189;
-            scale.applyOptions({ barSpacing: Math.max(0.5, scale.width() / (samples + 2)) });
-            this.initialSpacing = true;
-        }
         if (!this.fitted && latest) {
             const scale = this.chart.timeScale();
             scale.scrollToPosition(1, false);
             this.fitted = true;
         }
         $(this.id + '-empty').hidden = !!latest;
-        $(this.id + '-volume').textContent = `V ${compact(latest?.volume)}`;
-        if (!this.hovering)
-            this.showOHLC(latest);
+        const hovered = this.hoveredTime === next?.time ? next : this.rows.find(row => row.time === this.hoveredTime);
+        this.showCandleInfo(hovered ?? latest);
         for (const name of Object.keys(this.lines)) {
             const point = data.indicator_preview[name] ?? this.indicators[name]?.at(-1);
             const node = $(this.id + '-legend').querySelector('.' + name);
             node.hidden = !point;
         }
     }
-    showOHLC(row) {
+    showCandleInfo(row) {
+        $(this.id + '-volume').textContent = `Vol ${compact(row?.volume)}`;
         const node = $(this.id + '-ohlc');
         if (!row) {
             node.textContent = '—';
@@ -176,6 +174,38 @@ export class Panel {
         }
         const range = row.low > 0 ? ((row.high - row.low) / row.low * 100).toFixed(2) + '%' : '—';
         node.innerHTML = `<span>O ${money(row.open)}</span><span>H <b>${money(row.high)}</b></span><span>L <b>${money(row.low)}</b></span><span>C ${money(row.close)}</span><span title="(H − L) / L">Range <b>${range}</b></span>`;
+    }
+    showHover(row) {
+        this.hoveredTime = row?.time;
+        this.showCandleInfo(row ?? this.active ?? this.rows.at(-1));
+    }
+    clearLinkedPrice() {
+        if (this.linkedPrice)
+            this.linkedPrice.series.removePriceLine(this.linkedPrice.line);
+        this.linkedPrice = undefined;
+    }
+    showLinkedHover(row, price, paneIndex = 0) {
+        const series = paneIndex === 1 ? this.volume : this.candles;
+        if (row && price !== undefined) {
+            this.clearLinkedPrice();
+            this.chart.setCrosshairPosition(price, row.time, series);
+        }
+        else {
+            this.chart.clearCrosshairPosition();
+            if (price === undefined)
+                this.clearLinkedPrice();
+            else {
+                if (this.linkedPrice?.series !== series) {
+                    this.clearLinkedPrice();
+                    this.linkedPrice = { series, line: series.createPriceLine({ price, color: '#737d8c', lineWidth: 1,
+                            lineStyle: L.LineStyle.LargeDashed, axisLabelColor: '#4c5667', axisLabelTextColor: '#ffffff', axisLabelVisible: true }) };
+                }
+                else
+                    this.linkedPrice.line.applyOptions({ price });
+            }
+        }
+        // No matching date still allows a price line; OHLC/Vol stay at latest.
+        this.showHover(row);
     }
     reveal(row) {
         const index = this.rows.findIndex(r => r.time === row.time);
@@ -190,21 +220,18 @@ export class Panel {
 export function linkTradingDay(daily, intraday) {
     let linking = false, selectedTime;
     const restored = new Map();
-    function target(peer, row) {
-        const items = peer.days.get(dayKey(row.time));
+    function target(peer, time) {
+        const items = peer.days.get(dayKey(time));
         return items?.find(item => item.time === selectedTime) ?? items?.[0];
     }
     for (const [source, peer] of [[daily, intraday], [intraday, daily]]) {
-        source.onHover = row => {
+        source.onHover = (row, price, paneIndex = 0, time = row?.time) => {
             if (linking)
                 return;
             linking = true;
             try {
-                const match = row ? target(peer, row) : undefined;
-                if (match)
-                    peer.chart.setCrosshairPosition(match.close, match.time, peer.candles);
-                else
-                    peer.chart.clearCrosshairPosition();
+                const match = time === undefined ? undefined : target(peer, time);
+                peer.showLinkedHover(match, price, paneIndex);
             }
             finally {
                 linking = false;
@@ -217,18 +244,19 @@ export function linkTradingDay(daily, intraday) {
                 $(panel.id + '-panel').dataset.selectedDay = day;
                 restored.set(panel, panel.key);
             }
-            const match = target(peer, row);
+            const match = target(peer, row.time);
             if (match)
                 peer.reveal(match);
-            source.onHover(row);
         };
     }
     return {
         clear() {
             selectedTime = undefined;
             restored.clear();
-            for (const panel of [daily, intraday])
+            for (const panel of [daily, intraday]) {
+                panel.showLinkedHover();
                 delete $(panel.id + '-panel').dataset.selectedDay;
+            }
         },
         restore() {
             if (selectedTime === undefined)

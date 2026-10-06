@@ -8,15 +8,16 @@ const signed = (value, percent = false, extended = false) => `${Number(value) > 
 const pnlClass = (value) => Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
 const symbolFor = (ticker) => ticker.endsWith('.US') ? ticker : ticker + '.US';
 export function sortedHoldingRows(holdings, sort) {
-    const rows = holdings.flatMap(holding => holding.sequences.map(sequence => ({ holding, sequence })));
+    const all = holdings.flatMap(holding => holding.sequences.map(sequence => ({ holding, sequence })));
+    const rows = all.filter(row => !row.sequence.closed_today), closed = all.filter(row => row.sequence.closed_today);
     if (!sort)
-        return rows;
+        return [...rows, ...closed];
     const value = ({ holding, sequence }) => {
         if (sort === 'symbol')
             return holding.ticker;
         return sort === 'change_percent' || sort === 'extended_percent' ? holding[sort] : sequence[sort];
     };
-    return rows.sort((a, b) => {
+    rows.sort((a, b) => {
         const left = value(a), right = value(b);
         if (sort === 'symbol')
             return String(right).localeCompare(String(left), 'en');
@@ -24,6 +25,7 @@ export function sortedHoldingRows(holdings, sort) {
         const missingX = x == null || !Number.isFinite(x), missingY = y == null || !Number.isFinite(y);
         return missingX ? (missingY ? 0 : 1) : missingY ? -1 : y - x;
     });
+    return [...rows, ...closed];
 }
 export class HoldingsList {
     onSelect;
@@ -114,6 +116,10 @@ export class HoldingsList {
         const first = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort)[0];
         return first ? { symbol: symbolFor(first.holding.ticker), key: first.sequence.buy_ids.join(':') } : null;
     }
+    forSymbol(symbol) {
+        const row = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort).find(row => symbolFor(row.holding.ticker) === symbol);
+        return row ? { symbol, key: row.sequence.buy_ids.join(':') } : null;
+    }
     update(state, regularSession) {
         this.data = state;
         if (regularSession !== undefined)
@@ -162,7 +168,7 @@ export class HoldingsList {
         $('holdings-account').title = data ? `Latest position value + SnapTrade cash ${money.format(Number(data.funds.cash))}` : '';
         $('holdings-empty').hidden = !!data?.holdings.length;
         $('holdings-empty').textContent = data ? 'No holdings' : this.data?.error ? 'Holdings unavailable' : 'Loading…';
-        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
+        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.closed_today, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
         if (structure !== this.structure) {
             this.structure = structure;
             this.rows.clear();
@@ -175,6 +181,7 @@ export class HoldingsList {
                     const key = sequence.buy_ids.join(':'), row = document.createElement('tr');
                     row.dataset.holding = key;
                     row.tabIndex = 0;
+                    row.classList.toggle('holding-closed', sequence.closed_today);
                     row.setAttribute('aria-label', `Select ${holding.ticker}, bought ${sequence.opened_on}`);
                     const label = this.cell(row, '');
                     const toggle = document.createElement('button');
@@ -200,6 +207,7 @@ export class HoldingsList {
                             const detail = document.createElement('tr');
                             detail.className = 'holding-trade';
                             detail.dataset.holding = key;
+                            detail.classList.toggle('holding-closed', sequence.closed_today);
                             this.cell(detail, sale ? 'Sold' : 'Buy');
                             this.cell(detail, trade.date);
                             this.cell(detail, sale ? String(sale.holding_days) : '');
@@ -225,7 +233,8 @@ export class HoldingsList {
                 this.value(row.cells[1], netLiq.format(Number(sequence.market_value)));
                 const priceTime = new Date(typeof holding.price_timestamp === 'number' ? holding.price_timestamp * 1000 : holding.price_timestamp).toLocaleString('en-GB');
                 const session = holding.price_session === 'Intraday' ? 'Regular' : holding.price_session;
-                row.cells[1].title = `${holding.price_source === 'longbridge' ? 'Longbridge' : 'SnapTrade fallback'}${session ? ' · ' + session : ''} · ${priceTime}`;
+                row.cells[1].title = sequence.closed_today ? 'Closed today · no remaining position' :
+                    `${holding.price_source === 'longbridge' ? 'Longbridge' : 'SnapTrade fallback'}${session ? ' · ' + session : ''} · ${priceTime}`;
                 this.value(row.cells[2], String(sequence.holding_days));
                 this.value(row.cells[3], signed(sequence.total_pnl_percent, true));
                 row.cells[3].className = pnlClass(sequence.total_pnl_percent);
@@ -238,8 +247,10 @@ export class HoldingsList {
                     row.cells[index].className = value == null ? '' : pnlClass(value);
                 }
                 row.cells[7].title = holding.extended_percent != null ? `${session}: change from regular close` : '';
-                row.cells[8].title = holding.day_reference_price != null ?
-                    `${quantity.format(Number(sequence.held_quantity))} shares × (latest price − ${money.format(Number(holding.day_reference_price))} previous regular close) · ${session} · ${priceTime}` : 'Daily P/L unavailable: missing Longbridge price or previous regular close';
+                const basis = sequence.day_reference_source === 'entry' ? 'entry price' :
+                    sequence.day_reference_source === 'mixed' ? 'weighted entry / previous regular close' : 'previous regular close';
+                row.cells[8].title = sequence.day_reference_price != null ?
+                    `${sequence.closed_today ? 'Realized today' : quantity.format(Number(sequence.held_quantity)) + ' remaining shares'} · ${basis} ${money.format(Number(sequence.day_reference_price))} · ${session ?? ''} · ${priceTime}` : 'Daily P/L unavailable: missing price or previous regular close';
             }
         $('holdings-total-value').textContent = data ? netLiq.format(Number(data.funds.stock_market_value)) : '—';
         $('holdings-total-pnl').textContent = data ? signed(data.summary.pnl) : '—';
@@ -294,8 +305,8 @@ export class HoldingsList {
             document.body.append(copy);
             const intrinsic = Math.ceil(copy.getBoundingClientRect().width);
             copy.remove();
-            const list = document.querySelector('.list-body');
-            this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + list.offsetWidth - list.clientWidth);
+            const scroll = table.closest('.holdings-scroll');
+            this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + scroll.offsetWidth - scroll.clientWidth);
         }
         this.onWidth(this.minimumWidth);
     }

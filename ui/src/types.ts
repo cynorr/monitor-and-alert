@@ -10,6 +10,34 @@ export function defaultTimeframe(now = Date.now()) {
     const period = [5, 15, 30, 60].find(minutes => elapsed < minutes) ?? 60;
     return period === 60 ? '1h' : `${period}m`;
 }
+export type PipelineStage = {
+    status: 'idle' | 'running' | 'ready' | 'error';
+    target: string | null;
+    updated_at: string | null;
+    error: string | null;
+};
+export type MassiveState = {
+    target_date: string;
+    ready: boolean;
+    running: boolean;
+    error?: string;
+    daily: PipelineStage;
+    splits: PipelineStage;
+    bars: PipelineStage & { input_revision: string | null };
+    features: PipelineStage & { date: string | null; input_revision: string | null };
+};
+export function scanProgress(value: MassiveState) {
+    const labels = { daily: 'Downloading daily', splits: 'Updating splits', bars: 'Building daily bars', features: 'Preparing scan' };
+    const stages = Object.entries(labels) as [keyof typeof labels, string][];
+    const ready = value.features.date;
+    const completed = value.features.updated_at ? new Date(value.features.updated_at) : null;
+    const stamp = completed && Number.isFinite(completed.getTime()) ? ' · ' + nyTime.format(completed) + ' ET' : '';
+    const errors = [value.error, ...stages.map(([key]) => value[key].error)].filter((error): error is string => !!error);
+    const active = stages.find(([key]) => value[key].status === 'running');
+    const progress = active?.[1] ?? (value.running ? 'Preparing scan' : errors.length ? 'Refresh failed' : !ready ? 'Scan not ready' : '');
+    const text = [ready ? 'Scan Ready ' + ready + stamp : '', progress].filter(Boolean).join(' · ');
+    return { text, error: errors.length > 0, title: errors.join('\n') || 'Latest completed scan; target ' + value.target_date };
+}
 export type Row = {
     time: number;
     open: number;
@@ -50,6 +78,11 @@ export type Ticker = {
     symbol: string;
     ticker: string;
     status: string;
+    section?: string;
+    tags?: string[];
+    tag_ids?: string[];
+    manual_tags?: string[];
+    excluded_at?: string;
     quote?: Quote;
     errors?: string[];
     close?: number | null;
@@ -60,6 +93,7 @@ export type View = {
     type?: string;
     request_id?: number;
     symbol: string;
+    security_name?: string | null;
     timeframe: string;
     server_time: number;
     run_id: string;
@@ -67,6 +101,7 @@ export type View = {
     app_mode?: 'scan' | 'monitor';
     mock?: boolean;
     date?: string;
+    read_only_daily?: boolean;
     charts: Record<string, ChartData>;
     quote: Quote;
     summary: {
@@ -85,3 +120,6 @@ export function extendedQuote(quote?: Quote) {
     const regular = quote.regular;
     return Object.values(quote.extended).filter(q => !regular || q.timestamp > regular.timestamp).sort((a, b) => b.timestamp - a.timestamp)[0];
 }
+
+export const selectionRequest = (symbol: string, timeframe: string, request_id: number, mode: 'scan' | 'monitor', source: 'watchlist' | 'holdings') =>
+    ({ type: 'select', symbol, timeframe, request_id, mode, source });

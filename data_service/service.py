@@ -32,7 +32,7 @@ class SyncState:
 
 
 class DataService:
-    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None):
+    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None):
         self.tickers = tickers
         self.holdings_symbols = []
         self.symbols = [t.symbol for t in tickers]
@@ -40,12 +40,14 @@ class DataService:
         self.now = clock or time.time
         self.mode = 'live'
         self.calendar = calendar or TradingCalendar()
-        self.store = BarStore(runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
+        self.store = BarStore(bars_path or runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
         self.validator = DataValidator(self.store, self.calendar)
         self.charts = ChartCache(self.store, self.calendar)
+        self.alerts = alerts
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
-        self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.charts.apply_quote,
-                                   on_reconnect=self.recover) if broker else None
+        self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
+                                   on_reconnect=lambda: self.recover(reset_alerts=False),
+                                   on_reset=alerts.reset if alerts else None) if broker else None
         self.run_id = uuid.uuid4().hex
         self.started_at = int(self.now())
         self.focus = (self.symbols[0] if self.symbols else '', '5m')
@@ -107,28 +109,35 @@ class DataService:
                 'workspace_error': self.workspace.error if self.workspace else None}
 
     async def list_action(self, payload):
-        from .workspace import normalize_ticker, SECTIONS
+        from .workspace import normalize_ticker
         if self.workspace is None or self.workspace_subset is not None:
             raise ValueError('List editing unavailable for this session')
         action, ticker = payload.get('action'), normalize_ticker(payload.get('ticker', ''))
         section = payload.get('section')
         if action in {'lookup', 'add'}:
             if action == 'add':
-                if section not in SECTIONS:
-                    raise ValueError('Invalid section')
-                if self.workspace.section(ticker):
-                    return {**self.list_state(), 'notice': 'Ticker already in Focus or Wait'}
+                if payload.get('list_name', 'focus') != 'focus':
+                    raise ValueError('Add new tickers to Focus')
+                if self.workspace.section(ticker) == 'focus':
+                    self.workspace.keep_ticker(ticker)
+                    return {**self.list_state(), 'notice': 'Ticker already in Focus'}
             if self.broker is None:
                 raise ValueError('Ticker validation unavailable')
             info = await self.broker.validate_ticker(ticker)
             if action == 'lookup':
                 return {'ticker': ticker, 'name': info['name']}
-            self.workspace.add_ticker(ticker, section)
+            self.workspace.add_ticker(ticker, 'focus')
+            if section not in (None, 'focus', 'wait', 'unclassified'):
+                self.workspace.move_ticker(ticker, section, 0)
             return {**self.list_state(), 'notice': f"Added {ticker} · {info['name']}"}
         if action == 'delete':
             self.workspace.delete_ticker(ticker)
         elif action == 'move':
-            self.workspace.move_ticker(ticker, section, payload.get('index'))
+            self.workspace.move_ticker(ticker, section, payload.get('index'), list_name=payload.get('list_name', 'focus'))
+        elif action == 'keep':
+            self.workspace.add_ticker(ticker, 'focus')
+        elif action == 'tag':
+            self.workspace.set_manual_tags(ticker, payload.get('tags', []))
         else:
             raise ValueError('Unknown list action')
         return self.list_state()
@@ -136,16 +145,18 @@ class DataService:
     def validate(self, symbol, now=None):
         return self.validator.validate(symbol, int(self.now()) if now is None else now)
 
-    def select(self, symbol, timeframe):
+    def select(self, symbol, timeframe, source='watchlist'):
         self.store.check(symbol)
         if timeframe not in INTRADAY:
             raise ValueError('Invalid intraday timeframe')
         self.focus = (symbol, timeframe)
 
-    def recover(self):
+    def recover(self, *, reset_alerts=True):
         # A recovery cannot attribute missed Quote increments to the active bucket.
         self.charts.volume_baselines.clear()
         self.charts.quotes.clear()
+        if self.alerts and reset_alerts:
+            self.alerts.reset()
         for active in self.charts.active.values():
             active['volume'] = None
         for state in self.sync.values():
@@ -153,6 +164,11 @@ class DataService:
             state.complete = False
             state.due = state.attempt = 0
             state.limit = 4
+
+    def apply_quote(self, symbol, quote):
+        if self.alerts:
+            self.alerts.quote(symbol, quote)
+        self.charts.apply_quote(symbol, quote)
 
     def priority(self, key):
         symbol, tf = key
@@ -273,7 +289,7 @@ class DataService:
             result['regular'] = {**regular, 'prev_close': previous or regular.get('prev_close')}
         return result
 
-    def view(self, symbol, tf, revisions=None):
+    def view(self, symbol, tf, revisions=None, source='watchlist'):
         self.store.check(symbol)
         if tf not in INTRADAY:
             raise ValueError('Invalid chart timeframe')
@@ -292,7 +308,8 @@ class DataService:
         result = []
         for ticker in self.tickers:
             state = self.status(ticker.symbol, now)
-            result.append({**asdict(ticker), 'quote': self.quote(ticker.symbol, now),
+            member = self.workspace.data['statuses'].get(ticker.ticker, {}) if self.workspace else {}
+            result.append({**member, **asdict(ticker), 'quote': self.quote(ticker.symbol, now),
                            'errors': state['errors']})
         return result
 

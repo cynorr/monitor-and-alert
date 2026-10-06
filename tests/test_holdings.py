@@ -4,18 +4,18 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from data_service.holdings import build, read_rules, trades, stock_positions
+from data_service.holdings import build, read_rules, trades, stock_positions, holding_days, value_positions
 
 
 def activity(oid, side, qty, price, day, *, aid=None, symbol='XYZ'):
     return {'id': aid or oid, 'external_reference_id': oid,
-            'symbol': {'id': symbol, 'symbol': symbol}, 'option_symbol': None,
+            'symbol': {'id': symbol, 'symbol': symbol, 'type': {'code': 'cs'}, 'currency': {'code': 'USD'}}, 'option_symbol': None,
             'type': side, 'units': D(qty) * (1 if side == 'BUY' else -1),
             'price': D(price), 'trade_date': day + 'T00:00:00Z'}
 
 
 def order(oid, side, qty, price, day):
-    return {'brokerage_order_id': oid, 'universal_symbol': {'id': 'XYZ', 'symbol': 'XYZ'},
+    return {'brokerage_order_id': oid, 'universal_symbol': {'id': 'XYZ', 'symbol': 'XYZ', 'type': {'code': 'cs'}, 'currency': {'code': 'USD'}},
             'option_symbol': None, 'filled_quantity': qty, 'execution_price': price,
             'action': side, 'time_executed': day + 'T00:00:00Z'}
 
@@ -48,11 +48,11 @@ class AccountingTests(unittest.TestCase):
         self.assertEqual((s['sold_quantity'], s['held_quantity']), (D(50), D(50)))
         self.assertEqual((s['realized_pnl'], s['realized_pnl_percent']), (D(75), D(15)))
         self.assertEqual((s['unrealized_pnl'], s['unrealized_pnl_percent']), (D(100), D(20)))
-        self.assertEqual((s['total_pnl'], s['total_pnl_percent']), (D(175), D('17.5')))
+        self.assertEqual((s['total_pnl'], s['total_pnl_percent']), (D(100), D(20)))
         self.assertEqual(s['market_value'], D(600))
         self.assertEqual(s['sold_percent'], D(50))
-        self.assertEqual(result['summary']['pnl'], D(175))
-        self.assertEqual(result['summary']['pnl_percent'], D(175) / D(600) * 100)
+        self.assertEqual(result['summary']['pnl'], D(100))
+        self.assertEqual(result['summary']['pnl_percent'], D(20))
         self.assertEqual(s['holding_days'], 16)
         self.assertEqual(set(result['funds']), {'stock_market_value', 'account_total', 'cash'})
 
@@ -144,6 +144,70 @@ class AccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'quantity mismatch'):
             build(raw, [])
 
+    def test_short_holding_days_skip_only_weekends_then_return_to_calendar_days(self):
+        self.assertEqual(holding_days('2026-10-02', '2026-10-02'), 0)
+        self.assertEqual(holding_days('2026-10-02', '2026-10-05'), 1)
+        self.assertEqual(holding_days('2026-10-02', '2026-10-09'), 5)
+        self.assertEqual(holding_days('2026-10-02', '2026-10-10'), 8)
+        # A weekday holiday still counts; no exchange calendar is involved.
+        self.assertEqual(holding_days('2026-09-04', '2026-09-07'), 1)
+
+    def test_closed_today_is_found_from_fills_without_any_current_position(self):
+        raw = snapshot([activity('b', 'BUY', '100', '10', '2026-09-14')], '0',
+                       [order('s', 'SELL', '100', '9', '2026-09-17')])
+        raw['positions']['results'] = []
+        base = build(raw, [])
+        s, = base['holdings'][0]['sequences']
+        self.assertTrue(s['closed_today'])
+        self.assertEqual((s['market_value'], s['total_pnl'], s['total_pnl_percent']), (D(0), D(-100), D(-10)))
+        self.assertEqual(s['holding_days'], 3)
+        quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 11, 'prev_close': 9.5, 'trade_session': 'Intraday'}}}
+        current = value_positions(base, quotes)
+        self.assertEqual(current['holdings'][0]['sequences'][0]['day_pnl'], D(-50))
+        self.assertEqual(current['summary'], {'pnl': D(0), 'pnl_percent': None, 'day_pnl': D(0)})
+        self.assertEqual(current['funds']['account_total'], D(400))
+        self.assertEqual(value_positions(base, quotes, '2026-09-18')['holdings'], [])
+
+    def test_closed_today_group_and_open_group_of_same_ticker_reconcile(self):
+        raw = snapshot([activity('old', 'BUY', '20', '10', '2026-09-14'),
+                        activity('closed', 'SELL', '20', '8', '2026-09-17'),
+                        activity('new', 'BUY', '10', '11', '2026-09-17')], '10')
+        rules = [{'ticker': 'XYZ', 'buys': ['old'], 'sells': ['closed']}]
+        result = build(raw, rules)
+        old, new = result['holdings'][0]['sequences']
+        self.assertTrue(old['closed_today'])
+        self.assertFalse(new['closed_today'])
+        self.assertEqual(result['summary']['pnl'], D(10))
+        self.assertEqual(new['holding_days'], 0)
+
+    def test_sold_only_previous_day_is_not_retained(self):
+        raw = snapshot([activity('b', 'BUY', '10', '10', '2026-09-14'),
+                        activity('s', 'SELL', '10', '9', '2026-09-16')], '0')
+        self.assertEqual(build(raw, [])['holdings'], [])
+
+    def test_multiple_flat_episodes_closed_today_survive_without_old_history(self):
+        raw = snapshot([activity('old', 'BUY', '5', '1', '2026-08-01'),
+                        activity('old-sell', 'SELL', '5', '2', '2026-08-02'),
+                        activity('a', 'BUY', '10', '10', '2026-09-14'),
+                        activity('b', 'BUY', '20', '11', '2026-09-17'),
+                        activity('sa', 'SELL', '10', '9', '2026-09-17'),
+                        activity('sb', 'SELL', '20', '12', '2026-09-17')], '0')
+        rules = [{'ticker': 'XYZ', 'buys': ['a'], 'sells': ['sa']},
+                 {'ticker': 'XYZ', 'buys': ['b'], 'sells': ['sb']}]
+        rows = build(raw, rules)['holdings'][0]['sequences']
+        self.assertEqual([s['buy_ids'] for s in rows], [['a'], ['b']])
+        self.assertTrue(all(s['closed_today'] for s in rows))
+
+    def test_missing_buy_or_ambiguous_closed_sell_is_not_guessed(self):
+        raw = snapshot([activity('s', 'SELL', '10', '9', '2026-09-17')], '0')
+        with self.assertRaisesRegex(ValueError, 'quantity mismatch'):
+            build(raw, [])
+        raw['activities'] = [activity('a', 'BUY', '10', '10', '2026-09-17'),
+                             activity('b', 'BUY', '10', '11', '2026-09-17'),
+                             activity('s', 'SELL', '20', '9', '2026-09-17')]
+        with self.assertRaisesRegex(ValueError, 'Ambiguous sell'):
+            build(raw, [])
+
     def test_txt_supports_comments_spaces_and_merged_buy_alias(self):
         raw = snapshot([activity('a', 'BUY', '10', '10', '2026-09-01'),
                         activity('b', 'BUY', '10', '12', '2026-09-02'),
@@ -158,4 +222,3 @@ class AccountingTests(unittest.TestCase):
             (folder / 'sequences.txt').write_text('missing s\n')
             with self.assertRaises(KeyError):
                 read_rules(raw, folder)
-

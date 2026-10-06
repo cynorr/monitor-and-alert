@@ -10,7 +10,7 @@
 <main id="workspace" class="workspace" aria-label="Charts and watchlist">
   <article class="chart-panel" id="daily-panel" aria-label="Daily chart">
     <div class="chart-header">
-      <div class="chart-toolbar"><strong class="symbol">—</strong><button id="daily-latest" class="latest icon-button" aria-label="Daily: go to latest" title="Go to latest">↦</button></div>
+      <div class="chart-toolbar"><strong class="symbol">—</strong><span id="daily-security-name" class="security-name" hidden></span><button id="daily-latest" class="latest icon-button" aria-label="Daily: go to latest" title="Go to latest">↦</button></div>
       <div class="spread" hidden><span class="bid"></span><span class="ask"></span></div>
       <div class="metrics"><span>ADR20 <b class="adr">—</b></span><span>ADV20 <b class="adv">—</b></span></div>
       <div class="header-bottom"><div id="daily-legend" class="legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma50">SMA 50</span></div><span id="daily-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
@@ -32,54 +32,66 @@
   <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
   <aside class="watchlist" aria-label="Watchlist">
     <div class="list-header">
-    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button></div><span id="symbol-count"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
+    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
+    <div id="scan-progress" class="scan-progress" role="status" hidden></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
     </div>
-    <section id="scan-controls" class="scan-controls" hidden aria-label="Scan controls">
-      <div class="scan-date-row"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button><span id="scan-result-count"></span></div>
-      <div id="scan-lists" class="scan-pills" role="group" aria-label="Scan list"><button data-list="discover">Discover</button><button data-list="focus">Focus</button><button data-list="wait">Wait</button><button data-list="hidden">Hidden</button></div>
+    <section id="scan-controls" class="scan-controls" hidden aria-label="List filters and Scan controls">
+      <div id="scan-date-row" class="scan-date-row"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button><span id="scan-result-count"></span></div>
+      <div id="scan-lists" class="scan-pills" role="group" aria-label="Scan list"><button data-list="discover">Discover</button><button data-list="focus">Focus</button><button data-list="excluded">Excluded</button></div>
       <div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div><button id="tag-add" aria-label="Create Tag">+</button></div>
       <details id="filter-editor"><summary>Filters <span id="filter-count"></span><span id="tag-unsaved" hidden>Unsaved</span></summary>
-        <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
+        <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><select id="tag-role" aria-label="Tag role"><option value="setup">Setup</option><option value="extended">Extended</option><option value="broken">Broken</option><option value="label">Label</option></select><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
+        <div class="tag-appearance-editor" aria-label="Tag appearance">
+          <label>Icon<select id="tag-icon" aria-label="Tag icon"></select></label>
+          <label>Line color<input id="tag-color" type="color" aria-label="Tag line color"></label>
+          <label>Background<select id="tag-background" aria-label="Tag background"><option value="frosted">Frosted</option><option value="transparent">Transparent</option></select></label>
+          <label>Background color<input id="tag-background-color" type="color" aria-label="Tag background color"></label>
+          <span id="tag-preview" aria-label="Tag preview"></span>
+        </div>
         <div id="filter-rules" class="filter-rules"></div>
       </details>
-      <div class="scan-batch"><label><input type="checkbox" id="scan-select-all"> Select all results</label><select id="scan-sort" aria-label="Scan sort"><option value="default">Default order</option><option value="rfl1m">RFL 1M</option><option value="rfl3m">RFL 3M</option><option value="rfl6m">RFL 6M</option></select></div>
-      <div id="scan-move" class="scan-move"><span>Move to</span><button data-target="discover">Discover</button><button data-target="focus">Focus</button><button data-target="wait">Wait</button><button data-target="hidden">Hidden</button></div>
+      <div id="scan-batch" class="scan-batch"><label><input type="checkbox" id="scan-select-all"> Select all results</label><select id="scan-sort" aria-label="Scan sort"><option value="default">Default order</option><option value="rfl1m">RFL 1M</option><option value="rfl3m">RFL 3M</option><option value="rfl6m">RFL 6M</option></select></div>
+      <div id="scan-move" class="scan-move"><span>Move to</span><button data-target="discover">Discover</button><button data-target="focus">Focus</button><button data-target="excluded" title="Exclude for seven days">Excluded</button></div>
       <div id="scan-error" class="list-message" role="alert"></div>
     </section>
     <div id="workspace-error" class="list-message" role="alert"></div>
     <div id="list-notice" class="list-message" role="status"></div>
+    <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
+      <div class="holdings-heading">
+        <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count" class="count-badge"></span></button>
+        <div class="holdings-meta"><span>Account Value <b id="holdings-account">—</b></span><time id="holdings-updated" role="status">Loading…</time></div>
+      </div>
+      <div id="holdings-content">
+        <div class="holdings-scroll">
+          <table id="holdings-table" class="holdings-table" aria-label="Holdings and trades by buy order">
+            <thead><tr>
+              <th scope="col" aria-sort="none"><button data-holdings-sort="symbol">Symbol</button></th>
+              <th scope="col" aria-sort="none" title="Shares held × latest price"><button data-holdings-sort="market_value">Net Liq</button></th>
+              <th scope="col" aria-sort="none"><button data-holdings-sort="holding_days">Days</button></th>
+              <th scope="col" aria-sort="none" title="Remaining position profit / remaining cost; closed rows show realized return"><button data-holdings-sort="total_pnl_percent">P/L %</button></th>
+              <th scope="col" aria-sort="none" title="Remaining position profit; closed rows show realized profit"><button data-holdings-sort="total_pnl">P/L</button></th>
+              <th scope="col" aria-sort="none"><button data-holdings-sort="sold_percent">Sold</button></th>
+              <th scope="col" aria-sort="none" title="Regular price change from previous daily close"><button data-holdings-sort="change_percent">Chg%</button></th>
+              <th scope="col" aria-sort="none" title="Latest extended price change from regular close"><button data-holdings-sort="extended_percent">Ext</button></th>
+              <th scope="col" aria-sort="none" title="Remaining shares: today's buys use entry cost, older shares use previous regular close; closed rows show realized daily profit"><button data-holdings-sort="day_pnl">P/L Day</button></th>
+            </tr></thead>
+            <tbody id="holdings-rows"></tbody>
+            <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td></tr></tfoot>
+          </table>
+        </div>
+        <div id="holdings-empty" class="empty-list">Loading…</div>
+      </div>
+    </section>
     <div class="list-body">
-      <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
-        <div class="holdings-heading">
-          <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count"></span></button>
-          <div class="holdings-meta"><span>Account Value <b id="holdings-account">—</b></span><time id="holdings-updated" role="status">Loading…</time></div>
-        </div>
-        <div id="holdings-content">
-          <div class="holdings-scroll">
-            <table id="holdings-table" class="holdings-table" aria-label="Holdings and trades by buy order">
-              <thead><tr>
-                <th scope="col" aria-sort="none"><button data-holdings-sort="symbol">Symbol</button></th>
-                <th scope="col" aria-sort="none" title="Shares held × latest price"><button data-holdings-sort="market_value">Net Liq</button></th>
-                <th scope="col" aria-sort="none"><button data-holdings-sort="holding_days">Days</button></th>
-                <th scope="col" aria-sort="none" title="Row: total profit / buy cost; total: total profit / current market value"><button data-holdings-sort="total_pnl_percent">P/L %</button></th>
-                <th scope="col" aria-sort="none" title="Realized + unrealized profit"><button data-holdings-sort="total_pnl">P/L</button></th>
-                <th scope="col" aria-sort="none"><button data-holdings-sort="sold_percent">Sold</button></th>
-                <th scope="col" aria-sort="none" title="Regular price change from previous daily close"><button data-holdings-sort="change_percent">Chg%</button></th>
-                <th scope="col" aria-sort="none" title="Latest extended price change from regular close"><button data-holdings-sort="extended_percent">Ext</button></th>
-                <th scope="col" aria-sort="none" title="Shares still held × (latest price − previous regular close)"><button data-holdings-sort="day_pnl">P/L Day</button></th>
-              </tr></thead>
-              <tbody id="holdings-rows"></tbody>
-              <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td></tr></tfoot>
-            </table>
-          </div>
-          <div id="holdings-empty" class="empty-list">Loading…</div>
-        </div>
-      </section>
-      <div id="list-columns" class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span><span aria-hidden="true"></span></div>
+      <div id="list-columns" class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span><span title="1M / 3M / 6M return from low">Growth</span><span>Tags</span><span aria-hidden="true"></span></div>
       <nav id="symbols" aria-label="Symbols"></nav>
     </div>
   </aside>
 </main>
-
+<aside id="alert-stack" class="alert-stack" aria-label="Price alerts">
+  <button id="alert-notifications" class="alert-notifications" hidden></button>
+  <div id="alert-error" class="alert-error" role="alert" hidden><span id="alert-error-message"></span><button id="alert-error-close" aria-label="Dismiss error">×</button></div>
+  <div id="alert-cards" class="alert-cards" aria-live="polite" aria-relevant="additions"></div>
+</aside>
 </body></html>
