@@ -42,6 +42,11 @@ export type Row = {
     low: number;
     close: number;
     volume: number | null;
+    volume_comparison?: {
+        average: number | null;
+        samples: number;
+        percent: number | null;
+    };
 };
 export type Point = {
     time: number;

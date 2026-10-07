@@ -2,6 +2,20 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-08：Vol 与五交易日均量比较
+
+环境：macOS、Python 3.13、Longbridge SDK 5.0.0、TypeScript、真实本机服务与 Codex 浏览器；美东 2026-10-07 Regular。行情 API 验收限定 BMNR / MU，历史规则使用现有 Longbridge 和 Massive 缓存，各来源独立核对；未新增或运行 Mock。
+
+- 历史数据 726 项核对通过：BMNR / MU 的 Daily 与五个 Intraday 周期、Scan Daily、PSIG 的零成交量与零均值、窗口起点无参考历史。真实 MU 2025-12-01 的 13:30 2h 样本自动跳过前五交易日中的 Thanksgiving 提前收盘日，使用4个样本；2025-11-03 的 09:30 时段跨 DST 仍匹配5个样本。
+- 13:24:43 ET 完成实时验收：56 个 symbol 的336个 closed 窗口 complete，pending=0；BMNR / MU 的六周期 open 和对应历史参考均正确。MU Daily / 1h 连续观察30秒，144次 WS view、408项独立核对通过，分别出现95 / 96组不同成交量及百分比。比例使用完整历史 candle；无额外券商请求。
+- 浏览器确认 Monitor MU 的 Daily、1h、15m 与历史悬停分别显示同一 candle 的 Vol / `5D Avg`；Scan 的 PSIG / JAGX 使用本源历史。最终前端的 JAGX 历史悬停在多次 WS 刷新中保持 `Vol 6.87K · 5D Avg 110%`，离开后恢复最后一根。JAGX 最新 Daily 的原始比例549.300034%，实际显示 `Vol 27.07M · 5D Avg 549%`，验证整数截取。未录屏。
+- 后端均值索引复用历史 revision，实时仅计算比例；缓存和数据库的官方 OHLCV 未改变。既有 SECZ Daily 重复时间戳诊断继续保留。
+- TypeScript build、Python编译、git diff --check通过；既有 UI 用例的显示预期同步新标签。正式服务已重启，保留当前 Scan 展示，Quote / Holdings 后台持续运行。
+
+证据：[历史规则核对](</var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/monitor-volume-history-_3n791tg/report.json>)、[实时验收](</var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/monitor-volume-live-ji10o50l/report.json>)、[真实页面截图](/tmp/monitor-volume-comparison-2026-10-08.png)。
+
+未覆盖：整日持续运行、移动端、真实开盘/收盘切换；半天与 DST 用真实历史验证，不表示本轮经历了对应 live 时段。未运行全量离线回归。需求唯一入口见 [Volume comparison](chart-ui.md#volume-comparison)。
+
 ## 2026-10-08：Longbridge 六周期 SDK 实时 candle
 
 环境：macOS、Python 3.13、Longbridge SDK 5.0.0；美东 2026-10-07 Regular。正式服务按当前 Focus 与 Holdings 白名单验证，未新增或运行 Mock，未录屏。

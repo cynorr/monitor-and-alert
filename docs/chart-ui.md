@@ -1,6 +1,6 @@
 # Chart UI
 
-Updated: 2026-10-07. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
+Updated: 2026-10-08. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
 
 ## Implementation principle
 
@@ -45,11 +45,22 @@ The default volume divider is moderately higher than before; it remains adjustab
 - EMA/SMA legends pair colored line swatches with concise labels: EMA 10, EMA 20, and SMA 50 for Daily or SMA 65 for Intraday. They do not show current indicator values; unavailable indicator lines and legends remain absent.
 - OHLC sits immediately below the aligned black horizontal border on each chart, at **15px**; ADR/ADV also use **15px**. OHLC fields stay together and wrap on narrow panels. Native chart axes use **12px**. Shared CSS font variables keep other small labels at **11px**, list values at **12px** and body text at **13px**.
 - Range is `(H-L)/L × 100%`. H/L values and Range value are black; other labels and values retain their original color.
-- The volume value uses **`Vol` + compact value** (for example `Vol 1.38M`) at a fixed top-right position within the volume pane. Hover or a linked crosshair shows the volume of the corresponding bar, matching the OHLC bar. Leaving or clearing the crosshair restores the latest bar's volume. Quote refreshes must not replace the hovered value. The label position follows native pane resizing.
+- The volume readout, its five-day comparison and hover behavior follow [Volume comparison](#volume-comparison).
 - Active OHLCV comes directly from the corresponding SDK candle; official closed bars replace provisional values. Data handling is maintained in [longbridge-data.md](longbridge-data.md).
-- The Vol tooltip distinguishes the current Daily cumulative volume, current Intraday candle volume, and unavailable current volume. Hovered closed candles keep their own volume. Daily and Intraday source totals can differ; the source boundary is maintained in [longbridge-data.md](longbridge-data.md#官方数据与时段).
 - Lightweight Charts does not supply a TradingView-style instrument/OHLC header; the small DOM legends use subscribeCrosshairMove and seriesData.
 - Headers omit market/currency, adjustment/session metadata, bar counts and branding/footer strips. Validation sample counts remain backend diagnostics.
+
+## Volume comparison
+
+- Every chart's volume pane shows **`Vol 1.38M · 5D Avg 125%`** at its fixed top-right position. `Vol` and the comparison always refer to the same candle. The position follows native pane resizing. This applies to Monitor Daily/Intraday and Scan/Review Daily.
+- Percentage = candle volume / mean reference volume × 100. **100% means the historical average**, 150% means 1.5 times that average. Display only the integer portion, truncating rather than rounding (125.9% → 125%); retain full precision in calculation. Use exactly `5D Avg`.
+- Anchor the reference window to the displayed candle's New York trading date: use the **five exchange trading sessions strictly before that date**, excluding the displayed session. Historical hover uses that historical date, not today's date.
+- Daily uses the available Daily volumes within those sessions. Intraday uses only the selected period and the same Regular time slot, identified by its New York start time. For example, the second 15m candle compares 09:45–10:00 ET across the prior five sessions. Missing candles do not shift later slots; DST does not change the local-time match.
+- Open and closed candles use the same calculation. The current open volume is compared with historical completed candles for the full corresponding window. Do not extrapolate, normalize by elapsed time or use smaller periods to assemble the reference.
+- Use the available matching samples within the fixed five-session window; do not count absence as zero or reach farther back to fill five samples. Valid zero volumes count as samples. Shortened session-final candles keep their time slot; absent afternoon candles on early-close days are skipped. No samples or a zero historical average produces `5D Avg —`.
+- Hovering candles or volume, including a linked crosshair, shows that candle's Vol and comparison together, matching its OHLC. Clearing or leaving hover restores the last candle, including the current Regular open candle. Live updates refresh a hovered open candle, and preserve a hovered closed candle's readout.
+- The tooltip identifies current Daily cumulative volume, current Intraday candle volume or historical candle volume, and includes the historical mean, actual sample count and `100% = average`. Missing volume remains unavailable.
+- Calculate in Python with the shared trading calendar and existing history cache; send `volume_comparison: {average, samples, percent}` alongside each displayed row. The frontend formats and selects the corresponding result. Each source uses its own historical data; no new requests, subscriptions, persistence or cross-source comparisons are introduced.
 
 ## Mouse, zoom and periods
 

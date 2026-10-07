@@ -17,7 +17,7 @@ from .charts import bar_row
 from .downloader import ohlc_comparison, append_ohlc_log
 from .features.screening import apply_filter, add_rank, mark_candidate
 from .features.snapshot import feature_row, feature_frame
-from .indicators import series, daily_summary, adr_adv, return_from_low
+from .indicators import series, daily_summary, adr_adv, return_from_low, volume_context, volume_comparison
 from .store import atomic_json, read_bars
 from .workspace import inherit_workspace, migrate_workspace
 from .preferences import DEFAULT, validate_preferences
@@ -214,6 +214,9 @@ def daily_chart(path, symbol, value, calendar):
     with closing(connect_daily(path)) as db:
         bars = read_bars(db, symbol, '1d', end=day_start(calendar, value))
     rows = [bar_row(bar) for bar in bars]
+    volume = volume_context(rows, '1d')
+    for row in rows:
+        row['volume_comparison'] = volume_comparison(row, '1d', calendar, volume)
     base = series(rows)
     summary = daily_summary(bars, calendar, calendar.bar_end(day_start(calendar, value), '1d'))
     return {'revision': 1, 'bars': rows, 'indicators': base['series'], 'active': None,

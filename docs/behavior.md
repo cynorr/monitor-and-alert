@@ -72,6 +72,8 @@ Longbridge 调度、重试、恢复与窗口状态统一见 [longbridge-data.md]
 
 Intraday 初始周期按美东开盘经过时间选择，之后保留手工选择。所有 chart 使用统一、可人工调整的初始 bar spacing；可见历史长度随间距与面板宽度变化。参数、周期控件、参考线和交互只在 [chart-ui.md](chart-ui.md) 维护。
 
+所有图表的 Vol 同时显示后端计算的五交易日成交量比较；当前、历史悬停与缺失样本的统一需求只在 [Volume comparison](chart-ui.md#volume-comparison) 维护。
+
 两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 `close × volume` 均值；停牌/稀疏记录按实际根数取窗口，不使用 turnover 改变公式。均线样本不足时不显示该线；上下界矛盾保留官方原值，也可能体现在派生指标中。
 
 跨 closed 边界和回补期间保留上一份完整图表；本周期 closed 与 open 就绪后一次更新。Daily 不依赖 5m 刷新，报价与账户后台持续运行。

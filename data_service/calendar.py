@@ -38,6 +38,11 @@ class TradingCalendar:
             return []
         return [t.date() for t in self.calendar.sessions_in_range(start.isoformat(), end.isoformat())]
 
+    @lru_cache(maxsize=6000)
+    def previous_days(self, day: date, count: int = 5) -> tuple[date, ...]:
+        return tuple(self.days(day - timedelta(days=count * 2 + 30),
+                               day - timedelta(days=1))[-count:])
+
     def completed_days(self, now: int, count: int) -> list[date]:
         today = datetime.fromtimestamp(now, ET).date()
         days = self.days(today - timedelta(days=count * 2 + 30), today)

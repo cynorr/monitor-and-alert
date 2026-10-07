@@ -70,8 +70,9 @@ export class Panel {
             observer.observe(mainPane);
         this.chart.subscribeCrosshairMove(param => {
             const candle = param.seriesData.get(this.candles);
-            const volume = param.seriesData.get(this.volume);
-            const row = candle ? { ...candle, time: Number(candle.time), volume: volume?.value ?? null } : undefined;
+            // The library supplies the time; the original row owns Vol and its comparison.
+            const time = candle ? Number(candle.time) : undefined;
+            const row = time === this.active?.time ? this.active ?? undefined : this.rows.find(row => row.time === time);
             this.showHover(row);
             // Link the pointer's value, never the candle close or histogram value.
             if (param.sourceEvent) {
@@ -184,9 +185,13 @@ export class Panel {
     }
     showCandleInfo(row) {
         const volume = $(this.id + '-volume');
-        volume.textContent = `Vol ${compact(row?.volume)}`;
+        const comparison = row?.volume_comparison;
+        const percent = comparison?.percent;
+        volume.textContent = `Vol ${compact(row?.volume)} · 5D Avg ${percent == null ? '—' : Math.trunc(percent) + '%'}`;
         volume.title = row?.time === this.active?.time && row ? (row.volume == null ? 'Current candle volume unavailable'
             : this.daily ? 'Current daily cumulative volume' : 'Volume for the current intraday candle') : 'Volume for this candle';
+        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${compact(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average.`
+            : '\nPrevious 5 trading days: comparison unavailable.';
         const node = $(this.id + '-ohlc');
         if (!row) {
             node.textContent = '—';

@@ -1,7 +1,7 @@
 """Memory-only display candles and indicator caches; never writes market bars."""
 from __future__ import annotations
 
-from .indicators import series, preview, daily_summary
+from .indicators import series, preview, daily_summary, volume_context, volume_comparison
 
 
 def bar_row(bar):
@@ -30,10 +30,15 @@ class ChartCache:
         if self.dependencies.get(key) != dependency:
             bars = self.store.window(symbol, tf)
             rows = [bar_row(b) for b in bars]
+            volume = volume_context(rows, tf)
+            for row in rows:
+                row['volume_comparison'] = volume_comparison(row, tf, self.calendar, volume)
             previous = self.history.get(key)
             if previous is None or previous[1] != rows:
                 revision = previous[0] + 1 if previous else 1
-                self.history[key] = (revision, rows, series(rows, sma_period=50 if tf == '1d' else 65), bars)
+                base = series(rows, sma_period=50 if tf == '1d' else 65)
+                base['volume_context'] = volume
+                self.history[key] = (revision, rows, base, bars)
             self.dependencies[key] = dependency
         return self.history[key]
 
@@ -52,6 +57,8 @@ class ChartCache:
         target = self.calendar.latest_closed(tf, now)
         closed_ready = bool(rows and rows[-1]['time'] == target)
         active = self.forming(symbol, tf, now) if ready and closed_ready else None
+        if active:
+            active['volume_comparison'] = volume_comparison(active, tf, self.calendar, base['volume_context'])
         # Publish a complete replacement only after this period's closed history
         # and next SDK candle are ready. Other periods do not block this chart.
         waiting = not ready or not closed_ready or (active is None and previous is not None
