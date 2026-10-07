@@ -7,9 +7,11 @@ import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
 import { AlertController, type AlertEvent, type AlertState } from './alerts.js';
+import { AdditionalInfoDisplay, acceptsAdditional, type AdditionalMessage } from './additional-info.js';
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
+const additional = new AdditionalInfoDisplay();
 let symbol = '', timeframe = defaultTimeframe(), epoch = 0;
 let socket: WebSocket | null = null;
 let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, currentView: View | null = null;
@@ -87,11 +89,6 @@ function state(text: string, kind = '') {
         const node = $(id + '-state'); node.textContent = text; node.className = 'state ' + kind;
     }
 }
-function showSecurityName(name?: string | null) {
-    const node = $('daily-security-name'), text = name?.trim() ?? '';
-    node.textContent = node.title = text;
-    node.hidden = !text;
-}
 function showState(view: View) {
     if (appMode === 'scan' || view.read_only_daily) {
         $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
@@ -118,7 +115,6 @@ function apply(view: View) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
-    showSecurityName(view.security_name);
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
         holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
@@ -153,7 +149,7 @@ function select(next: string, tf: string, source: 'watchlist' | 'holdings' = sel
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll<HTMLElement>('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
-    showSecurityName();
+    additional.update(null);
     document.querySelectorAll<HTMLElement>('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
     document.querySelectorAll<HTMLElement>('.session,.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
@@ -181,6 +177,12 @@ function connect() {
         try {
             const data = JSON.parse(event.data);
             if (data.type === 'list') { applyList(data as ListState); return; }
+            if (data.type === 'additional_info') {
+                const info = data as AdditionalMessage;
+                if (acceptsAdditional(info, { symbol, request_id: epoch, mode: appMode, source: selectionSource }))
+                    additional.update(info);
+                return;
+            }
             if (data.type === 'alerts') {
                 alerts.update(data as AlertState);
                 if (nativeEvent) {
@@ -211,7 +213,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button =
     catch (error) { $('list-notice').textContent = (error as Error).message; }
     finally { modePending = false; document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(node => { node.disabled = false; }); }
 }));
-setInterval(() => { if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
+setInterval(() => { additional.tick(); if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
     socket.close(); if (currentView && socket?.readyState === WebSocket.OPEN)
     showState(currentView); }, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && symbol && socket?.readyState === WebSocket.OPEN)

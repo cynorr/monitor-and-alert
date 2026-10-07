@@ -73,6 +73,7 @@ def create_app(service, cors_origin=None):
             nonlocal revisions, context
             last_board = 0
             last_alerts = None
+            last_additional = None
             try:
                 while not ws.closed:
                     if context != service.run_id:
@@ -87,6 +88,14 @@ def create_app(service, cors_origin=None):
                             await ws.send_json({'type': 'alerts', **alerts})
                             last_alerts = signature
                     if symbol in service.symbols:
+                        if hasattr(service, 'additional_info'):
+                            info = service.additional_info(symbol)
+                            signature = (symbol, request_id, source, context, service.additional.revision,
+                                         info['earnings']['last'], info['earnings']['next'])
+                            if signature != last_additional:
+                                await ws.send_json({'type': 'additional_info', 'request_id': request_id,
+                                                    'mode': service.mode, 'source': source, **info})
+                                last_additional = signature
                         view = service.view(symbol, tf, revisions, source=source)
                         revisions = {period: chart['revision'] for period, chart in view['charts'].items()}
                         message = {'type': 'view', 'request_id': request_id, **view}
@@ -133,7 +142,7 @@ def create_app(service, cors_origin=None):
 
     app.router.add_get('/v1/stream', socket)
     app.router.add_post('/v1/list', list_action)
-    app.router.add_post('/v1/{action:mode|scan|preferences|alerts}', list_action)
+    app.router.add_post('/v1/{action:mode|scan|preferences|alerts|additional-info}', list_action)
     app.router.add_get('/v1/{resource}', api)
     app.router.add_get('/health', api)
     app.router.add_get('/', index)

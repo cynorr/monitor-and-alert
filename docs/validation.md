@@ -2,6 +2,30 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-07：Additional Info 显示精简与位置微调
+
+环境：本机 macOS、TypeScript、现有正式服务与 Chrome，使用本轮已有 Nasdaq 缓存及真实图表。只修改前端显示和维护文档，不重启服务或安排额外供应商请求。
+
+- `npm run build --prefix ui` 和前端28项用例通过。新增分类精简用例覆盖括号说明、冒号后细节、重复首级/大小写/空白和可空分类；可空显示用例同步 Intraday 市值及无美元符号。未重复运行未改动的 Python 数据/调度用例。
+- 实际 Scan 的 USDE 显示 `Finance`，没有重复 `Finance: Consumer Services`；2026-10-06 日图、ADR/ADV及三条指标正常显示。既有Massive准备完成后，本次成功切换和读取不再遇到上一条记录中的重建写锁。
+- 实际 Monitor 的 AGEN 显示 `Health Care · Biotechnology`，分类与EMA/SMA均为11px；`Market Cap 394.26M`位于 Intraday 周期按钮下方，11px、黑色且不带美元符号。财报与ET时间均为12px、#293341；两个头部实测均120px，指标行及下边界对齐。浏览器已刷新为本轮生成文件，结束保留Monitor、AGEN与1h。
+- 完整原分类及美元金额仍保留在独立数据契约中；显示规则、职责入口和唯一图表规范已同步。`git diff --check`通过。
+
+未覆盖：Regular时段真实bid/ask同时出现的布局、全部行业逐个浏览和移动端；没有把本轮前端显示验证作为刷新调度或上游可用性验证。
+
+## 2026-10-07：独立 Additional Info
+
+环境：本机 macOS、Python 3.13.1、正式 Longbridge SDK 5.0.0、TypeScript 5.9.3、Chrome；真实 Nasdaq 请求使用工程既有代理，不读任何券商或 Massive 凭证。新增模块规则只在 [additional-info.md](additional-info.md) 维护。
+
+- 本轮有界公开接口验收：一份 Screener 整表和四个财报日期（2026-10-01、10-04、10-07、2027-02-04）。新模块真实解析出6,628个可匹配`.US`证券，分别取得5、0、4、0条财报事件，全部成功写入临时独立SQLite。验证AAPL/AAOI分类与市值、ACN已发布报告、未来预估事件及空日期；QCML未覆盖字段为null。当前整表的Common Stock/Ordinary Shares/Class A/B/Preferred Stock/Depositary/Voting后缀均通过Python清理，原行保留。
+- Python定向102项通过，覆盖名称清理、零/负EPS、日历请求日期、成功替换某日及取消事件、失败保留旧数据、缓存重读、首次/每日/每周窗口与续做、冻结旧历史、缺失/损坏缓存、Mock不联网、启动不等待附加任务、选择身份、独立WS更新不重发bars及原ETF/Scan流程。旧名称用例迁到新模块；同步一个旧Scan测试的失效断言：指定日重建原本只允许CLI，HTTP仍拒绝。补验独立GET/POST、Origin限制及立即安排刷新后，3项集成用例再次通过；临时CLI同日`--companies-only`成功跳过已有公司表，无新请求。
+- `npm run build --prefix ui`通过，前端27项通过；包括最近报告优先、七日后转下次、缺事件、纽约跨日/DST、单数/Today、选择身份及缺失显示。Python编译与`git diff --check`通过。没有升级SDK或新增依赖。
+- 正常退出旧原生实例后，把本轮成功Nasdaq缓存作为首次缓存并重启正式Market Monitor。独立首次任务完成2026-06-09至2027-02-04共241个日期，成功跳过已缓存4日，errors全部为空；公司表未重复获取。Monitor Quote为CONNECTED、Holdings持续刷新，附加信息下载中实际图表已显示。没有改名单、账户或Alert；页面结束恢复Monitor、AGEN与1h。
+- Chrome实际验证公司名与symbol同基线、下一行sector/industry及市值、ADR/ADV下移、120px头部保留。AGEN显示Next earnings report / In 33 days，MU显示Last earnings report / 7 days ago；名单和Holdings选择共用信息。QCML四项隐藏而行情指标正常。窄Daily面板省略财报说明文字，保留天数；完整日期、预估说明及更新时间在tooltip。
+- 重启同时触发既有Massive新交易日2026-10-06准备，滚动split文件按原流程更新，bars全量重建期间切Scan遇到既有行情SQLite写锁，WS图表暂时关闭。已恢复Monitor；该问题来自Massive写库/Scan读库路径，未修改其行为，不能把本次短暂切换计为成功的真实Scan图表验收。附加信息GET、缓存和独立刷新不读取该库。
+
+未覆盖：持续运行时真实纽约跨日/七日定时刷新（用定向用例覆盖计划）、公开接口实际失败/schema变更、历史Scan/Review的浏览器完整验收、Regular时段bid/ask布局和移动端。失败/缺失路径只用临时缓存的相关用例验证，没有故障注入、通知或交易操作。
+
 ## 2026-10-06：Longbridge 前复权与近期窗口缓存
 
 环境：本机 macOS、Python 3.13.1、Longbridge SDK 5.0.0、TypeScript；美东 2026-10-06 Regular。使用正式 runtime、真实 49 个 Focus 与当前 Holdings，共 54 个去重行情标的；没有新增证券、修改名单或账户，没有运行 mock 验证。

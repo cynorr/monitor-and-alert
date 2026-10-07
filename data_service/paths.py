@@ -32,6 +32,10 @@ class RuntimePaths:
         return self.root / 'symbol-directory.json'
 
     @property
+    def additional_info_dir(self) -> Path:
+        return self.root / 'additional-info'
+
+    @property
     def days(self) -> Path:
         return self.root / 'days'
 

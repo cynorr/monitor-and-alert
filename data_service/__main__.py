@@ -44,6 +44,7 @@ async def run(args, tickers, notifier=None):
 
     if args.command == 'serve':
         from .workbench import Workbench
+        from .additional_info import AdditionalInfo
         paths = RuntimePaths(args.runtime)
         pipeline = None
         if not args.external_daily_db and not args.mock_scan and args.symbols is None:
@@ -61,7 +62,9 @@ async def run(args, tickers, notifier=None):
                             lambda allowed: Broker(args.credentials, allowed, args.runtime, args.region),
                             mock=args.mock_scan, only=args.symbols,
                             holdings_factory=holdings_factory if args.holdings_credentials.exists() else None,
-                            pipeline=pipeline, bars_path=paths.bars_db, notifier=notifier)
+                            pipeline=pipeline, bars_path=paths.bars_db, notifier=notifier,
+                            additional_info=AdditionalInfo(paths.additional_info_dir,
+                                                           enabled=not args.mock_scan and args.symbols is None))
         if notifier:
             notifier.bind(service.alerts, asyncio.get_running_loop())
         server = None

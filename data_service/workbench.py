@@ -18,7 +18,7 @@ from .scan import candidates, previous_candidates, read_snapshot, build_day, pub
 from .service import DataService
 from .workspace import derive_day_view, normalize_ticker
 from .store import atomic_json
-from .symbol_directory import read_directory
+from .additional_info import AdditionalInfo
 from .alerts import AlertEngine, price_cents
 from .alerts.engine import symbol_key
 from .list_rules import focus_classification
@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 class Workbench:
     def __init__(self, workspace, runtime, daily_path, broker_factory, *, calendar=None, mock=False, only=None,
-                 holdings_factory=None, pipeline=None, bars_path=None, notifier=None):
+                 holdings_factory=None, pipeline=None, bars_path=None, notifier=None, additional_info=None):
         self.workspace, self.runtime, self.daily_path = workspace, runtime, daily_path
         self.broker_factory, self.calendar = broker_factory, calendar or TradingCalendar()
         self.mock, self.only = mock, only
@@ -45,8 +45,8 @@ class Workbench:
         self.snapshot_cache, self.chart_cache, self.previous_cache = {}, {}, {}
         self.switching = self.generating = False
         self.preferences_path = runtime / 'preferences.json'
-        self.symbol_directory_path = RuntimePaths(runtime).symbol_directory
-        self.symbol_directory_cache = None, {}
+        self.additional = additional_info or AdditionalInfo(RuntimePaths(runtime).additional_info_dir, enabled=False)
+        self.additional_task = None
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(DEFAULT))
         self.list_context = self._list_context()
         self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, notifier=notifier) if only is None else None
@@ -161,6 +161,8 @@ class Workbench:
             self.start_monitor()
         if self.pipeline and self.pipeline_task is None:
             self.pipeline_task = asyncio.create_task(self.pipeline.run(on_publish=self.scan_published))
+        if self.additional_task is None:
+            self.additional_task = asyncio.create_task(self.additional.run())
 
     def scan_published(self, *_):
         # reload follows a new day only when the user was already following latest.
@@ -201,6 +203,10 @@ class Workbench:
         return self.holdings.state(quotes, as_of=datetime.fromtimestamp(now, ET).date().isoformat())
 
     async def close(self):
+        if self.additional_task:
+            self.additional_task.cancel()
+            await asyncio.gather(self.additional_task, return_exceptions=True)
+            self.additional_task = None
         if self.pipeline_task:
             self.pipeline_task.cancel()
             await asyncio.gather(self.pipeline_task, return_exceptions=True)
@@ -313,8 +319,7 @@ class Workbench:
     def view(self, symbol, tf, revisions=None, source='watchlist'):
         review = self.mode == 'monitor' and source != 'holdings' and self.is_review(symbol)
         if self.mode == 'monitor' and not review:
-            return {**self.monitor.view(symbol, tf, revisions), 'app_mode': 'monitor',
-                    'security_name': self.security_name(symbol)}
+            return {**self.monitor.view(symbol, tf, revisions), 'app_mode': 'monitor'}
         value = self.workspace.date if review else self.selected_date
         key = value, symbol
         if key not in self.chart_cache:
@@ -323,28 +328,12 @@ class Workbench:
         if revisions and revisions.get('1d') == chart['revision']:
             chart = {key:value for key,value in chart.items() if key not in ('bars','indicators')}
         return {'symbol': symbol, 'timeframe': tf, 'app_mode': self.mode, 'mode': self.mode, 'mock': self.scan_mock,
-                'security_name': self.security_name(symbol),
                 'read_only_daily': review, 'date': value, 'run_id': self.run_id, 'server_time': int(time.time()),
                 'charts': {'1d': chart}, 'summary': summary, 'status': {'stage': 'full','errors': []},
                 'quote': {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}}
 
-    def security_name(self, symbol):
-        """Read optional local directory names, independent of chart data and brokers."""
-        try:
-            stat = self.symbol_directory_path.stat()
-            signature = stat.st_mtime_ns, stat.st_size, stat.st_ino
-        except OSError:
-            self.symbol_directory_cache = None, {}
-            return None
-        cached_signature, symbols = self.symbol_directory_cache
-        if cached_signature != signature:
-            try:
-                symbols = read_directory(self.symbol_directory_path)['symbols']
-            except (OSError, ValueError):
-                symbols = {}
-            self.symbol_directory_cache = signature, symbols
-        name = symbols.get(symbol, {}).get('name')
-        return name.strip() or None if isinstance(name, str) else None
+    def additional_info(self, symbol):
+        return self.additional.info(symbol)
 
     async def list_action(self, payload):
         if not self.list_state()['editable']:
@@ -398,6 +387,10 @@ class Workbench:
         return self.list_state()
 
     async def action(self, resource, payload):
+        if resource == 'additional-info':
+            if payload.get('action') != 'refresh':
+                raise ValueError('Expected additional info refresh')
+            return self.additional.request_refresh()
         if resource == 'alerts':
             if self.alerts is None:
                 raise ValueError('Alerts are disabled for symbol-subset sessions')
@@ -480,6 +473,8 @@ class Workbench:
         raise ValueError('Unknown action')
 
     async def api(self, path, query):
+        if path == '/v1/additional-info':
+            return self.additional_info(query['symbol'][0]) if 'symbol' in query else self.additional.state()
         if path == '/v1/alerts':
             return self.alert_state()
         if path == '/v1/holdings':
@@ -492,6 +487,7 @@ class Workbench:
                     'alerts': {'enabled': self.alerts is not None, 'count': len(self.alerts.alerts) if self.alerts else 0,
                                'error': self.alerts.error if self.alerts else None},
                     'massive': self.pipeline.state() if self.pipeline else None,
+                    'additional_info': self.additional.state(),
                     'holdings_task_active': bool(self.holdings_task and not self.holdings_task.done())}
         if path == '/v1/scan':
             return self.list_state()
@@ -501,10 +497,7 @@ class Workbench:
         if path == '/v1/chart' and self.mode == 'monitor' and self.is_review(query['symbol'][0]):
             return self.view(query['symbol'][0], query.get('timeframe', ['5m'])[0], source=query.get('source', ['watchlist'])[0])
         if self.mode == 'monitor':
-            result = await self.monitor.api(path, query)
-            if path == '/v1/chart':
-                result = {**result, 'security_name': self.security_name(query['symbol'][0])}
-            return result
+            return await self.monitor.api(path, query)
         if path == '/v1/chart':
             symbol = query['symbol'][0]
             if symbol not in self.symbols:

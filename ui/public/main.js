@@ -7,9 +7,11 @@ import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
 import { AlertController } from './alerts.js';
+import { AdditionalInfoDisplay, acceptsAdditional } from './additional-info.js';
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
+const additional = new AdditionalInfoDisplay();
 let symbol = '', timeframe = defaultTimeframe(), epoch = 0;
 let socket = null;
 let reconnectTimer, lastMessage = 0, reconnectDelay = 1000, currentView = null;
@@ -106,11 +108,6 @@ function state(text, kind = '') {
         node.className = 'state ' + kind;
     }
 }
-function showSecurityName(name) {
-    const node = $('daily-security-name'), text = name?.trim() ?? '';
-    node.textContent = node.title = text;
-    node.hidden = !text;
-}
 function showState(view) {
     if (appMode === 'scan' || view.read_only_daily) {
         $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
@@ -145,7 +142,6 @@ function apply(view) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
-    showSecurityName(view.security_name);
     document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
         holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
@@ -187,7 +183,7 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
-    showSecurityName();
+    additional.update(null);
     document.querySelectorAll('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
     document.querySelectorAll('.session,.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
@@ -219,6 +215,12 @@ function connect() {
             const data = JSON.parse(event.data);
             if (data.type === 'list') {
                 applyList(data);
+                return;
+            }
+            if (data.type === 'additional_info') {
+                const info = data;
+                if (acceptsAdditional(info, { symbol, request_id: epoch, mode: appMode, source: selectionSource }))
+                    additional.update(info);
                 return;
             }
             if (data.type === 'alerts') {
@@ -273,6 +275,7 @@ document.querySelectorAll('[data-app-mode]').forEach(button => button.addEventLi
     }
 }));
 setInterval(() => {
+    additional.tick();
     if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
         socket.close();
     if (currentView && socket?.readyState === WebSocket.OPEN)

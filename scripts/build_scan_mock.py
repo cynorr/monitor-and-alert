@@ -44,7 +44,7 @@ def build_mock(root, end='2026-09-30', count=48):
                 previous = close
             db.executemany('INSERT INTO bars VALUES (?,?,?,?,?,?,?,?,?)', records)
     atomic_json(root / 'symbol-directory.json', make_snapshot({
-        ticker + '.US': {'name': f'{ticker} synthetic security', 'etf': False, 'test_issue': False}
+        ticker + '.US': {'etf': False}
         for ticker in symbols}))
     folder = root / 'days'
     for day in days[-2:]:

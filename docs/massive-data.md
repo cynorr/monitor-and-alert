@@ -1,6 +1,6 @@
 # Massive 数据要求
 
-更新：2026-10-06。本文件是 Massive 下载、证券目录、候选资格、ADR/ADV、RFL、名单完整特征和构建策略的唯一要求入口。共用 Bar 表结构见 [upstream-daily-data.md](upstream-daily-data.md)，名单生命周期见 [list-design.md](list-design.md)，图表展示见 [ui.md](ui.md)。
+更新：2026-10-07。本文件是 Massive 下载、证券目录、候选资格、ADR/ADV、RFL、名单完整特征和构建策略的唯一要求入口。共用 Bar 表结构见 [upstream-daily-data.md](upstream-daily-data.md)，名单生命周期见 [list-design.md](list-design.md)，图表展示见 [ui.md](ui.md)。
 
 ## 独立配置与处理顺序
 
@@ -14,13 +14,13 @@
 | adv20_min_usd | 5000000 | ADV20 至少 $5M |
 | rfl_top_n | 50 | RFL 1m / 3m / 6m 分别取前 50，取并集 |
 
-顺序：当日有 bar → 目录确认非 ETF → 有效历史门槛 → ADR/ADV → RFL 计算与全市场排名 → 候选及保留成员的完整特征。被挡住的证券不占 RFL 名次；属于已有 Focus 或 Excluded 的证券仍按下述范围计算完整特征。目录未知不当作非 ETF；名称可以缺失。未增加 Price、Test Issue、权证、优先股或 ADR 类别规则。
+顺序：当日有 bar → 目录确认非 ETF → 有效历史门槛 → ADR/ADV → RFL 计算与全市场排名 → 候选及保留成员的完整特征。被挡住的证券不占 RFL 名次；属于已有 Focus 或 Excluded 的证券仍按下述范围计算完整特征。目录未知不当作非 ETF；公司资料不参与资格判断。未增加 Price、Test Issue、权证、优先股或 ADR 类别规则。
 
 “50 日”采用实际日 K 根数，目的为确保 SMA50 有样本；不是上市后的 50 个自然日，也不查询或推测 IPO 日期。停牌/缺数据按实际记录计数，未来 bar 不计入；即使名义上市已很久但本地不足 50 根，也暂不成为候选。价格正数有限、volume 非负整数、时间及闭合边界有效；仅 OHLC 上下界矛盾仍保留官方原值并记录日志，继续采用项目共用校验规则。
 
 上述门槛只决定自动扫描候选。Focus 和全部 Excluded（含 Hidden）继续用本地数据计算完整特征，不因未入选候选或 RFL 前 50 而省略。Hidden 七天内跳过名单规则判断，仍计算特征；归属与期限见 [list-design.md](list-design.md#每日规则)。Holdings 独立，不根据扫描资格删持仓，也不扩大 Longbridge 订阅。
 
-## Nasdaq Trader 分类与名称
+## Nasdaq Trader ETF 筛查目录
 
 免费官方文件：[nasdaqlisted.txt](https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt)、[otherlisted.txt](https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt)。字段含义以 [Symbol Directory Definitions](https://www.nasdaqtrader.com/Trader.aspx?id=SymbolDirDefs) 为准，ETF 使用官方 Y/N 字段，不依靠名称猜测。
 
@@ -33,9 +33,9 @@
 
 首个脚本只获取这两个文本文件，各请求一次；也可用成对的 `--nasdaq-file` / `--other-file` 导入本地原文。使用项目共用代理，网络失败直接报错。解析必要表头、每行字段数、ETF Y/N、重复证券和最后 File Creation Time，两文件有效才写 `runtime/symbol-directory.json`。不读取 Massive 凭证，不查询券商。
 
-缓存是普通 JSON，使用 `.US` 标识；Nasdaq 使用 Symbol，其他交易所使用 ACT Symbol，不增加协议别名转换。Security Name 保留原名称、允许空值。下载 UTC 时间和文件创建时间仅供查看，不参与规则版本判断。少数供应商符号不匹配时，名称留空、扫描不接纳未确认类别，不推测映射。
+缓存是普通 JSON，使用 `.US` 标识；Nasdaq 使用 Symbol，其他交易所使用 ACT Symbol，不增加协议别名转换。只保存官方 ETF 布尔标记，不保存或提供 Security Name；公司资料由独立 [Additional Info](additional-info.md) 维护。下载 UTC 时间和文件创建时间仅供查看，不参与规则版本判断。少数供应商符号不匹配时，扫描不接纳未确认类别，不推测映射。
 
-服务、Massive 准备和图表都只消费本地目录，GET 不触发更新。目录不存在或损坏时，新扫描失败并保留旧结果，提示先运行独立脚本；图表名称缺失时正常显示空缺。应在每日准备前更新目录，当前没有定时拉取任务。历史扫描重算也使用当前目录，不能将当前分类冒充历史某日的上市名录。
+Massive 准备和扫描只消费本地目录，GET 不触发更新。目录不存在或损坏时，新扫描失败并保留旧结果，提示先运行独立脚本。应在每日准备前更新目录，当前没有定时拉取任务。历史扫描重算也使用当前目录，不能将当前分类冒充历史某日的上市名录。
 
 Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算；免费目录避免额外使用 Massive 证券资料接口和带宽。已经保存的原始 Daily 不删除或按筛选结果改写。
 

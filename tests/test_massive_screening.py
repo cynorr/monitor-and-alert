@@ -47,7 +47,7 @@ def test_etf_and_49_records_filtered_before_rfl_ranking(tmp_path, monkeypatch):
     assert called == [15, 20]  # Only confirmed non-ETF securities with sufficient history.
     assert scan.candidates(snapshot) == {'STOCK'}
     assert rows['STOCK.US']['rfl1m_rank'] == rows['STOCK.US']['rfl6m_rank'] == 1
-    assert rows['STOCK.US']['sma50'] == 20 and rows['STOCK.US']['security_name'] is None
+    assert rows['STOCK.US']['sma50'] == 20 and 'security_name' not in rows['STOCK.US']
     for symbol in ('ETF.US', 'YOUNG.US', 'UNKNOWN.US'):
         assert not rows[symbol]['eligible'] and not rows[symbol]['candidate']
         assert rows[symbol]['rfl1m'] is rows[symbol]['rfl6m_rank'] is None

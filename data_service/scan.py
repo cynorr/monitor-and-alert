@@ -134,7 +134,7 @@ def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tra
             metrics = adr_adv({key: [getattr(bar, key) for bar in history[-20:]]
                                for key in ('high', 'low', 'close', 'volume')})
             rows.append({'symbol': symbol, 'close': history[-1].close, **metrics,
-                         'security_name': info['name'] if info else None, 'etf': info['etf'] if info else None,
+                         'etf': info['etf'] if info else None,
                          'etf_pass': etf_pass, 'history_pass': len(history) >= config.min_daily_bars})
         screen = apply_filter(pd.DataFrame(rows), config)
         for name in ('rfl1m', 'rfl3m', 'rfl6m'):

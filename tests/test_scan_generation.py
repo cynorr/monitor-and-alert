@@ -253,9 +253,10 @@ def test_refresh_uses_completed_metadata_and_selects_new_day(tmp_path):
         await app.action('scan', {'generate': True})
         assert app.workspace.path.read_bytes() == new_before
         assert not app.generating
-        # Explicit historical regeneration remains available to API/CLI callers.
-        state = await app.action('scan', {'date': '2026-09-29', 'generate': True})
-        assert state['date'] == '2026-09-29' and not state['editable']
+        # Specified-date rebuilding is a CLI operation; HTTP must reject it.
+        with pytest.raises(ValueError, match='scan --date'):
+            await app.action('scan', {'date': '2026-09-29', 'generate': True})
+        assert app.selected_date == '2026-10-01' and not app.generating
         await app.close()
     asyncio.run(scenario())
 

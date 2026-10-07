@@ -90,7 +90,6 @@ export type View = {
     type?: string;
     request_id?: number;
     symbol: string;
-    security_name?: string | null;
     timeframe: string;
     server_time: number;
     run_id: string;

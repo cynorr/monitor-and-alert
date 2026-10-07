@@ -35,19 +35,29 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .chart-toolbar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 12px 3px; }
 .symbol, .last-price { font-size: var(--font-title); line-height: 34px; font-weight: 700; letter-spacing: -.3px; color: #161b22; }
 .symbol { flex-shrink: 0; }
-.security-name { min-width: 0; font-size: var(--font-detail); font-weight: 400; color: #727a85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instrument-title { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+.company-name { min-width: 0; font-size: var(--font-detail); font-weight: 400; color: #727a85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.company-details { display: flex; align-items: center; height: 22px; flex: 0 0 22px; padding: 0 12px; font-size: var(--font-small); color: #727a85; }
+#daily-classification { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.intraday-details { display: flex; align-items: center; gap: 8px; height: 20px; flex: 0 0 20px; padding: 0 12px; font-size: var(--font-small); color: #000; }
+#intraday-market-cap { flex-shrink: 0; white-space: nowrap; }
+.earnings-clock { display: flex; gap: 4px; font-size: var(--font-row); line-height: 26px; color: #293341; max-width: 48%; min-width: 0; white-space: nowrap; }
+#daily-earnings-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#daily-earnings-countdown { flex-shrink: 0; }
 .market-clock { display: flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; }
-.clock { font-size: var(--font-detail); height: 26px; line-height: 26px; color: #67717e; }
+.clock { font-size: var(--font-row); height: 26px; line-height: 26px; color: #293341; }
 .session { height: 26px; font-size: var(--font-small); }
 .latest { font-size: 18px; }
 .latest:hover { background: #dfe4ec; }
-#daily-latest { margin-left: auto; }
+#daily-latest { margin-left: 0; }
 .spread { display: flex; gap: 6px; padding: 1px 12px 5px; }
 .spread span { border-radius: 999px; padding: 3px 8px; background: #f5f6f8; font-size: var(--font-small); }
 .bid { color: var(--down); }
 .ask { color: var(--up); }
 .metrics { display: flex; gap: 14px; padding: 3px 12px; font-size: var(--font-detail); color: #727a85; }
 .metrics b { color: #293341; font-weight: 500; margin-left: 3px; }
+.metrics > span { flex-shrink: 0; }
+.metrics .spread, .intraday-details .spread { padding: 0; margin-left: auto; min-width: 0; overflow: hidden; white-space: nowrap; }
 .header-bottom { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 0 12px 6px; }
 .legend { display: flex; align-items: center; gap: 10px; min-height: 16px; font-size: var(--font-small); white-space: nowrap; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -73,7 +83,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .alert-line-delete { display: flex; align-items: center; justify-content: center; width: 24px; height: 20px; padding: 3px 5px; border-radius: 999px; color: #000; background: transparent; }
 .alert-line-delete svg { width: 14px; height: 14px; }
 .alert-line-delete:hover { background: #f1f3f5; }
-.period-row { display: flex; align-items: center; padding: 0 12px 4px; }
+.period-row { display: flex; align-items: center; padding: 0 12px 2px; }
 .timeframes { display: flex; align-items: center; background: #eef0f4; border-radius: 999px; padding: 3px; gap: 1px; }
 .timeframes button { padding: 4px 6px; border-radius: 999px; font-size: var(--font-small); white-space: nowrap; }
 .timeframes button.active { background: #242c38; color: white; box-shadow: 0 1px 4px #0002; }

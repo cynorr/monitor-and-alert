@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-06。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-10-07。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -10,7 +10,7 @@
 | workbench.py | 同一 Workspace、Scan/Monitor展示、持续后台行情/账户及本地Scan API |
 | paths.py / network.py | 唯一runtime布局、显式共用HTTP代理/session与Massive凭证读取 |
 | massive/daily.py / splits.py / build.py | 原始Daily补文件、两年split覆盖、新日增量追加；输入修订或失败后从raw全量重建派生SQLite |
-| symbol_directory.py / scripts/pull_symbol_directory.py | 独立免费Nasdaq目录获取/校验/原子发布；分类及可空名称均为.US |
+| symbol_directory.py / scripts/pull_symbol_directory.py | 独立免费Nasdaq目录获取/校验/原子发布；仅保存.US官方ETF标记，用于扫描资格 |
 | massive/settings.py / config/massive.json | 直接读取候选配置，不做自动版本跟踪 |
 | pipeline.py | 一次准备任务、阶段重试、产物核对及统一Ready状态 |
 | scan.py | 上游只读连接、完成日截面/发布、Scan 日图 |
@@ -39,6 +39,8 @@
 | ui/src/chart.ts / chart-settings.ts / layout.ts | Lightweight Charts、共用初始图形参数、日联动、列宽和原生交互 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
+| data_service/additional_info/ / scripts/pull_additional_info.py | 独立Nasdaq公司资料/财报获取、Python清理、业务SQLite/内存缓存和后台调度；先读模块AGENTS.md |
+| ui/src/additional-info.ts | 附加信息选择身份校验、分类显示精简、可空字段格式化和纽约自然日倒计时；不操作图表bars |
 | data_service/alerts/ | 独立 Alert Engine、业务 SQLite、最小 macOS 通知；先读本目录 AGENTS.md |
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
@@ -89,9 +91,9 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 同一个服务、同一个Workspace、一个全局展示模式。正式serve在HTTP可响应后启动一次Broker/DataService与Holdings；切Scan不停止它们，服务关闭才cancel/await并释放context/store/session。Mock Scan与有界--symbols禁用Massive与真实账户；Mock明确切Monitor才构造Longbridge，回到Mock Scan时释放。后台准备与展示切换分离，仅禁止重复生成，不建立第二个服务或通用source接口。
 
-Massive唯一要求见 [massive-data.md](massive-data.md)，共用bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。RuntimePaths统一所有正式路径：symbol-directory.json、massive/daily原始文件、massive/splits.json、massive/daily.sqlite3、longbridge/bars.sqlite3、holdings与days；继续接受--runtime。正式Workbench和reconcile/verify注入Longbridge新路径；DataService独立/模拟器默认临时bars路径保持。两库共用BAR_SCHEMA、Bar、read_bars与指标，Daily ts为ET零点转Unix秒；不混库或拼接历史。显式--daily-db是只读外部入口，不运行内置Massive，筛选仍消费指定runtime的本地目录。
+Massive唯一要求见 [massive-data.md](massive-data.md)，共用bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。RuntimePaths统一所有正式路径：symbol-directory.json、massive/daily原始文件、massive/splits.json、massive/daily.sqlite3、longbridge/bars.sqlite3、holdings、additional-info/info.sqlite3与days；继续接受--runtime。正式Workbench和reconcile/verify注入Longbridge新路径；DataService独立/模拟器默认临时bars路径保持。两库共用BAR_SCHEMA、Bar、read_bars与指标，Daily ts为ET零点转Unix秒；不混库或拼接历史。显式--daily-db是只读外部入口，不运行内置Massive，筛选仍消费指定runtime的本地目录。
 
-build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录，按 [Massive 数据要求](massive-data.md) 完成候选筛选与全市场排名。随后对候选、Focus及全部Excluded（含Hidden）读取最多1000根建立完整特征，包含Growth使用的三种RFL数值；完整特征补算不改变资格、candidate或已有市场名次，不为继承名单另行排名。其他非候选仅保留轻量指标、资格标记及可空security_name。daily_metrics复用共用纯算子，不重复维护公式。workspace_scope读取同日或最近前日的全部Focus/Excluded；enrich_snapshot为本地成员补齐旧截面缺少的完整特征及RFL数值，记录feature_scope，不重跑全市场排名或下载。详细计算范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。
+build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录，按 [Massive 数据要求](massive-data.md) 完成候选筛选与全市场排名。随后对候选、Focus及全部Excluded（含Hidden）读取最多1000根建立完整特征，包含Growth使用的三种RFL数值；完整特征补算不改变资格、candidate或已有市场名次，不为继承名单另行排名。其他非候选仅保留轻量指标和资格标记。截面不再嵌入公司名称；旧截面遗留字段不用于UI。daily_metrics复用共用纯算子，不重复维护公式。workspace_scope读取同日或最近前日的全部Focus/Excluded；enrich_snapshot为本地成员补齐旧截面缺少的完整特征及RFL数值，记录feature_scope，不重跑全市场排名或下载。详细计算范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。
 
 每步只保留单只历史与全市场标量，避免全市场历史fetchall；读到的bar均验证闭合/结构。checked_history复用Bar.validate，OHLC范围矛盾保留原值；后续阶段仅为上一窗口起点之前的矛盾追加日志，避免一次生成内重叠窗口重复记录。阶段耗时和证券/候选数量写普通日志，不新增指标持久化或性能框架。真实样本线程对照：单线程1000只约0.46秒、四线程约1.12秒；不添加更慢的线程池。全日生成继续在现有asyncio.to_thread中执行，不阻塞HTTP/WS事件循环。
 
@@ -109,7 +111,7 @@ indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统
 
 正式serve启动一次MassivePipeline.run；手动massive命令/脚本及页面Refresh复用它，无周期定时器。单任务串行执行Daily→split→bars→features；Daily/split网络获取保持既有有界重试；bars/features本地失败直接报错，不自动重试。网络失败不回退直连。HTTP/WS/图表读取不安排任务。
 
-network.proxy_url统一读取MARKET_PROXY，默认http://127.0.0.1:7899，显式空值直连；create_session禁用trust_env。Massive和SnapTrade显式传proxy，但各自保留限流、签名、解析和session。Massive凭证读取MASSIVE_API_KEY或单行massive-token.txt，日志不得包含值、带key的URL或任意上游响应体。
+network.proxy_url统一读取MARKET_PROXY，默认http://127.0.0.1:7899，显式空值直连；create_session禁用trust_env。Massive、SnapTrade和Additional Info显式传proxy，但各自保留限流、签名、解析和session。Massive凭证读取MASSIVE_API_KEY或单行massive-token.txt，日志不得包含值、带key的URL或任意上游响应体。
 
 Daily/split下载、重试及复权要求集中在massive-data.md。symbol_directory独立脚本仅取两个免费文本，不由pull_massive/服务/GET触发；缺目录或坏配置在任何Massive请求之前检查。Mock构建器先写明确合成目录。开发验证遵循独立准则，优先真实数据，只做本次必要检查。
 
@@ -117,7 +119,11 @@ build.py保留input_revision/metadata/build入口。metadata.raw_files保存已�
 
 pipeline-status.json维护daily/splits/bars/features，目标均为daily.target_date给出的成熟交易日；split覆盖包含目标日及两年窗口则Ready，不按自然日重复更新。Ready只核对已完成日及既有行情input_revision，不维护目录/配置feature_revision。启动、普通CLI和页面Refresh使用非force流程，逐步跳过已完成产物；配置/目录修改后从CLI显式重算，每次生成直接读取，不自动监听或重算。操作命令只在 [README Massive 操作](../README.md#massive-操作) 维护。内置库的scan命令保留SQLite行情input_revision与生成时间，使最新日重算后仍为Ready。Scan与人工名单维持既有保存/继承流程；自动发布更新页面缓存，手动刷新即使run返回None也从features.date打开最新可用日，并在日期变化时更新run_id。指定日生成不经POST入口。无新增GET下载、连接或轮询。
 
-Workbench.view及Monitor图表GET带可空security_name，来源仅为RuntimePaths.symbol_directory；按mtime/大小/inode缓存，文件变化无需bar revision变化也能刷新名称。缺失或损坏返回null，禁止名称查询扩大券商白名单或触发网络。前端用textContent显示并在清图时隐藏，具体绘制统一见ui.md。
+附加信息定位与数据规则只在 [additional-info.md](additional-info.md) 维护；代码入口为 [additional_info/AGENTS.md](../data_service/additional_info/AGENTS.md)。Workbench独立持有AdditionalInfo，核心任务安排完成后create_task(run)，不await可选缓存/请求。正式serve启用自动刷新，Mock和--symbols关闭联网。解析/SQLite工作通过to_thread执行；内存读取不访问文件、SDK或行情库。
+
+`GET /v1/additional-info` 返回独立状态，带symbol返回可空company_name/sector/industry/market_cap、earnings.last/next、来源更新时间和server_time。`POST /v1/additional-info` 的action=refresh只安排后台任务并立即返回，复用Origin/JSON规则。WS的additional_info消息带symbol、request_id、mode、source，独立revision控制推送，完全不改变bars revision。前端检查socket和选择身份，用textContent显示；倒计时按服务器时钟及纽约自然日计算。
+
+service.py负责独立SQLite及内存缓存、每日/每周调度；nasdaq.py负责固定公开接口、全响应校验与Python名称处理。每份公司表或每个财报日期成功后普通提交，失败保留原数据。独立CLI与正式服务共用runtime锁，避免同时写缓存；命令维护在README。
 
 两个Scan复制项目已完成数据与功能迁移并删除；保留的schwab-review只作参考，正式代码不import或执行它。Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。正式服务的Longbridge缓存按唯一数据要求初始化。
 

@@ -41,13 +41,13 @@ Mock 生成器要求目标目录没有现成 daily.sqlite3；重复试验用 `--
 .venv/bin/python scripts/pull_massive.py
 ```
 
-Nasdaq 目录更新独立于 Massive，保存免费 ETF 分类和证券名称。扫描先排除 ETF、未确认类别与不足 50 根有效日 K 的证券，再做 ADR/ADV 和 RFL 排名。可编辑条件集中于 [config/massive.json](config/massive.json)，数据要求统一见 [Massive 数据要求](docs/massive-data.md)。普通新日直接追加 SQLite；旧文件或 split 变化则删除 SQLite 后全量重建。配置和目录变更由命令行重算应用，不做自动版本跟踪。
+Nasdaq Trader 目录更新独立于 Massive，仅保存官方 ETF 标记用于筛查。扫描先排除 ETF、未确认类别与不足 50 根有效日 K 的证券，再做 ADR/ADV 和 RFL 排名。可编辑条件集中于 [config/massive.json](config/massive.json)，数据要求统一见 [Massive 数据要求](docs/massive-data.md)。普通新日直接追加 SQLite；旧文件或 split 变化则删除 SQLite 后全量重建。配置和目录变更由命令行重算应用，不做自动版本跟踪。
 
 服务未运行时也可用 `.venv/bin/python -m data_service massive`，与启动、页面 Refresh 共用准备流程。任务 Ready 返回0，阶段失败返回2。手动命令与服务共用 runtime 单实例锁。显式 `--daily-db` 只读消费外部库，不启用内置 Massive 下载。日常刷新与维护重算的操作见下方 [Massive 操作](#massive-操作)。
 
-默认代理为 `http://127.0.0.1:7899`，Massive 与 SnapTrade 共用；`MARKET_PROXY` 覆盖地址，显式空值关闭代理。Massive 凭证来自 `MASSIVE_API_KEY` 或 Git 忽略的 `massive-token.txt` 单行文件，不输出到日志。Longbridge SDK 的接入不由此配置改变。
+默认代理为 `http://127.0.0.1:7899`，Massive、SnapTrade 与 Additional Info 共用；`MARKET_PROXY` 覆盖地址，显式空值关闭代理。Massive 凭证来自 `MASSIVE_API_KEY` 或 Git 忽略的 `massive-token.txt` 单行文件，不输出到日志。Longbridge SDK 的接入不由此配置改变。
 
-数据统一放在 `runtime/massive/`、`runtime/longbridge/`、`runtime/holdings/`，人工名单与偏好保持现有路径。Massive 原始 `daily/*.json` 累积保留且不加入 Git；`splits.json` 是唯一允许入 Git 的运行数据。split 每次完整获取两年窗口，替换窗口内记录并保留更早历史，校验成功后原子覆盖。Massive 采用拆股复权，成交量 HALF_UP 四舍五入为整数；Longbridge 仅服务 Monitor，其数据口径与可重建缓存规则统一见 [Longbridge 数据要求](docs/longbridge-data.md)。两者共用指标与图表，数据互不干涉。
+数据统一放在 `runtime/massive/`、`runtime/longbridge/`、`runtime/holdings/`、`runtime/additional-info/`，人工名单与偏好保持现有路径。Massive 原始 `daily/*.json` 累积保留且不加入 Git；`splits.json` 是唯一允许入 Git 的运行数据。split 每次完整获取两年窗口，替换窗口内记录并保留更早历史，校验成功后原子覆盖。Massive 采用拆股复权，成交量 HALF_UP 四舍五入为整数；Longbridge 仅服务 Monitor，其数据口径与可重建缓存规则统一见 [Longbridge 数据要求](docs/longbridge-data.md)。两者共用指标与图表，数据互不干涉。
 
 Scan 正常时仅显示日期下拉，不重复显示 Ready 日期和完成时间；处理中、失败或目标日未完成时显示阶段及目标日期。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 补齐并打开最新可用日，已完成则直接打开。新日第一次生成继承 Focus 和 Excluded。首份截面准备中可以先打开页面。
 
@@ -58,6 +58,18 @@ Monitor凭证来自longbridge-token.txt，沿用App Key/Secret/Token，不输出
 Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，标签与值各占一行，保存在 git 忽略的 `snaptrade-token.txt`（权限600）。没有该文件时不启用持仓；`--holdings-credentials` 指定其他路径。正式服务启动立即刷新，Scan/Monitor 均每30秒获取当前USD股票/ETF多头及买卖活动；失败保留上次完整结果，下个周期再取。Scan Mock、独立模拟器、`--symbols`有界验收不获取真实持仓或 Massive 数据。
 
 买卖归属配置为 `runtime/holdings/sequences.txt` 与 `merge_buys.txt`，每次刷新重读；本机已从 `schwab-review` 复制现有规则，原项目保留。新环境需复制这两个文件（无手工关联时可留空）；`--holdings-rules` 可指定目录。单份原始缓存为 `runtime/holdings/latest.json`。SnapTrade 数据获取独立于 HTTP 和前端，正式入口仍是 `data_service serve`，无需旧8766/8000服务；旧持仓进程应停止，避免重复占用同一账户额度。
+
+## Additional Info
+
+公司名、行业大类/小类、市值与财报日期独立后台刷新，允许缺失，不等待或影响 Ready。数据源、Python 名称处理、保存和调度的唯一规范见 [Additional Info](docs/additional-info.md)，模块维护入口为 [additional_info/AGENTS.md](data_service/additional_info/AGENTS.md)。
+
+运行中可用 `POST /v1/additional-info`，JSON 为 `{"action":"refresh"}`；立即返回，不等待下载。`GET /v1/additional-info` 查看独立状态，加 `?symbol=AAPL.US` 只读当前信息。服务停止后可独立运行：
+
+```bash
+.venv/bin/python scripts/pull_additional_info.py --runtime runtime
+```
+
+`--companies-only` 只更新公司整表；财报验证可用成对的 `--earnings-start` / `--earnings-end` 限定日期。命令共用 runtime 锁，无需券商或 Massive 凭证。
 
 ## Massive 操作
 

@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-06。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-10-07。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## Alert 与入选规则
 
@@ -13,6 +13,10 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护。
 
 Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 更新最新价格与持仓估值。页面选股不改变券商订阅范围。关闭网页不停止后端。
+
+## Additional Info
+
+公司名、行业大类/小类、市值和财报日期独立于行情、筛选和账户，允许缺失，不等待或影响系统 Ready。后台单独刷新并保留成功缓存；页面选择只读本地内存。Scan 历史日期也显示当前参考信息。数据源、处理、刷新及财报文字的唯一需求见 [additional-info.md](additional-info.md)，位置见 [Chart UI](chart-ui.md#headers-and-information)。
 
 ## Holdings
 

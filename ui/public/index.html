@@ -10,9 +10,9 @@
 <main id="workspace" class="workspace" aria-label="Charts and watchlist">
   <article class="chart-panel" id="daily-panel" aria-label="Daily chart">
     <div class="chart-header">
-      <div class="chart-toolbar"><strong class="symbol">—</strong><span id="daily-security-name" class="security-name" hidden></span><button id="daily-latest" class="latest icon-button" aria-label="Daily: go to latest" title="Go to latest">↦</button></div>
-      <div class="spread" hidden><span class="bid"></span><span class="ask"></span></div>
-      <div class="metrics"><span>ADR20 <b class="adr">—</b></span><span>ADV20 <b class="adv">—</b></span></div>
+      <div class="chart-toolbar"><div class="instrument-title"><strong class="symbol">—</strong><span id="daily-company-name" class="company-name" hidden></span></div><span id="daily-earnings" class="earnings-clock" hidden><span id="daily-earnings-label"></span><span id="daily-earnings-countdown"></span></span><button id="daily-latest" class="latest icon-button" aria-label="Daily: go to latest" title="Go to latest">↦</button></div>
+      <div class="company-details"><span id="daily-classification" hidden></span></div>
+      <div class="metrics"><span>ADR20 <b class="adr">—</b></span><span>ADV20 <b class="adv">—</b></span><div class="spread" hidden><span class="bid"></span><span class="ask"></span></div></div>
       <div class="header-bottom"><div id="daily-legend" class="legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma50">SMA 50</span></div><span id="daily-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
     </div>
     <div id="daily-ohlc" class="ohlc">—</div>
@@ -23,7 +23,7 @@
     <div class="chart-header">
       <div class="chart-toolbar"><strong class="last-price">—</strong><div class="market-clock"><span class="session pill" hidden></span><time class="clock"></time></div><button id="intraday-latest" class="latest icon-button" aria-label="Intraday: go to latest" title="Go to latest">↦</button></div>
       <div class="period-row"><div class="timeframes" role="group" aria-label="Intraday period"><button data-tf="5m" class="active" aria-pressed="true">5m</button><button data-tf="15m" aria-pressed="false">15m</button><button data-tf="30m" aria-pressed="false">30m</button><button data-tf="1h" aria-pressed="false">1h</button><button data-tf="2h" aria-pressed="false">2h</button><button data-tf="4h" aria-pressed="false">4h</button></div></div>
-      <div class="spread" hidden><span class="bid"></span><span class="ask"></span></div>
+      <div class="intraday-details"><span id="intraday-market-cap" hidden></span><div class="spread" hidden><span class="bid"></span><span class="ask"></span></div></div>
       <div class="header-bottom"><div id="intraday-legend" class="legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma65">SMA 65</span></div><span id="intraday-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
     </div>
     <div id="intraday-ohlc" class="ohlc">—</div>
