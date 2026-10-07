@@ -18,6 +18,3 @@ build/
 dist/
 
 ui/node_modules/
-
-# Imported holdings reference project; its data are migrated into maintained paths.
-/schwab-review/

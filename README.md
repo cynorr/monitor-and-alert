@@ -24,7 +24,7 @@ python3 -m venv .venv
 
 前三种在 http://127.0.0.1:8765/ 打开；模拟器在 http://127.0.0.1:18765/ 。命令同时启动后端和网页，不需另起前端。停止使用 Ctrl+C，关闭网页不停止后端。同一 runtime 只允许一个实例。
 
-本轮已生成 `runtime/scan-mock`。新环境首次创建 Mock：
+需要临时合成 Scan 数据时，先生成 Mock：
 
 ```bash
 .venv/bin/python scripts/build_scan_mock.py
@@ -51,13 +51,13 @@ Nasdaq Trader 目录更新独立于 Massive，仅保存官方 ETF 标记用于�
 
 Scan 正常时仅显示日期下拉，不重复显示 Ready 日期和完成时间；处理中、失败或目标日未完成时显示阶段及目标日期。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 补齐并打开最新可用日，已完成则直接打开。新日第一次生成继承 Focus 和 Excluded。首份截面准备中可以先打开页面。
 
-默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。旧 Scan 数据、15份历史名单与7个Tag已迁入正式runtime，两个复制的 Scan 项目目录已删除。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
+默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
 
 Monitor凭证来自longbridge-token.txt，沿用App Key/Secret/Token，不输出到日志。默认官方.cn，`--region global`切换接入点。只请求/订阅当前Focus及Holdings；历史库、Discover、Hidden不决定券商白名单。
 
 Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，标签与值各占一行，保存在 git 忽略的 `snaptrade-token.txt`（权限600）。没有该文件时不启用持仓；`--holdings-credentials` 指定其他路径。正式服务启动立即刷新，Scan/Monitor 均每30秒获取当前USD股票/ETF多头及买卖活动；失败保留上次完整结果，下个周期再取。Scan Mock、独立模拟器、`--symbols`有界验收不获取真实持仓或 Massive 数据。
 
-买卖归属配置为 `runtime/holdings/sequences.txt` 与 `merge_buys.txt`，每次刷新重读；本机已从 `schwab-review` 复制现有规则，原项目保留。新环境需复制这两个文件（无手工关联时可留空）；`--holdings-rules` 可指定目录。单份原始缓存为 `runtime/holdings/latest.json`。SnapTrade 数据获取独立于 HTTP 和前端，正式入口仍是 `data_service serve`，无需旧8766/8000服务；旧持仓进程应停止，避免重复占用同一账户额度。
+买卖归属配置为 `runtime/holdings/sequences.txt` 与 `merge_buys.txt`，每次刷新重读。新环境需复制这两个文件（无手工关联时可留空）；`--holdings-rules` 可指定目录。单份原始缓存为 `runtime/holdings/latest.json`。SnapTrade 数据获取独立于 HTTP 和前端，正式入口是 `data_service serve`。
 
 ## Additional Info
 

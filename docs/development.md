@@ -125,7 +125,7 @@ pipeline-status.json维护daily/splits/bars/features，目标均为daily.target_
 
 service.py负责独立SQLite及内存缓存、每日/每周调度；nasdaq.py负责固定公开接口、全响应校验与Python名称处理。每份公司表或每个财报日期成功后普通提交，失败保留原数据。独立CLI与正式服务共用runtime锁，避免同时写缓存；命令维护在README。
 
-两个Scan复制项目已完成数据与功能迁移并删除；保留的schwab-review只作参考，正式代码不import或执行它。Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。正式服务的Longbridge缓存按唯一数据要求初始化。
+Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。正式服务的Longbridge缓存按唯一数据要求初始化。
 
 ## Workspace 与动态名单
 
@@ -139,7 +139,7 @@ Workbench.start_background先异步补本地成员feature、重新分类，再�
 
 Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用DataService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
-Holdings另由Workbench持有单个controller与轮询task，正式服务两种展示均持续启用；服务退出时先cancel并await持仓任务及其aiohttp session，再退出Monitor。SnapTrade凭证工厂在正式后台启动时使用，mock/only禁用工厂。原项目代码迁入维护路径，不import `schwab-review`。凭证文件与规则/账户缓存均git忽略，凭证权限600；CLI缺少凭证文件时不启用持仓。后台启动的第一个refresh位于timer sleep之前；展示切换不重建刷新任务；失败不调用成员更新、不提交raw缓存，下一周期再执行，没有额外即时重试。
+Holdings另由Workbench持有单个controller与轮询task，正式服务两种展示均持续启用；服务退出时先cancel并await持仓任务及其aiohttp session，再退出Monitor。SnapTrade凭证工厂在正式后台启动时使用，mock/only禁用工厂。凭证文件与规则/账户缓存均git忽略，凭证权限600；CLI缺少凭证文件时不启用持仓。后台启动的第一个refresh位于timer sleep之前；展示切换不重建刷新任务；失败不调用成员更新、不提交raw缓存，下一周期再执行，没有额外即时重试。
 
 DataService.tickers仍只包含workspace成员，board只输出Focus；holdings_symbols独立接收已接受余仓与当日清仓复盘批次。唯一_update_symbols按两来源并集更新store/broker.allowed、Quote范围和SyncState，同ticker保持既有任务。它不调用static_info、不检查workspace归属、不写workspace。Holdings只在账户成功刷新时重建买卖关联；约1Hz list_state读取用已有Decimal批次标量与Quote重新估值，不重复匹配流水。前端selectionSource与buy_ids批次key分离于symbol，Watchlist更新不得覆盖持仓选择，HTTP/WS图表继续用原request_id/mode/socket保护。
 
@@ -183,7 +183,7 @@ List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受
 
 Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source:"discover",target:"focus"}`。列表状态增加app_mode、date、dates、preferences和mock；历史Scan日期或--symbols不可写。POST /v1/mode切换模式，POST /v1/scan选择/生成日期，POST /v1/preferences同步保存完整偏好；所有写入复用同源检查，body上限64KiB。生成保留同日人工覆盖，同时更新规则标签/分类。
 
-新日继承Focus与Excluded，Hidden期限跨候选空档保留。publish_day读取同日人工状态或继承上一日，读取preferences，再apply_rules；同日重算不清人工覆盖。正式默认days为runtime/days，三个拷贝参考目录不import。旧人工数据保留，当前读取采用V3。
+新日继承Focus与Excluded，Hidden期限跨候选空档保留。publish_day读取同日人工状态或继承上一日，读取preferences，再apply_rules；同日重算不清人工覆盖。正式默认days为runtime/days。旧人工数据保留，当前读取采用V3。
 
 前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口，唯一差别是目标Section；Scan查询本地只读SQLite，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 
