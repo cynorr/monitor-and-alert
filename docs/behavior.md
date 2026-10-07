@@ -10,9 +10,9 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 ## 启动与接收
 
-正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护。
+正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote 与 SDK 实时 candle，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护。
 
-Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Regular 更新活跃 candle；extended 更新最新价格与持仓估值。页面选股不改变券商订阅范围。关闭网页不停止后端。
+Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Quote 更新最新价格、持仓估值与 Alert；各周期活跃 candle 独立接收 SDK 推送。页面选股不改变券商订阅范围。关闭网页不停止后端。
 
 ## Additional Info
 
@@ -30,7 +30,7 @@ Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 
 
 启动默认 Monitor，可用 --mode scan。页面在列表面板内切换展示，所有浏览器会话跟随这个选择。正式服务的Longbridge与SnapTrade任务仅在整体退出时停止；Scan使用Massive数据，后台仍只跟踪最新Focus及已接受Holdings。切回Monitor复用连接、任务和缓存。Mock Scan仍离线；只有明确切入Monitor才启用Longbridge，回到Mock Scan时停止。
 
-Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus 在Scan中也使用该上游来源；切回Monitor才使用runtime/longbridge/bars.sqlite3与实时Quote。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
+Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus 在Scan中也使用该上游来源；切回Monitor才使用runtime/longbridge/bars.sqlite3与SDK实时candle。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
 
 Massive 数据要求、拆股/整数成交量、来源时段与筛选配置统一见 [massive-data.md](massive-data.md)。Longbridge 数据要求统一见 [longbridge-data.md](longbridge-data.md)。读取、指标和图表不再做复权；两源共享格式与计算，数据互不干涉。Daily Symbol右侧可以显示本地Nasdaq目录名称，缺失正常留空，两模式共用。
 
@@ -68,15 +68,13 @@ Longbridge 调度、重试、恢复与窗口状态统一见 [longbridge-data.md]
 
 ## 图表周期与指标
 
-官方闭合数据存 SQLite。Quote 产生的临时 5m、所有合成周期和指标仅在内存。
+官方六周期 closed 数据存 SQLite，各周期 SDK open candle 和指标仅在内存。Daily 与 Intraday 的数据来源、成交量口径、初始化与恢复统一见 [Longbridge 数据说明](longbridge-data.md)。
 
-Intraday 初始周期按美东开盘经过时间选择，之后保留手工选择。所有chart使用统一、可人工调整的初始bar spacing；可见历史长度随间距与面板宽度变化。具体参数、周期控件、参考线和交互只在 [chart-ui.md](chart-ui.md) 维护。
+Intraday 初始周期按美东开盘经过时间选择，之后保留手工选择。所有 chart 使用统一、可人工调整的初始 bar spacing；可见历史长度随间距与面板宽度变化。参数、周期控件、参考线和交互只在 [chart-ui.md](chart-ui.md) 维护。
 
-2h/4h 始终从 5m 合成。15m/30m/1h 缺少官方 bar 时，用相同函数合成替代；官方到达后随下一次现有 WebSocket 更新直接替换，不另等收盘。按实际开盘时间分组，不跨日，尾根按收盘时间结束。闭合合成 candle 的 5m 前缀缺失时不编造完整结果。
+两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 `close × volume` 均值；停牌/稀疏记录按实际根数取窗口，不使用 turnover 改变公式。均线样本不足时不显示该线；上下界矛盾保留官方原值，也可能体现在派生指标中。
 
-合成只改变周期，不扩展已加载窗口的时间跨度。均线样本不足时不显示该线。
-
-两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 `close × volume` 均值；停牌/稀疏记录按实际根数取窗口，不使用 turnover 改变公式。Intraday active volume = 本根内已闭合部分的量 + 当前 5m 内 Quote 累计量的增量。已闭合部分优先按 1h → 30m → 15m → 5m 无重叠拼接，只使用完整落在本根起点到当前 5m 起点之间的官方 bar。结果缓存为标量，Quote 更新不重新求和。不能用全天 Quote 累计量减历史 K 线总量，因为两者累计差异会全部堆到 active。盘中启动、恢复、跳过时间桶或累计量回退时，没有可靠起点的 active volume 暂空；跨入下一连续 5m 后恢复。Daily 仍使用官方累计量。active 是按 Quote 观测时刻估算的临时量，收盘后由官方 K 线替换。上下界矛盾也可能体现在图表及派生指标中，因为本版保留官方原值。
+跨 closed 边界和回补期间保留上一份完整图表；本周期 closed 与 open 就绪后一次更新。Daily 不依赖 5m 刷新，报价与账户后台持续运行。
 
 ## Monitor 页面状态
 

@@ -18,17 +18,16 @@
 | preferences.py / list_rules.py | Tag 用途和保存契约（含独立外观 metadata）；共享字段目录；纯匹配与自动三名单分类，外观不参与分类 |
 | config.py | 当前 Focus 解析、凭证读取、错误脱敏 |
 | workspace.py | 最新日期选择、内存 JSON、同步直接写入、单个原生文件事件 watcher |
-| broker.py | 单 SDK context、static_info 添加验证、最近 K 线、Quote 请求、全局/后台请求预算 |
+| broker.py | 单 SDK context、static_info、原生六周期历史/实时订阅、Quote / Trade、请求预算 |
 | snaptrade.py | 独立异步签名GET、指定账户、10次/滚动分钟预算、原始快照获取与成功提交；不提供HTTP服务、不调用Longbridge |
 | holdings.py | 买卖归属、余仓与当日清仓、Decimal估值/日基准/Days、30秒刷新与失败保留；唯一数据需求见holdings-data.md |
-| calendar.py | UTC/ET、XNYS、交易日刷新阶段、实际闭合边界、5m 到 4h 时间网格 |
-| downloader.py | 最近窗口 fetch/parse/validate；完整响应成功后替换、增量覆盖，追加 OHLC 比较日志 |
+| calendar.py | UTC/ET、XNYS、交易日刷新阶段、实际闭合边界、5m 到 2h 时间网格 |
+| downloader.py | 历史/实时共用 parse/validate；最新目标成功后提交、拒绝行诊断、OHLC 比较日志 |
 | store.py | 逐根官方 bars、最新成功批次、单窗口普通提交及 revision |
 | validator.py | 最近窗口完整性检查与缓存；不联网、不写状态文件 |
 | service.py | 每个 ticker/官方周期一份 SyncState，排序、执行、重试、恢复；API 组合 |
-| quotes.py | 共用 Quote 标准化入口、时段最新值、snapshot/watchdog、恢复通知 |
-| resample.py | 所有内存周期合成的唯一算法 |
-| charts.py / indicators.py | 活跃 candle、官方/合成显示、图表缓存；唯一指标公式 |
+| quotes.py | Quote 标准化、六周期 candle 订阅生命周期、callback 代次、snapshot/watchdog、恢复通知 |
+| charts.py / indicators.py | 原生 candle 显示与图表缓存；唯一指标公式 |
 | http_api.py | aiohttp 静态页面、诊断 HTTP、List mutation、WebSocket/Origin 校验 |
 | ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
 | ui/src/list.ts | 统一内联搜索/新增、输入查询生命周期、拖动/快捷键移动、折叠和报价行更新 |
@@ -43,11 +42,13 @@
 | ui/src/additional-info.ts | 附加信息选择身份校验、分类显示精简、可空字段格式化和纽约自然日倒计时；不操作图表bars |
 | data_service/alerts/ | 独立 Alert Engine、业务 SQLite、后台声音；先读本目录 AGENTS.md |
 
-依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
+依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；candle preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
 持仓数据需求只在 [holdings-data.md](holdings-data.md) 维护，显示交互见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度使用同样CSS的临时隐藏副本测量，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。main.ts复用已有Quote.current_regular_session，前端不新增日历、HTTP、券商请求或后台任务，金额仍为后端Decimal字符串，计算语义以Holdings数据需求为准。
 
 图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
+
+chart.ts 的 syncSeries 用公开 data/update API 比较已显示数据：相同时间序列的尾部替换/追加只更新变化项，较早官方修订用 update(row, true)。只有新窗口、时间序列变化或删除点时使用 setData；正常 closed 更新不调用滚动重定位，未知 active volume 只更新 histogram 的 whitespace，不重建 candles/MA。保持 vendor 原样。
 
 List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局部 AI 约束见 ui/src/AGENTS.md。list.ts 保持七个行单元与 main.ts/index.html 列头一致；board.growthValue 仅格式化 RFL，原始百分比及排名不变。CSS 维护独立 Growth/Tags 列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
 
@@ -99,7 +100,7 @@ build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录�
 
 latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)回退推断；缺少完成日则失败并保留原状态。CLI scan未传--date、页面Refresh未传date时用该完成日，build_day继续拒绝未收盘日或无当日bar。成功后同步publish_day、reload workspace并明确选中新生成日期，首次才创建workspace。相同日期重算不重新继承；生成失败释放busy并保留原日期/名单。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
 
-只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有Quote active、Intraday或Ready实时状态；Daily复用同一个Panel。
+只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有实时active、Intraday或Ready实时状态；Daily复用同一个Panel。
 
 indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。指标直接消费已选来源的价格；不同供应商的结果允许不同。
 
@@ -137,7 +138,7 @@ Tag role为setup/extended/broken/label，负面Broken优先，Setup顺序决定�
 
 Workbench.start_background先异步补本地成员feature、重新分类，再启动正式Focus行情；本地准备失败保留名单、显示错误并继续原行情与Massive准备。新截面发布、Tag保存和显式编辑后重评；list_state/GET不写盘、不请求下载。DataService只接收Focus，Workbench在Monitor board额外拼Review本地行。Review只用Massive Daily，加入Focus才扩订阅。HTTP/WS选股source区分watchlist与holdings，同symbol持仓仍能看实时图；成员/Review身份变化更新run_id，清WS revision，避免本地预览切实时图时沿用旧来源bars。
 
-Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用DataService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有 Quote loop，按 subscribed 与当前成员差集增删订阅；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
+Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用DataService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有行情循环，按当前成员增删 Quote / Trade 与六周期 candle 订阅；移除时先清 candle，再退订底层行情；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
 Holdings另由Workbench持有单个controller与轮询task，正式服务两种展示均持续启用；服务退出时先cancel并await持仓任务及其aiohttp session，再退出Monitor。SnapTrade凭证工厂在正式后台启动时使用，mock/only禁用工厂。凭证文件与规则/账户缓存均git忽略，凭证权限600；CLI缺少凭证文件时不启用持仓。后台启动的第一个refresh位于timer sleep之前；展示切换不重建刷新任务；失败不调用成员更新、不提交raw缓存，下一周期再执行，没有额外即时重试。
 
@@ -151,25 +152,21 @@ SnapTrade固定请求配置account_id，不通过/accounts假设仅一个账户�
 
 `downloader.fetch` 在请求前后核对刷新阶段，响应通过逐根校验及最新closed目标检查后才提交。`store.upsert(replace=True)` 用已有SQLite连接的一次普通提交替换单个symbol/周期，普通增量按主键覆盖。bars保持共用逐根结构；batches仅含symbol、timeframe和payload，payload记录成功请求的阶段、时间与数量。数据库采用WAL/NORMAL；不设行数裁剪、历史水位、迁移或备份框架。
 
-bars revision在行内容变化或窗口替换后递增。validator按revision、closed目标及刷新阶段缓存结果，不扫描历史连续性；共用Bar校验只在 [upstream-daily-data.md](upstream-daily-data.md) 定义。图表依赖revision与周期当前状态，比较最终显示序列，内容未变不重发。未刷新周期的旧窗口继续独立展示，不参与当前active、跨周期拼合和本地Daily报价基准修正。
+bars revision在行内容变化或窗口替换后递增。validator按revision、closed目标及刷新阶段缓存结果，不扫描历史连续性；共用Bar校验只在 [upstream-daily-data.md](upstream-daily-data.md) 定义。图表历史仅依赖本周期 revision，比较最终显示序列，内容未变不重发。未刷新周期的旧窗口继续独立展示，不参与当前 active 和本地 Daily 报价基准修正。
+
+ChartCache.views 每个 symbol/周期只保留最近一份完整显示，沿用 revision/bars/active/indicator_preview 契约。跨桶时检查本周期最新 closed 已到达及下一 SDK open 可用；等待时返回上一份快照。官方替换与新 active 同一条 WS view 发布，Daily 无 5m 依赖。移出范围清掉 active/views；GET 不下载。
 
 UI契约为 `status: {stage: loading|basic|full, errors: string[], refreshing: boolean}`。正常closed等待不重置Ready；刷新状态由现有任务派生。详细complete/target/latest/count/missing/errors只在诊断接口提供。显示规范见 [Chart status](chart-ui.md#chart-status)。
 
-## 合成和时段
+## 实时 candle 与时段
 
-resample 接受统一 5m 行结构，按 calendar 网格分组，O首/H最大/L最小/C末，量与额相加。闭合组必须有齐全的 5m 槽；活跃组可展示当前近似值。按交易日分组，处理 DST、提前收盘、常规尾根。2h/4h 从不读取官方 1h 作为基础，也不发额外历史请求。
+QuoteService 在同一 SDK context 注册 Quote 与 candle callback，通过现有 asyncio loop 派发并检查 callback 代次和当前白名单。`candle_subscribed[(symbol, tf)]` 管理六周期订阅，`candle_errors` 保留独立错误；Quote 成功不能清掉 candle 错误。订阅返回的尾根以 initial 标记进入同一处理入口，已到达的新推送不能被较旧初始化覆盖。
 
-15m/30m/1h在相关来源周期完成当前阶段刷新后，按timestamp合并“5m合成 + 官方优先”，官方到达即通过现有revision消息替换。5m 临时 candle 从本进程收到的第一条 Quote 起算；更大活跃 candle 也复用 resample。合成和临时 candle 绝不写入官方 bars。
+`downloader.parse_candle` 是历史与实时共用的 Bar 转换/校验；closed 校验用于落盘，实时只接受当前网格时间桶。历史响应拒绝非法行并写入当前 batch 的 rejected；最新 closed 目标无效或缺失仍失败回补。上下界矛盾照常保留与记录。DataService.apply_candle 将原始完整 OHLCV 交给 `ChartCache.active[(symbol, tf)]`，不读取其他周期或 Quote。SDK confirmed 不落盘，closed 仅由 downloader 提交。
 
-Quote 接收不按 UI 选择筛选；regular/pre/post/overnight 共用 apply，按时段保留最新值。snapshot 归一化后走同一入口。倒序拒绝、旧 callback 代次保护继续保留。扩展时段只改价格展示，不改 regular candle。
+DataService.recover 清掉 active，刷新窗口并唤醒行情循环；先退订 candle 再重新订阅，保证 SDK 取得新起点。connect 的 on_reset 同时重置 Alert 起点，on_reconnect 只刷新 closed 任务，避免递归恢复。历史请求仍共用同一 broker/context。行情基础与限制见 [Longbridge 数据说明](longbridge-data.md)。
 
-### Active 成交量
-
-`ChartCache.volume_baselines[symbol]` 仅存当前 5m 的 Quote 起点累计量。跨入相邻桶时取上一条 regular Quote；每次新 Quote 做一次减法，重复推送不累加。首次盘中启动、跨桶缺失、恢复或累计量回退时清空基准；无基准显示 null，不用全天累计量兜底。恢复同时清掉旧 Quote，避免把断线期间的增量归给新桶。
-
-`closed_volume(symbol, tf, start, end)` 只算 active 所在周期内 `[start, 当前5m起点)` 的官方 closed 量，按 1h/30m/15m/5m 贪心覆盖，每段恰好使用一次，缺口不能跳过。较大周期可覆盖缺少的 5m；跨越 end 的 bar 不参与。每个 symbol/tf 缓存一个总量（或 null），签名为起止时间及四个官方周期的store revision与当前状态，只使用已完成当前阶段的周期；新柱、修订、撤回或换桶自动失效。不为每次 Quote 读库或重算历史 sum，OHLC 的统一 resample 不重复计算这份成交量。
-
-Daily 保持累计量；2h/4h 的闭合 OHLCV 仍只由 5m 合成。这里的大周期优先只用于 active 成交量的已闭合部分。临时量基于收到的 Quote，推送跨边界合并或口径差异可能导致其与最终官方量有差别，闭合后以官方数据为准。
+Quote 接收不按 UI 选择筛选；regular/pre/post/overnight 共用 apply，snapshot 归一化后走同一入口，时段报价与 candle 独立。active preview 只用本周期已缓存的指标标量。
 
 ## 传输
 

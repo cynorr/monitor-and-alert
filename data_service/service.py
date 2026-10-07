@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .calendar import ET, PHASES, INTRADAY, TradingCalendar
 from .charts import ChartCache, bar_row
-from .downloader import BarDownloader
+from .downloader import BarDownloader, parse_candle, append_ohlc_log, ohlc_comparison
 from .quotes import QuoteService
 from .store import BarStore
 from .validator import DataValidator
@@ -45,8 +45,8 @@ class DataService:
         self.alerts = alerts
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
         self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
-                                   on_reconnect=lambda: self.recover(reset_alerts=False),
-                                   on_reset=alerts.reset if alerts else None) if broker else None
+                                   on_reconnect=self.refresh_windows, on_reset=self.reset_realtime,
+                                   on_candle=self.apply_candle) if broker else None
         self.run_id = uuid.uuid4().hex
         self.started_at = int(self.now())
         self.session = self.calendar.window_session(self.started_at)
@@ -96,8 +96,9 @@ class DataService:
             for tf in PHASES:
                 self.sync[symbol, tf] = SyncState()
         for symbol in removed:
-            for cache in (self.charts.active, self.charts.quotes, self.charts.volume_baselines):
-                cache.pop(symbol, None)
+            for cache in (self.charts.active, self.charts.views):
+                for key in [key for key in cache if key[0] == symbol]:
+                    cache.pop(key)
         if self.focus[0] not in symbols:
             self.focus = (symbols[0] if symbols else '', self.focus[1])
         if self.quotes and (added or removed):
@@ -151,14 +152,15 @@ class DataService:
             raise ValueError('Invalid intraday timeframe')
         self.focus = (symbol, timeframe)
 
-    def recover(self, *, reset_alerts=True):
-        # A recovery cannot attribute missed Quote increments to the active bucket.
-        self.charts.volume_baselines.clear()
-        self.charts.quotes.clear()
-        if self.alerts and reset_alerts:
+    def reset_realtime(self):
+        self.charts.active.clear()
+        if self.alerts:
             self.alerts.reset()
-        for active in self.charts.active.values():
-            active['volume'] = None
+
+    def recover(self):
+        self.reset_realtime()
+        if self.quotes:
+            self.quotes.restart()
         self.refresh_windows()
 
     def refresh_windows(self):
@@ -177,17 +179,31 @@ class DataService:
     def apply_quote(self, symbol, quote):
         if self.alerts:
             self.alerts.quote(symbol, quote)
-        self.charts.apply_quote(symbol, quote)
+
+    def apply_candle(self, symbol, tf, item, *, initial=False):
+        self.store.check(symbol)
+        now = int(self.now())
+        bar = parse_candle(item, symbol, tf, self.calendar, now, closed=False)
+        if bar.invalid_range:
+            append_ohlc_log(self.store.path.parent / 'invalid_ohlc.jsonl', [ohlc_comparison(
+                bar, self.calendar, now, 'Intraday',
+                {key: str(getattr(item, key)) for key in ('open', 'high', 'low', 'close', 'volume')})])
+        # Only the history pull writes closed bars, including SDK-confirmed candles.
+        if bar.ts == self.calendar.active_start(tf, now):
+            self.charts.apply_candle(symbol, tf, bar_row(bar), initial=initial)
+            return True
+        return False
 
     def priority(self, key):
         symbol, tf = key
         state = self.sync[key]
         selected = symbol == self.focus[0]
+        order = ('5m', '1d', *PHASES[2:])
         if not state.refresh:
             return (-2 if selected else -1, 0)
         if selected and tf in ('5m', '1d', self.focus[1]):
-            return (0, ('5m', '1d', '15m', '30m', '1h').index(tf))
-        return (('5m', '1d', '15m', '30m', '1h').index(tf) + 1, self.symbols.index(symbol))
+            return (0, order.index(tf))
+        return (order.index(tf) + 1, self.symbols.index(symbol))
 
     async def _execute(self, key):
         state = self.sync[key]
@@ -225,7 +241,7 @@ class DataService:
         session = self.calendar.window_session(now)
         if session != self.session:
             self.session = session
-            self.refresh_windows()
+            self.recover()
         targets = {tf: self.calendar.latest_closed(tf, now) for tf in PHASES}
         for (symbol, tf), state in self.sync.items():
             if state.pending or state.task is not None or state.target == targets[tf]:
@@ -291,6 +307,12 @@ class DataService:
         else:
             completed = [tf for tf in PHASES if self.window_ready(symbol, tf, now)]
             errors = [f"{tf}: {self.sync[symbol, tf].error}" for tf in PHASES if self.sync[symbol, tf].alert]
+            for tf in PHASES:
+                batch = self.store.batch(symbol, tf)
+                if batch and batch.get('rejected'):
+                    errors.extend(f"{tf} history: {row['ts']}: {row['error']}" for row in batch['rejected'])
+            if self.quotes:
+                errors.extend(f'{tf} live: {error}' for (s, tf), error in self.quotes.candle_errors.items() if s == symbol)
         level = 'full' if len(completed) == len(PHASES) else 'basic' if all(tf in completed for tf in ('1d', '5m')) else 'loading'
         refreshing = level == 'loading' and any(
             tf not in completed and self.store.batch(symbol, tf) for tf in ('1d', '5m'))
@@ -360,7 +382,7 @@ class DataService:
                 raise ValueError('symbol is required')
             tf = query.get('timeframe', ['5m'])[0]
             if tf not in PHASES:
-                raise ValueError('timeframe must be 1d, 5m, 15m, 30m or 1h')
+                raise ValueError('timeframe must be ' + ', '.join(PHASES))
             return {'symbol': symbol, 'timeframe': tf, 'adjust_type': 'ForwardAdjust',
                     'session': 'regular', 'closed_only': True,
                     'current': self.window_ready(symbol, tf, now),

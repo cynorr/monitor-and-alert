@@ -46,14 +46,16 @@ The default volume divider is moderately higher than before; it remains adjustab
 - OHLC sits immediately below the aligned black horizontal border on each chart, at **15px**; ADR/ADV also use **15px**. OHLC fields stay together and wrap on narrow panels. Native chart axes use **12px**. Shared CSS font variables keep other small labels at **11px**, list values at **12px** and body text at **13px**.
 - Range is `(H-L)/L × 100%`. H/L values and Range value are black; other labels and values retain their original color.
 - The volume value uses **`Vol` + compact value** (for example `Vol 1.38M`) at a fixed top-right position within the volume pane. Hover or a linked crosshair shows the volume of the corresponding bar, matching the OHLC bar. Leaving or clearing the crosshair restores the latest bar's volume. Quote refreshes must not replace the hovered value. The label position follows native pane resizing.
-- Active volume comes from the backend's estimate; missing initialization after startup/recovery remains empty until usable, and closed official bars replace estimates. Data formulas are maintained in [behavior.md](behavior.md#图表周期与指标).
+- Active OHLCV comes directly from the corresponding SDK candle; official closed bars replace provisional values. Data handling is maintained in [longbridge-data.md](longbridge-data.md).
+- The Vol tooltip distinguishes the current Daily cumulative volume, current Intraday candle volume, and unavailable current volume. Hovered closed candles keep their own volume. Daily and Intraday source totals can differ; the source boundary is maintained in [longbridge-data.md](longbridge-data.md#官方数据与时段).
 - Lightweight Charts does not supply a TradingView-style instrument/OHLC header; the small DOM legends use subscribeCrosshairMove and seriesData.
 - Headers omit market/currency, adjustment/session metadata, bar counts and branding/footer strips. Validation sample counts remain backend diagnostics.
 
 ## Mouse, zoom and periods
 
 - Use native pan, zoom, price scaling, pane resizing and scrollToRealTime. Realtime updates preserve a historical viewport.
-- On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and `[0,5)` minutes → 5m, `[5,15)` → 15m, `[15,30)` → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h/4h are manual only. Controls: **5m, 15m, 30m, 1h, 2h, 4h**.
+- A closed boundary or refresh retains the previous complete chart until the official replacement and usable active data arrive together. Routine tail replacement/append uses public series updates without clearing candles, rebuilding all history or resetting the viewport. The final Regular candle stays visible while its official replacement is pending.
+- On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and `[0,5)` minutes → 5m, `[5,15)` → 15m, `[15,30)` → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h is manual only. Controls: **5m, 15m, 30m, 1h, 2h**.
 - `↦` means Go to latest: return to the latest available trading day while retaining the chart's zoom. Period changes preserve the selected day when that day exists in the new period.
 
 ## Linked trading day
@@ -68,8 +70,8 @@ The default volume divider is moderately higher than before; it remains adjustab
 ## Data boundaries
 
 - Keep mode, request_id, source and socket identity checks. Mode/date changes reset chart context; backend run_id changes force full history. Indicators are calculated only in Python; reading or selecting charts does not trigger downloads.
-- 2h/4h derive from official closed 5m bars. Missing official 15m/30m/1h history uses the same in-memory conversion; official data replaces it on the next update.
-- Derived periods share the loaded 5m window coverage. Insufficient SMA65 history leaves the line absent. Longbridge cache freshness and source boundaries follow [longbridge-data.md](longbridge-data.md).
+- All six Monitor periods use their own official closed history and SDK open candles.
+- Each period has its own loaded window. Insufficient SMA65 history leaves the line absent. Longbridge cache freshness and source boundaries follow [longbridge-data.md](longbridge-data.md).
 - Scan and Review use completed local Daily bars without an active candle or Intraday data. Review's disabled Intraday controls and Add to Focus prompt follow [List UI](ui.md#展示范围与控件).
 
 ## Alert interaction
@@ -78,6 +80,6 @@ Alert 在 Scan/Monitor 的创建、选择、改价、删除与跨图同步只在
 
 ## Chart status
 
-- Live Monitor: show a muted Refreshing label while a previously loaded Daily or 5m window awaits refresh; keep existing charts and live prices visible. Otherwise Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all five official periods complete, hidden after three seconds. Routine closed updates do not restart the timer.
+- Live Monitor: show a muted Refreshing label while a previously loaded Daily or 5m window awaits refresh; keep existing charts and live prices visible. Otherwise Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all six official periods complete, hidden after three seconds. Routine closed updates do not restart the timer.
 - Exhausted history retries and connection failures use one exclamation icon with reason on hover, retaining existing charts. Finite positive OHLC range contradictions do not produce UI warnings or retries; display official values unchanged.
-- Scan and Review use their local Daily date/status rather than live five-period readiness. Scan's date, preparation status and refresh controls follow [List UI](ui.md#scan-日期与准备状态).
+- Scan and Review use their local Daily date/status rather than live six-period readiness. Scan's date, preparation status and refresh controls follow [List UI](ui.md#scan-日期与准备状态).

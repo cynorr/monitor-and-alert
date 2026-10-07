@@ -24,16 +24,22 @@ function chart() {
     };
     return {
         addSeries(kind) {
-            const item = { kind, data: [], priceLines: [], applyOptions() {}, coordinateToPrice: y => y / 10,
+            const item = { kind, rows: [], priceLines: [], applyOptions() {}, coordinateToPrice: y => y / 10,
                 createPriceLine(options) {
                     const line = { options: { ...options }, applyOptions(next) { Object.assign(this.options, next); } };
                     this.priceLines.push(line); return line;
                 },
                 removePriceLine(line) { this.priceLines.splice(this.priceLines.indexOf(line), 1); },
-                setData(data) { this.data = data; },
-                update(row) {
-                    const index = this.data.findIndex(item => item.time === row.time);
-                    if (index < 0) this.data.push(row); else this.data[index] = row;
+                data() {
+                    // Match the public library's field order and omission of whitespace.
+                    return this.rows.filter(row => this.kind === 'candle' || row.value !== undefined).map(row =>
+                        this.kind === 'candle' ? { open: row.open, high: row.high, low: row.low, close: row.close, time: row.time }
+                            : { value: row.value, time: row.time, ...(row.color ? { color: row.color } : {}) });
+                },
+                setData(data) { this.rows = data; },
+                update(row, historicalUpdate = false) {
+                    const index = this.rows.findIndex(item => item.time === row.time);
+                    if (index < 0) this.rows.push(row); else this.rows[index] = row;
                 },
             };
             series.push(item);
@@ -44,7 +50,7 @@ function chart() {
         move(time, mouse = false, y = 88, paneIndex = 0) {
             const seriesData = new Map();
             for (const item of series) {
-                const row = item.data.find(row => row.time === time);
+                const row = item.rows.find(row => row.time === time);
                 if (row) seriesData.set(item, row);
             }
             this.crosshair({ time, seriesData, point: { x: 100, y }, paneIndex, sourceEvent: mouse ? {} : undefined });

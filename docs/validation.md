@@ -2,6 +2,20 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-08：Longbridge 六周期 SDK 实时 candle
+
+环境：macOS、Python 3.13、Longbridge SDK 5.0.0；美东 2026-10-07 Regular。正式服务按当前 Focus 与 Holdings 白名单验证，未新增或运行 Mock，未录屏。
+
+- 当前周期为 Daily、5m、15m、30m、1h、2h；SDK 映射、日历、调度、Ready 与 UI 入口一致。全部 56 个 symbol 的 336 个 closed 窗口完成初始化，pending=0、无耗尽任务错误，Quote CONNECTED，已收到 3,424 次 Quote 推送；Holdings 后台任务运行。
+- closed 与 SDK 订阅初始化完成后，连续观察 MU 20 秒：六周期 open 均有整数 volume，六周期均持续更新；2h WebSocket 收到 94 次图表更新，active 未清空。
+- 已撤下周期的图表与 bars 请求均返回 400，页面只提供五个 Intraday 周期；正式缓存已清理对应 48,254 根 bar 和 56 个 batch，复查没有残留或重新写入。代码、脚本、测试和文档无已撤下周期的引用。
+- SECZ Daily 的官方重复时间戳仍明确拒绝并显示诊断；Ready 不表示原始历史无异常。没有新增数据补偿或跨周期组合。
+- TypeScript build、Python 编译与 git diff --check 通过，正式服务保持运行。
+
+证据：[正式服务验收](</var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/monitor-period-removal-omog7as1/report.json>)。
+
+未覆盖：整日运行、实际断网/休眠、收盘、DST/提前收盘；本轮未重复浏览器帧率测量或全量离线回归。数据口径与处理规则统一见 [Longbridge 数据说明](longbridge-data.md)。
+
 ## 2026-10-07：Alert 连续播放原声
 
 环境：本机 macOS 26.7、Python 3.13.1。只验证声音资源与播放任务，没有运行其他业务测试或前端构建。
@@ -47,19 +61,6 @@
 - 重启同时触发既有Massive新交易日2026-10-06准备，滚动split文件按原流程更新，bars全量重建期间切Scan遇到既有行情SQLite写锁，WS图表暂时关闭。已恢复Monitor；该问题来自Massive写库/Scan读库路径，未修改其行为，不能把本次短暂切换计为成功的真实Scan图表验收。附加信息GET、缓存和独立刷新不读取该库。
 
 未覆盖：持续运行时真实纽约跨日/七日定时刷新（用定向用例覆盖计划）、公开接口实际失败/schema变更、历史Scan/Review的浏览器完整验收、Regular时段bid/ask布局和移动端。失败/缺失路径只用临时缓存的相关用例验证，没有故障注入、通知或交易操作。
-
-## 2026-10-06：Longbridge 前复权与近期窗口缓存
-
-环境：本机 macOS、Python 3.13.1、Longbridge SDK 5.0.0、TypeScript；美东 2026-10-06 Regular。使用正式 runtime、真实 49 个 Focus 与当前 Holdings，共 54 个去重行情标的；没有新增证券、修改名单或账户，没有运行 mock 验证。
-
-- 启动前确认旧服务已停止，删除正式、旧布局与 Scan Mock 的全部 Longbridge NoAdjust K 线库及 sidecar，共 6,934,826 根旧柱；同时删除旧 Longbridge OHLC 比较日志、状态文件与验收报告。Massive 原始数据及库、人工名单、持仓与 Alert 业务数据保留。新库只通过真实官方 ForwardAdjust 请求建立。
-- 11:31 ET 启动真实 Monitor，Quote 连接 54 个标的。6 个标的首轮暂缺最新 closed 5m，按原回补规则在后续实际收盘轮次恢复；11:35 ET 后 270 个窗口均完成，待处理与错误归零。Quote 与持仓刷新持续运行。
-- 11:40:08 ET 只读核验：54 个标的均为完整 Ready，270 个窗口；257,753 根存储柱逐根通过实际 Regular 时间网格、closed、OHLC 正数有限和整数成交量校验。AGEN 5m 缓存与图表都返回 1001 根且逐值一致；最新批次中54份为count=2，说明盘中增量正常追加。5秒实际WebSocket收到24份4h图表更新，首份有完整历史，后续有active；Holdings没有loading或error。
-- 重启为原生 Market Monitor.app。AGEN 5m 从真实旧窗口1001根替换为新响应999根：3个旧窗口外时间戳删除，1根新closed加入，forming未落盘。最终54个标的再次全部Ready、Quote连接正常；原生通知状态为available、authorized、sound=true，未发送测试通知。
-- 两次有界真实官方Daily读取：AGEN与GPRO各999根closed OHLCV/turnover与正式缓存逐值一致。短暂切Scan后AGEN日图独立匹配Massive自身库，active为空；3秒内后台Quote增加77次，Holdings和Alert仍启用。结束恢复Monitor，原生服务继续运行。
-- 浏览器核对实际双图、指标、报价和Holdings显示。`npm run build --prefix ui`、Python编译及`git diff --check`通过；仅同步已有用例中失效的缓存契约与移除旧迁移/撤下修订要求，没有新增或运行mock用例。Longbridge唯一完整数据要求为[longbridge-data.md](longbridge-data.md)，其他入口改为引用。
-
-未覆盖：真实连续跨交易日与开盘边界、公司行动当天、休眠/断线、供应商非法响应和物理断电；没有人为故障注入、价格触发或通知投递验证。本轮盘中成功不能替代这些场景的实际运行证据。
 
 ## 2026-10-06：Massive 状态与 Refresh 简化
 
@@ -218,35 +219,6 @@
 - 首次尝试已验证增删/移动/外部更新，但验收脚本比较 /var 与 /private/var 别名导致超时；修正测试路径后以上完整重跑通过。首次记录不作为完整验收依据。
 - 完整通过证据：`/private/var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/list-v0-live-8_z3b6a3/report.json`。
 - 未覆盖：全名单长时间运行、物理断网/休眠、移动触屏。错误路径使用离线测试；未额外查询真实无效 ticker，未操作生产名单。
-
-## 2026-09-23：Intraday active volume 修复（当日美东上午）
-
-- 离线回归：68 项通过，2.26 秒。覆盖全天累计差异不进入 active、大周期无重叠覆盖、缺少 5m、缓存复用及修订失效、六个分钟周期、跨日/跳桶/恢复/计数回退。前端代码未修改。
-- 本轮 live 仅观察现有服务的 MRNA.US 最新 5m：美东 2026-09-23 10:55–11:00；未新建券商连接、未请求旧交易日测试集。
-- 22 次只读观测确认：桶内 `Quote累计量 - active量` 基准不变，active 量始终非负；首个观测 113,633，最后一个收盘前观测 214,853；官方 closed 返回后替换为 161,673，下一桶观测为 7,629，没有把全天累计差异堆到新柱。
-- active 是 Quote 采样估算，不承诺等于官方分钟量；本轮预估与官方仍有差异。闭合后使用官方量，不能通过任意缩放或修正价格/成交量伪造一致。
-- 证据：`/var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/mrna-volume-final-ugv35ac3/report.json`。本轮只验收成交量修复，不宣称全名单所有周期无错误或全天稳定运行。
-
-## 2026-09-23：架构精简
-
-当前实现规则见 [behavior.md](behavior.md)，开发入口见 [development.md](development.md)。下面记录本轮执行证据，不代表持续在线状态。
-
-环境：macOS、Python 3.13、Longbridge SDK 5.0.0。测试使用当前 workspace 白名单及临时 SQLite；未修改生产数据库，临时服务均已停止。
-
-- 离线：58 项通过（2.23 秒）；TypeScript check/build 通过。最后将模拟器 HTTP 启动改为复用正式入口后，相关 5 项再通过（1.12 秒）。
-- 覆盖：OHLC 原值与重复追加日志、最新目标缺失/请求失败的重试轮次、历史断档接受、重连期间在途任务、8/2 限流和 3+2 并发、官方替换合成、2h/4h、DST/提前收盘、Quote 恢复、HTTP/WS 与模拟器跨周期。
-- 浏览器：保留矛盾 OHLC 后图表可绘制，无 JavaScript 错误；2h/4h 切换正常。黄色 Ready 跨多次观察持续显示；官方 15m 延迟时已有 5m 合成显示。蓝色 Ready 的 3 秒隐藏已在较短延迟的前一次模拟验收中验证。
-- 最终全名单 live：美东 2026-09-22 13:39:50 起运行 150 秒，45/45 ticker 的五个官方周期 full，pending=0、errors={}。收到 1,799 次 Quote 推送、737 条图表消息；WS 重连收到完整快照。
-- 同轮请求：225 次 count=1000、44 次正常 count=2；跨过 13:40 收盘节点。没有额外补缺请求。1000 请求允许返回更短历史，最短存储窗口 158 根。OHLC JSONL 追加 466 条，均未造成错误状态或重试。
-- 真实 Quote 重订阅：PAYS/HTFL/PLTU，首次各五周期共 15 次 count=1000；主动取消再订阅后，全部 15 项进入统一恢复，再请求 15 次 count=1000，恢复 full、无错误，随后收到新推送。此测试不等同于物理断网或操作系统休眠。
-
-最终全名单证据：`/var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/longbridge-check-4v431g4y/report.json`；同目录 `invalid_ohlc.jsonl` 可与 TradingView 手工比较。
-
-重订阅证据：`/var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/longbridge-recovery-80yla527/report.json`。
-
-前一轮 live 曾检查返回窗口内连续性，导致 REPL 的三个分钟周期与 USDE Daily 因旧空档重试；这些周期的最新目标均存在。最终已删除历史连续性检查并重跑以上全名单验收。前一轮产物 `longbridge-check-b8zmpv5b` 仅供差异追溯，不代表最终行为。
-
-本轮未重新完整操作所有既有布局/日联动手势；chart.ts 与 layout.ts 未改动。长时间运行、物理断网和系统休眠仍需另行观察。
 
 ## 2026-10-06 Alert 外观与自由十字线
 

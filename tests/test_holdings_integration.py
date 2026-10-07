@@ -335,8 +335,8 @@ def test_independent_membership_shares_market_state_and_never_changes_workspace(
         service.update_tickers([])
         assert service.symbols == ['XYZ.US', 'OTHER.US']
         assert service.sync['XYZ.US', '5m'] is existing
-        service.select('OTHER.US', '4h')
-        assert set(service.view('OTHER.US', '4h')['charts']) == {'1d', '4h'}
+        service.select('OTHER.US', '2h')
+        assert set(service.view('OTHER.US', '2h')['charts']) == {'1d', '2h'}
         service.update_holdings(['XYZ.US'])
         assert 'OTHER.US' not in service.store.allowed and service.focus[0] == 'XYZ.US'
         service.update_holdings([])
@@ -368,11 +368,11 @@ def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_background
         await asyncio.sleep(.05)
         assert client.calls == 1 and 'XYZ.US' in app.symbols
         for _ in range(30):
-            if app.monitor.view('XYZ.US', '4h')['charts']['1d']['bars'] and app.monitor.view('XYZ.US', '4h')['charts']['4h']['bars']:
+            if app.monitor.view('XYZ.US', '2h')['charts']['1d']['bars'] and app.monitor.view('XYZ.US', '2h')['charts']['2h']['bars']:
                 break
             await asyncio.sleep(.05)
-        assert app.monitor.view('XYZ.US', '4h')['charts']['1d']['bars']
-        assert app.monitor.view('XYZ.US', '4h')['charts']['4h']['bars']
+        assert app.monitor.view('XYZ.US', '2h')['charts']['1d']['bars']
+        assert app.monitor.view('XYZ.US', '2h')['charts']['2h']['bars']
         app.monitor.update_tickers([Ticker('XYZ.US', 'XYZ', 'focus')])
         assert app.symbols.count('XYZ.US') == 1
         runner = web.AppRunner(create_app(app))
@@ -385,12 +385,12 @@ def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_background
                 assert response.status == 200 and (await response.json())['data']['holdings'][0]['ticker'] == 'XYZ'
                 async with session.ws_connect(base + '/v1/stream') as ws:
                     assert ws.compress == 0
-                    await ws.send_json({'type': 'select', 'symbol': 'XYZ.US', 'timeframe': '4h', 'request_id': 42, 'mode': 'monitor'})
+                    await ws.send_json({'type': 'select', 'symbol': 'XYZ.US', 'timeframe': '2h', 'request_id': 42, 'mode': 'monitor'})
                     while True:
                         message = await ws.receive_json(timeout=2)
                         if message['type'] == 'list': assert message['holdings']['data']['holdings'][0]['ticker'] == 'XYZ'
                         if message['type'] == 'view' and message['request_id'] == 42: break
-                    assert set(message['charts']) == {'1d', '4h'}
+                    assert set(message['charts']) == {'1d', '2h'}
                     assert client.calls == 1  # HTTP/WS reads do not trigger acquisition.
                     client.fail = True
                     previous = app.holdings.base

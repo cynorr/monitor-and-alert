@@ -33,7 +33,7 @@ class Bar:
     def invalid_range(self) -> bool:
         return self.low > min(self.open, self.close) or self.high < max(self.open, self.close) or self.high < self.low
 
-    def validate(self, calendar: TradingCalendar, now: int) -> None:
+    def validate(self, calendar: TradingCalendar, now: int, *, closed=True) -> None:
         if self.timeframe not in PHASES:
             raise ValueError('Only official periods may be persisted')
         values = (self.open, self.high, self.low, self.close)
@@ -43,7 +43,10 @@ class Bar:
             raise ValueError('Volume must be a nonnegative integer')
         if self.turnover is not None and (not math.isfinite(self.turnover) or self.turnover < 0):
             raise ValueError('Turnover must be finite and nonnegative')
-        if calendar.bar_end(self.ts, self.timeframe) > now:
+        end = calendar.bar_end(self.ts, self.timeframe)
+        if self.ts > now:
+            raise ValueError('Candle timestamp is in the future')
+        if closed and end > now:
             raise ValueError('Forming candle cannot be persisted')
 
 

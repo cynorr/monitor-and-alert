@@ -177,6 +177,7 @@ Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式
 
 - One same-origin WebSocket carries initial/selection/reconnect snapshots and subsequent updates. HTTP serves assets, universe and read-only diagnostics; POST /v1/list performs edits. POST /v1/mode, /v1/scan and /v1/preferences handle mode, generation/date and saved Tags. Independent list messages refresh membership even without chart selection. A chart GET must not change selection priority.
 - Chart context checks, local/derived history and status boundaries follow [Chart UI](chart-ui.md#data-boundaries).
+- Monitor closed-bar refresh continuity and Vol readout semantics follow [Chart UI](chart-ui.md#headers-and-information) and [Mouse, zoom and periods](chart-ui.md#mouse-zoom-and-periods).
 - Simulator uses the same UI, scheduler and validation against temporary data with an instance exchange clock. It never reads credentials or falls back to a broker. SIM and MOCK are offline fixtures, not live evidence.
 
 ## Checks

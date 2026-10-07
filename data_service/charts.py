@@ -1,11 +1,7 @@
 """Memory-only display candles and indicator caches; never writes market bars."""
 from __future__ import annotations
 
-from datetime import datetime
-
-from .calendar import ET
 from .indicators import series, preview, daily_summary
-from .resample import resample
 
 
 def bar_row(bar):
@@ -17,49 +13,23 @@ class ChartCache:
     def __init__(self, store, calendar, ready=None):
         self.store, self.calendar = store, calendar
         self.ready = ready or (lambda symbol, tf: True)
-        self.active, self.quotes, self.history, self.dependencies, self.summaries = {}, {}, {}, {}, {}
-        self.volume_baselines, self.volume_prefixes = {}, {}
+        self.active, self.history, self.dependencies, self.summaries = {}, {}, {}, {}
+        self.views = {}
 
-    def apply_quote(self, symbol, quote):
-        if quote['trade_session'] != 'Intraday':
+    def apply_candle(self, symbol, tf, row, *, initial=False):
+        key = (symbol, tf)
+        previous = self.active.get(key)
+        # Subscription history can return after a newer push has already arrived.
+        if previous and (previous['time'] > row['time'] or initial and previous['time'] == row['time']):
             return
-        ts, price = quote['timestamp'], quote['last_price']
-        start = self.calendar.active_start('5m', ts)
-        if start is None or self.quotes.get(symbol, {}).get('timestamp', 0) > ts:
-            return
-        previous = self.quotes.get(symbol)
-        self.quotes[symbol] = quote
-        old = self.active.get(symbol)
-        if old is None or old['time'] != start:
-            self.active[symbol] = {'time': start, 'open': price, 'high': price, 'low': price, 'close': price, 'volume': None}
-            # Compare Quote to Quote, never the day total to historical candle volume.
-            # A missed bucket or mid-bucket startup has no trustworthy starting counter.
-            self.volume_baselines[symbol] = (previous['cumulative_volume'] if previous
-                and start - 300 <= previous['timestamp'] < start else None)
-        else:
-            old.update(high=max(old['high'], price), low=min(old['low'], price), close=price)
-        if previous and quote['cumulative_volume'] < previous['cumulative_volume']:
-            self.volume_baselines[symbol] = None
-        baseline = self.volume_baselines.get(symbol)
-        self.active[symbol]['volume'] = None if baseline is None else quote['cumulative_volume'] - baseline
+        self.active[key] = row
 
     def closed(self, symbol, tf):
         key = (symbol, tf)
-        source_periods = ('5m',) if tf in ('2h', '4h') else (tf, '5m') if tf not in ('1d', '5m') else (tf,)
-        dependency = tuple((self.store.revisions.get((symbol, period), 0), self.ready(symbol, period))
-                           for period in source_periods)
+        dependency = self.store.revisions.get(key, 0)
         if self.dependencies.get(key) != dependency:
-            bars = [] if tf in ('2h', '4h') else self.store.window(symbol, tf)
+            bars = self.store.window(symbol, tf)
             rows = [bar_row(b) for b in bars]
-            if tf in ('2h', '4h') or (tf not in ('1d', '5m')
-                                      and all(self.ready(symbol, period) for period in source_periods)):
-                five = self.closed(symbol, '5m')[1]
-                # Inputs are official closed 5m bars; the final 5m end is the conversion cutoff.
-                cutoff = self.calendar.bar_end(five[-1]['time'], '5m') if five else 0
-                converted = resample(five, tf, self.calendar, cutoff)
-                merged = {row['time']: row for row in converted}
-                merged.update({row['time']: row for row in rows})
-                rows = [merged[t] for t in sorted(merged)]
             previous = self.history.get(key)
             if previous is None or previous[1] != rows:
                 revision = previous[0] + 1 if previous else 1
@@ -68,64 +38,35 @@ class ChartCache:
         return self.history[key]
 
     def forming(self, symbol, tf, now):
-        periods = ('5m',) if tf in ('5m', '2h', '4h') else (tf, '5m')
-        if not all(self.ready(symbol, period) for period in periods):
-            return None
+        active = self.active.get((symbol, tf))
         start = self.calendar.active_start(tf, now)
-        five_start = self.calendar.active_start('5m', now)
-        active, quote = self.active.get(symbol), self.quotes.get(symbol)
-        if start is None or active is None or quote is None or active['time'] != five_start:
-            return None
-        day = datetime.fromtimestamp(now, ET).date()
-        opened = self.calendar.session(day)[0]
-        prefix = [b for b in self.closed(symbol, '5m')[1] if opened <= b['time'] < five_start]
-        # Volume comes from the cached official prefix below; do not sum it in resample.
-        pieces = [b for b in prefix if b['time'] >= start] + [{**active, 'volume': None}]
-        candle = resample(pieces, tf, self.calendar, now, include_active=True)[-1]
-        candle['volume'] = None
-        if tf == '1d':
-            candle['volume'] = quote['cumulative_volume']
-        elif active['volume'] is not None:
-            completed = self.closed_volume(symbol, tf, start, five_start)
-            if completed is not None:
-                candle['volume'] = completed + active['volume']
-        return candle
-
-    def closed_volume(self, symbol, tf, start, end):
-        """Cached scalar for [start, end): cover once with the largest official bars."""
-        periods = ('1h', '30m', '15m', '5m')
-        signature = (start, end, tuple((self.store.revisions.get((symbol, p), 0), self.ready(symbol, p)) for p in periods))
-        key = (symbol, tf)
-        cached = self.volume_prefixes.get(key)
-        if cached is not None and cached[0] == signature:
-            return cached[1]
-        candidates = {}
-        if start < end:
-            for period in periods:
-                if not self.ready(symbol, period):
-                    continue
-                for bar in self.store.bars(symbol, period, start, end - 1):
-                    close = self.calendar.bar_end(bar.ts, period)
-                    if close <= end:
-                        candidates.setdefault(bar.ts, (close, bar.volume))
-        cursor, total = start, 0
-        while cursor < end:
-            piece = candidates.get(cursor)
-            if piece is None:
-                total = None
-                break
-            cursor, volume = piece
-            total += volume
-        self.volume_prefixes[key] = (signature, total)
-        return total
+        if self.ready(symbol, tf) and start is not None and active and active['time'] == start:
+            return {**active, 'provisional': True}
+        return None
 
     def chart(self, symbol, tf, now, known_revision=None):
+        key = (symbol, tf)
+        previous = self.views.get(key)
+        ready = self.ready(symbol, tf)
         revision, rows, base, _ = self.closed(symbol, tf)
-        active = self.forming(symbol, tf, now)
-        result = {'symbol': symbol, 'timeframe': tf, 'revision': revision,
-                  'active': active, 'indicator_preview': preview(base, active)}
-        if known_revision != revision:
-            result.update(bars=rows, indicators=base['series'])
+        target = self.calendar.latest_closed(tf, now)
+        closed_ready = bool(rows and rows[-1]['time'] == target)
+        active = self.forming(symbol, tf, now) if ready and closed_ready else None
+        # Publish a complete replacement only after this period's closed history
+        # and next SDK candle are ready. Other periods do not block this chart.
+        waiting = not ready or not closed_ready or (active is None and previous is not None
+            and previous['active'] is not None
+            and not any(row['time'] == previous['active']['time'] for row in rows))
+        if waiting and previous is not None:
+            full = previous
+        else:
+            full = {'symbol': symbol, 'timeframe': tf, 'revision': revision,
+                    'bars': rows, 'indicators': base['series'],
+                    'active': active, 'indicator_preview': preview(base, active)}
+            self.views[key] = full
+        result = {name: value for name, value in full.items() if name not in ('bars', 'indicators')}
+        if known_revision != full['revision']:
+            result.update(bars=full['bars'], indicators=full['indicators'])
         return result
 
     def summary(self, symbol, now):

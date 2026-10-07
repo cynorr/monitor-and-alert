@@ -4,6 +4,23 @@ const L = window.LightweightCharts;
 const dateFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 function dateOf(t) { return typeof t === 'number' ? new Date(t * 1000) : typeof t === 'string' ? new Date(t) : new Date(Date.UTC(t.year, t.month - 1, t.day, 12)); }
+function syncSeries(series, rows) {
+    const previous = series.data();
+    if (!previous.length && !rows.length)
+        return false;
+    // A new window needs setData; replacing a provisional tail uses update.
+    if (!previous.length || rows.length < previous.length || previous.some((row, i) => row.time !== rows[i].time)) {
+        series.setData([...rows]);
+        return true;
+    }
+    for (let i = 0; i < rows.length; i++) {
+        const old = previous[i];
+        const row = rows[i];
+        if (!old || Object.keys({ ...old, ...row }).some(key => old[key] !== row[key]))
+            series.update(rows[i], i < previous.length - 1);
+    }
+    return false;
+}
 export class Panel {
     id;
     daily;
@@ -106,7 +123,7 @@ export class Panel {
     histogram(row) { return row.volume == null ? { time: row.time } : { time: row.time, value: row.volume, color: row.close >= row.open ? '#26a69a99' : '#ef535099' }; }
     render(data) {
         const next = data.active;
-        const rebuild = data.bars !== undefined || this.active?.time !== next?.time || (!!this.active && this.active.volume !== null && next?.volume === null);
+        const rebuild = data.bars !== undefined || this.active?.time !== next?.time;
         if (data.bars !== undefined) {
             this.rows = data.bars;
             this.indicators = data.indicators ?? {};
@@ -130,13 +147,13 @@ export class Panel {
                 items.push(row);
                 this.days.set(day, items);
             }
-            this.candles.setData(rows.map(row => this.candle(row)));
-            this.volume.setData(rows.map(row => this.histogram(row)));
+            const replaced = syncSeries(this.candles, rows.map(row => this.candle(row)));
+            syncSeries(this.volume, rows.map(row => this.histogram(row)));
             for (const [name, line] of Object.entries(this.lines))
-                line.setData([...(this.indicators[name] ?? []), ...(data.indicator_preview[name] ? [data.indicator_preview[name]] : [])]);
-            if (this.fitted && browsing && timeRange)
+                syncSeries(line, [...(this.indicators[name] ?? []), ...(data.indicator_preview[name] ? [data.indicator_preview[name]] : [])]);
+            if (replaced && this.fitted && browsing && timeRange)
                 scale.setVisibleRange(timeRange);
-            else if (this.fitted)
+            else if (replaced && this.fitted)
                 scale.scrollToPosition(1, false);
         }
         else if (next) {
@@ -166,7 +183,10 @@ export class Panel {
         }
     }
     showCandleInfo(row) {
-        $(this.id + '-volume').textContent = `Vol ${compact(row?.volume)}`;
+        const volume = $(this.id + '-volume');
+        volume.textContent = `Vol ${compact(row?.volume)}`;
+        volume.title = row?.time === this.active?.time && row ? (row.volume == null ? 'Current candle volume unavailable'
+            : this.daily ? 'Current daily cumulative volume' : 'Volume for the current intraday candle') : 'Volume for this candle';
         const node = $(this.id + '-ohlc');
         if (!row) {
             node.textContent = '—';

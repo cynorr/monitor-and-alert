@@ -8,9 +8,9 @@ import exchange_calendars as xcals
 
 ET = ZoneInfo('America/New_York')
 UTC = timezone.utc
-PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '2h': 120, '4h': 240, '1d': 0}
-PHASES = ('1d', '5m', '15m', '30m', '1h')
-INTRADAY = ('5m', '15m', '30m', '1h', '2h', '4h')
+PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '2h': 120, '1d': 0}
+PHASES = ('1d', '5m', '15m', '30m', '1h', '2h')
+INTRADAY = ('5m', '15m', '30m', '1h', '2h')
 
 
 def timestamp(value: datetime) -> int:

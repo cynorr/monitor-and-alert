@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from functools import lru_cache
 from types import SimpleNamespace
 
-from data_service.calendar import ET, TradingCalendar
+from data_service.calendar import ET, PHASES, TradingCalendar
 
 
 class SessionClock:
@@ -141,6 +141,10 @@ class SimulatedQuotes:
         self.last_quote_received_at = None
         self.push_count = 0
         self.raw, self.values = {}, {}
+        self.candle_errors = {}
+        self.tick()
+
+    def restart(self):
         self.tick()
 
     def set_symbols(self, symbols):
@@ -160,7 +164,15 @@ class SimulatedQuotes:
                      'cumulative_volume':raw['volume'], 'bid_price':price-.01, 'ask_price':price+.01,
                      'source':'simulation'}
             self.raw[symbol], self.values[symbol] = raw, value
-            self.cache.apply_quote(symbol, value)
+            day = datetime.fromtimestamp(now, ET).date()
+            for tf in PHASES:
+                ts = self.market.calendar.active_start(tf, now)
+                if ts is None:
+                    continue
+                start = self.market.calendar.session(day)[0] if tf == '1d' else ts
+                o, h, l, c, volume, turnover = self.market.segment(symbol, day, start, now)
+                self.cache.apply_candle(symbol, tf, {'time': ts, 'open': o, 'high': h, 'low': l,
+                                       'close': c, 'volume': volume, 'turnover': turnover})
             self.push_count += 1
         self.last_quote_received_at = now
 

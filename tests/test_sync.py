@@ -2,11 +2,11 @@
 import asyncio
 import json
 import time
-from dataclasses import replace
 
 import pytest
 
 from data_service.broker import Broker, RateLimiter
+from data_service.calendar import PHASES
 from data_service.config import Ticker
 from data_service.downloader import BarDownloader
 from data_service.service import DataService
@@ -167,8 +167,6 @@ def test_partial_and_full_status_and_no_redundant_price_revision(tmp_path, cal):
         rev=service.store.revisions['PAYS.US','5m']
         service.store.upsert(rows,now)
         assert service.store.revisions['PAYS.US','5m']==rev
-        with pytest.raises(ValueError,match='official'):
-            service.store.upsert([replace(rows[0],timeframe='2h')],now)
     finally: service.store.close()
 
 
@@ -217,9 +215,9 @@ def test_scheduler_selection_priority_and_bad_symbol_isolation(tmp_path,cal):
         assert broker.calls[:2]==[('PAYS.US','5m'),('PAYS.US','1d')]
         assert broker.maximum==5
         assert service.status('PAYS.US',now)['stage']=='full'
-        assert len(service.status('BLSH.US',now)['errors'])==5
+        assert len(service.status('BLSH.US',now)['errors'])==len(PHASES)
         service.recover()
-        service.select('BLSH.US','4h')
+        service.select('BLSH.US','2h')
         assert service.priority(('BLSH.US','5m'))<service.priority(('PAYS.US','5m'))
     finally: service.store.close()
 

@@ -6,12 +6,12 @@ import time
 from collections import deque
 from pathlib import Path
 
-from longbridge.openapi import AdjustType, AsyncQuoteContext, Config, Period, SubType, TradeSessions
+from longbridge.openapi import AdjustType, AsyncQuoteContext, Config, Period, PushCandlestickMode, SubType, TradeSessions
 
 from .config import read_credentials, redact
 
 SDK_PERIODS = {'1d': Period.Day, '5m': Period.Min_5, '15m': Period.Min_15,
-               '30m': Period.Min_30, '1h': Period.Min_60}
+               '30m': Period.Min_30, '1h': Period.Min_60, '2h': Period.Min_120}
 
 
 class RateLimiter:
@@ -44,7 +44,7 @@ class Broker:
         domain = 'cn' if region == 'cn' else 'com'
         os.environ['LONGBRIDGE_REGION'] = 'cn' if region == 'cn' else 'hk'
         self.config = Config.from_apikey(
-            *self.secrets, enable_print_quote_packages=False,
+            *self.secrets, enable_print_quote_packages=False, push_candlestick_mode=PushCandlestickMode.Realtime,
             http_url=f'https://openapi.longbridge.{domain}',
             quote_ws_url=f'wss://openapi-quote.longbridge.{domain}/v2')
         self.timeout, self.limiter = timeout, RateLimiter()
@@ -93,7 +93,14 @@ class Broker:
 
     async def subscribe(self, ctx, symbols: list[str]):
         self.check(symbols)
-        await self.call(ctx.subscribe, symbols, [SubType.Quote], symbols=symbols)
+        await self.call(ctx.subscribe, symbols, [SubType.Quote, SubType.Trade], symbols=symbols)
+
+    async def subscribe_candles(self, ctx, symbol, timeframe):
+        return await self.call(ctx.subscribe_candlesticks, symbol, SDK_PERIODS[timeframe],
+                               TradeSessions.Intraday, symbols=[symbol])
+
+    async def unsubscribe_candles(self, ctx, symbol, timeframe):
+        await self.call(ctx.unsubscribe_candlesticks, symbol, SDK_PERIODS[timeframe])
 
     async def snapshot(self, ctx, symbols: list[str]):
         self.check(symbols)
@@ -101,7 +108,7 @@ class Broker:
 
     async def unsubscribe(self, ctx, symbols: list[str]):
         # Removed symbols must still be unsubscribed after the whitelist changes.
-        await self.call(ctx.unsubscribe, symbols, [SubType.Quote])
+        await self.call(ctx.unsubscribe, symbols, [SubType.Quote, SubType.Trade])
 
     async def validate_ticker(self, ticker: str):
         from .workspace import normalize_ticker

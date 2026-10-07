@@ -17,6 +17,22 @@ def sdk_timestamp(value: datetime) -> int:
     return timestamp(value.astimezone())
 
 
+def parse_candle(item, symbol, timeframe, calendar, as_of, *, closed=True):
+    session = str(item.trade_session).split('.')[-1]
+    if session not in {'Intraday', 'Normal'}:
+        raise ValueError('Non-regular candle returned')
+    try:
+        turnover = float(item.turnover)
+        if not math.isfinite(turnover) or turnover < 0:
+            turnover = None
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        turnover = None
+    bar = Bar(symbol, timeframe, sdk_timestamp(item.timestamp), float(item.open), float(item.high),
+              float(item.low), float(item.close), item.volume, turnover)
+    bar.validate(calendar, as_of, closed=closed)
+    return bar
+
+
 def ohlc_comparison(bar, calendar, as_of, session, ohlcv):
     end = calendar.bar_end(bar.ts, bar.timeframe)
     return {'symbol': bar.symbol, 'timeframe': bar.timeframe, 'session': session,
@@ -54,20 +70,13 @@ class BarDownloader:
                     raise ValueError('Non-regular candle returned')
                 end = self.calendar.bar_end(ts, timeframe)
                 if ts in seen:
+                    bars = [bar for bar in bars if bar.ts != ts]
                     raise ValueError('Duplicate timestamp in API response')
                 seen.add(ts)
                 if end > as_of:
                     forming += 1
                     continue
-                try:
-                    turnover = float(item.turnover)
-                    if not math.isfinite(turnover) or turnover < 0:
-                        turnover = None
-                except (AttributeError, TypeError, ValueError, OverflowError):
-                    turnover = None
-                bar = Bar(symbol, timeframe, ts, float(item.open), float(item.high),
-                          float(item.low), float(item.close), item.volume, turnover)
-                bar.validate(self.calendar, as_of)
+                bar = parse_candle(item, symbol, timeframe, self.calendar, as_of)
                 bars.append(bar)
                 if bar.invalid_range:
                     anomalies.append(ohlc_comparison(bar, self.calendar, as_of, session,
@@ -89,13 +98,16 @@ class BarDownloader:
         if self.calendar.window_session(as_of) != session:
             return None
         bars, rejected, forming = self._parse(raw, symbol, timeframe, as_of)
-        if rejected:
-            raise ValueError('; '.join(f"{item['ts']}: {item['error']}" for item in rejected))
         target = self.calendar.latest_closed(timeframe, as_of)
         if not any(bar.ts == target for bar in bars):
-            raise ValueError(f'Missing latest closed {timeframe} bar: {target}')
+            details = '; '.join(f"{item['ts']}: {item['error']}" for item in rejected)
+            raise ValueError(f'Missing latest closed {timeframe} bar: {target}' + (f'; {details}' if details else ''))
+        if rejected:
+            log.warning('%s %s rejected history rows: %s', symbol, timeframe, rejected)
+        if count != 1000:
+            rejected = batch.get('rejected', []) + rejected
         batch = {'symbol': symbol, 'timeframe': timeframe, 'as_of': as_of,
                  'session': session, 'requested_count': count, 'returned_count': len(raw),
-                 'forming_count': forming}
+                 'forming_count': forming, 'rejected': rejected}
         self.store.upsert(bars, as_of, batch, replace=count == 1000)
         return batch
