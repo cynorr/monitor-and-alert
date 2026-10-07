@@ -15,7 +15,7 @@ Chart layout, colors, margins, headers, volume hover, scale defaults, mouse/zoom
 
 ## Alert UI
 
-Scan/Monitor 图表设置、横线操作、待处理 stack 与 macOS 通知的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开 series primitive、图表鼠标手势与持久事件 stack。
+Scan/Monitor 图表设置、横线操作、待处理 stack 与后台声音的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开 series primitive、图表鼠标手势与持久事件 stack。
 
 ## Logo / Icon
 
@@ -76,7 +76,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Alert 卡片关闭 | `×` | 手动处理该事件 |
 | Alert 卡片跳转 | `↗` | 打开对应 Monitor 图表并处理事件 |
 
-Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶仍按名单生命周期排除 symbol。网页准确使用上述图形；macOS 通知保留方向含义，可附方向图片，文字颜色、位置和系统排版不由应用控制。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
+Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶仍按名单生命周期排除 symbol。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
 
 ### 品牌与平台实现
 

@@ -25,7 +25,6 @@ const scan = new ScanControls(applyList, () => { watchlist.render(); const rows 
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
 let waitingJump = null;
-let nativeEvent = location.hash.startsWith('#alert=') ? location.hash.slice(7) : '';
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async (selected) => {
     const tf = timeframe;
     if (appMode === 'scan' && scan.activeList !== 'focus')
@@ -225,13 +224,6 @@ function connect() {
             }
             if (data.type === 'alerts') {
                 alerts.update(data);
-                if (nativeEvent) {
-                    const event = alerts.value?.events.find(event => event.id === nativeEvent);
-                    if (event) {
-                        nativeEvent = '';
-                        void alerts.open(event);
-                    }
-                }
                 return;
             }
             const view = data;

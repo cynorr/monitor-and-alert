@@ -83,7 +83,7 @@ def create_app(service, cors_origin=None):
                         last_board = asyncio.get_running_loop().time()
                     if hasattr(service, 'alert_state'):
                         alerts = service.alert_state()
-                        signature = alerts['revision'], alerts['notification'], alerts['error']
+                        signature = alerts['revision'], alerts['sound'], alerts['error']
                         if signature != last_alerts:
                             await ws.send_json({'type': 'alerts', **alerts})
                             last_alerts = signature

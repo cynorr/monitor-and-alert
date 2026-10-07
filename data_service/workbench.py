@@ -21,6 +21,7 @@ from .store import atomic_json
 from .additional_info import AdditionalInfo
 from .alerts import AlertEngine, price_cents
 from .alerts.engine import symbol_key
+from .alerts.sound import AlertSound
 from .list_rules import focus_classification
 
 log = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ log = logging.getLogger(__name__)
 
 class Workbench:
     def __init__(self, workspace, runtime, daily_path, broker_factory, *, calendar=None, mock=False, only=None,
-                 holdings_factory=None, pipeline=None, bars_path=None, notifier=None, additional_info=None):
+                 holdings_factory=None, pipeline=None, bars_path=None, sound=None, additional_info=None):
         self.workspace, self.runtime, self.daily_path = workspace, runtime, daily_path
         self.broker_factory, self.calendar = broker_factory, calendar or TradingCalendar()
         self.mock, self.only = mock, only
@@ -49,7 +50,9 @@ class Workbench:
         self.additional_task = None
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(DEFAULT))
         self.list_context = self._list_context()
-        self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, notifier=notifier) if only is None else None
+        self.sound = sound if sound is not None else AlertSound() if not mock and only is None else None
+        self.sound_task = None
+        self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, sound=self.sound) if only is None else None
         self.refresh_alert_scope()
         workspace.on_change = self.workspace_changed
 
@@ -65,8 +68,7 @@ class Workbench:
 
     def alert_state(self):
         return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'events': [], 'eligible_symbols': [],
-                'scope_known': True, 'notification': {'available': False, 'authorization': 'unavailable', 'sound': False,
-                                                     'error': 'Alerts are disabled for symbol-subset sessions'}, 'error': None}
+                'scope_known': True, 'sound': {'enabled': False, 'error': None}, 'error': None}
 
     def focus_classifications(self, tickers):
         rows = {row['symbol'].removesuffix('.US'): row for row in self.snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
@@ -151,6 +153,8 @@ class Workbench:
             self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
 
     async def start_background(self):
+        if self.sound and self.sound_task is None:
+            self.sound_task = asyncio.create_task(self.sound.run())
         if self.only is None:
             try:
                 await self.prepare_lists()
@@ -203,6 +207,10 @@ class Workbench:
         return self.holdings.state(quotes, as_of=datetime.fromtimestamp(now, ET).date().isoformat())
 
     async def close(self):
+        if self.sound_task:
+            self.sound_task.cancel()
+            await asyncio.gather(self.sound_task, return_exceptions=True)
+            self.sound_task = None
         if self.additional_task:
             self.additional_task.cancel()
             await asyncio.gather(self.additional_task, return_exceptions=True)
@@ -220,7 +228,7 @@ class Workbench:
     async def run(self):
         while True:
             self.refresh_alert_scope()
-            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task)):
+            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task), ('Alert sound', self.sound_task)):
                 if task and task.done():
                     task.result()
                     raise RuntimeError(f'{name} task stopped unexpectedly')
@@ -421,9 +429,6 @@ class Workbench:
                 self.alerts.delete(payload['id'])
             elif action == 'acknowledge':
                 self.alerts.acknowledge(payload['event_id'])
-            elif action == 'notifications':
-                if self.alerts.notifier:
-                    self.alerts.notifier.request_settings()
             else:
                 raise ValueError('Unknown alert action')
             return self.alert_state()

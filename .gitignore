@@ -16,7 +16,6 @@ massive-token.txt
 *.egg-info/
 build/
 dist/
-macos/build/
 
 ui/node_modules/
 

@@ -2,6 +2,28 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-07：Alert 连续播放原声
+
+环境：本机 macOS 26.7、Python 3.13.1。只验证声音资源与播放任务，没有运行其他业务测试或前端构建。
+
+- `tests/test_alert_sound.py`：4 项通过，覆盖上穿/下穿各调用播放器4次、事件串行、播放失败与后续新事件恢复，以及退出清理。
+- 两份 WAV 恢复为原始单次声音，每份46,788字节；每次 afplay 完成立即调用下一次，没有合成音频或主动等待。
+- 实际仅试听上穿、下穿各一组，每组调用原始音频4次，均播放完成，error=null；没有测试其他业务功能。
+- 后台沿用原 runtime 重启加载修改；需求与实现契约同步 alert.md、development.md。本轮没有创建正式 Alert、修改名单或测试行情触发、卡片、图表与持久化。
+
+## 2026-10-07：Alert 改用后台声音与持久卡片
+
+环境：本机 macOS 26.7 arm64、Python 3.13.1、TypeScript、Chrome 与正式 Safari Charts。按本轮要求使用临时 SQLite 和 mock Regular 最新价验证触发，没有等待开盘或修改正式名单、Alert、账户。
+
+- `.venv/bin/python -m pytest -q tests/test_alert_sound.py tests/test_alerts.py`：28 项通过。覆盖新事件提交后才播放、同条不重复播放、失败写入不播放、恢复/处理卡片不重播、Mock默认静音、任务启动/退出，以及串行音频、播放错误和后续新事件恢复。localhost 用例在沙箱外运行，所有数据写临时目录。
+- `npm run build --prefix ui`、改动 Python 编译、文档链接和 `git diff --check` 通过。离线构建 wheel 确认包含两个 WAV 及 sound.py，不含旧 macos.py 或原生通知依赖；刷新本地 editable 安装后 `pip check` 通过。
+- 明确启用实际声音，用 CHECK.US 的临时 Regular 最新价经 AlertEngine 依次触发上穿和下穿，间隔约两秒，两个事件均持久化、声音状态 error=null。用户确认“两次都听到，声音不同”。没有读取行情凭证或在正式 Alert 中制造触发，临时库已清理。
+- Chrome 使用 Scan Mock 副本、临时库和既有 FakeBroker，localhost:8767 限时120秒。两张未处理卡片在刷新前后均存在，原通知按钮为0个，页面无 console error。完整截图保存在 `/tmp/alert-cards-refresh-2026-10-07.png`；临时服务、目录与页面已关闭。
+- 正常退出旧原生进程，实际删除 `dist/Market Monitor.app`、macos 构建目录、launcher/setup/build脚本及 PyObjC/py2app 和其专用依赖；原 WAV 移入 Alert 模块。正式 runtime 改用现有 Python CLI 启动，/health 为 running、Quote 为 CONNECTED；Alert sound 为 enabled=true、error=null。切换前后正式库均为3条 Alert、2条历史事件、0条未处理事件。Safari Charts 已刷新，恢复 Monitor 与 PLSE 选择。
+- Alert 需求、职责/契约、产品行为、UI 总入口、README 与模块 AGENTS 已同步为后台声音和持久卡片。
+
+未覆盖：真实 Regular 行情穿越、Mac 重启/睡眠与 macOS 27 实机运行。当前听辨只证明本机当前音量和输出设备下的两种声音，不把子进程成功退出当作其他设备的听辨证据。
+
 ## 2026-10-07：Additional Info 显示精简与位置微调
 
 环境：本机 macOS、TypeScript、现有正式服务与 Chrome，使用本轮已有 Nasdaq 缓存及真实图表。只修改前端显示和维护文档，不重启服务或安排额外供应商请求。
@@ -365,6 +387,8 @@
 移动触控、全天稳定运行和实际系统长时间休眠恢复仍未完整验收。模拟测试、短时 live 和历史记录分别标明，不相互替代。
 
 ## 2026-10-06 Alert 实现与 macOS 通知
+
+以下为历史证据：原生通知应用方案已于2026-10-07移除，当前实现与验收见本文件同日的“Alert 改用后台声音与持久卡片”。
 
 环境：macOS 26.7 arm64，Python 3.13.1；PyObjC Cocoa/UserNotifications 12.2.2、py2app 0.28.10、setuptools 80.10.2；Lightweight Charts 5.2.0、TypeScript 5.9.3。原生应用固定 `dist/Market Monitor.app`，Bundle ID `local.cyno.MarketMonitor`，本地 ad-hoc designated requirement 固定 identifier；当前为 alias bundle，运行依赖原工程和 .venv。
 

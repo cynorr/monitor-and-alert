@@ -24,7 +24,6 @@ let listRegularSession = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
 let waitingJump: { symbol: string; resolve: () => void } | null = null;
-let nativeEvent = location.hash.startsWith('#alert=') ? location.hash.slice(7) : '';
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async selected => {
     const tf = timeframe;
     if (appMode === 'scan' && scan.activeList !== 'focus') await scan.showFocus();
@@ -185,10 +184,6 @@ function connect() {
             }
             if (data.type === 'alerts') {
                 alerts.update(data as AlertState);
-                if (nativeEvent) {
-                    const event = alerts.value?.events.find(event => event.id === nativeEvent);
-                    if (event) { nativeEvent = ''; void alerts.open(event); }
-                }
                 return;
             }
             const view = data as View;

@@ -261,8 +261,7 @@ button:disabled { cursor: default; opacity: .45; }
 .crossing-icon { width:24px; height:24px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 .crossing-icon.up { color:#2962ff; }
 .crossing-icon.down { color:#000000; }
-.alert-notifications,.alert-error { pointer-events:auto; background:#fff; border:1px solid #dce0e5; border-radius:6px; padding:8px 10px; font-size:11px; color:#727b88; box-shadow:0 2px 8px #0001; }
-.alert-notifications:disabled { opacity:1; }
+.alert-error { pointer-events:auto; background:#fff; border:1px solid #dce0e5; border-radius:6px; padding:8px 10px; font-size:11px; color:#727b88; box-shadow:0 2px 8px #0001; }
 .alert-error { display:flex; gap:8px; align-items:center; color:#b42318; }
 .alert-error button { border:0; background:none; color:inherit; cursor:pointer; }
-.alert-error[hidden],.alert-notifications[hidden] { display:none; }
+.alert-error[hidden] { display:none; }

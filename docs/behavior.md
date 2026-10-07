@@ -4,7 +4,7 @@
 
 ## Alert 与入选规则
 
-Alert 的范围、Regular 触发、Scan/Monitor 共用、持久化、图表操作、卡片与 macOS 通知只在 [alert.md](alert.md) 维护。手动及 Alert 移入 Focus 的重新分类与 section 首位规则只在 [list-design.md](list-design.md#统一移入-focus) 维护。两项已接入现有后台；实际验证范围见 [validation.md](validation.md)。
+Alert 的范围、Regular 触发、Scan/Monitor 共用、持久化、图表操作、卡片与后台声音只在 [alert.md](alert.md) 维护。手动及 Alert 移入 Focus 的重新分类与 section 首位规则只在 [list-design.md](list-design.md#统一移入-focus) 维护。两项已接入现有后台；实际验证范围见 [validation.md](validation.md)。
 
 Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互](alert.md#图表交互)；图表统一线段虚线、横纵独立的自由十字线和 Vol 显示只在 [Chart UI](chart-ui.md) 维护。
 

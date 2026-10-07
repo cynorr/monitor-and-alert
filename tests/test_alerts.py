@@ -240,3 +240,64 @@ def test_focus_saved_alert_write_rejected_returns_explicit_partial_result(app_da
         finally:
             await app.close()
     asyncio.run(scenario())
+
+
+def test_sound_only_follows_committed_new_events_and_restart_keeps_cards(tmp_path, cal):
+    from data_service.alerts.sound import AlertSound
+    sound = AlertSound()
+    clock = lambda: at('2026-10-05T09:31:00')
+    path = tmp_path / 'alerts.sqlite3'
+    value = AlertEngine(path, cal, clock=clock, sound=sound)
+    value.maintain({'NVDA.US'}, True)
+    alert = value.create('NVDA.US', 10)
+    tick(value, 9); tick(value, 10)
+    tick(value, 9); tick(value, 11)
+    assert sound.queue.qsize() == 1
+    assert sound.queue.get_nowait() == 'up'
+    sound.queue.task_done()
+    value.rearm(alert['id'], 10, 1)
+    tick(value, 10)
+    assert sound.queue.get_nowait() == 'down'
+    sound.queue.task_done()
+    events = value.state()['events']
+    assert len(events) == 2
+    value.close()
+    restored = AlertEngine(path, cal, clock=clock, sound=sound)
+    try:
+        assert restored.state()['events'] == events
+        assert restored.state()['sound'] == {'enabled': True, 'error': None}
+        assert 'notification' not in restored.state()
+        assert sound.queue.empty()
+        restored.acknowledge(events[0]['id'])
+        assert len(restored.state()['events']) == 1 and sound.queue.empty()
+    finally:
+        restored.close()
+
+
+def test_failed_trigger_save_does_not_play_sound(engine):
+    from data_service.alerts.sound import AlertSound
+    value, _ = engine
+    value.sound = sound = AlertSound()
+    value.create('NVDA.US', 10)
+    tick(value, 9)
+    value.db.execute('PRAGMA query_only=ON')
+    tick(value, 10)
+    assert not value.state()['events'] and sound.queue.empty()
+    assert value.state()['error'] == 'Could not save alert trigger'
+
+
+def test_workbench_sound_lifecycle_and_mock_defaults(app_data):
+    from data_service.alerts.sound import AlertSound
+    async def scenario():
+        app, _ = make_app(app_data)
+        assert app.sound is None and app.alert_state()['sound']['enabled'] is False
+        app.sound = app.alerts.sound = AlertSound()
+        await app.start_background()
+        task = app.sound_task
+        assert task is not None
+        await app.close()
+        assert task.cancelled() and app.sound_task is None
+        formal, _ = make_app(app_data, mock=False)
+        assert isinstance(formal.sound, AlertSound) and formal.alerts.sound is formal.sound
+        await formal.close()
+    asyncio.run(scenario())

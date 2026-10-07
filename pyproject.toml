@@ -11,13 +11,15 @@ dependencies = ["longbridge==5.0.0", "exchange-calendars==4.13.2", "aiohttp>=3.1
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
-macos = ["pyobjc-framework-Cocoa>=12.2,<13; sys_platform == 'darwin'", "pyobjc-framework-UserNotifications>=12.2,<13; sys_platform == 'darwin'", "py2app>=0.28.10,<1; sys_platform == 'darwin'", "setuptools>=75,<81; sys_platform == 'darwin'"]
 
 [project.scripts]
 longbridge-data = "data_service.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["data_service*"]
+
+[tool.setuptools.package-data]
+"data_service.alerts" = ["sounds/*.wav"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

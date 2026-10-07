@@ -77,7 +77,7 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 
 目标日仍采用美东 **18:00** 门槛：之前使用上一交易日，之后才准备当天。周末和休市日沿用上一交易日，不重新拉 split 或构建派生产物。日期下拉中的日期都是已经生成的截面；失败原因在阶段提示悬停中查看。
 
-修改候选配置或证券目录后，需要主动重算。先停止 CLI 服务（Ctrl+C）或退出 Market Monitor 应用，再用已有本地 SQLite 重算最新完成日：
+修改候选配置或证券目录后，需要主动重算。先停止 Python 后台服务（Ctrl+C），再用已有本地 SQLite 重算最新完成日：
 
 ```bash
 .venv/bin/python -m data_service scan
@@ -99,26 +99,10 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 
 ## 使用
 
-macOS 系统通知使用本机原生应用。首次构建：
-
-```bash
-.venv/bin/pip install -e '.[macos]'
-scripts/build_macos_app.sh
-open 'dist/Market Monitor.app'
-```
-
-先退出使用同一 runtime 的 CLI 服务。应用沿用本工程的 runtime、workspace 和凭证；关闭网页继续监控，应用菜单 Quit 才退出。当前为本机 alias bundle，保留工程目录与 .venv，固定路径和 Bundle ID；源码修改退出再打开，资源/依赖或签名修改后重建。完整通知设置见 [Alert 权限](docs/alert.md#macos-权限与运行)。
+Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，无需安装独立应用或授权系统通知。继续使用上面的 `data_service serve` 命令启动；后台保持运行即可，Safari/Chrome 关闭或在后台不影响检测和声音。未处理卡片持久化，刷新或重启后仍恢复，恢复时不重播声音。声音与运行要求见 [Alert 后台声音](docs/alert.md#后台声音与运行)。
 
 - 图表按住 **Command + Option** 左键创建，价格取鼠标水平线；点击横线选中后 **Backspace** 删除，上下拖动改价并重新激活。
 - Regular 到达/穿越后灰线与左下角卡片保留到手动关闭或跳转。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
-
-原生投递的有界检查（先退出应用；只发两条 CHECK 通知，不读凭证/数据库或启动行情）：
-
-```bash
-'dist/Market Monitor.app/Contents/MacOS/Market Monitor' --notification-check
-```
-
-检查后从应用菜单 Quit，并重新打开正式应用。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
 - Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，Refresh跳过已完成日。

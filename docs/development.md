@@ -41,7 +41,7 @@
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
 | data_service/additional_info/ / scripts/pull_additional_info.py | 独立Nasdaq公司资料/财报获取、Python清理、业务SQLite/内存缓存和后台调度；先读模块AGENTS.md |
 | ui/src/additional-info.ts | 附加信息选择身份校验、分类显示精简、可空字段格式化和纽约自然日倒计时；不操作图表bars |
-| data_service/alerts/ | 独立 Alert Engine、业务 SQLite、最小 macOS 通知；先读本目录 AGENTS.md |
+| data_service/alerts/ | 独立 Alert Engine、业务 SQLite、后台声音；先读本目录 AGENTS.md |
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；Quote preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
@@ -53,23 +53,23 @@ List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局
 
 Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted',backgroundColor}`，不从显示名称反推已保存外观，也不影响 role、filters、分类与订阅。前端只为旧偏好中缺失的外观初始化默认值，下次偏好保存持久化；后端校验内置 icon、背景枚举与六位 HEX 颜色，不接收任意 SVG/URL/CSS。列表和编辑 preview 复用 `tag-appearance.ts`，无外部图标依赖。固定展示数量不引入测宽监听。Save/Cancel 检查完整 Tag 草稿，筛选预览只检查条件变化，外观编辑保留人工匹配成员。图形要求统一见 [Logo / Icon](ui.md#logo--icon)，名单排布见 [List UI](ui.md#list-ui)。
 
-后续客户端明确包含 Android 原生 App，iOS 可能接入。迁移时以 behavior/list-design 的产品语义、本文件的接口与保存契约、ui 的设计要求为入口；保留 Tag Icon ID、外观和名单操作含义，按平台重做绘制、密度与触摸交互。Web 的 DOM/CSS/SVG 和 px 仅是当前实现参考；不提前建设移动端原生工程或通用适配层。Alert 所需最小 macOS 通知应用按下节实现。
+后续客户端明确包含 Android 原生 App，iOS 可能接入。迁移时以 behavior/list-design 的产品语义、本文件的接口与保存契约、ui 的设计要求为入口；保留 Tag Icon ID、外观和名单操作含义，按平台重做绘制、密度与触摸交互。Web 的 DOM/CSS/SVG 和 px 仅是当前实现参考；不提前建设移动端原生工程或通用适配层。Alert 后台声音按下节实现。
 
 ## Alert 实现
 
-实现：2026-10-06；完整功能要求见 [alert.md](alert.md)，模块 AI 入口见 [data_service/alerts/AGENTS.md](../data_service/alerts/AGENTS.md)。本节只维护职责、调用和保存契约，不重复生命周期或 UI 数值。
+更新：2026-10-07；完整功能要求见 [alert.md](alert.md)，模块 AI 入口见 [data_service/alerts/AGENTS.md](../data_service/alerts/AGENTS.md)。本节只维护职责、调用和保存契约，不重复生命周期或 UI 数值。
 
-- Workbench 持有唯一 Alert Engine，并在正式后台启动/关闭时创建和释放。UI → 同源 Data API → Workbench → Alert Engine → SQLite/macOS 通知；Alert 不依赖 Scan 算子或图表渲染，不建立第二个进程服务、端口或消息协议。
+- Workbench 持有唯一 Alert Engine，并在正式后台启动/关闭时创建和释放。UI → 同源 Data API → Workbench → Alert Engine → SQLite/后台声音；Alert 不依赖 Scan 算子或图表渲染，不建立第二个进程服务、端口或消息协议。
 - `quotes.py` 继续承担 Quote 的唯一标准化与校验入口，在现有 callback 处派发有效 Regular 最新价。Engine 只接标准化值、报价时间与接收顺序；借用现有 calendar/恢复信号判断交易窗口和重新建立起点，不直接访问 SDK。`pipeline.py` 仍只管理 Massive 准备，与 Alert 检测无关。
 - 当前 scope 由最新 workspace Focus 和按当前纽约日期有效的已接受 Holdings 提供，不能用带 Review 的 `Workbench.symbols` 或 Scan 时返回 null 的显示字段作为白名单。复用 Holdings 现有日期/批次语义，不建第二份账户归属缓存。
-- `alerts/engine.py` 直接管理状态、检测、操作和业务 SQLite，`alerts/macos.py` 管权限、通知、声音和回调；函数直接互调，不引入通用 repository、adapter、rules 或恢复框架。UI Alert 交互在 `ui/src/alerts.ts` 内维护：公开 series primitive 的 paneViews 绘制虚线，priceAxisPaneViews 绘制进入价格轴的右箭头，不提供 priceAxisViews 数字标签；应用层 DOM 胶囊使用公开 pane HTMLElement/尺寸/坐标与 primitive.updateAllViews 定位。胶囊与横线共用拖动/删除动作，两图共用 controller 中的改价预览，松手提交一次；不依赖 vendor 内部 DOM。
+- `alerts/engine.py` 直接管理状态、检测、操作和业务 SQLite，`alerts/sound.py` 管本地声音；函数直接互调，不引入通用 repository、adapter、rules 或恢复框架。UI Alert 交互在 `ui/src/alerts.ts` 内维护：公开 series primitive 的 paneViews 绘制虚线，priceAxisPaneViews 绘制进入价格轴的右箭头，不提供 priceAxisViews 数字标签；应用层 DOM 胶囊使用公开 pane HTMLElement/尺寸/坐标与 primitive.updateAllViews 定位。胶囊与横线共用拖动/删除动作，两图共用 controller 中的改价预览，松手提交一次；不依赖 vendor 内部 DOM。
 - RuntimePaths.alerts_db 为独立 Alert 数据库路径。Alert 与 events 两张业务表保存用户设置及处理状态；前者有独立 ID；Engine 按 symbol 建立内存索引，后者有事件 ID 及 Alert/generation 关联。模式、周期、来源、Scan 日期不参与持久化身份；UI 上下文仍使用原有 request_id/source/socket 检查。
-- SQLite 使用 WAL/FULL，所有修改在同一后台 asyncio loop 内串行提交；触发状态和事件一并提交，之后才发原生通知/WS。每份行情仅检查该 symbol 的内存 Active 集合，有实际修改才写库；不保存行情回放日志。事件保留到处理，不以 UI 暂时不可见推断已处理。
+- SQLite 使用 WAL/FULL，所有修改在同一后台 asyncio loop 内串行提交；触发状态和事件一并提交，之后才播放声音/发送 WS。每份行情仅检查该 symbol 的内存 Active 集合，有实际修改才写库；不保存行情回放日志。事件保留到处理，不以 UI 暂时不可见推断已处理。
 - Workbench 的 Alert 创建动作先验证输入，再复用统一 Focus 入选动作，最后调用 Engine.create；入选清理/分类/顺序细则只在 [List 入选规则](list-design.md#统一移入-focus) 维护。`workspace.py` 管一次同步保存，`list_rules.py` 管现有匹配；手动入选和 Alert 入选不得分别实现。
 - `_focus`/`add_ticker`/`move_members` 已清理来源人工 Tag/section，接收共用匹配结果并一次保存；不能仅在 Alert 入口清理，不能依赖稍后的 `prepare_lists` 去消除中间状态。现有 Focus 内的人工调整与全新 symbol 指定 section 新增按原契约保留。
 - workspace JSON 与 Alert SQLite 沿用各自的直接保存方式，不新增跨存储事务协调。入选失败中止；入选已保存但 Alert 保存失败，保留已成功的 Focus 入选并返回明确部分结果，不伪造成功横线。GET/图表选择仍只读，真实行情范围仅随已提交的名单变化。
-- 最小 macOS `.app` 建立固定应用身份；使用 PyObjC 12.2 与 py2app 0.28.10；打包依赖固定 setuptools <81。主线程运行 AppKit/通知事件循环，单个后台线程运行现有 asyncio Workbench；原生操作通过线程安全调度返回后台 loop，后台通知通过主线程调度调用 macOS。这是同一 Python 进程，不把 `.app` 做成另一个行情服务。
-- 应用打包只包含程序/UI/声音资源，现有 runtime、workspace 与凭证继续留在工程运行目录。开发可使用 alias bundle，发布使用完整 bundle；升级不新建用户数据库，保持应用身份并验证权限保留。最小应用提供打开工作台、通知设置与退出入口，明确退出才关闭原有服务。当前为本机 alias bundle，固定在工程 dist/Market Monitor.app，代码与 .venv 留在原目录；不宣称是可拷走的独立发行包。构建和启动方式见 README。Finder 的 C locale 在 launcher 中设为 UTF-8；通知冷启动的 Open/Close 等待 Workbench ready/bind 后进入同一业务处理。
+- 正式 Python 启动入口直接启用 AlertSound；Workbench.start_background/close 管理同一 asyncio loop 内的播放任务。每个新事件入内存队列，按顺序用 macOS 自带 `/usr/bin/afplay` 播放 `alerts/sounds/up.wav` 或 `down.wav`，循环规则遵循 [Alert 后台声音](alert.md#后台声音与运行)。资源保存单次原声，每次播放完成立即启动下一次，不主动等待。这是短时播放子进程，不是独立后台服务；通过异步 subprocess 等待，失败报告后继续处理下一事件。退出时终止在播子进程，丢弃内存队列，不重播历史事件。
+- WAV 随 Python package-data 安装，不依赖应用包、签名、通知授权、PyObjC 或 py2app。Mock/模拟器默认不创建播放器，明确声音验收时才注入；平台声音状态只包含 enabled/error。UI 只显示实际声音错误，删除通知设置入口及原生通知跳转逻辑。
 
 当前函数/传输接口：
 
@@ -80,12 +80,12 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 | `AlertEngine.rearm(alert_id, price, expected_generation)` | 提交改价/重新设置，保护已被另一操作重新设置的版本 |
 | `AlertEngine.delete(alert_id)` | 删除用户选中的 Alert |
 | `AlertEngine.acknowledge(event_id)` | 处理事件，只在 generation 对应当前 Triggered 时删除 Alert |
-| `POST /v1/alerts` | 同源 JSON mutation，动作 create/rearm/delete/acknowledge/notifications，复用 Origin 与错误处理 |
-| `GET /v1/alerts` | 只读当前 Alert、未处理事件及原生通知状态，不安排行情请求 |
+| `POST /v1/alerts` | 同源 JSON mutation，动作 create/rearm/delete/acknowledge，复用 Origin 与错误处理 |
+| `GET /v1/alerts` | 只读当前 Alert、未处理事件及 sound.enabled/error，不安排行情请求或播放 |
 | `WS /v1/stream` 的独立 `type=alerts` | 初次/重连及实际业务变化发完整 Alert/待处理快照，不依赖选中 symbol |
-| `/health` 的 alerts 状态 | enabled/count/error；通知授权、声音和投递错误在 GET /v1/alerts 与 WS 快照中 |
+| `/health` 的 alerts 状态 | enabled/count/error；声音状态与播放错误在 GET /v1/alerts 与 WS 快照中 |
 
-仅留后续程序调用入口，不接入 Atomic feature 或新增自动设置测试。Mock/模拟器只能使用自己的临时名单/库，不能读取真实凭证或自动改为真实 API；离线会话不投递真实桌面通知。
+仅留后续程序调用入口，不接入 Atomic feature 或新增自动设置测试。Mock/模拟器只能使用自己的临时名单/库，不能读取真实凭证或自动改为真实 API；声音验收必须明确启用实际播放。
 
 ## 模式与上游数据
 

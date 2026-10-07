@@ -37,7 +37,7 @@ def parser():
     return result
 
 
-async def run(args, tickers, notifier=None):
+async def run(args, tickers):
     from .broker import Broker
     from .http_api import start_http
     from .service import DataService
@@ -62,18 +62,14 @@ async def run(args, tickers, notifier=None):
                             lambda allowed: Broker(args.credentials, allowed, args.runtime, args.region),
                             mock=args.mock_scan, only=args.symbols,
                             holdings_factory=holdings_factory if args.holdings_credentials.exists() else None,
-                            pipeline=pipeline, bars_path=paths.bars_db, notifier=notifier,
+                            pipeline=pipeline, bars_path=paths.bars_db,
                             additional_info=AdditionalInfo(paths.additional_info_dir,
                                                            enabled=not args.mock_scan and args.symbols is None))
-        if notifier:
-            notifier.bind(service.alerts, asyncio.get_running_loop())
         server = None
         try:
             service.mode = args.mode
             workspace.start_watcher()
             server = await start_http(service, args.port, args.cors_origin)
-            if notifier:
-                notifier.open_workbench()
             await service.start_background()
             print(f'{args.mode.upper()}: http://127.0.0.1:{args.port}/', flush=True)
             if args.duration:
@@ -111,7 +107,7 @@ async def run(args, tickers, notifier=None):
             broker.close()
 
 
-def main(argv=None, *, notifier=None):
+def main(argv=None):
     args = parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
     try:
@@ -175,7 +171,7 @@ def main(argv=None, *, notifier=None):
             except BlockingIOError:
                 raise ValueError('A service already uses this runtime directory') from None
             logging.info('Service start symbols=%d workspace=%s', len(tickers), path.resolve())
-            return asyncio.run(run(args, tickers, notifier))
+            return asyncio.run(run(args, tickers))
     except KeyboardInterrupt:
         return 0
     except (ValueError, OSError, sqlite3.Error) as exc:

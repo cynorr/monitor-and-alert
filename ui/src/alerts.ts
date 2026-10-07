@@ -5,7 +5,7 @@ import { post } from './api.js';
 
 export type PriceAlert = { id: string; symbol: string; price_cents: number; generation: number; state: 'active' | 'triggered'; expires_at: number };
 export type AlertEvent = { id: string; alert_id: string; generation: number; symbol: string; direction: 'up' | 'down'; price_cents: number; actual_price: number; quote_time: number; fired_at: number };
-export type AlertState = { revision: number; alerts: PriceAlert[]; events: AlertEvent[]; eligible_symbols: string[]; scope_known: boolean; error: string | null; notification: { available: boolean; authorization: string; sound: boolean; alerts?: boolean; error: string | null } };
+export type AlertState = { revision: number; alerts: PriceAlert[]; events: AlertEvent[]; eligible_symbols: string[]; scope_known: boolean; error: string | null; sound: { enabled: boolean; error: string | null } };
 export const alertPrice = (cents: number) => (cents / 100).toFixed(2);
 const previewCents = (price: number) => {
     const [digits, exponent = '0'] = price.toString().split('e');
@@ -181,7 +181,6 @@ export class AlertController {
             if (event.key === 'Escape') { this.layers.forEach(layer => layer.cancel()); this.choose(''); }
             if (event.key === 'Backspace' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
         }, true);
-        $('alert-notifications').addEventListener('click', () => { void this.mutate({ action: 'notifications' }); });
         $('alert-error-close').addEventListener('click', () => { this.error = ''; this.render(); });
     }
     update(value: AlertState) {
@@ -212,20 +211,15 @@ export class AlertController {
         try {
             await this.jump(event);
             await this.mutate({ action: 'acknowledge', event_id: event.id });
-            if (location.hash === '#alert=' + event.id) history.replaceState(null, '', location.pathname);
         } catch (error) { this.error = (error as Error).message; }
         finally { this.pending.delete(event.id); this.render(); }
     }
     private render() {
         const value = this.value;
-        const notification = value?.notification;
-        const note = $('alert-notifications') as HTMLButtonElement;
-        note.hidden = !notification || (notification.authorization === 'authorized' && notification.sound && notification.alerts === true && !notification.error);
-        note.disabled = !notification?.available;
-        note.textContent = notification?.error ?? (notification?.authorization === 'not_determined' ? 'Enable notifications' : notification?.authorization === 'authorized' ? 'Notification sound/display is off' : notification?.available ? 'Notification settings' : 'Open Market Monitor.app for notifications');
         const error = $('alert-error');
-        error.hidden = !this.error && !value?.error;
-        $('alert-error-message').textContent = this.error || value?.error || '';
+        const message = this.error || value?.error || value?.sound.error || '';
+        error.hidden = !message;
+        $('alert-error-message').textContent = message;
         const stack = $('alert-cards');
         const focused = (document.activeElement as HTMLElement)?.dataset.alertAction;
         const focusEvent = (document.activeElement as HTMLElement)?.dataset.event;

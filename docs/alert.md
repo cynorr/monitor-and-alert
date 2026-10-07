@@ -1,13 +1,13 @@
 # Alert 需求
 
-更新：2026-10-06。状态：功能已实现；macOS 26.7 已构建和验证通知授权、投递及部分实际交互，macOS 27 仍需实机验收。具体覆盖和未覆盖见 [validation.md](validation.md)。
+更新：2026-10-07。提醒方式为后台直接播放声音与网页持久卡片。具体覆盖和未覆盖见 [validation.md](validation.md)，macOS 27 仍需实机验收。
 
-本文件是 Alert 功能范围、触发、生命周期、图表操作、通知和验收的唯一需求入口。开发遵循 [development-principles.md](development-principles.md)，模块维护入口为 [data_service/alerts/AGENTS.md](../data_service/alerts/AGENTS.md)，职责与接口方案见 [development.md 的 Alert 章节](development.md#alert-实现)。移入 Focus 的完整规则只在 [List / 统一移入 Focus](list-design.md#统一移入-focus) 维护；图形与颜色的具体定义只在 [Logo / Icon](ui.md#alert-图形) 维护。
+本文件是 Alert 功能范围、触发、生命周期、图表操作、声音和验收的唯一需求入口。开发遵循 [development-principles.md](development-principles.md)，模块维护入口为 [data_service/alerts/AGENTS.md](../data_service/alerts/AGENTS.md)，职责与接口方案见 [development.md 的 Alert 章节](development.md#alert-实现)。移入 Focus 的完整规则只在 [List / 统一移入 Focus](list-design.md#统一移入-focus) 维护；图形与颜色的具体定义只在 [Logo / Icon](ui.md#alert-图形) 维护。
 
 ## 目标与范围
 
 - 这是手动价格提醒的工程功能，不包含交易策略、Price Alert 之外的提醒类型、下单或自动交易。
-- Alert Engine 独立于浏览器和图表，运行在现有 Python 后台进程中。关闭或后台运行 Chrome 不停止检测、声音与 macOS 通知；Scan/Monitor 切换不停止检测。
+- Alert Engine 独立于浏览器和图表，运行在现有 Python 后台进程中。Safari、Chrome 或其网页在后台或关闭时不停止检测和声音；Scan/Monitor 切换不停止检测。后台服务必须持续运行。
 - 仅消费现有行情链路的有效 Regular last price。盘前、盘后、夜盘均不检测、不触发，也不更新 Alert 的比较起点。其余业务继续使用已有行情时段要求。
 - 支持 macOS 26、macOS 27；这一版不适配其他操作系统版本，不建设 Android/iOS 原生客户端。
 - UI 无价格输入框，创建、选择、删除与改价都直接在图表完成，不弹二次确认。
@@ -43,7 +43,7 @@
 - Filter、搜索、排序、折叠、选图与展示模式不改变允许范围；Discover/Excluded 的创建操作必须先完成入选 Focus，不能直接给它们订阅行情。
 - 启动重读 workspace，并按当前日期取得有效 Holdings 范围。首次 Holdings 尚未确认时，holdings-only Alert 等待范围确认；请求失败不能被解释为持仓已空，沿用上次已接受范围。
 - 出范围立即停止后续触发并持久化删除，不等 UI 连接；重新加入不会恢复已删除 Alert。
-- 已发生的未处理卡片独立保存，仍须手动处理；出范围或到期只自动删除 Alert/横线并阻止后续通知。出范围卡片保留关闭操作，跳转不能重新扩大订阅范围。
+- 已发生的未处理卡片独立保存，仍须手动处理；出范围或到期只自动删除 Alert/横线并阻止后续声音。出范围卡片保留关闭操作，跳转不能重新扩大订阅范围。
 
 ## 触发语义
 
@@ -80,10 +80,10 @@
 - 默认有效期为创建或成功重新设置后 `7 × 24` 小时；重启不延长。灰线也遵守该期限；已经发生的未处理事件不因期限自动清除。
 - 在独立 `runtime/alerts/alerts.sqlite3` 中保存 Alert 与触发记录，不使用可重建的 Longbridge/Massive 行情库，不把 Alert 写进每日 workspace。
 - 创建、修改、删除、触发与处理都立即提交 SQLite。成功响应前持久化完成；写失败显示错误，不假装已保存或已触发。
-- Triggered 状态与对应事件在同一个事务中保存，提交成功后才发送 macOS 通知和 WebSocket 更新。每份报价只检查该 symbol 的 Active Alert，不逐份报价写库。
+- Triggered 状态与对应事件在同一个事务中保存，提交成功后才播放后台声音并发送 WebSocket 更新。每份报价只检查该 symbol 的 Active Alert，不逐份报价写库。
 - 触发记录包含事件 ID、Alert ID/generation、symbol、方向、阈值、实际触发价、报价时间、触发时间和处理状态。存储时间为 UTC，显示时间为 ET。
 - 重新设置增加 generation；旧卡片关闭只能处理旧事件，不能删除或改变已重新设置的 Alert，也不能删除它的新一轮 Triggered 状态。
-- 恢复未处理事件时不重新播放声音；系统通知提交成功不等同于用户已经看到/听到，网页卡片以持久化事件为准。
+- 页面刷新、重连、后台重启与恢复未处理事件时不重新播放声音；网页卡片以持久化事件为准。播放命令成功不等于用户实际听到，声音验收须包含人工听辨。
 
 ## 图表交互
 
@@ -98,35 +98,30 @@
 - Daily 与 Intraday 同时显示同一 symbol 的 Alert，各自只按价格是否位于可见主图范围判断，不依赖悬停日期或另一张图的时间/价格范围；超出本图价格范围时不强制缩放。任一图都能选中、拖动和删除，拖动预览与提交价格同步到两图。缩放、价格轴缩放、pane resize 和周期切换后仍对准对应价格。重叠 Alert 必须可以逐条选中和删除。
 - 使用 Lightweight Charts 的内置参数和公开 primitive/坐标/命中检测 API；保持 vendor 文件原样，不使用私有接口或内部 DOM。
 
-## 卡片与系统通知
+## 卡片
 
-- 待处理 stack 默认位于 Market Monitor 网页左下角，Scan/Monitor 共用。浏览器关闭后仍记录事件并发系统通知，重新打开网页恢复 stack；本版不建设独立桌面浮窗。
+- 待处理 stack 默认位于 Market Monitor 网页左下角，Scan/Monitor 共用。浏览器关闭后仍记录事件并播放声音，重新打开网页恢复 stack；本版不建设独立桌面浮窗。
 - 新事件置前，超出可用高度时内部滚动，不设置自动消失计时器。刷新、重连或应用重启不清空未处理卡片。
-- 卡片和系统通知保持简洁：symbol、方向符号、阈值价格、日期和精确到秒的 ET 时间；不显示额外策略解释。实际触发价可在 tooltip 查看。
+- 卡片保持简洁：symbol、方向符号、阈值价格、日期和精确到秒的 ET 时间；不显示额外策略解释。实际触发价可在 tooltip 查看。
 - 上穿用箭头向上穿过横线的亮蓝色图形，下穿用箭头向下穿过横线的黑色图形；详细配色/图形只维护在 [Logo / Icon](ui.md#alert-图形)。
 - 卡片 `×` 关闭并处理；跳转按钮成功打开相应 Monitor 图表后处理。跳转失败保留卡片，处理失败保留服务端未处理状态并显示错误。
 - 当前 Triggered generation 被处理后删除灰线；若 Alert 已重新设置，只移除旧卡片。手动删除 Alert 后，已有未处理卡片仍可关闭，不再重新触发。
-- 系统通知的 Open/Close 回调进入同一处理函数。注册关闭回调；不能仅凭系统通知不再可见推断事件已被处理。
-- 使用 macOS UserNotifications 本地通知；不依赖 Chrome Notification、网页音频或浏览器后台定时器。上穿、下穿分别使用两份短声音，网页不重复播放。
-- 原生通知的位置、文字颜色和排版由 macOS 控制。应用内完整实现指定图形；系统通知保留方向符号，可附方向图片，但不承诺任意彩色文字布局。
-- 通知权限或声音关闭时，Engine 和持久化卡片继续工作，并明确显示通知状态；不绕过系统设置、不偷偷回退 Chrome。系统提交失败保留事件并报告错误，不反复播放旧报警。
 
-## macOS 权限与运行
+## 后台声音与运行
 
-- 为工程建立稳定身份的 `Market Monitor.app`，固定 Bundle ID、安装路径及签名方式。权限属于应用，不属于工程目录、localhost 页面或 Python 源文件。
-- `.app` 承载同一 Python 进程，最小原生层只负责事件循环、通知、声音和用户操作；检测仍在后台 Engine，不拆出第二个服务。具体职责见 [development.md](development.md#alert-实现)。
-- 首次设置通知时由应用请求 alert/sound 权限，用户在系统提示中选择 Allow；之后读取实际权限和声音设置。拒绝后到系统设置开启，不重复弹创建确认。
-- `System Settings → Notifications → Market Monitor`：打开 Allow notifications、Desktop、Notification Center、Play sound for notification，选择 Persistent。
-- 使用 Focus / Do Not Disturb 时，在对应 Focus 的允许应用中加入 Market Monitor。锁屏、显示器休眠及屏幕共享时是否显示通知按本人需要设置。
-- 如需登录后自动恢复监控，将应用加入登录项；持久化恢复本身不依赖登录项。浏览器退出不停止应用，明确退出应用才停止后台。
-- Mac 真正休眠、关机或程序退出时无实时检测；显示器熄灭与系统休眠不是同一状态，通知显示权限不会补造期间的行情。
-- macOS 26 与 27 均需验收权限请求、前后台通知、两种声音、Open/Close 和升级后的权限保留；不能用其中一版结果代替另一版。
-
-官方依据：[通知授权](https://developer.apple.com/documentation/usernotifications/asking-permission-to-use-notifications)、[本地通知](https://developer.apple.com/documentation/usernotifications/scheduling-a-notification-locally-from-your-app)、[自定义声音](https://developer.apple.com/documentation/usernotifications/unnotificationsound)、[关闭回调](https://developer.apple.com/documentation/usernotifications/unnotificationcategoryoptions/customdismissaction)、[macOS 26 通知设置](https://support.apple.com/guide/mac-help/notifications-settings-mh40583/26/mac/26)、[macOS 27 通知设置](https://support.apple.com/en-nz/guide/mac-help/mh40583/27/mac/27)。
+- 不使用 macOS 系统通知，不构建原生通知应用。正式入口为现有 Python 后台服务，Safari/Chrome 网页仅显示和处理卡片。
+- 后台直接播放本地上穿/下穿两份短音频，不依赖网页音频、浏览器后台定时器、通知权限或 Focus 的通知允许名单。
+- 每个新触发事件成功保存后，直接连续播放对应原始声音4次，每次播放完成立即开始下一次，不合成音频、不主动添加间隔。同批事件按触发顺序串行播放，避免两种声音重叠；播放不阻塞行情和卡片处理。
+- 播放失败保留 Triggered 状态与未处理卡片，并通过现有错误提示及日志报告。该事件不自动重试播放；之后新事件仍尝试播放，成功后清除声音错误。
+- 关闭或跳转卡片不播放声音。刷新、重连、后台重启与恢复卡片均不重播，声音排队状态只在内存，不持久化补报。
+- Mock/模拟器默认静音；只有明确的声音验收使用临时库和模拟报价启用实际播放，不读取凭证、不连接真实行情。
+- 使用 README 的 Python 命令启动后台。关闭网页不停止服务；退出后台才停止检测。退出时停止正在播放的声音，不继续播放排队事件。
+- 声音使用当前系统音量与输出设备。系统静音、输出接到其他设备时可能听不到；不修改用户音量或设备设置。
+- Mac 真正休眠、关机或后台退出时无实时检测；恢复后仍按首价建立起点，无补报。macOS 26/27 均需实机听辨，不能用播放命令返回成功代替。
 
 ## 实施与必要验收
 
-1. 先验证最小 `.app` 通知链路：权限、两份声音、前后台和操作回调；确认平台路径后再接入正式 Engine。
+1. 验证后台播放两份声音，不依赖页面或通知；使用临时库模拟触发，并进行实际听辨。
 2. 完成后端 Engine、SQLite、Regular 最新价入口、范围与生命周期。统一手动/Alert 移入 Focus 的公共流程，不另建分类策略。
 3. 完成同源 mutation 与独立 Alert WebSocket 快照，再接图表手势和持久 stack。函数接口复用该核心能力，为后续调用留入口。
 4. 只执行有关的定向验证与有界真实数据验证，记录日期、环境、覆盖和未覆盖范围。
@@ -137,7 +132,7 @@
 - 鼠标水平线价格、两位小数、同 symbol 多 Alert、Scan/Monitor 共用、不同周期同步、选择/退格/拖动与原生图表手势。
 - Discover/全部 Excluded 创建立即入 Focus；丢弃旧自动/人工 Tag 与人工 section，按当前 Focus 规则重新分类；无匹配入 Unclassified，新入组首位；手动移入得到相同结果。
 - 持久化、Triggered 不重复、拖动重新激活、旧卡片不误删新 generation、到期及 Focus/Holdings 联合范围、当天清仓保留和次日移除。
-- stack 不自动消失、关闭与成功跳转、重连/重启恢复；浏览器后台或退出时仍有系统通知，两版 macOS 的权限、声音和回调。
+- stack 不自动消失、关闭与成功跳转、重连/重启恢复；浏览器后台或退出时仍有声音；声音只随新触发播放、失败提示和退出清理，以及两版 macOS 的实际听辨。
 - TypeScript 变更后执行 `npm run build --prefix ui`；Python 只跑涉及本次行为的定向用例。真实行情限定当前允许范围中的少量 symbols 并规定结束条件，不建立故障注入、回放或压力测试框架。
 
 后续 Atomic feature 自动设置、真实订单与自动交易均不在本版范围。实现验证与未覆盖范围只在 validation.md 记录，不把离线用例或平台兼容目标当作 Regular live 穿越或 macOS 27 的证据。
