@@ -343,6 +343,7 @@ def value_positions(base, quotes, as_of=None):
             total = sequence['realized_pnl'] if closed else unrealized
             items.append({**sequence, 'market_value': sequence['held_quantity'] * price,
                           'holding_days': holding_days(sequence['opened_on'], as_of),
+                          'is_new': sequence['opened_on'] == as_of,
                           'unrealized_pnl': unrealized,
                           'unrealized_pnl_percent': (price / sequence['buy_price'] - 1) * 100,
                           'total_pnl': total, 'total_pnl_percent': total / sequence['buy_value'] * 100 if closed else (price / sequence['buy_price'] - 1) * 100,
@@ -359,7 +360,7 @@ def value_positions(base, quotes, as_of=None):
     open_rows = [s for h in holdings for s in h['sequences'] if not s['closed_today']]
     total_pnl = sum((s['total_pnl'] for s in open_rows), D(0))
     remaining_cost = sum((s['held_quantity'] * s['buy_price'] for s in open_rows), D(0))
-    day_values = [s['day_pnl'] for s in open_rows]
+    day_values = [s['day_pnl'] for h in holdings for s in h['sequences']]
     day_pnl = sum(day_values, D(0)) if all(value is not None for value in day_values) else None
     return {**base, 'holdings': holdings,
             'funds': {**base['funds'], 'stock_market_value': market_value,

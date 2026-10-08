@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-08. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-09. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -168,7 +168,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 
 ### 独立 Holdings 入口
 
-Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式、买卖明细、排序、选择和状态的唯一要求见 [Holdings UI](holdings-ui.md)。
+Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式、买卖明细、排序、选择和状态的唯一要求见 [Holdings UI](holdings-ui.md)。当日新仓复用List的NEW标记；账户总值与延迟时间显示也只在该入口维护。
 
 ### Scan 日期与准备状态
 

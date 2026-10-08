@@ -148,6 +148,7 @@ def test_today_entry_daily_pnl_uses_cost_even_without_previous_close(session):
     sequence = result['holdings'][0]['sequences'][0]
     assert sequence['day_reference_price'] == D(10)
     assert sequence['day_reference_source'] == 'entry'
+    assert sequence['is_new']
     assert sequence['day_pnl'] == D(75)
     assert sequence['total_pnl'] == D(75) and sequence['total_pnl_percent'] == D(10)
     assert result['summary']['pnl'] == D(75) and result['summary']['day_pnl'] == D(75)
@@ -163,6 +164,7 @@ def test_mixed_old_and_today_merged_buys_weight_daily_basis_and_reset_tomorrow()
     sequence = result['holdings'][0]['sequences'][0]
     assert sequence['day_reference_price'] == D('12.5')
     assert sequence['day_reference_source'] == 'mixed'
+    assert not sequence['is_new']
     assert sequence['day_pnl'] == D(150)
     assert sequence['total_pnl'] == D(300)
     tomorrow = value_positions(base, quotes, '2026-09-18')['holdings'][0]['sequences'][0]
@@ -176,7 +178,50 @@ def test_closed_today_bought_today_retains_realized_pnl_without_a_quote():
     sequence = result['holdings'][0]['sequences'][0]
     assert sequence['closed_today'] and sequence['day_pnl'] == D(-10)
     assert sequence['total_pnl'] == D(-10)
-    assert result['summary']['pnl'] == 0 and result['summary']['day_pnl'] == 0
+    assert sequence['is_new']
+    assert result['summary'] == {'pnl': D(0), 'pnl_percent': None, 'day_pnl': D(-10)}
+
+
+def test_daily_total_includes_today_closed_profit_but_return_totals_only_include_open_shares():
+    raw = snapshot([activity('old', 'BUY', '100', '10', '2026-09-15'),
+                    activity('previous-sale', 'SELL', '20', '12', '2026-09-16'),
+                    activity('close', 'SELL', '80', '9', '2026-09-17'),
+                    activity('rebuy', 'BUY', '20', '12', '2026-09-17')], '20')
+    base = build(raw, [{'ticker': 'XYZ', 'buys': ['old'], 'sells': ['previous-sale', 'close']}])
+    quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 13, 'prev_close': 11, 'trade_session': 'Intraday'}}}
+    result = value_positions(base, quotes)
+    closed, current = result['holdings'][0]['sequences']
+    assert closed['day_pnl'] == D(-160)  # Today's 80-share sale, not yesterday's realized gain.
+    assert current['day_pnl'] == D(20) and current['is_new'] and not closed['is_new']
+    assert result['summary']['day_pnl'] == D(-140)
+    assert result['summary']['pnl'] == D(20)
+    assert result['summary']['pnl_percent'] == D(20) / D(240) * 100
+    tomorrow = value_positions(base, quotes, '2026-09-18')
+    assert len(tomorrow['holdings'][0]['sequences']) == 1
+    assert not tomorrow['holdings'][0]['sequences'][0]['is_new']
+    assert tomorrow['summary']['day_pnl'] == D(40)
+    assert tomorrow['summary']['pnl'] == D(20)
+
+
+def test_missing_closed_daily_baseline_prevents_partial_daily_total():
+    raw = snapshot([activity('old', 'BUY', '10', '10', '2026-09-16'),
+                    activity('close', 'SELL', '10', '9', '2026-09-17'),
+                    activity('new', 'BUY', '20', '12', '2026-09-17')], '20')
+    base = build(raw, [{'ticker': 'XYZ', 'buys': ['old'], 'sells': ['close']}])
+    quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 13, 'trade_session': 'Intraday'}}}
+    result = value_positions(base, quotes)
+    closed, current = result['holdings'][0]['sequences']
+    assert closed['day_pnl'] is None and current['day_pnl'] == D(20)
+    assert result['summary']['day_pnl'] is None
+    assert result['summary']['pnl'] == D(20)
+
+
+def test_new_holding_uses_new_york_day_and_expires_without_an_account_refresh():
+    raw = snapshot([activity('new', 'BUY', '10', '10', '2026-09-17')], '10')
+    raw['fetched_at'] = '2026-09-18T02:00:00Z'  # Still Sep 17 in New York.
+    base = build(raw, [])
+    assert value_positions(base, {})['holdings'][0]['sequences'][0]['is_new']
+    assert not value_positions(base, {}, '2026-09-18')['holdings'][0]['sequences'][0]['is_new']
 
 
 def test_holdings_uses_same_corrected_daily_close_as_watchlist(app_data):

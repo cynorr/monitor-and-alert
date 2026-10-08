@@ -126,6 +126,14 @@ export class HoldingsList {
             this.regularSession = regularSession;
         this.render();
     }
+    tick(now = Date.now()) {
+        const data = this.data?.data, updated = $('holdings-updated');
+        updated.hidden = !!data && now - Date.parse(data.fetched_at) < 60_000;
+        updated.textContent = data ? new Date(data.fetched_at).toLocaleTimeString('en-GB', { hour12: false }) :
+            this.data?.error ? 'Refresh failed' : this.data?.loading ? 'Loading…' : '';
+        updated.title = this.data?.error ?? (data ? `Last successful account refresh ${new Date(data.fetched_at).toLocaleString('en-GB')} · Positions as of ${data.positions_as_of}` : '');
+        updated.classList.toggle('negative', !!this.data?.error);
+    }
     cell(row, text) {
         const cell = row.insertCell();
         cell.textContent = text;
@@ -155,15 +163,12 @@ export class HoldingsList {
             button.title = active ? 'Restore default order' : 'Sort descending';
         }
         $('holdings-count').textContent = data ? String(data.holdings.reduce((n, h) => n + h.sequences.length, 0)) : '';
-        $('holdings-updated').textContent = this.data?.error ? 'Refresh failed' : this.data?.loading ? 'Loading…' :
-            data ? new Date(data.fetched_at).toLocaleTimeString('en-GB', { hour12: false }) : '';
-        $('holdings-updated').title = this.data?.error ?? (data ? `Positions as of ${data.positions_as_of}` : '');
-        $('holdings-updated').classList.toggle('negative', !!this.data?.error);
-        $('holdings-account').textContent = data ? money.format(Number(data.funds.account_total)) : '—';
+        this.tick();
+        $('holdings-account').textContent = data ? netLiq.format(Number(data.funds.account_total)) : '—';
         $('holdings-account').title = data ? `Latest position value + SnapTrade cash ${money.format(Number(data.funds.cash))}` : '';
         $('holdings-empty').hidden = !!data?.holdings.length;
         $('holdings-empty').textContent = data ? 'No holdings' : this.data?.error ? 'Holdings unavailable' : 'Loading…';
-        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.closed_today, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
+        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.closed_today, s.is_new, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
         if (structure !== this.structure) {
             this.structure = structure;
             this.rows.clear();
@@ -190,6 +195,12 @@ export class HoldingsList {
                     name.className = 'ticker';
                     name.textContent = holding.ticker;
                     label.append(toggle, name);
+                    if (sequence.is_new) {
+                        const flag = document.createElement('span');
+                        flag.className = 'symbol-flag new';
+                        flag.textContent = 'NEW';
+                        label.append(flag);
+                    }
                     for (let column = 1; column < 9; column++)
                         this.cell(row, '');
                     body.append(row);

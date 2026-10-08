@@ -202,7 +202,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button =
     catch (error) { $('list-notice').textContent = (error as Error).message; }
     finally { modePending = false; document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(node => { node.disabled = false; }); }
 }));
-setInterval(() => { additional.tick(); if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
+setInterval(() => { additional.tick(); holdings.tick(); if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
     socket.close(); if (currentView && socket?.readyState === WebSocket.OPEN)
     showState(currentView); }, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && symbol && socket?.readyState === WebSocket.OPEN)

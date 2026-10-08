@@ -164,7 +164,7 @@ class AccountingTests(unittest.TestCase):
         quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 11, 'prev_close': 9.5, 'trade_session': 'Intraday'}}}
         current = value_positions(base, quotes)
         self.assertEqual(current['holdings'][0]['sequences'][0]['day_pnl'], D(-50))
-        self.assertEqual(current['summary'], {'pnl': D(0), 'pnl_percent': None, 'day_pnl': D(0)})
+        self.assertEqual(current['summary'], {'pnl': D(0), 'pnl_percent': None, 'day_pnl': D(-50)})
         self.assertEqual(current['funds']['account_total'], D(400))
         self.assertEqual(value_positions(base, quotes, '2026-09-18')['holdings'], [])
 

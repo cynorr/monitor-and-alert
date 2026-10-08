@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-08。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-10-09。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## Alert 与入选规则
 
@@ -24,7 +24,7 @@ Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 
 
 持仓排序只影响当前页面，不修改账户数据或 workspace；行情更新沿用当前排序。Holdings固定在下方名单滚动区之外，可整体折叠。布局、列、数值格式、排序按钮和买卖明细的唯一要求见 [holdings-ui.md](holdings-ui.md)。
 
-账户刷新、买卖归属、余仓P/L、当日建仓P/L Day基准、短期Days与当日清仓记录的唯一数据需求见 [holdings-data.md](holdings-data.md)。主行盈亏仅计剩余仓位；当天清仓仅作为当日复盘记录保留，不计入余仓Total。它与Focus共用既有行情任务和图表，数据获取仍在单进程中独立维护。
+账户刷新、买卖归属、余仓P/L、当日建仓P/L Day基准、短期Days与当日清仓记录的唯一数据需求见 [holdings-data.md](holdings-data.md)。P/L与P/L %总计仅计剩余仓位，P/L Day总计加入当天清仓的已实现日盈亏。当日新仓NEW、整数账户总值与延迟时才显示的刷新时间见Holdings UI。它与Focus共用既有行情任务和图表，数据获取仍在单进程中独立维护。
 
 ## Scan 与后台数据任务
 

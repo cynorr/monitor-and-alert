@@ -2,7 +2,7 @@ import { $ } from './types.js';
 
 type Trade = { id: string; date: string; quantity: string; value: string };
 type Sale = Trade & { holding_days: number; pnl: string; pnl_percent: string };
-type Sequence = { buy_ids: string[]; opened_on: string; holding_days: number; closed_today: boolean; held_quantity: string; buy_price: string; market_value: string; total_pnl: string; total_pnl_percent: string; day_pnl: string | null; day_reference_price: string | null; day_reference_source: 'entry' | 'previous_close' | 'mixed'; sold_percent: string; buys: Trade[]; sells: Sale[] };
+type Sequence = { buy_ids: string[]; opened_on: string; holding_days: number; closed_today: boolean; is_new: boolean; held_quantity: string; buy_price: string; market_value: string; total_pnl: string; total_pnl_percent: string; day_pnl: string | null; day_reference_price: string | null; day_reference_source: 'entry' | 'previous_close' | 'mixed'; sold_percent: string; buys: Trade[]; sells: Sale[] };
 type Holding = { ticker: string; price_source: string; price_session: string | null; price_timestamp: string | number; change_percent: string | null; extended_percent: string | null; day_reference_price: string | null; sequences: Sequence[] };
 export type HoldingsState = { data: { fetched_at: string; positions_as_of: string; funds: { stock_market_value: string; account_total: string; cash: string }; summary: { pnl: string; pnl_percent: string | null; day_pnl: string | null }; holdings: Holding[] } | null; loading: boolean; error: string | null };
 const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -112,6 +112,14 @@ export class HoldingsList {
         if (regularSession !== undefined) this.regularSession = regularSession;
         this.render();
     }
+    tick(now = Date.now()) {
+        const data = this.data?.data, updated = $('holdings-updated');
+        updated.hidden = !!data && now - Date.parse(data.fetched_at) < 60_000;
+        updated.textContent = data ? new Date(data.fetched_at).toLocaleTimeString('en-GB', { hour12: false }) :
+            this.data?.error ? 'Refresh failed' : this.data?.loading ? 'Loading…' : '';
+        updated.title = this.data?.error ?? (data ? `Last successful account refresh ${new Date(data.fetched_at).toLocaleString('en-GB')} · Positions as of ${data.positions_as_of}` : '');
+        updated.classList.toggle('negative', !!this.data?.error);
+    }
     private cell(row: HTMLTableRowElement, text: string) {
         const cell = row.insertCell(); cell.textContent = text;
         return cell;
@@ -139,15 +147,12 @@ export class HoldingsList {
             button.title = active ? 'Restore default order' : 'Sort descending';
         }
         $('holdings-count').textContent = data ? String(data.holdings.reduce((n, h) => n + h.sequences.length, 0)) : '';
-        $('holdings-updated').textContent = this.data?.error ? 'Refresh failed' : this.data?.loading ? 'Loading…' :
-            data ? new Date(data.fetched_at).toLocaleTimeString('en-GB', { hour12: false }) : '';
-        $('holdings-updated').title = this.data?.error ?? (data ? `Positions as of ${data.positions_as_of}` : '');
-        $('holdings-updated').classList.toggle('negative', !!this.data?.error);
-        $('holdings-account').textContent = data ? money.format(Number(data.funds.account_total)) : '—';
+        this.tick();
+        $('holdings-account').textContent = data ? netLiq.format(Number(data.funds.account_total)) : '—';
         $('holdings-account').title = data ? `Latest position value + SnapTrade cash ${money.format(Number(data.funds.cash))}` : '';
         $('holdings-empty').hidden = !!data?.holdings.length;
         $('holdings-empty').textContent = data ? 'No holdings' : this.data?.error ? 'Holdings unavailable' : 'Loading…';
-        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.closed_today, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
+        const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.closed_today, s.is_new, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
         if (structure !== this.structure) {
             this.structure = structure; this.rows.clear(); this.groups.clear(); this.order = ''; this.widthSignature = '';
             const body = document.createDocumentFragment();
@@ -165,6 +170,10 @@ export class HoldingsList {
                     toggle.setAttribute('aria-label', `Toggle ${holding.ticker} trades`);
                     const name = document.createElement('span'); name.className = 'ticker'; name.textContent = holding.ticker;
                     label.append(toggle, name);
+                    if (sequence.is_new) {
+                        const flag = document.createElement('span'); flag.className = 'symbol-flag new';
+                        flag.textContent = 'NEW'; label.append(flag);
+                    }
                     for (let column = 1; column < 9; column++) this.cell(row, '');
                     body.append(row); this.rows.set(key, row);
                     const group = [row]; this.groups.set(key, group);

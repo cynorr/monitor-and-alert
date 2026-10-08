@@ -262,6 +262,7 @@ document.querySelectorAll('[data-app-mode]').forEach(button => button.addEventLi
 }));
 setInterval(() => {
     additional.tick();
+    holdings.tick();
     if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
         socket.close();
     if (currentView && socket?.readyState === WebSocket.OPEN)
