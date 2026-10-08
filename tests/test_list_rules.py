@@ -10,8 +10,7 @@ from data_service.workspace import Workspace, derive_day_view, empty_workspace, 
 
 
 def preferences():
-    return {'activeList': 'discover', 'sort': 'default', 'activeTag': 'default', 'tags': [
-        {'id': 'default', 'name': 'Default', 'filters': {}},
+    return {'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': [
         {'id': 'ext', 'name': 'Extended', 'filters': {'extended_k': {'min': 1.5}}},
         {'id': 'broken-tag', 'name': 'Broken', 'filters': {'broken_k': {'min': 1}, 'below_days': {'min': 2}}},
         {'id': 'surf', 'name': 'Surf-10', 'filters': {'ema10_touch_days_5d': {'min': 3}}},
@@ -46,7 +45,7 @@ def test_discover_and_focus_negative_rules_broken_priority_and_tag_roles():
     data = empty_workspace()
     data['statuses']['FOCUS'] = {'status': 'focus', 'section': 'unclassified'}
     prefs = validate_preferences(preferences())
-    prefs['tags'][1]['name'] = 'Stretched'  # Stable role survives a rename.
+    prefs['tags'][0]['name'] = 'Stretched'  # Stable role survives a rename.
     result = apply_rules(data, snapshot(FOCUS={'extended_k': 2}, DISC={'extended_k': 2, 'broken_k': 2, 'below_days': 3},
                                         AUX={'adr20': 7}, POT={'ema10_touch_days_5d': 4, 'adr20': 7}), prefs)
     assert result['statuses']['FOCUS']['section'] == 'extended'
@@ -207,4 +206,4 @@ def test_migration_combines_focus_wait_and_preferences_without_candidate_carry()
     prefs = preferences()
     prefs['activeList'] = 'hidden'
     assert validate_preferences(prefs)['activeList'] == 'excluded'
-    assert prefs['tags'][1]['role'] == 'extended'
+    assert prefs['tags'][0]['role'] == 'extended'

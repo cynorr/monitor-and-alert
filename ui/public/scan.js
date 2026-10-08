@@ -5,7 +5,7 @@ import { tagChanged, tagFiltersChanged, tagRole, withSavedTag } from './tags.js'
 import { TAG_ICONS, tagAppearance, tagLogo } from './tag-appearance.js';
 import { countBadge, rowTags } from './board.js';
 const rank = (row, field) => typeof row[field] === 'number' ? row[field] : Infinity;
-export const matchesTag = (row, tag, useAssigned = true) => (useAssigned && tag.id !== 'default' && rowTags(row).includes(tag.id)) || matchesFilters(row, tag.filters);
+export const matchesTag = (row, tag, useAssigned = true) => (useAssigned && rowTags(row).includes(tag.id)) || matchesFilters(row, tag.filters);
 export class ScanControls {
     updateList;
     changed;
@@ -13,6 +13,7 @@ export class ScanControls {
     selected = new Set();
     preferences;
     draft;
+    baseline;
     rows = [];
     savedKey = '';
     date = '';
@@ -22,9 +23,12 @@ export class ScanControls {
     serverRunning = false;
     discard;
     deleting = false;
+    holdingSymbols = new Set();
+    editorOpen = false;
     constructor(updateList, changed) {
         this.updateList = updateList;
         this.changed = changed;
+        $('filter-toggle').addEventListener('click', () => { this.editorOpen = !this.editorOpen; this.render(); });
         $('tag-icon').replaceChildren(...TAG_ICONS.map(([id, name]) => new Option(name, id)));
         void fetch('/v1/filter-catalog').then(response => response.json()).then((catalog) => {
             if (!Array.isArray(catalog))
@@ -59,7 +63,7 @@ export class ScanControls {
             const id = event.target.closest('[data-tag]')?.dataset.tag;
             if (id)
                 this.protectDraft(() => {
-                    this.preferences.activeTag = id;
+                    this.preferences.activeTag = this.preferences.activeTag === id ? null : id;
                     this.resetDraft();
                     this.selected.clear();
                     this.render();
@@ -68,8 +72,8 @@ export class ScanControls {
                 });
         });
         $('tag-add').addEventListener('click', () => this.protectDraft(() => {
-            this.draft = { ...structuredClone(this.savedTag()), id: crypto.randomUUID(), name: '', role: 'setup' };
-            $('filter-editor').open = true;
+            this.draft = { ...structuredClone(this.draft), id: crypto.randomUUID(), name: '', role: 'setup' };
+            this.editorOpen = true;
             this.render();
             $('tag-name').focus();
         }));
@@ -98,7 +102,7 @@ export class ScanControls {
             }
             const preferences = structuredClone(this.preferences);
             preferences.tags = preferences.tags.filter(tag => tag.id !== this.draft.id);
-            preferences.activeTag = 'default';
+            preferences.activeTag = null;
             void this.persist(preferences, true);
         });
         $('tag-discard').addEventListener('click', () => { const proceed = this.discard; this.discard = undefined; proceed?.(); });
@@ -119,8 +123,16 @@ export class ScanControls {
         } });
     }
     savedTag() { return this.preferences.tags.find(tag => tag.id === this.preferences.activeTag); }
-    resetDraft() { this.draft = { ...structuredClone(this.savedTag()), role: tagRole(this.savedTag()), appearance: tagAppearance(this.savedTag()) }; }
-    dirty() { return !!this.draft && !!this.preferences && (this.draft.id !== this.savedTag().id || tagChanged(this.savedTag(), this.draft)); }
+    resetDraft() {
+        const tag = this.savedTag() ?? { id: crypto.randomUUID(), name: '', role: 'setup', filters: {} };
+        this.baseline = { ...structuredClone(tag), role: tagRole(tag), appearance: tagAppearance(tag) };
+        this.draft = structuredClone(this.baseline);
+    }
+    dirty() { return !!this.draft && !!this.baseline && tagChanged(this.baseline, this.draft); }
+    useAssignedTags() {
+        const saved = this.savedTag();
+        return !!saved && !!this.draft && !tagFiltersChanged(saved, this.draft);
+    }
     protectDraft(proceed) {
         if (this.dirty()) {
             this.discard = proceed;
@@ -133,8 +145,10 @@ export class ScanControls {
         this.enabled = data.app_mode === 'scan';
         this.rows = data.board;
         this.editable = data.editable;
+        this.holdingSymbols = new Set(data.holding_symbols ?? []);
         this.serverRunning = data.scan_running === true;
         $('scan-controls').hidden = !data.preferences;
+        $('list-tools').hidden = !data.preferences;
         for (const id of ['scan-date-row', 'scan-lists', 'scan-batch', 'scan-move'])
             $(id).hidden = !this.enabled;
         if (!data.preferences)
@@ -159,24 +173,27 @@ export class ScanControls {
         if (JSON.stringify(Array.from(select.options).map(option => option.value)) !== JSON.stringify(data.dates))
             select.replaceChildren(...(data.dates ?? []).map(date => new Option(date, date)));
         select.value = this.date;
-        this.selected = new Set([...this.selected].filter(symbol => data.board.some(row => row.symbol === symbol)));
+        this.selected = new Set([...this.selected].filter(symbol => this.available(data.board).some(row => row.symbol === symbol)));
         this.render();
     }
     visible(rows) {
-        if (!this.preferences || !this.draft)
-            return this.enabled ? rows : rows.filter(row => row.status === 'focus' || (row.status === 'excluded' && row.section === 'review'));
-        const sort = this.enabled ? this.preferences.sort : 'default';
-        const useTags = !tagFiltersChanged(this.savedTag(), this.draft) && this.draft.id !== 'default';
-        return rows.filter(row => (this.enabled ? row.status === this.activeList : row.status === 'focus' || (row.status === 'excluded' && row.section === 'review')) &&
-            matchesTag(row, this.draft, useTags))
-            .sort((a, b) => (sort === 'default' ? 0 : rank(a, sort + '_rank') - rank(b, sort + '_rank')) || rank(a, 'order_index') - rank(b, 'order_index'));
+        rows = this.available(rows);
+        const sort = this.enabled ? this.preferences?.sort ?? 'default' : 'default';
+        const inList = (row) => this.enabled ? row.status === this.activeList : row.status === 'focus' || (row.status === 'excluded' && row.section === 'review');
+        const useTags = this.preferences ? this.useAssignedTags() : false;
+        return rows.filter(row => inList(row) && (!this.draft || matchesTag(row, this.draft, useTags)))
+            .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) ||
+            (a.pinned && b.pinned ? rank(a, 'pin_index') - rank(b, 'pin_index') :
+                (sort === 'default' ? 0 : rank(a, sort + '_rank') - rank(b, sort + '_rank')) || rank(a, 'order_index') - rank(b, 'order_index')));
     }
+    isHolding(symbol) { return this.holdingSymbols.has(symbol); }
+    available(rows) { return rows.filter(row => !this.isHolding(row.symbol)); }
     get activeList() { return this.enabled ? this.preferences?.activeList ?? 'discover' : 'focus'; }
     async showFocus() {
         if (!this.preferences)
             return;
         this.preferences.activeList = 'focus';
-        this.preferences.activeTag = 'default';
+        this.preferences.activeTag = null;
         this.resetDraft();
         this.render();
         await this.persist(this.preferences);
@@ -196,7 +213,7 @@ export class ScanControls {
             this.savedKey = '';
             this.updateList(data);
             if (fold)
-                $('filter-editor').open = false;
+                this.editorOpen = false;
             this.deleting = false;
         }
         catch (error) {
@@ -246,15 +263,19 @@ export class ScanControls {
     render() {
         if (!this.preferences || !this.draft)
             return;
+        $('filter-editor').hidden = !this.editorOpen;
+        $('filter-toggle').setAttribute('aria-expanded', String(this.editorOpen));
+        const available = this.available(this.rows);
         const filtered = this.visible(this.rows);
-        $('scan-result-count').replaceChildren(countBadge(filtered.length), ' / ', countBadge(this.rows.filter(row => row.status === this.activeList).length));
+        $('scan-result-count').replaceChildren(countBadge(filtered.length), ' / ', countBadge(available.filter(row => row.status === this.activeList).length));
         $('scan-lists').querySelectorAll('[data-list]').forEach(button => {
-            const group = button.dataset.list, count = this.rows.filter(row => row.status === group && matchesTag(row, this.draft, !tagFiltersChanged(this.savedTag(), this.draft))).length;
+            const group = button.dataset.list, count = available.filter(row => row.status === group && matchesTag(row, this.draft, this.useAssignedTags())).length;
             button.replaceChildren(group[0].toUpperCase() + group.slice(1), countBadge(count));
             button.classList.toggle('active', group === this.activeList);
             button.disabled = this.pending;
         });
-        $('scan-tags').replaceChildren(...this.preferences.tags.map(tag => {
+        const displayPriority = (tag) => tagRole(tag) === 'setup' ? 0 : ['extended', 'broken', 'under50'].includes(tagRole(tag)) ? 2 : 1;
+        $('scan-tags').replaceChildren(...[...this.preferences.tags].sort((a, b) => displayPriority(a) - displayPriority(b)).map(tag => {
             const button = document.createElement('button');
             button.dataset.tag = tag.id;
             button.textContent = tag.name;
@@ -266,10 +287,9 @@ export class ScanControls {
         const name = $('tag-name');
         if (name.value !== this.draft.name)
             name.value = this.draft.name;
-        name.readOnly = this.draft.id === 'default';
         const role = $('tag-role');
         role.value = tagRole(this.draft);
-        role.disabled = this.pending || this.draft.id === 'default';
+        role.disabled = this.pending;
         const appearance = this.draft.appearance;
         for (const [id, value] of [['tag-icon', appearance.icon], ['tag-color', appearance.color], ['tag-background', appearance.background], ['tag-background-color', appearance.backgroundColor]])
             $(id).value = value;
@@ -278,12 +298,12 @@ export class ScanControls {
         $('tag-unsaved').hidden = !this.dirty();
         $('tag-save').disabled = this.pending || !this.dirty();
         $('tag-add').disabled = this.pending || this.preferences.tags.length >= 10;
-        $('tag-delete').hidden = this.draft.id === 'default' || !this.preferences.tags.some(tag => tag.id === this.draft.id);
+        $('tag-delete').hidden = !this.preferences.tags.some(tag => tag.id === this.draft.id);
         $('tag-delete').textContent = this.deleting ? 'Confirm delete' : 'Delete Tag';
         $('tag-discard').hidden = !this.discard;
         $('filter-rules').querySelectorAll('input,button').forEach(node => { node.disabled = this.pending; });
-        this.panel?.render(this.draft.filters, this.rows);
-        $('filter-count').replaceChildren(countBadge(Object.keys(this.draft.filters).length), ' active');
+        this.panel?.render(this.draft.filters, available);
+        $('filter-count').replaceChildren(countBadge(Object.keys(this.draft.filters).length));
         const all = $('scan-select-all'), count = filtered.filter(row => this.selected.has(row.symbol)).length;
         all.checked = !!filtered.length && count === filtered.length;
         all.indeterminate = count > 0 && count < filtered.length;

@@ -20,7 +20,6 @@ let selectionSource = 'watchlist', holdingKey = '';
 const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), applyList);
 const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode = 'monitor', scanDate = '', modePending = false;
-let listRegularSession = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
@@ -81,8 +80,7 @@ function applyList(data) {
         holdings.selected = '';
         ++epoch;
     }
-    listRegularSession = data.board.some(ticker => ticker.quote?.current_regular_session);
-    holdings.update(data.holdings ?? null, listRegularSession || currentView?.quote.current_regular_session === true);
+    holdings.update(data.holdings ?? null, data.current_regular_session === true);
     watchlist.update(data, selectionSource === 'watchlist');
     if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
         const first = holdings.first();
@@ -95,8 +93,6 @@ function applyList(data) {
         const first = holdings.first();
         select(first.symbol, timeframe, 'holdings', first.key);
     }
-    const labels = appMode === 'scan' ? ['Symbol', 'Price', 'ADR20', 'ADV20', 'Growth', 'Tags', ''] : ['Symbol', 'Last', 'Chg%', 'Ext', 'Growth', 'Tags', ''];
-    Array.from($('list-columns').children).forEach((node, index) => { node.textContent = labels[index]; });
     if (changed && !symbol)
         select('', timeframe);
 }
@@ -142,8 +138,6 @@ function apply(view) {
         return;
     currentView = view;
     document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
-    if (appMode === 'monitor' && view.quote.current_regular_session !== undefined)
-        holdings.setRegularSession(listRegularSession || view.quote.current_regular_session);
     daily.render(view.charts['1d']);
     if (appMode === 'monitor' && !view.read_only_daily) {
         intraday.render(view.charts[timeframe]);

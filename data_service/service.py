@@ -106,6 +106,7 @@ class DataService:
 
     def list_state(self):
         return {'board': self.board(), 'mode': self.mode,
+                'current_regular_session': self.calendar.is_open(int(self.now())),
                 'editable': self.workspace is not None and self.workspace_subset is None,
                 'workspace_error': self.workspace.error if self.workspace else None}
 
@@ -139,6 +140,10 @@ class DataService:
             self.workspace.add_ticker(ticker, 'focus')
         elif action == 'tag':
             self.workspace.set_manual_tags(ticker, payload.get('tags', []))
+        elif action == 'pin':
+            self.workspace.pin_ticker(ticker, payload['pinned'])
+        elif action == 'pin_move':
+            self.workspace.move_pin(ticker, payload['index'])
         else:
             raise ValueError('Unknown list action')
         return self.list_state()
@@ -345,11 +350,13 @@ class DataService:
 
     def board(self):
         now = int(self.now())
+        pins = {ticker: index for index, ticker in enumerate(self.workspace.data['pinned'])} if self.workspace else {}
         result = []
         for ticker in self.tickers:
             state = self.status(ticker.symbol, now)
             member = self.workspace.data['statuses'].get(ticker.ticker, {}) if self.workspace else {}
             result.append({**member, **asdict(ticker), 'quote': self.quote(ticker.symbol, now),
+                           **({'pinned': ticker.ticker in pins, 'pin_index': pins.get(ticker.ticker)} if self.workspace else {}),
                            'errors': state['errors']})
         return result
 

@@ -1,12 +1,12 @@
 # UI layout and interactions
 
-Updated: 2026-10-08. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md); that feature is confirmed but not implemented. The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-08. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
 - Monitor has Daily, Intraday and List panels; Scan has Daily and List. Panel width rules are defined once in **List UI / 宽度与视觉** below.
 - No application header, brand, global instrument banner or footer. Chart-owned headers follow [Chart UI](chart-ui.md#headers-and-information).
-- White floating cards with generous corners on a neutral background. Black section boundaries and divider handles; internal chart panes follow [Chart UI](chart-ui.md#colors-margins-and-reference-lines).
+- White floating cards with generous corners on a neutral background. Black header/column rules and divider handles; internal chart panes follow [Chart UI](chart-ui.md#colors-margins-and-reference-lines).
 - Search, period selector, price-session labels and resize handles use pills.
 
 ## Chart UI
@@ -53,6 +53,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 
 | 场景 | 当前图形 | 含义 |
 | --- | --- | --- |
+| 各 List 置顶 | 向上箭头推至顶线，置顶后蓝色、改为向下取消箭头 | Pin / Unpin：仅改变当日显示位置，保留 section |
 | Discover / Focus 行操作 | 轮廓垃圾桶 | Exclude：移到 Hidden 七天，**不是永久删除股票或数据** |
 | Excluded 的 Hidden / Extended / Broken / Under-50 行操作 | `↩` | Release：解除排除，随后按当前规则重新分类 |
 | Review 行操作 | `+` | Add to Focus，开始实时监控 |
@@ -63,6 +64,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | 图表 / 名单错误 | `!` | 提供当前错误详情，不扩展错误判断范围 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
+- 置顶箭头位于原有行操作左侧，按钮之间留 **10px** 空隙；Web 置顶/垃圾桶按钮为 **24×24px**，图形 **16×16px**；Review 的加号复用共用新增按钮。未置顶时 hover/键盘 focus 可见，置顶后持续显示蓝色，并提供 Unpin 名称和 pressed 状态。
 - 操作使用完整的英文说明和可访问名称，不能仅靠垃圾桶或 `+` 猜测结果。Tag 定义的 Delete 当前是文字按钮，与名单行的垃圾桶操作不同。
 
 ### Alert 图形
@@ -94,7 +96,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 - 扣除工作区内边距和面板分隔条后，两模式 List 默认占可用面板宽度 **32%**，最小 **680px**；每个图表最小 **320px**，Monitor 双图均分剩余空间。数值统一放在 `layout.ts`，方便单点调整比例。
 - 面板分隔条和 List 数据列间距均为 **12px**。拖动只调整相邻面板并保留最小宽度；打开页面、切换模式或双击分隔条恢复默认。小窗口保持最小宽度，允许工作区整体溢出。
 - Monitor 的最小宽度也接受独立持仓内容需求，具体测量和固定顶部布局见 [Holdings UI](holdings-ui.md#位置折叠与宽度)。
-- List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Scan 准备状态和 Search 均位于 List 面板内；名单列头不增加顶部分隔线。
+- List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Search 和一行 Filter/Tags 位于固定头部的水平分割线上方；与两图保持同一固定高度。Scan 准备状态在分割线下，仅需要时显示。名单列头在 Holdings 下方，文字位于其底部分割线上方；没有额外的 Filters/Holdings 或 section 分割线。
 - 计数使用独立 `span.count-badge`：**10px、黑色、不加粗**，与标题留小间距。适用于列表按钮、section、symbol 总数、Holdings、Filter 与结果数。数字本身不统一加背景；选中 pill 中的数字仍为黑色，所在 pill 使用浅背景保证可读。
 
 ### 展示范围与控件
@@ -105,45 +107,45 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 | Monitor | Focus setup sections、折叠 Review、上方独立 Holdings | Focus/Holdings 实时图；Review 本地 Daily 预览；共用 Tag/Filter |
 
 - Discover 和 Excluded 的 Hidden / Extended / Broken / Under-50 仅 Scan 展示。Review 不订阅 Longbridge：选择后显示 Daily 日期，禁用 Intraday 周期按钮，提示 `Add to Focus for live data`；加入 Focus 后才开始实时监控。
+- 所有常规 List（Scan 与 Monitor）在前端屏蔽当前 Holdings 已有 symbol，含仅保留当天的清仓批次；可见计数、筛选、搜索、导航和批量操作使用同一屏蔽结果。后端名单、归属、Tag、订阅与原有顺序不变。
 - 同 ticker 的 Holdings 仍为独立实时选择。WS 选择携带 `source=holdings` 或 `source=watchlist`；名单刷新、折叠和筛选不得抢走已选持仓的图表。
 - 切换模式同步已打开客户端的展示，后台 Focus 行情和账户刷新持续运行。合成 Scan 标记 MOCK，独立模拟器标记 SIM。
 - 历史 Scan 与有界 `--symbols` 会话禁用名单编辑；模拟器只修改临时 workspace。
 
 ### 行与格式
 
-| 位置 | Scan | Monitor |
-| --- | --- | --- |
-| 1 | Symbol | Symbol |
-| 2 | Price | Last |
-| 3 | ADR20 | Chg% |
-| 4 | ADV20 | Ext |
-| 5 | Growth | Growth |
-| 6 | Tags | Tags |
-| 7 | 行操作 | 行操作 |
+| 模式 | 列 |
+| --- | --- |
+| Scan | Symbol / Price / ADR20 / ADV20 / Growth / Tags / 行操作 |
+| Monitor | Symbol / Last / Chg% / Ext（仅非 regular）/ Tags / 行操作 |
 
-- 同 ticker 只有一行，固定行高 **32px**，主体数据列保持同一水平行；Growth、Tags 与行操作均不换行、不增加副标题。
-- Growth 依次显示 **1m / 3m / 6m** 三个值，不显示周期 key，以浅色 `|` 分隔。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
+- 同 ticker 只有一行，固定行高 **28px**，主体数据列保持同一水平行；Scan Growth、Tags 与行操作不换行、不增加副标题。
+- **仅 Scan** 的 Growth 依次显示 **1m / 3m / 6m** 三个值，不显示周期 key，以浅色 `|` 分隔。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
 - Tags 列显示轮廓 glyph，图案、尺寸与配色统一见 [Logo / Icon](#logo--icon)。保持 **110px** 列宽下限并为编辑按钮留空隙；最多显示三个 glyph，其余用小号 `+N`，悬停列出完整剩余标签。glyph 悬停显示完整名称与人工 `today` 状态，人工补充仅当日有效，不额外使用蓝色 badge。Tags 与 `+N` 均不换行、不增加行高，不增加测宽或 ResizeObserver。
 - Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑仅修改当日人工补充，Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
 - NEW / RETURNED 使用 Symbol 旁的小标记；NEW 使用与 EMA10 一致的蓝色 **#2962ff**，RETURNED 保持灰色。ticker 不显示 `.US`。Scan 的成员勾选与图表选中互相独立。
-- Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段或缺数据时留空。Review 显示本地 Daily close，实时涨幅列留空。
+- Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。Review 显示本地 Daily close，实时涨幅列留空。
 - 选中行保留圆角黑色内边框，不改变背景；仅未选中 hover 行使用灰背景。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
 
 ### Section、顺序与选择
 
 - Discover/Focus 按保存的 **Setup** Tag 顺序分组，最后是 Unclassified；Excluded 固定 **Review / Broken / Extended / Under-50 / Hidden**。一只股票可有多个 Tag、一个主 section。
+- 置顶是独立显示状态，不是 Tag 定义或 section：每个 List 的 Pinned 区域位于该 List 所有 section 之前，支持多个 ticker；原 section 内不重复显示。取消置顶回到仍属的 section 与其原有顺序。置顶遵循 Filter 和持仓屏蔽。Scan/Monitor 共用保存顺序，置顶区可拖动及 Shift+上下重排，不受 RFL 排序影响。Monitor 的 Focus 与 Excluded/Review 各有自己的置顶区。
+- Section 之间不画水平线，以标题行和间距区分。
 - Scan 与 Monitor 的折叠状态独立。Review 在 Monitor 默认折叠、Scan 默认展开。非搜索状态 setup 空组也显示；搜索只显示有结果的组。
 - 新进入 section 的成员放**队首**，留在同组的成员保留人工顺序。人工主 section 仅当天有效，名单归属和保存顺序按 List 设计执行。
 - Default order 下，允许在 Discover/Focus setup 组内及组间拖动。落点显示行前/行后线；落在组头或空组插入队首。筛选/搜索可见行作为完整组顺序的锚点，松手立即保存。
-- RFL1M/3M/6M 排序仅改变显示，禁用 Scan 人工重排；Excluded 分组由规则决定，不提供人工排序。
+- RFL1M/3M/6M 排序仅改变显示，禁用 Scan 普通 section 人工重排；Excluded 普通分组由规则决定，不提供人工排序。置顶区顺序独立。
+- 新置顶保存成功后，当前 List 的黑框选择与图表按操作前可见顺序移到下一个 ticker，跳过刚置顶的成员；到尾部循环至首个其他可见成员，只有一个成员则保留选择。取消置顶保留当前选择；持仓选择不受影响。
 - 点击或上下方向键按显示顺序选图，跳过折叠组。非搜索状态 Shift+上下在同一 setup 组内交换相邻成员并保留选择，到边界不移动。Holdings 使用独立导航、不参与 Shift 重排。
 
 ### Tag 与 Filter 编辑
 
+- 固定头部最后一行依次为 **Filters + 数字**、保存的 Tags 和新增按钮；Tag 加号固定在右侧，位于 Tag 横向滚动区之外，与 section 加号同一横坐标；不显示 `active`。Tags 单行水平排列，放不开时横向滚动。Setup Tags（Surf/Bounce 等）在前，Label 居中，Extended/Broken/Under-50 在后；仅改变按钮显示，不重写保存顺序或分类优先级。Tag/Filter 标签与 List 列名到下方水平线的间距使用与 Chart legend 相同的共用变量，数值在 [Chart Headers](chart-ui.md#headers-and-information) 维护。Filter 按钮展开线下编辑区，不改变顶部水平线高度；取消原 Filters/Holdings 分割线。
 - 两模式使用同一套保存的 Tag/Filter。38 字段目录包含 Market、MA arrangement 和 atomic feature 各组。使用 **CSS 两列 columns** 布局，每组保持完整；不使用横向对齐的 grid，避免短组下面出现空白。
 - 数值条件支持 Any / ≥ / ≤ / range；不同条件 AND，分类多选 OR。缺失值匹配 Any 或显式 Missing。Filter 不移动名单、不改变订阅，被筛掉的成员保留底层归属。
-- Tag 用途固定为 Setup / Extended / Broken / Under-50 / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Default 始终存在、用途 Label、不可改名或删除；Tag 名称唯一，最多十个。
-- 新建克隆已保存条件，用途默认 Setup。条件编辑即时预览；Save 保存并折叠，Cancel 恢复。未保存时切 Tag 需明确丢弃，保存失败保留草稿；名单/排序偏好写入不得覆盖未保存的 Filter 草稿。
+- Tag 用途固定为 Setup / Extended / Broken / Under-50 / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Tag 名称唯一，可保存零到十个；选择按钮点击一次选中，再点击取消。没有选择时不应用保存 Tag 筛选。
+- 新建克隆当前草稿条件，用途默认 Setup；未选 Tag 时从空条件编辑，可保存为新命名 Tag。条件编辑即时预览；Save 保存并折叠，Cancel 恢复。未保存时切 Tag 需明确丢弃，保存失败保留草稿；名单/排序偏好写入不得覆盖未保存的 Filter 草稿。
 - Tag 外观编辑遵循 [Logo / Icon](#logo--icon)，与本章同一份 Tag 草稿一起保存或恢复；外观编辑保留已保存条件下的人工匹配成员，不切换到纯条件预览。
 - 已保存 Tag 的筛选包含人工补 Tag 成员；未保存条件预览只按草稿条件判断。保存规则由后端重评已有本地数据，UI 筛选不触发下载。
 
@@ -156,6 +158,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 
 ### Search 与 Add
 
+- List 模块的 Tag 新增、section 新增和 Review Add to Focus 只使用一套加号按钮样式：26×26px、21px 字号、圆形 hover 背景；Tag 与 section 加号距面板右边同为8px。
 - Search 与可编辑 Focus setup 组的 `+` 共用唯一行内输入，placeholder 始终为 `Search`，不使用新增弹窗。`/` 随时清空并开始 Focus 搜索；Focus 组内 `+` 指定该 section 为新增目标。Esc 退出并恢复全名单。
 - 即时筛选本地 ticker，仅显示匹配组，无空组或 No matches；没有本地结果时隐藏报价列头。搜索临时展示折叠组，选中结果只展开当前模式的对应组。
 - 没有精确本地 ticker 时，停输一秒发起精确查询：Scan 读本地 Daily，Monitor 经后端官方 static_info。查询不保存、不订阅；输入变化或退出后丢弃旧响应。

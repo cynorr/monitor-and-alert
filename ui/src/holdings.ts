@@ -112,11 +112,6 @@ export class HoldingsList {
         if (regularSession !== undefined) this.regularSession = regularSession;
         this.render();
     }
-    setRegularSession(regularSession: boolean) {
-        if (this.regularSession === regularSession) return;
-        this.regularSession = regularSession; this.render();
-    }
-
     private cell(row: HTMLTableRowElement, text: string) {
         const cell = row.insertCell(); cell.textContent = text;
         return cell;
@@ -128,6 +123,7 @@ export class HoldingsList {
     render() {
         $('holdings').hidden = !this.data;
         $('holdings-content').hidden = this.collapsed;
+        $('holdings').dataset.expanded = String(!this.collapsed);
         $('holdings-toggle').setAttribute('aria-expanded', String(!this.collapsed));
         $('holdings-arrow').textContent = this.collapsed ? '▸' : '▾';
         const data = this.data?.data;

@@ -2,6 +2,35 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-08：Tag 选择与 List 布局微调
+
+环境：本机 macOS、Python 3.13、TypeScript、正式 localhost:8765 服务与 Codex 浏览器；使用 2026-10-07 的12,598行真实 Massive 截面、当前149个名单成员及11个 Holdings symbol。只验证本轮 Tag、置顶选择与布局，未运行 mock 或合成行情。
+
+- 删除专用 Default Tag 的定义、校验、匹配例外、按钮和真实偏好保存记录；当前保留的7个用户 Tag 条件、用途、外观和顺序完全一致。activeTag 使用 null 表达空选择，允许零个保存 Tag；同步更新现有测试中的旧契约及唯一规范文档。
+- 9项真实数据定向检查通过：空选择及每个实际 Tag 的选择都不改变自动分类；零 Tag 偏好合法，真实成员保留、失效标签清除。临时副本仅更改偏好，未构造特征数据。
+- 真实 Monitor 和 Scan 均完成 Surf-10 选择/再次点击取消：当前 Focus 前端可见结果由37降至6、再恢复37。无选择时新建 Tag 从空条件开启草稿，Cancel 恢复；重新加载仍为空选择，页面不存在 Default 按钮。
+- 真实 Monitor 置顶 ALAB 后黑框与图表自动移到 EDRY；取消置顶回原 Surf-10 section，当前 EDRY 选择保持。末尾 ARCT 置顶后循环到 PLSE。Scan 的 RFL1M 可见顺序中，ALAB 置顶后黑框与图表移到实际下一项 XMTR。测试置顶均取消，最终 workspace 与本轮前149个成员、section、原顺序及 PLTR/PLSE/PSNL 置顶完全一致。
+- DOM 测量：三面板固定顶部线均为y=130px；Tag/EMA/List列名文字到下方线均为5.5px（共用4px布局间隔、16px行高）。Tag与section加号同一横坐标、同26×26px/21px样式；Review加号也复用此样式，Scan 680px宽时行与列头无横向溢出。Holdings展开的底部空白8px，折叠为0；时间在总值数字左侧且底部一致，总值无可见title。
+- `npm run build --prefix ui`、相关Python编译和`git diff --check`通过。最终真实 ALAB Daily/Intraday 均为Ready，浏览器无脚本错误；正式服务PID 38387、Quote CONNECTED、Massive Ready，恢复Monitor及原Discover/RFL1M偏好（Tag为空选择）。未新建真实Alert或交易操作。
+- 未覆盖：全量回归、全部分钟周期Ready、真实次日触发或移动端。最终health记录48项分钟线回补提示，不把Quote连接或单只ALAB的Ready解释为全部行情完整。
+
+证据：[真实偏好规则检查](/tmp/monitor-list-refine-2026-10-08/real-preference-checks.json)、[页面交互与测量](/tmp/monitor-list-refine-2026-10-08/ui-evidence.json)、[最终状态](/tmp/monitor-list-refine-2026-10-08/final-report.json)、[真实页面](/tmp/monitor-list-refine-2026-10-08/final-monitor.png)。
+
+## 2026-10-08：当日置顶与 List 显示重构
+
+环境：本机 macOS、Python 3.13、TypeScript、Codex 浏览器和正式 localhost:8765 服务。仅使用真实 Massive 截面、现有 workspace、真实 Longbridge Quote/candle 与 SnapTrade 持仓；本轮未运行 mock 或合成数据验证。
+
+- `npm run build --prefix ui` 和 `git diff --check` 通过。Scan/Monitor 列定义共用于标题和行，值按字段更新；删除 Monitor Growth 渲染、旧列头位置修改、从个股 Quote 推断整表时段的逻辑及多余分割线。没有新增 List Alert 列。
+- 10 项定向检查使用真实截面和 workspace 临时副本，覆盖置顶不改归属/section/原顺序、各 List 独立调序、同日分类/重启保留、取消恢复、同 List 换组保留、跨 List/Exclude/自动归属变化清除，以及新日继承清空。最新副本来自 2026-10-07 的 12,598 行真实截面；自动归属变化对照真实 2026-10-06 workspace，没有构造特征数据。
+- 正式页面实际置顶 APPN/PSIG，Monitor 与 Scan 共用顺序；两模式拖动调序成功，Scan RFL1M 下置顶区仍可拖动；取消回 Surf-10。Excluded 的 PDSB/SDEV 置顶后保留 Review 的 Add to Focus 行操作，取消回原 Review 顺序。实际同日服务重启保留 APPN；修正了无 Workspace 的行情 board 覆盖 Workbench 置顶字段的问题并完成重测。
+- 正式服务启动准备并发布 2026-10-07 完成日，真实发布时自动清除了 2026-10-06 的 APPN/PSIG 置顶。最终后端名单为 Focus 42、Discover 17、Excluded 89，其中 Under-50 26、Broken 8、Extended 36、Hidden 14、Review 5；26 只 Under-50 的原始 `ma_arrangement` 均为 under50，重复规则评估没有变化。启动准备更新了真实 Daily/SQLite/截面和正式 split 窗口缓存，不是新增定时任务。
+- 当前 10 个 Holdings symbol（含当天清仓批次）仍在后端完整 Scan board 中，前端各 List 屏蔽。Focus 当前可见 36 只，实际 Select all 恰好勾选这 36 只，均不含 Holdings；置顶测试前后，全部后端成员、section 与原 section 顺序一致。
+- 页面观察：固定三面板头部底边均为 y=130px（包含工作区顶部10px），Filter 展开不移动头部线；Filter 只显示数字，Setup Tags 在前、排除 Tags 在后；全部 section 上边框为0，Holdings下边框为0，常规列名位于其1px底线之上。行高28px，图钉与原行操作间距10px。Scan 最小680px宽时，标题与行的 scrollWidth/clientWidth 均为680，全部列及按钮在范围内。
+- 真实盘前页面显示 Monitor/Holdings Ext；2026-10-08 09:30 ET 开盘后，两者整列隐藏，普通行无 Ext 单元；Monitor 列为 Symbol/Last/Chg%/Tags/操作，Scan 保留自己的七列。09:31:58 ET 检查页面可见真实图表与持仓估值。未等待收盘再次恢复 Ext，未覆盖所有手动 Tag/Alert 手势、故障路径或模拟器运行。
+- 最终恢复原 Discover/Default/RFL1M 偏好与 Monitor 模式，清除当前日测试置顶；2026-10-06 workspace 与本轮开始备份逐字节一致。新完成日数据保持正式发布结果。服务 PID 31881，Quote CONNECTED、Massive Ready、health errors为空，未新增真实 Alert 或交易操作。临时浏览器页验证后关闭。
+
+证据：[真实规则检查](/tmp/monitor-list-2026-10-08/real-rules.json)、[新日分类](/tmp/monitor-list-2026-10-08/real-classification.json)、[最终状态](/tmp/monitor-list-2026-10-08/final-report.json)、[盘前置顶页面](/tmp/monitor-list-2026-10-08/pinned-monitor.jpg)、[最终盘中页面](/tmp/monitor-list-2026-10-08/final-monitor.jpg)。
+
 ## 2026-10-08：Under-50 排除用途与自动分类
 
 环境：本机 macOS、Python 3.13、TypeScript、Codex 浏览器与现有正式服务；本地 Massive 最新截面为 2026-10-06，含 12,579 行。验证限于名单分类、偏好保存与界面，不主动请求新的行情数据或创建真实 Alert。

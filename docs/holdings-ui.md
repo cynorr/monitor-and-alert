@@ -1,12 +1,12 @@
 # Holdings UI
 
-更新：2026-10-06。本文件是独立持仓表的唯一UI规范；[ui.md](ui.md) 是总入口。账户刷新、价格来源、会计、Days与P/L Day计算只在 [holdings-data.md](holdings-data.md) 维护，图案与操作含义见 [Logo / Icon](ui.md#logo--icon)。产品界面仅使用英文。
+更新：2026-10-08。本文件是独立持仓表的唯一UI规范；[ui.md](ui.md) 是总入口。账户刷新、价格来源、会计、Days与P/L Day计算只在 [holdings-data.md](holdings-data.md) 维护，图案与操作含义见 [Logo / Icon](ui.md#logo--icon)。产品界面仅使用英文。
 
 ## 位置、折叠与宽度
 
-- Monitor 的 Holdings 固定在 List 面板顶部、Focus 上方，位于下方名单的纵向滚动区域之外。滚动 Focus/Review 时，持仓表、Account Value、刷新时间和 Total 均留在顶部。
-- Holdings 按内容使用自然高度，不增加独立纵向滚动或最大高度限制。整体折叠后释放空间给下方名单，折叠选择本地记忆；保留既有 Buy/Sold 明细展开。表格过宽时保留水平 overflow。
-- Holdings 是独立只读表。主行按买入 sequence 展示，同 ticker 的不同批次及与 Focus/Review 重复均保留；不参与名单勾选、增删、拖动、Tag 筛选或 Shift 重排。
+- Monitor 的 Holdings 固定在 List 面板顶部、Focus 上方，位于下方名单的纵向滚动区域之外。滚动 Focus/Review 时，持仓表、账户总值、刷新时间和 Total 均留在顶部。右上角仅显示总值数字，刷新时间位于数字左侧、底部对齐，不显示总值 title。
+- Holdings 按内容使用自然高度，不增加独立纵向滚动或最大高度限制。展开时 Total 下方与常规 List 列头之间保留8px空白；折叠时取消该空白。整体折叠后释放空间给下方名单，折叠选择本地记忆；保留既有 Buy/Sold 明细展开。表格过宽时保留水平 overflow。
+- Holdings 是独立只读表。主行按买入 sequence 展示，同 ticker 的不同批次保留；常规 List 在前端屏蔽持仓已有 ticker，后端归属仍独立；不参与名单勾选、增删、拖动、Tag 筛选或 Shift 重排。
 - 持仓自然内容宽度只在必要时提高 Monitor List 的最小宽度，默认占比和共用最小宽度仍以 [List UI / 宽度与视觉](ui.md#宽度与视觉) 为准，不把默认比例改成固定内容宽度。报价更新不能让侧栏反复缩窄或抖动；展开明细需要更多宽度时增长，收起不引起宽度抖动。
 - 计数外观使用 [List UI](ui.md#宽度与视觉) 的共用 count-badge。整体折叠、交易明细和排序图形遵循 [Logo / Icon](ui.md#操作与状态图标)。
 
@@ -14,7 +14,7 @@
 
 列为 **Symbol、Net Liq、Days、P/L %、P/L、Sold、Chg%、Ext、P/L Day**。regular 时段隐藏整列 Ext，包括列头、主行、明细和 Total 占位；取消该列排序并回收测量宽度。离开 regular 后恢复。使用已有服务端时段状态，不新增前端日历或请求。
 
-- 主行单行。ticker 统一对齐，左侧独立保留展开箭头空隙；不增加副标题或主行 Trade Price。
+- 主行单行，单元格上下 padding **3px**，适度压缩行间距；表格下方不单独画 Holdings/List 分割线，常规 List 列名位于自己的底部分割线上方。ticker 统一对齐，左侧独立保留展开箭头空隙；不增加副标题或主行 Trade Price。
 - Net Liq、P/L、P/L Day 和对应 Total 显示整数。P/L %、Chg% 使用一位小数；Ext 和成交价使用两位小数。
 - Sold 显示整数百分比。零留空且无展开箭头；实际非零但四舍五入为零时显示 `<1%`，并允许展开。
 - 缺失值显示 `—`；regular 时段的 Ext 整列隐藏。市值的价格来源、时段与时间，以及 P/L Day 基准保留 tooltip。

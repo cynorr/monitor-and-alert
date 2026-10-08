@@ -12,7 +12,7 @@ from aiohttp import ClientSession, web
 from data_service.calendar import TradingCalendar
 from data_service.http_api import create_app
 from data_service.indicators import daily_summary
-from data_service.preferences import DEFAULT, validate_preferences
+from data_service.preferences import INITIAL_PREFERENCES, validate_preferences
 from data_service.scan import build_day, daily_chart, publish_day, read_snapshot, candidates
 from data_service.workbench import Workbench
 from data_service.workspace import Workspace, derive_day_view, inherit_workspace
@@ -204,7 +204,7 @@ def test_scan_http_ws_historical_readonly_origin_and_refresh(app_data):
 
 
 def test_preferences_reject_unknown_rules_and_keep_exact_thresholds():
-    data = json.loads(json.dumps(DEFAULT))
+    data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
     data['tags'][0]['filters']={'adv20':{'min':5_123_456.75}, 'ma_arrangement':{'values':['ema10_lead','straddle']}}
     assert validate_preferences(data)['tags'][0]['filters']['adv20']['min'] == 5_123_456.75
     data['tags'][0]['filters']['BROKEN'] = {'values': ['true']}
@@ -214,9 +214,9 @@ def test_preferences_reject_unknown_rules_and_keep_exact_thresholds():
 
 @pytest.mark.parametrize('background', ['transparent', 'frosted'])
 def test_preferences_appearance_roundtrip_and_legacy_compatibility(background):
-    legacy = json.loads(json.dumps(DEFAULT))
+    legacy = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
     assert 'appearance' not in validate_preferences(legacy)['tags'][0]
-    data = json.loads(json.dumps(DEFAULT))
+    data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
     appearance = {'icon': 'surf', 'color': '#2962ff', 'background': background, 'backgroundColor': '#E4B400'}
     data['tags'][0]['appearance'] = appearance
     data['tags'][0]['filters'] = {'adv20': {'min': 5_123_456.75}}
@@ -236,7 +236,7 @@ def test_preferences_appearance_roundtrip_and_legacy_compatibility(background):
     {'icon': 'surf', 'color': '#2962ff', 'background': 'frosted', 'backgroundColor': '#e4b400', 'svg': '<svg/>'},
 ])
 def test_preferences_reject_invalid_appearance(invalid):
-    data = json.loads(json.dumps(DEFAULT))
+    data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
     data['tags'][0]['appearance'] = invalid
     with pytest.raises(ValueError, match='appearance'):
         validate_preferences(data)

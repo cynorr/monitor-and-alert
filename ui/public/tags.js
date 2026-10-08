@@ -2,8 +2,6 @@ import { tagAppearance } from './tag-appearance.js';
 export function tagRole(tag) {
     if (tag.role)
         return tag.role;
-    if (tag.id === 'default')
-        return 'label';
     const name = tag.name.trim().toLowerCase();
     return name === 'extended' || name === 'broken' ? name : name === 'under-50' ? 'under50' : 'setup';
 }

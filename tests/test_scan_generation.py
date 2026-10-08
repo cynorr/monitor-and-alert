@@ -174,9 +174,8 @@ def test_publish_classifies_candidates_and_preserves_same_day_manual_focus(tmp_p
     }, 'orders': {'focus': [], 'wait': ['ALSO'], 'hidden': []}}))
     previous_bytes = previous.read_bytes()
     (tmp_path / 'preferences.json').write_text(json.dumps({
-        'activeList': 'wait', 'sort': 'default', 'activeTag': 'default',
-        'tags': [{'id': 'default', 'name': 'Default', 'filters': {}},
-                 {'id': section, 'name': name, 'filters': filters}],
+        'activeList': 'wait', 'sort': 'default', 'activeTag': None,
+        'tags': [{'id': section, 'name': name, 'filters': filters}],
     }))
     snapshot = {'date': '2026-10-01', 'rows': [
         {'symbol': 'LOW.US', 'candidate': True, **fields},
@@ -208,7 +207,7 @@ def test_publish_invalid_preferences_keeps_existing_day(tmp_path):
     folder = days / snapshot['date']
     before = {name: (folder / name).read_bytes() for name in ('workspace.json', 'scan.json')}
     (tmp_path / 'preferences.json').write_text(json.dumps({
-        'activeList': 'discover', 'sort': 'default', 'activeTag': 'default', 'tags': [],
+        'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': [{'id': str(i), 'name': str(i), 'filters': {}} for i in range(11)],
     }))
     with pytest.raises(ValueError, match='tags'):
         scan.publish_day(days, snapshot)

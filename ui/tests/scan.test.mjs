@@ -83,7 +83,7 @@ test('draft edits leave saved filters intact until explicit save, and cancellati
 });
 
 test('new Tags have independent filters, unique names and a ten-Tag limit', () => {
-    const tags = [{ id: 'default', name: 'Default', filters: { below_days: { min: 2 } } }];
+    const tags = [{ id: 'surf', name: 'Surf-10', filters: { below_days: { min: 2 } } }];
     const result = withSavedTag(tags, { id: 'new', name: ' Bounce ', filters: tags[0].filters });
     assert.equal(result[1].name, 'Bounce');
     result[1].filters.below_days.min = 5;
@@ -96,7 +96,6 @@ test('new Tags have independent filters, unique names and a ten-Tag limit', () =
 
 test('setup sections preserve Tag order; renamed negative and helper labels remain outside setup sections', () => {
     const tags = [
-        { id: 'default', name: 'Default', filters: {} },
         { id: 'first', name: 'Surf-20', role: 'setup', filters: {} },
         { id: 'negative', name: 'Too far', role: 'extended', filters: {} },
         { id: 'under', name: 'Below long MA', role: 'under50', filters: {} },
@@ -109,8 +108,8 @@ test('setup sections preserve Tag order; renamed negative and helper labels rema
     assert.equal(excluded[3].name, 'Under-50');
     assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus','excluded']);
     assert.equal(sectionKey({ status: 'focus', section: 'second', tags: ['first','second'] }), 'focus:second');
-    assert.equal(tagRole(tags[2]), 'extended');
-    assert.equal(tagRole(tags[3]), 'under50');
+    assert.equal(tagRole(tags[1]), 'extended');
+    assert.equal(tagRole(tags[2]), 'under50');
     assert.equal(tagRole({ id: 'under', name: 'Under-50', filters: {} }), 'under50');
     assert.equal(tagRole({ id: 'under', name: 'Under-50', role: 'label', filters: {} }), 'label');
 });
@@ -140,6 +139,7 @@ test('appearance edits save independently, survive renaming, and preserve manual
     assert.equal(saved.appearance.color, '#e4b400');
     const controls = Object.create(ScanControls.prototype);
     controls.enabled = false;
+    controls.holdingSymbols = new Set();
     controls.preferences = { activeTag: saved.id, tags: [saved] };
     controls.draft = draft;
     const row = { status: 'focus', tags: ['surf'], manual_tags: ['surf'], below_days: 3 };

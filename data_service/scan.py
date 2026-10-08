@@ -20,7 +20,7 @@ from .features.snapshot import feature_row, feature_frame
 from .indicators import series, daily_summary, adr_adv, return_from_low, volume_context, volume_comparison
 from .store import atomic_json, read_bars
 from .workspace import inherit_workspace, migrate_workspace
-from .preferences import DEFAULT, validate_preferences
+from .preferences import INITIAL_PREFERENCES, validate_preferences
 from .list_rules import apply_rules
 from .massive.settings import load_config, directory_for_database
 from .symbol_directory import read_directory
@@ -204,7 +204,7 @@ def publish_day(days, snapshot):
         data = inherit_workspace(json.loads(previous.read_text()) if previous else None,
                                  previous_candidates(days, snapshot['date']), candidates(snapshot), snapshot['date'])
     preferences_path = days.parent / 'preferences.json'
-    preferences = validate_preferences(json.loads(preferences_path.read_text()) if preferences_path.exists() else deepcopy(DEFAULT))
+    preferences = validate_preferences(json.loads(preferences_path.read_text()) if preferences_path.exists() else deepcopy(INITIAL_PREFERENCES))
     data = apply_rules(data, snapshot, preferences)
     atomic_json(workspace, data)
     atomic_json(folder / 'scan.json', snapshot)

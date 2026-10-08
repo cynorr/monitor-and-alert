@@ -1,8 +1,8 @@
 {
   "status": "OK",
   "start_date": "2024-07-12",
-  "end_date": "2026-10-06",
-  "resultsCount": 3459,
+  "end_date": "2026-10-07",
+  "resultsCount": 3465,
   "results": [
     {
       "id": "E69d6ca86b3758d1626b2a0fd5b12cefe0ac75be322fe36b805b5597178356118",
@@ -4862,7 +4862,7 @@
       "split_to": 1.0,
       "ticker": "UBXG",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 400.0
+      "historical_adjustment_factor": 16.0
     },
     {
       "id": "E70d2936f972cd8b630e992f51f9f42361b2817fb6bf39706ac4605a6d6ead2c5",
@@ -16403,7 +16403,7 @@
       "historical_adjustment_factor": 238.095238
     },
     {
-      "id": "Eddddd6dec896dca093b95f4526cc5afeb762587883b6863d92914a0c1d8c8008",
+      "id": "E308f13316ea4bc6a0e142cd9d19dd4a9927c5885576f92242eb719c21feb6b1b",
       "execution_date": "2025-10-27",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -18824,7 +18824,7 @@
       "historical_adjustment_factor": 160.0
     },
     {
-      "id": "E1961d40baa5fe68e38dbb1b476fc877e6d24466738448f10316c260a4898b1ed",
+      "id": "E4287f60ce435eb25d8c0452cdbc448c5485d65a0b11b13aeb255b46173178eaa",
       "execution_date": "2025-12-23",
       "split_from": 1.0,
       "split_to": 3.0,
@@ -19130,7 +19130,7 @@
       "historical_adjustment_factor": 6.0
     },
     {
-      "id": "Ed2efadc793f49a38bff002616b5acf9e8117c8b35c270ab7c545269c6aa26928",
+      "id": "Ed26e8dac7dc7cf22ea7996fd78592034173187e7452c0b49109838f6408815a1",
       "execution_date": "2026-01-02",
       "split_from": 30.0,
       "split_to": 1.0,
@@ -24278,7 +24278,7 @@
       "historical_adjustment_factor": 15.0
     },
     {
-      "id": "E89ff98c46b815933b75a011c2ff1b494412cae95a1141669534da4fb9cf2a909",
+      "id": "E0070baa8b8586e6dfa7ec3aa4cce3d07f506b65da2113d5e3600b1d12fcefbc1",
       "execution_date": "2026-05-08",
       "split_from": 1.0,
       "split_to": 1.047337278106509,
@@ -24863,6 +24863,15 @@
       "historical_adjustment_factor": 20.0
     },
     {
+      "id": "E88e4a6d0953c6db583618dc6186e8f010724102eb88309c6c1ef659893792382",
+      "execution_date": "2026-05-22",
+      "split_from": 25.0,
+      "split_to": 1.0,
+      "ticker": "MF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 25.0
+    },
+    {
       "id": "E64701c670a5b19fa0d51a87fd9bdaf5f5f6d36ffca65a9947c9105f65a8a265a",
       "execution_date": "2026-05-22",
       "split_from": 40.0,
@@ -24888,15 +24897,6 @@
       "ticker": "TAGOF",
       "adjustment_type": "stock_dividend",
       "historical_adjustment_factor": 0.973958
-    },
-    {
-      "id": "E88e4a6d0953c6db583618dc6186e8f010724102eb88309c6c1ef659893792382",
-      "execution_date": "2026-05-22",
-      "split_from": 25.0,
-      "split_to": 1.0,
-      "ticker": "UBXG",
-      "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 25.0
     },
     {
       "id": "E3b87bc0060c73c5dc7f4e8d214f7d36dde33a6a65813863920868eedd55164f7",
@@ -24944,6 +24944,15 @@
       "historical_adjustment_factor": 25.0
     },
     {
+      "id": "E7b2d3d184c618830b46c0be24039e04a6231912d82d0936423ea95ad306056a8",
+      "execution_date": "2026-05-26",
+      "split_from": 50.0,
+      "split_to": 1.0,
+      "ticker": "MEDS",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 50.0
+    },
+    {
       "id": "Eb6c8e2cedd48986cce734fdf20fd19b7ced06008fb0f6499e2a3716b441db041",
       "execution_date": "2026-05-26",
       "split_from": 10.0,
@@ -24969,15 +24978,6 @@
       "ticker": "VSA",
       "adjustment_type": "reverse_split",
       "historical_adjustment_factor": 10.0
-    },
-    {
-      "id": "E7b2d3d184c618830b46c0be24039e04a6231912d82d0936423ea95ad306056a8",
-      "execution_date": "2026-05-26",
-      "split_from": 50.0,
-      "split_to": 1.0,
-      "ticker": "WGRX",
-      "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 50.0
     },
     {
       "id": "Ef6e99378d148c142aa146e5a7001cc5a1686ca16c738d0b8076df2a862aafda9",
@@ -28229,15 +28229,6 @@
       "historical_adjustment_factor": 10.0
     },
     {
-      "id": "E2ac0d0e50e91c0d9c9a95bd270bdad830d55b51477869952b659b84ab0a15f8d",
-      "execution_date": "2026-08-03",
-      "split_from": 30.0,
-      "split_to": 1.0,
-      "ticker": "KWM",
-      "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 30.0
-    },
-    {
       "id": "Eeab99947f307a33e3b0b984c1175765a519d3184839a831e057be9d2677da178",
       "execution_date": "2026-08-03",
       "split_from": 200.0,
@@ -28263,6 +28254,15 @@
       "ticker": "MVIS",
       "adjustment_type": "reverse_split",
       "historical_adjustment_factor": 15.0
+    },
+    {
+      "id": "E2ac0d0e50e91c0d9c9a95bd270bdad830d55b51477869952b659b84ab0a15f8d",
+      "execution_date": "2026-08-03",
+      "split_from": 30.0,
+      "split_to": 1.0,
+      "ticker": "NXAT",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 30.0
     },
     {
       "id": "Ef9d72ce2d132bd48d199fe00ce51374e44b773028b2307d7ad5ec0fdb03e659f",
@@ -30884,7 +30884,7 @@
       "historical_adjustment_factor": 12.0
     },
     {
-      "id": "E5070d9270235ff864a5e5a75b62e1cea705beed2fef511187385d98e8052cfe9",
+      "id": "Eeeaa212cd35361bed79d83b9054466eba202d6eff0fa5f7cd114fc86e89f2932",
       "execution_date": "2026-09-30",
       "split_from": 1.0,
       "split_to": 3.0,
@@ -31134,6 +31134,60 @@
       "ticker": "RUBI",
       "adjustment_type": "stock_dividend",
       "historical_adjustment_factor": 0.666667
+    },
+    {
+      "id": "E831bace5b71dcb742437ea54a56529fceacc68c41ee3813600d0ff36ab902d73",
+      "execution_date": "2026-10-07",
+      "split_from": 6.0,
+      "split_to": 1.0,
+      "ticker": "GCDT",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 6.0
+    },
+    {
+      "id": "Ede13cc5d1b5cf6d8db1c2aa76722ca0371deee1c23cc4cf667d96977114db91c",
+      "execution_date": "2026-10-07",
+      "split_from": 10.0,
+      "split_to": 1.0,
+      "ticker": "PCIMF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 10.0
+    },
+    {
+      "id": "Eb740d08b2d2a8dff2a40ef29e16d1d84075132871697286c05383675e4ceb5ae",
+      "execution_date": "2026-10-07",
+      "split_from": 6.0,
+      "split_to": 1.0,
+      "ticker": "SUGP",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 6.0
+    },
+    {
+      "id": "Ebcf15df4ae41296d5f1ae9f8d1a21889e2dd1240e0969a0a4f28101906da383f",
+      "execution_date": "2026-10-07",
+      "split_from": 1.0,
+      "split_to": 5.0,
+      "ticker": "TELWY",
+      "adjustment_type": "forward_split",
+      "historical_adjustment_factor": 0.2
+    },
+    {
+      "id": "Ef3809df4c1dacf41c63775e5241249d958d500fc95f288ab8e9c4440478899e6",
+      "execution_date": "2026-10-07",
+      "split_from": 1.0,
+      "split_to": 15.0,
+      "ticker": "TKOMY",
+      "adjustment_type": "forward_split",
+      "historical_adjustment_factor": 0.066667
+    },
+    {
+      "id": "E45fa8c1e8f11792ed413918a83eaee50e4249b088109746889e2b21793a95836",
+      "execution_date": "2026-10-07",
+      "split_from": 1.0,
+      "split_to": 2.0,
+      "ticker": "TOPPY",
+      "adjustment_type": "forward_split",
+      "historical_adjustment_factor": 0.5
     }
   ]
 }

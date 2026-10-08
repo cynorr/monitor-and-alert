@@ -33,14 +33,14 @@
   <aside class="watchlist" aria-label="Watchlist">
     <div class="list-header">
     <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
-    <div id="scan-progress" class="scan-progress" role="status" hidden></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
+    <div id="list-tools" class="list-tools" hidden><button id="filter-toggle" aria-expanded="false" aria-controls="filter-editor">Filters <span id="filter-count"></span></button><div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div></div><button id="tag-add" class="add-button" aria-label="Create Tag">+</button></div>
     </div>
+    <div id="scan-progress" class="scan-progress" role="status" hidden></div>
     <section id="scan-controls" class="scan-controls" hidden aria-label="List filters and Scan controls">
       <div id="scan-date-row" class="scan-date-row"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button><span id="scan-result-count"></span></div>
       <div id="scan-lists" class="scan-pills" role="group" aria-label="Scan list"><button data-list="discover">Discover</button><button data-list="focus">Focus</button><button data-list="excluded">Excluded</button></div>
-      <div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div><button id="tag-add" aria-label="Create Tag">+</button></div>
-      <details id="filter-editor"><summary>Filters <span id="filter-count"></span><span id="tag-unsaved" hidden>Unsaved</span></summary>
+      <section id="filter-editor" aria-label="Tag and Filter editor" hidden><span id="tag-unsaved" hidden>Unsaved</span>
         <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><select id="tag-role" aria-label="Tag role"><option value="setup">Setup</option><option value="extended">Extended</option><option value="broken">Broken</option><option value="under50">Under-50</option><option value="label">Label</option></select><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
         <div class="tag-appearance-editor" aria-label="Tag appearance">
           <label>Icon<select id="tag-icon" aria-label="Tag icon"></select></label>
@@ -50,7 +50,7 @@
           <span id="tag-preview" aria-label="Tag preview"></span>
         </div>
         <div id="filter-rules" class="filter-rules"></div>
-      </details>
+      </section>
       <div id="scan-batch" class="scan-batch"><label><input type="checkbox" id="scan-select-all"> Select all results</label><select id="scan-sort" aria-label="Scan sort"><option value="default">Default order</option><option value="rfl1m">RFL 1M</option><option value="rfl3m">RFL 3M</option><option value="rfl6m">RFL 6M</option></select></div>
       <div id="scan-move" class="scan-move"><span>Move to</span><button data-target="discover">Discover</button><button data-target="focus">Focus</button><button data-target="excluded" title="Exclude for seven days">Excluded</button></div>
       <div id="scan-error" class="list-message" role="alert"></div>
@@ -60,7 +60,7 @@
     <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
       <div class="holdings-heading">
         <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count" class="count-badge"></span></button>
-        <div class="holdings-meta"><span>Account Value <b id="holdings-account">—</b></span><time id="holdings-updated" role="status">Loading…</time></div>
+        <div class="holdings-meta"><time id="holdings-updated" role="status">Loading…</time><b id="holdings-account" aria-label="Account value">—</b></div>
       </div>
       <div id="holdings-content">
         <div class="holdings-scroll">
@@ -83,8 +83,8 @@
         <div id="holdings-empty" class="empty-list">Loading…</div>
       </div>
     </section>
+    <div id="list-columns" class="list-columns"></div>
     <div class="list-body">
-      <div id="list-columns" class="list-columns"><span>Symbol</span><span>Last</span><span>Chg%</span><span>Ext</span><span title="1M / 3M / 6M return from low">Growth</span><span>Tags</span><span aria-hidden="true"></span></div>
       <nav id="symbols" aria-label="Symbols"></nav>
     </div>
   </aside>

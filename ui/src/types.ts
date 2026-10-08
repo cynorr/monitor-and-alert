@@ -84,6 +84,8 @@ export type Ticker = {
     tags?: string[];
     tag_ids?: string[];
     manual_tags?: string[];
+    pinned?: boolean;
+    pin_index?: number;
     excluded_at?: string;
     quote?: Quote;
     errors?: string[];

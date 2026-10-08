@@ -13,7 +13,7 @@ from copy import deepcopy
 
 from .calendar import TradingCalendar, ET
 from .paths import RuntimePaths
-from .preferences import DEFAULT, validate_preferences
+from .preferences import INITIAL_PREFERENCES, validate_preferences
 from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot
 from .service import DataService
 from .workspace import derive_day_view, normalize_ticker
@@ -48,7 +48,7 @@ class Workbench:
         self.preferences_path = runtime / 'preferences.json'
         self.additional = additional_info or AdditionalInfo(RuntimePaths(runtime).additional_info_dir, enabled=False)
         self.additional_task = None
-        self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(DEFAULT))
+        self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(INITIAL_PREFERENCES))
         self.list_context = self._list_context()
         self.sound = sound if sound is not None else AlertSound() if not mock and only is None else None
         self.sound_task = None
@@ -261,6 +261,7 @@ class Workbench:
         view = derive_day_view(value, candidates(snapshot), prior, data)
         rows = {row['symbol']: row for row in snapshot['rows']}
         priority = {ticker: index for index,ticker in enumerate(data.get('discover_order', []))}
+        pins = {ticker: index for index, ticker in enumerate(data.get('pinned', []))}
         result = []
         for group, members in view.as_dict()['lists'].items():
             for index, ticker in enumerate(members):
@@ -268,6 +269,7 @@ class Workbench:
                 state = view.statuses.get(ticker, {})
                 result.append({**rows.get(symbol, {}), **state, 'symbol': symbol, 'ticker': ticker,
                                'status': group, 'order_index': index, 'discover_priority': priority.get(ticker),
+                               'pinned': ticker in pins, 'pin_index': pins.get(ticker),
                                'is_new': ticker in view.new, 'is_returned': ticker in view.returned})
         return result
 
@@ -305,6 +307,8 @@ class Workbench:
 
     def list_state(self):
         massive = self.pipeline.state() if self.pipeline else None
+        now = int(self.monitor.now()) if self.monitor else int(time.time())
+        holding_symbols = self.holdings.symbols_for(datetime.fromtimestamp(now, ET).date().isoformat()) if self.holdings else []
         return {'board': self.monitor_board() if self.mode == 'monitor' else self.scan_board(),
                 'mode': self.monitor.mode if self.mode == 'monitor' and self.monitor else self.mode, 'app_mode': self.mode,
                 'editable': self.only is None and (self.mode == 'monitor' or (self.has_snapshot() and self.selected_date == self.workspace.date)),
@@ -312,6 +316,7 @@ class Workbench:
                 'dates': sorted((p.parent.name for p in self.workspace.root.glob('*/scan.json')), reverse=True),
                 'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False,
                 'holdings': self.holdings_state(), 'massive': massive,
+                'holding_symbols': holding_symbols, 'current_regular_session': self.calendar.is_open(now),
                 'scan_running': self.generating or bool(massive and massive['running'])}
 
     def select(self, symbol, timeframe, source='watchlist'):
@@ -347,6 +352,13 @@ class Workbench:
         if not self.list_state()['editable']:
             raise ValueError('List editing unavailable for this session')
         action = payload['action']
+        if action in ('pin', 'pin_move'):
+            ticker = normalize_ticker(payload['ticker'])
+            if action == 'pin':
+                self.workspace.pin_ticker(ticker, payload['pinned'])
+            else:
+                self.workspace.move_pin(ticker, payload['index'])
+            return self.list_state()
         if action in ('lookup','add'):
             ticker = normalize_ticker(payload['ticker'])
             if self.mode == 'monitor':
@@ -375,7 +387,7 @@ class Workbench:
         elif action == 'keep':
             self.workspace.keep_ticker(normalize_ticker(payload['ticker']))
         elif action == 'tag':
-            if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags'] if tag['id'] != 'default'}:
+            if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags']}:
                 raise ValueError('Unknown Tag')
             self.workspace.set_manual_tags(normalize_ticker(payload['ticker']), payload['tags'])
         elif action == 'move' and not payload.get('tickers'):

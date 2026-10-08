@@ -28,13 +28,13 @@ def matches_filters(row, filters):
 
 
 def active_tag(tag):
-    return tag['id'] != 'default' and any(any(bound in rule for bound in ('min', 'max', 'values'))
+    return any(any(bound in rule for bound in ('min', 'max', 'values'))
                                         for rule in tag.get('filters', {}).values())
 
 
 def matched_tags(row, definitions, manual=()):
-    return [tag for tag in definitions if tag['id'] != 'default' and
-            (tag['id'] in manual or (active_tag(tag) and matches_filters(row, tag['filters'])))]
+    return [tag for tag in definitions
+            if tag['id'] in manual or (active_tag(tag) and matches_filters(row, tag['filters']))]
 
 
 def focus_classification(row, preferences):
@@ -52,7 +52,7 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
     rows = {row['symbol'].removesuffix('.US'): row for row in snapshot['rows']}
     candidates = {ticker for ticker, row in rows.items() if row.get('candidate')}
     definitions = preferences['tags']
-    tag_ids = {tag['id'] for tag in definitions if tag['id'] != 'default'}
+    tag_ids = {tag['id'] for tag in definitions}
     setup_sections = {'unclassified'} | {tag['id'] for tag in definitions if tag_role(tag) == 'setup'}
     scope = candidates | {ticker for ticker, state in states.items() if state.get('status') in ('focus', 'excluded')}
 
@@ -119,4 +119,6 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
         incoming = sorted(members - set(unchanged))
         orders[status] = incoming + unchanged
     result['orders'] = orders
+    result['pinned'] = [ticker for ticker in result['pinned'] if ticker in states and
+                        previous_states[ticker].get('status') == states[ticker].get('status')]
     return result

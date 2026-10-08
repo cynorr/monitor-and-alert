@@ -16,7 +16,7 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 | Focus | 正式关注、实时看盘；成员跨日保留 | 按潜力 Tag 分组，未匹配为 Unclassified |
 | Excluded | 暂不关注与机器提出的复核候选 | Broken、Extended、Under-50、Hidden、Review |
 
-同一 symbol 在三个列表中只有一个归属。Holdings 独立，不改变名单归属；同 ticker 底层行情去重。
+同一 symbol 在三个列表中只有一个归属。Holdings 独立，不改变名单归属；同 ticker 底层行情去重。常规名单前端屏蔽 Holdings 已有 ticker，后端成员与规则结果保留。
 
 ## 每日规则
 
@@ -42,7 +42,13 @@ Tag 的用途固定为 Setup、Extended、Broken、Under-50 或 Label。Setup �
 
 Section 支持折叠、内部排序和跨 section 拖拽。新进入 section 的股票放到队首，同 section 内保留人工顺序。允许盘中操作改变 section；本次不新增基于实时 Quote 的形态规则。
 
+Tag 选择是可空的显示偏好，点击已选 Tag 取消选择；未选时不应用保存 Tag 筛选。可保存零到十个命名 Tag，筛选草稿可独立编辑并保存为新 Tag。取消选择不删除定义，不影响每日自动分类。
+
 Filter 仅改变显示，不移动名单、不改变实时订阅。自动分类与显示筛选使用同一字段目录和相同条件含义。
+
+## 当日置顶
+
+置顶是独立的当日软状态，不是保存的规则 Tag，也不改变 List、主 section 或原有 section 顺序。每个 List 可置顶多个 ticker，置顶区顺序独立，Scan/Monitor 共用；取消置顶回到自己的 section。同一交易日保存、重分类与服务重启保留置顶；同 List 内换 section 保留，跨 List 移动（含规则导致的移动）取消。新完成交易日继承名单时清空全部置顶，和当天重新计算 Tag/section 的发布流程一致。Filter 与持仓屏蔽只影响可见结果，不取消置顶。
 
 ## Scan 与 Monitor
 

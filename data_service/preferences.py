@@ -7,8 +7,7 @@ from pathlib import Path
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'ui/src/filter-catalog.json'
 CATALOG = json.loads(CATALOG_PATH.read_text())
 FIELDS = {field['key']: field for field in CATALOG}
-DEFAULT = {'activeList': 'discover', 'sort': 'default', 'activeTag': 'default',
-           'tags': [{'id': 'default', 'name': 'Default', 'filters': {}, 'role': 'label'}]}
+INITIAL_PREFERENCES = {'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': []}
 APPEARANCE_KEYS = {'icon', 'color', 'background', 'backgroundColor'}
 TAG_ICONS = {'surf', 'bounce', 'prior-run', 'orderly-pullback', 'extended', 'broken', 'label'}
 
@@ -26,8 +25,6 @@ def validate_appearance(value):
 
 
 def tag_role(tag):
-    if tag['id'] == 'default':
-        return 'label'
     return tag.get('role') or {'extended': 'extended', 'broken': 'broken', 'under-50': 'under50'}.get(tag['name'].strip().casefold(), 'setup')
 
 
@@ -36,15 +33,13 @@ def validate_preferences(value):
     if value['activeList'] not in ('discover','focus','excluded') or value['sort'] not in ('default','rfl1m','rfl3m','rfl6m'):
         raise ValueError('Invalid list or sort')
     tags = value['tags']
-    if not 1 <= len(tags) <= 10:
-        raise ValueError('Keep between 1 and 10 tags')
+    if len(tags) > 10:
+        raise ValueError('Maximum 10 tags')
     names, ids = set(), set()
     for tag in tags:
         name = tag['name'].strip()
         if not name or len(name) > 24 or name.casefold() in names or not tag['id'] or tag['id'] in ids:
             raise ValueError('Use unique Tag IDs and names of 1–24 characters')
-        if tag['id'] == 'default' and name != 'Default':
-            raise ValueError('Default cannot be renamed')
         tag['role'] = tag_role(tag)
         if tag['role'] not in ('setup', 'extended', 'broken', 'under50', 'label'):
             raise ValueError('Invalid Tag role')
@@ -66,6 +61,6 @@ def validate_preferences(value):
                     raise ValueError('Filter minimum exceeds maximum')
             elif set(rule) != {'values'} or not isinstance(rule['values'], list) or not set(rule['values']) <= {item['value'] for item in FIELDS[key]['options']}:
                 raise ValueError('Invalid classification filter')
-    if 'default' not in ids or value['activeTag'] not in ids:
-        raise ValueError('Default and active Tag must exist')
+    if value['activeTag'] is not None and value['activeTag'] not in ids:
+        raise ValueError('Active Tag must exist')
     return value
