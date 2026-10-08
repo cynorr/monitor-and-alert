@@ -106,7 +106,7 @@ Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，�
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
 - Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，Refresh跳过已完成日。
-- Focus跨日保留；Discover与Focus匹配负面Tag直接进入Excluded。Hidden/Extended/Broken七个自然日到期后按当前规则重新分类；Review保留待审核，无Dismiss。Hidden七天内跳过名单规则判断，仍计算完整特征。删除Focus移入Hidden，Release/Move to Discover明确解除归属；新入section置顶。
+- Focus跨日保留；Discover与Focus匹配负面Tag直接进入Excluded。Hidden/Extended/Broken/Under-50七个自然日到期后按当前规则重新分类；Review保留待审核，无Dismiss。Hidden七天内跳过名单规则判断，仍计算完整特征。删除Focus移入Hidden，Release/Move to Discover明确解除归属；新入section置顶。
 - 共用Daily日 K：所有图使用统一、可人工调整的默认bar spacing，缩放后各自保留；EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、成交量随十字线切换。可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加SDK活跃日 K。显示与集中人工参数只在 [Chart UI](docs/chart-ui.md) 维护。
 - Monitor：5m/15m/30m/1h/2h、SMA65、交易日联动、实时行情；各周期使用原生官方 closed 与 SDK open candle。
 - Search 和 section 的 + 共用内联输入；Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info，确认后才保存。快捷键和新增位置见 [List UI](docs/ui.md#list-ui)。

@@ -1,8 +1,13 @@
 import type { Filters } from './filters.js';
 import { tagAppearance, type TagAppearance } from './tag-appearance.js';
-export type TagRole = 'setup' | 'extended' | 'broken' | 'label';
+export type TagRole = 'setup' | 'extended' | 'broken' | 'under50' | 'label';
 export type Tag = { id: string; name: string; filters: Filters; role?: TagRole; appearance?: TagAppearance };
-export const tagRole = (tag: Tag): TagRole => tag.role ?? (tag.id === 'default' ? 'label' : ['extended','broken'].includes(tag.name.toLowerCase()) ? tag.name.toLowerCase() as TagRole : 'setup');
+export function tagRole(tag: Tag): TagRole {
+    if (tag.role) return tag.role;
+    if (tag.id === 'default') return 'label';
+    const name = tag.name.trim().toLowerCase();
+    return name === 'extended' || name === 'broken' ? name : name === 'under-50' ? 'under50' : 'setup';
+}
 export type Preferences = { activeList: string; sort: string; activeTag: string; tags: Tag[] };
 export const tagFiltersChanged = (saved: Tag, draft: Tag) => saved.id !== draft.id || JSON.stringify(saved.filters) !== JSON.stringify(draft.filters);
 export const tagChanged = (saved: Tag, draft: Tag) => saved.name !== draft.name || tagRole(saved) !== tagRole(draft) || tagFiltersChanged(saved, draft) ||

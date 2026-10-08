@@ -1,5 +1,12 @@
 import { tagAppearance } from './tag-appearance.js';
-export const tagRole = (tag) => tag.role ?? (tag.id === 'default' ? 'label' : ['extended', 'broken'].includes(tag.name.toLowerCase()) ? tag.name.toLowerCase() : 'setup');
+export function tagRole(tag) {
+    if (tag.role)
+        return tag.role;
+    if (tag.id === 'default')
+        return 'label';
+    const name = tag.name.trim().toLowerCase();
+    return name === 'extended' || name === 'broken' ? name : name === 'under-50' ? 'under50' : 'setup';
+}
 export const tagFiltersChanged = (saved, draft) => saved.id !== draft.id || JSON.stringify(saved.filters) !== JSON.stringify(draft.filters);
 export const tagChanged = (saved, draft) => saved.name !== draft.name || tagRole(saved) !== tagRole(draft) || tagFiltersChanged(saved, draft) ||
     JSON.stringify(tagAppearance(saved)) !== JSON.stringify(tagAppearance(draft));

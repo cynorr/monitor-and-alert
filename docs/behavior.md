@@ -44,15 +44,15 @@ Daily与split统一按最新成熟交易日判断，保留ET18点门槛；周末
 
 需求背景与归属设计见 [list-design.md](list-design.md)，显示与交互的唯一规范见 [ui.md 的 List UI 章节](ui.md#list-ui)。
 
-Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus、独立 Holdings 和折叠 Review；Discover / Hidden / Extended / Broken 不订阅 Longbridge。Review 预览来自本地 Massive Daily，加入 Focus 后才实时订阅；Excluded 盘中恢复依赖下一个完成日扫描或人工加入。
+Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus、独立 Holdings 和折叠 Review；Discover / Hidden / Extended / Broken / Under-50 不订阅 Longbridge。Review 预览来自本地 Massive Daily，加入 Focus 后才实时订阅；Excluded 盘中恢复依赖下一个完成日扫描或人工加入。
 
 候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、Focus和全部Excluded（含Hidden）均计算完整特征与Growth所用RFL数值，即使继承成员不在候选或前50也继续计算，不为名单另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。已有人工成员不因候选门槛自动删除，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 
-Tag 保存条件与用途：Setup用于潜力section/Review，Extended和Broken用于淘汰，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可以匹配多个Tag，按Setup定义顺序选一个主section；未匹配为Unclassified。
+Tag 保存条件与用途：Setup用于潜力section/Review，Extended、Broken和Under-50用于淘汰，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可以匹配多个Tag，按Setup定义顺序选一个主section；未匹配为Unclassified。
 
 Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑定。编辑外观草稿继续使用已指派及人工补充的匹配结果，只有修改条件才进入条件预览，不因调颜色改变名单归属或订阅。
 
-Discover、Focus及非Hidden Excluded匹配负面规则立即进入Excluded对应section，Broken优先Extended；非Hidden Excluded不满足负面规则且匹配Setup进入Review。Review不强制每日清空，无Dismiss。Hidden表示人工未分类排除，七天内不参与规则判断。Hidden/Extended/Broken七个自然日到期后解除本次排除、再次按规则分类；仍匹配负面条件继续排除，无释放保护期；重复匹配不每日续期。Review保留到人工处理或新负面判断。
+Discover、Focus及非Hidden Excluded匹配负面规则立即进入Excluded对应section，优先级为Broken → Extended → Under-50；非Hidden Excluded不满足负面规则且匹配Setup进入Review。Review不强制每日清空，无Dismiss。Hidden表示人工未分类排除，七天内不参与规则判断。Hidden/Extended/Broken/Under-50七个自然日到期后解除本次排除、再次按规则分类；仍匹配负面条件继续排除，无释放保护期；重复匹配不每日续期。Review保留到人工处理或新负面判断。
 
 规则Tag每天重算；人工补Tag、主section和保留Focus例外仅当天有效。Focus成员及同section内部人工排序跨日保留，新进入section成员置顶。没有匹配Tag不淘汰Focus。人工入选Focus当天优先，仍显示机器负面标签，次日重新接受规则。临时Filter只改变显示，不移动名单或改变订阅；修改草稿预览，Save才更新条件并重新分类已有本地截面。
 

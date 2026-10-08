@@ -137,7 +137,8 @@ def test_quote_pipeline_accepts_same_second_push_rejects_old_snapshot_and_resets
     assert [q['last_price'] for q in received] == [9,10,10]
 
 
-def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data):
+@pytest.mark.parametrize('source', ['discover', 'under50'])
+def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data, source):
     async def scenario():
         app, brokers = make_app(app_data)
         try:
@@ -146,13 +147,20 @@ def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data):
             app.preferences['tags'].extend([
                 {'id':'first', 'name':'Surf', 'role':'setup', 'filters':{'adr20':{'min':0}}},
                 {'id':'second', 'name':'Bounce', 'role':'setup', 'filters':{'adr20':{'min':0}}}])
+            matched = ['first', 'second']
+            if source == 'under50':
+                app.preferences['tags'].append({'id':'under', 'name':'Under-50', 'role':'under50', 'filters':{'adr20':{'min':0}}})
+                matched.append('under')
             await app.prepare_lists()
             state = app.workspace.data['statuses'].setdefault(ticker, {'status':'discover'})
+            assert state['status'] == ('excluded' if source == 'under50' else 'discover')
+            if source == 'under50':
+                assert state['section'] == 'under50'
             state.update(tags=['stale'], manual_tags=['second'], manual_tags_date=app.workspace.date,
                          manual_section_date=app.workspace.date, section='second')
             result = await app.action('alerts', {'action':'create','symbol':row['symbol'],'price':12.345,'mode':'scan'})
             selected = app.workspace.data['statuses'][ticker]
-            assert selected['section'] == 'first' and selected['tags'] == ['first','second']
+            assert selected['section'] == 'first' and selected['tags'] == matched
             assert 'manual_tags' not in selected and 'manual_section_date' not in selected
             assert app.workspace.data['orders']['focus'][0] == ticker
             assert result['alerts'][0]['price_cents'] == 1235 and not brokers

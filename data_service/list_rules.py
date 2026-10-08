@@ -78,7 +78,7 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
         matched = matched_tags(rows.get(ticker, {}), definitions, manual)
         state['tags'] = [tag['id'] for tag in matched]
         potential = [tag['id'] for tag in matched if tag_role(tag) == 'setup']
-        negative = next((role for role in ('broken', 'extended') if any(tag_role(tag) == role for tag in matched)), None)
+        negative = next((role for role in ('broken', 'extended', 'under50') if any(tag_role(tag) == role for tag in matched)), None)
         manual_focus = state.get('status') == 'focus' and state.get('manual_focus_date') == selected_date
 
         if negative and not manual_focus:

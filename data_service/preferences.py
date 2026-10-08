@@ -28,7 +28,7 @@ def validate_appearance(value):
 def tag_role(tag):
     if tag['id'] == 'default':
         return 'label'
-    return tag.get('role') or {'extended': 'extended', 'broken': 'broken'}.get(tag['name'].strip().casefold(), 'setup')
+    return tag.get('role') or {'extended': 'extended', 'broken': 'broken', 'under-50': 'under50'}.get(tag['name'].strip().casefold(), 'setup')
 
 
 def validate_preferences(value):
@@ -46,7 +46,7 @@ def validate_preferences(value):
         if tag['id'] == 'default' and name != 'Default':
             raise ValueError('Default cannot be renamed')
         tag['role'] = tag_role(tag)
-        if tag['role'] not in ('setup', 'extended', 'broken', 'label'):
+        if tag['role'] not in ('setup', 'extended', 'broken', 'under50', 'label'):
             raise ValueError('Invalid Tag role')
         names.add(name.casefold())
         ids.add(tag['id'])

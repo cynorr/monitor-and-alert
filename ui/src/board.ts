@@ -13,7 +13,7 @@ export function listSections(scan: boolean, list: string, tags: Tag[]): ListSect
         .concat({ list: name, id: 'unclassified', name: 'Unclassified', key: `${name}:unclassified` });
     if (!scan) return sections('focus').concat({ list: 'excluded', id: 'review', name: 'Review', key: 'excluded:review' });
     if (list !== 'excluded') return sections(list);
-    return ['review', 'broken', 'extended', 'hidden'].map(id => ({ list, id, name: id[0].toUpperCase() + id.slice(1), key: `${list}:${id}` }));
+    return ['review', 'broken', 'extended', 'under50', 'hidden'].map(id => ({ list, id, name: id === 'under50' ? 'Under-50' : id[0].toUpperCase() + id.slice(1), key: `${list}:${id}` }));
 }
 
 export function growthValue(value: unknown) {

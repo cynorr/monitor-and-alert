@@ -14,7 +14,7 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 | --- | --- | --- |
 | Discover | 按 [Massive 数据要求](massive-data.md) 先完成证券与历史资格、ADR/ADV 初筛，再取 RFL 排名并集，等待选入 Focus | 按潜力 Tag 分组，未匹配为 Unclassified |
 | Focus | 正式关注、实时看盘；成员跨日保留 | 按潜力 Tag 分组，未匹配为 Unclassified |
-| Excluded | 暂不关注与机器提出的复核候选 | Broken、Extended、Hidden、Review |
+| Excluded | 暂不关注与机器提出的复核候选 | Broken、Extended、Under-50、Hidden、Review |
 
 同一 symbol 在三个列表中只有一个归属。Holdings 独立，不改变名单归属；同 ticker 底层行情去重。
 
@@ -22,13 +22,13 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 
 新完成交易日 Ready 后，按 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 为候选及全部继承的 Focus、Excluded（含 Hidden）计算完整 feature 和 Growth 数值，即使成员掉出候选或 RFL 前 50 也继续计算，不为继承名单另行排名。Tag 与归属按下述名单规则重评；Hidden 七天内仍跳过规则判断。
 
-- Discover 与 Focus 匹配 Broken / Extended，立即进入 Excluded 对应 section；同时匹配时 Broken 优先。
-- Excluded 的非 Hidden 成员匹配负面条件，按当前规则归入 Broken / Extended；不满足负面条件且匹配潜力 Tag，进入 Review。
-- Review 无 Dismiss 按钮、不要求每天清空。未选入 Focus 的股票继续保留；新负面规则仍可将其归入 Broken / Extended。
+- Discover 与 Focus 匹配 Broken / Extended / Under-50，立即进入 Excluded 对应 section；同时匹配时优先级为 Broken → Extended → Under-50，全部匹配 Tag 仍保留。
+- Excluded 的非 Hidden 成员匹配负面条件，按当前规则归入 Broken / Extended / Under-50；不满足负面条件且匹配潜力 Tag，进入 Review。
+- Review 无 Dismiss 按钮、不要求每天清空。未选入 Focus 的股票继续保留；新负面规则仍可将其归入 Broken / Extended / Under-50。
 - Hidden 是尚未分类的人工排除原因，七天内跳过规则判断；可以手动释放或加入 Focus。
 - 没有匹配 Tag、缺少数据都不等于 Broken，不据此淘汰 Focus。
 
-Hidden / Extended / Broken 七个自然日到期解除本次排除；随后仍按当前规则分类。仍匹配负面条件就继续进入对应 section，不增加“刚释放保护”或条件变化检测。重复匹配不每日续期，只有到期后的新排除重新计时。Review 保留到人工处理或新的负面判断，不强制七天清空。
+Hidden / Extended / Broken / Under-50 七个自然日到期解除本次排除；随后仍按当前规则分类。仍匹配负面条件就继续进入对应 section，不增加“刚释放保护”或条件变化检测。重复匹配不每日续期，只有到期后的新排除重新计时。Review 保留到人工处理或新的负面判断，不强制七天清空。
 
 人工加入 / 保留 Focus 当天优先，次日重新接受规则；机器标签仍如实显示。人工形态补充和主 section 调整仅当天有效，Tag 定义和 Focus 成员长期保留。
 
@@ -38,7 +38,7 @@ Tag 使用现有 atomic feature 条件，允许同时匹配多个。每日重算
 
 潜力 section 来自保存的潜力 Tag，例如 Surf-10、Surf-20、Bounce-10、Bounce-20。多标签按保存顺序选主 section，人工可拖拽调整；同一 symbol 只显示一行。
 
-Tag 的用途固定为 Setup、Extended、Broken 或 Label。Setup 用于潜力 section / Review；Label 仅辅助观察，适合后续 prior-run 等局部特征。显示名称可修改，用途不随改名变化。旧定义按名字识别 Extended / Broken，其余已有形态 Tag 转为 Setup。
+Tag 的用途固定为 Setup、Extended、Broken、Under-50 或 Label。Setup 用于潜力 section / Review；Label 仅辅助观察，适合后续 prior-run 等局部特征。显示名称可修改，用途不随改名变化。缺少用途的旧定义按名字识别 Extended / Broken / Under-50，其余已有形态 Tag 转为 Setup；已保存的用途优先。当前 Under-50 Tag 使用 `ma_arrangement = under50` 条件，均线排列含义见 [Atomic Feature 参考](atomic-feature-reference.md#3-ma-arrangement)。分类使用保存的条件，不按名称硬编码条件。
 
 Section 支持折叠、内部排序和跨 section 拖拽。新进入 section 的股票放到队首，同 section 内保留人工顺序。允许盘中操作改变 section；本次不新增基于实时 Quote 的形态规则。
 
@@ -46,7 +46,7 @@ Filter 仅改变显示，不移动名单、不改变实时订阅。自动分类�
 
 ## Scan 与 Monitor
 
-Scan 展示三个完整列表。Monitor 展示 Focus、独立 Holdings，以及折叠的 Review 入口。Discover、Hidden、Extended、Broken 不占 Longbridge symbol 额度；Review 使用本地 Massive Daily 预览，加入 Focus 后才订阅实时行情。
+Scan 展示三个完整列表。Monitor 展示 Focus、独立 Holdings，以及折叠的 Review 入口。Discover、Hidden、Extended、Broken、Under-50 不占 Longbridge symbol 额度；Review 使用本地 Massive Daily 预览，加入 Focus 后才订阅实时行情。
 
 因此 Excluded 的盘中恢复不被实时发现；每日完成日扫描发现恢复。仍希望当天实时关注的股票，应明确留在 Focus。切换模式不停止后台 Focus 行情或 Holdings 刷新。
 

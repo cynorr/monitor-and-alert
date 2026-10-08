@@ -54,7 +54,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | 场景 | 当前图形 | 含义 |
 | --- | --- | --- |
 | Discover / Focus 行操作 | 轮廓垃圾桶 | Exclude：移到 Hidden 七天，**不是永久删除股票或数据** |
-| Excluded 的 Hidden / Extended / Broken 行操作 | `↩` | Release：解除排除，随后按当前规则重新分类 |
+| Excluded 的 Hidden / Extended / Broken / Under-50 行操作 | `↩` | Release：解除排除，随后按当前规则重新分类 |
 | Review 行操作 | `+` | Add to Focus，开始实时监控 |
 | Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
@@ -104,7 +104,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 | Scan | Discover / Focus / Excluded 三个入口 | 本地 Massive Daily；日期、Refresh Scan、RFL 排序、批量选择/移动，以及共用 Tag/Filter |
 | Monitor | Focus setup sections、折叠 Review、上方独立 Holdings | Focus/Holdings 实时图；Review 本地 Daily 预览；共用 Tag/Filter |
 
-- Discover 和 Excluded 的 Hidden / Extended / Broken 仅 Scan 展示。Review 不订阅 Longbridge：选择后显示 Daily 日期，禁用 Intraday 周期按钮，提示 `Add to Focus for live data`；加入 Focus 后才开始实时监控。
+- Discover 和 Excluded 的 Hidden / Extended / Broken / Under-50 仅 Scan 展示。Review 不订阅 Longbridge：选择后显示 Daily 日期，禁用 Intraday 周期按钮，提示 `Add to Focus for live data`；加入 Focus 后才开始实时监控。
 - 同 ticker 的 Holdings 仍为独立实时选择。WS 选择携带 `source=holdings` 或 `source=watchlist`；名单刷新、折叠和筛选不得抢走已选持仓的图表。
 - 切换模式同步已打开客户端的展示，后台 Focus 行情和账户刷新持续运行。合成 Scan 标记 MOCK，独立模拟器标记 SIM。
 - 历史 Scan 与有界 `--symbols` 会话禁用名单编辑；模拟器只修改临时 workspace。
@@ -131,7 +131,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 
 ### Section、顺序与选择
 
-- Discover/Focus 按保存的 **Setup** Tag 顺序分组，最后是 Unclassified；Excluded 固定 **Review / Broken / Extended / Hidden**。一只股票可有多个 Tag、一个主 section。
+- Discover/Focus 按保存的 **Setup** Tag 顺序分组，最后是 Unclassified；Excluded 固定 **Review / Broken / Extended / Under-50 / Hidden**。一只股票可有多个 Tag、一个主 section。
 - Scan 与 Monitor 的折叠状态独立。Review 在 Monitor 默认折叠、Scan 默认展开。非搜索状态 setup 空组也显示；搜索只显示有结果的组。
 - 新进入 section 的成员放**队首**，留在同组的成员保留人工顺序。人工主 section 仅当天有效，名单归属和保存顺序按 List 设计执行。
 - Default order 下，允许在 Discover/Focus setup 组内及组间拖动。落点显示行前/行后线；落在组头或空组插入队首。筛选/搜索可见行作为完整组顺序的锚点，松手立即保存。
@@ -142,14 +142,14 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 
 - 两模式使用同一套保存的 Tag/Filter。38 字段目录包含 Market、MA arrangement 和 atomic feature 各组。使用 **CSS 两列 columns** 布局，每组保持完整；不使用横向对齐的 grid，避免短组下面出现空白。
 - 数值条件支持 Any / ≥ / ≤ / range；不同条件 AND，分类多选 OR。缺失值匹配 Any 或显式 Missing。Filter 不移动名单、不改变订阅，被筛掉的成员保留底层归属。
-- Tag 用途固定为 Setup / Extended / Broken / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Default 始终存在、用途 Label、不可改名或删除；Tag 名称唯一，最多十个。
+- Tag 用途固定为 Setup / Extended / Broken / Under-50 / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Default 始终存在、用途 Label、不可改名或删除；Tag 名称唯一，最多十个。
 - 新建克隆已保存条件，用途默认 Setup。条件编辑即时预览；Save 保存并折叠，Cancel 恢复。未保存时切 Tag 需明确丢弃，保存失败保留草稿；名单/排序偏好写入不得覆盖未保存的 Filter 草稿。
 - Tag 外观编辑遵循 [Logo / Icon](#logo--icon)，与本章同一份 Tag 草稿一起保存或恢复；外观编辑保留已保存条件下的人工匹配成员，不切换到纯条件预览。
 - 已保存 Tag 的筛选包含人工补 Tag 成员；未保存条件预览只按草稿条件判断。保存规则由后端重评已有本地数据，UI 筛选不触发下载。
 
 ### 名单操作与批量移动
 
-- `Add to Focus` 清除排除状态并开始实时监控。行 Exclude 将 Discover/Focus 移到 Hidden 七天；Hidden / Extended / Broken 提供 `Release`，当前规则仍可立即重新排除。Review 只有 Add to Focus，可留待处理或规则重分类，没有 Dismiss/Delete。
+- `Add to Focus` 清除排除状态并开始实时监控。行 Exclude 将 Discover/Focus 移到 Hidden 七天；Hidden / Extended / Broken / Under-50 提供 `Release`，当前规则仍可立即重新排除。Review 只有 Add to Focus，可留待处理或规则重分类，没有 Dismiss/Delete。
 - 批量 `Move to Discover` 明确结束 Focus 归属，`Move to Excluded` 表示 Hidden。Select all 勾选当前筛选结果，移动时整块插入队首。日期/名单/Filter 改变清空勾选；Space 切换选中 Scan 行的勾选。
 - 操作即时写入，保存失败保留原名单并显示简短行内错误。workspace/新日变更自动刷新，不增加 Refresh Workspace 按钮。名单选择消失时改选首个可用成员，空名单清图但保留 Search 和新增入口。
 - 手动/Alert 入选：从 Discover/Excluded 移入 Focus 时，统一按 [List 入选规则](list-design.md#统一移入-focus) 重新匹配并插入对应 section 首位。UI 只提交动作并使用后端结果，不继承来源的 Tag/section。

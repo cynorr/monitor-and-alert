@@ -136,7 +136,7 @@ watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 wa
 
 List完整需求见 [list-design.md](list-design.md)。Workspace V3直接维护JSON，statuses包含discover/focus/excluded、主section和当日匹配tags，orders是三名单扁平顺序。旧wait一次归Focus，旧hidden归Excluded/Hidden；读取迁移只在内存，下一次实际分类或编辑同步保存。只需这个明确旧版本迁移，不建立通用migration/repository层。Focus与Excluded跨候选空档继承，Discover只保留当日candidate。Hidden七天内不匹配；非Hidden Excluded可恢复Review，Review不强制过期。七天到期后仍匹配负面即可重新排除，不检查历史条件变化。新section成员放队首，同section人工顺序保留。
 
-Tag role为setup/extended/broken/label，负面Broken优先，Setup顺序决定主section。manual_tags_date/manual_section_date/manual_focus_date只在当前名单交易日有效；旧手动标签不驱动新日。删除Tag或修改role后，失效的人工section回归当前有效setup或unclassified。写失败恢复原内存；沿用同步直接写文件与单watcher，不增加锁、临时文件或写队列。数据缺失不淘汰Focus。
+Tag role为setup/extended/broken/under50/label，负面优先级为broken → extended → under50，Setup顺序决定主section。manual_tags_date/manual_section_date/manual_focus_date只在当前名单交易日有效；旧手动标签不驱动新日。删除Tag或修改role后，失效的人工section回归当前有效setup或unclassified。写失败恢复原内存；沿用同步直接写文件与单watcher，不增加锁、临时文件或写队列。数据缺失不淘汰Focus。
 
 Workbench.start_background先异步补本地成员feature、重新分类，再启动正式Focus行情；本地准备失败保留名单、显示错误并继续原行情与Massive准备。新截面发布、Tag保存和显式编辑后重评；list_state/GET不写盘、不请求下载。DataService只接收Focus，Workbench在Monitor board额外拼Review本地行。Review只用Massive Daily，加入Focus才扩订阅。HTTP/WS选股source区分watchlist与holdings，同symbol持仓仍能看实时图；成员/Review身份变化更新run_id，清WS revision，避免本地预览切实时图时沿用旧来源bars。
 

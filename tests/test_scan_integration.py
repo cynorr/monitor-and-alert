@@ -421,18 +421,28 @@ def test_mock_and_bounded_background_never_run_massive(app_data):
     asyncio.run(scenario())
 
 
-def test_startup_classifies_local_lists_and_keeps_hidden_out_of_matching(app_data):
+@pytest.mark.parametrize('role,name', [('extended', 'Extended'), ('under50', 'Under-50')])
+@pytest.mark.parametrize('trigger', ['startup', 'preferences'])
+def test_local_lists_classify_on_startup_or_tag_save_and_keep_hidden_out_of_matching(app_data, role, name, trigger):
     async def scenario():
         app, brokers = make_app(app_data, mock=False)
-        app.preferences['tags'].append({'id': 'ext', 'name': 'Extended', 'role': 'extended',
-                                        'filters': {'adr20': {'min': 0}}})
         app.workspace.data['statuses']['AAPL'] = {'status': 'excluded', 'section': 'hidden',
                                                  'excluded_at': app.workspace.date, 'status_at': app.workspace.date}
         app.workspace.data['orders']['excluded'] = ['AAPL']
-        await app.start_background()
+        negative = {'id': 'negative', 'name': name, 'role': role, 'filters': {'adr20': {'min': 0}}}
         try:
+            if trigger == 'startup':
+                app.preferences['tags'].append(negative)
+                await app.start_background()
+            else:
+                await app.start_background()
+                preferences = json.loads(json.dumps(app.preferences))
+                preferences['tags'].append(negative)
+                await app.action('preferences', preferences)
+                saved = json.loads(app.preferences_path.read_text())['tags'][-1]
+                assert saved == negative
             assert app.monitor is not None and brokers
-            assert app.workspace.data['statuses']['NVDA']['section'] == 'extended'
+            assert app.workspace.data['statuses']['NVDA']['section'] == role
             assert app.workspace.data['statuses']['NVDA']['status'] == 'excluded'
             assert app.workspace.data['statuses']['AAPL']['section'] == 'hidden'
             assert app.workspace.data['statuses']['AAPL']['tags'] == []

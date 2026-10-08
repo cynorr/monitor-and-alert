@@ -142,16 +142,17 @@ def test_workspace_scope_includes_all_inherited_focus_and_excluded_members(tmp_p
         'FOCUS': {'status': 'focus', 'section': 'unclassified', 'status_at': '2026-09-30'},
         'REVIEW': {'status': 'excluded', 'section': 'review', 'status_at': '2026-09-30'},
         'BROKEN': {'status': 'excluded', 'section': 'broken', 'status_at': '2026-09-30', 'excluded_at': '2026-09-30'},
+        'UNDER': {'status': 'excluded', 'section': 'under50', 'status_at': '2026-09-30', 'excluded_at': '2026-09-30'},
         'HIDDEN': {'status': 'excluded', 'section': 'hidden', 'status_at': '2026-09-29', 'excluded_at': '2026-09-29'},
         'DISCOVER': {'status': 'discover', 'section': 'unclassified', 'status_at': '2026-09-30'},
-    }, 'orders': {'discover': [], 'focus': ['FOCUS'], 'excluded': ['REVIEW', 'BROKEN', 'HIDDEN']}}))
+    }, 'orders': {'discover': [], 'focus': ['FOCUS'], 'excluded': ['REVIEW', 'BROKEN', 'UNDER', 'HIDDEN']}}))
     tracked = scan.workspace_scope(tmp_path / 'days', '2026-10-01')
-    assert tracked == {'FOCUS', 'REVIEW', 'BROKEN', 'HIDDEN'}
+    assert tracked == {'FOCUS', 'REVIEW', 'BROKEN', 'UNDER', 'HIDDEN'}
     source, calendar, now = small_source(tmp_path, [
         (ticker + '.US', 10., 11., 9., 1)
-        for ticker in ('FOCUS', 'REVIEW', 'BROKEN', 'HIDDEN', 'DISCOVER')])
+        for ticker in ('FOCUS', 'REVIEW', 'BROKEN', 'UNDER', 'HIDDEN', 'DISCOVER')])
     snapshot = scan.build_day(source, '2026-10-01', calendar, now, tracked_tickers=tracked)
-    assert snapshot['feature_scope'] == ['BROKEN.US', 'FOCUS.US', 'HIDDEN.US', 'REVIEW.US']
+    assert snapshot['feature_scope'] == ['BROKEN.US', 'FOCUS.US', 'HIDDEN.US', 'REVIEW.US', 'UNDER.US']
     for row in snapshot['rows']:
         assert not row['candidate'] and row['rfl1m_rank'] is None
         if row['symbol'].removesuffix('.US') in tracked:
@@ -160,7 +161,11 @@ def test_workspace_scope_includes_all_inherited_focus_and_excluded_members(tmp_p
             assert 'ema10' not in row
 
 
-def test_publish_classifies_candidates_and_preserves_same_day_manual_focus(tmp_path):
+@pytest.mark.parametrize('section,name,filters,fields', [
+    ('extended', 'Extended', {'extended_k': {'min': 1.5}}, {'extended_k': 2}),
+    ('under50', 'Under-50', {'ma_arrangement': {'values': ['under50']}}, {'ma_arrangement': 'under50'}),
+])
+def test_publish_classifies_candidates_and_preserves_same_day_manual_focus(tmp_path, section, name, filters, fields):
     days = tmp_path / 'days'
     previous = days / '2026-09-30' / 'workspace.json'
     previous.parent.mkdir(parents=True)
@@ -171,17 +176,17 @@ def test_publish_classifies_candidates_and_preserves_same_day_manual_focus(tmp_p
     (tmp_path / 'preferences.json').write_text(json.dumps({
         'activeList': 'wait', 'sort': 'default', 'activeTag': 'default',
         'tags': [{'id': 'default', 'name': 'Default', 'filters': {}},
-                 {'id': 'extended', 'name': 'Extended', 'filters': {'extended_k': {'min': 1.5}}}],
+                 {'id': section, 'name': name, 'filters': filters}],
     }))
     snapshot = {'date': '2026-10-01', 'rows': [
-        {'symbol': 'LOW.US', 'candidate': True, 'extended_k': 2},
+        {'symbol': 'LOW.US', 'candidate': True, **fields},
         {'symbol': 'ALSO.US', 'candidate': False, 'extended_k': 0},
     ]}
     scan.publish_day(days, snapshot)
     current = days / snapshot['date'] / 'workspace.json'
     data = json.loads(current.read_text())
     assert data['statuses']['LOW']['status'] == 'excluded'
-    assert data['statuses']['LOW']['section'] == 'extended'
+    assert data['statuses']['LOW']['section'] == section
     assert data['orders']['focus'] == ['ALSO']
     assert previous.read_bytes() == previous_bytes
     # An explicit same-day admission overrides the negative rule across regeneration.
@@ -192,7 +197,7 @@ def test_publish_classifies_candidates_and_preserves_same_day_manual_focus(tmp_p
     scan.publish_day(days, snapshot)
     regenerated = json.loads(current.read_text())
     assert regenerated['statuses']['LOW']['status'] == 'focus'
-    assert regenerated['statuses']['LOW']['tags'] == ['extended']
+    assert regenerated['statuses']['LOW']['tags'] == [section]
     assert regenerated['orders']['focus'] == ['LOW', 'ALSO']
 
 

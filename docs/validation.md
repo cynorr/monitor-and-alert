@@ -2,6 +2,20 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-08：Under-50 排除用途与自动分类
+
+环境：本机 macOS、Python 3.13、TypeScript、Codex 浏览器与现有正式服务；本地 Massive 最新截面为 2026-10-06，含 12,579 行。验证限于名单分类、偏好保存与界面，不主动请求新的行情数据或创建真实 Alert。
+
+- 为 Under-50 增加独立 `under50` 用途、Excluded 固定 section 和 Tag 编辑选项；现有保存条件 `ma_arrangement = under50` 保持原样，只把当前用户 Tag 的 `role` 从 Setup 改为 Under-50。现有图案与外观保留。
+- 61 项相关 Python 离线用例、12 项 Scan UI 用例及 TypeScript build 通过。覆盖多负面优先级、Focus/Discover/Review 自动排除、Hidden 七天内跳过、七天期限不每日续期、到期重排或释放、恢复 Review、人工 Focus 当天优先、新日继承与完整特征、同日重算、启动/保存 Tag 重评及手动/Alert 统一入选 Focus。
+- 当前真实名单发布结果与本地预期完全一致：Under-50 22 只，来自 Focus 5、Discover 10、Review 7；其余 Excluded 为 Broken 3、Extended 37、Hidden 12、Review 3。22 只均确认 SMA50 高于两条 EMA，且 Growth 三个 RFL 值完整；同时匹配更高优先级负面 Tag 的成员仍留在对应 section。18 份历史 workspace 的 SHA-256 保持不变。
+- 正式服务重启后，真实页面显示 Under-50 22、Release 操作和用途选项；当前 22 只均不在实时白名单。结束时恢复原 Monitor 展示、Discover/Default/RFL1M 偏好，偏好文件除 Under-50 用途外与原文件一致；临时浏览器页已关闭。Quote 为 CONNECTED、Holdings 后台持续运行。
+- 核对现有触发流程：新截面发布、服务启动和保存 Tag 自动分类；Massive 准备仍只由启动或 Refresh/CLI 触发，持续运行没有每日定时器。本轮沿用这个流程。
+
+证据：[真实名单核对](/tmp/monitor-under50-40we4v93/live-report.json)、[最终服务与偏好核对](/tmp/monitor-under50-40we4v93/final-service.json)、[真实页面截图](/tmp/monitor-under50-2026-10-08.jpg)。
+
+未覆盖：等待下一个真实交易日、全部 Longbridge 周期 Ready、真实 Alert 触发/声音、移动端。服务健康检查另有 CRMG 5m 缺少最新 closed 的现有回补提示，不将 Quote 连接状态解释为全部行情完整；未为此扩展本轮验收。未运行全量回归。
+
 ## 2026-10-08：Vol 与五交易日均量比较
 
 环境：macOS、Python 3.13、Longbridge SDK 5.0.0、TypeScript、真实本机服务与 Codex 浏览器；美东 2026-10-07 Regular。行情 API 验收限定 BMNR / MU，历史规则使用现有 Longbridge 和 Massive 缓存，各来源独立核对；未新增或运行 Mock。

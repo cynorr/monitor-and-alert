@@ -99,14 +99,20 @@ test('setup sections preserve Tag order; renamed negative and helper labels rema
         { id: 'default', name: 'Default', filters: {} },
         { id: 'first', name: 'Surf-20', role: 'setup', filters: {} },
         { id: 'negative', name: 'Too far', role: 'extended', filters: {} },
+        { id: 'under', name: 'Below long MA', role: 'under50', filters: {} },
         { id: 'helper', name: 'Higher lows', role: 'label', filters: {} },
         { id: 'second', name: 'Bounce-10', role: 'setup', filters: {} },
     ];
     assert.deepEqual(listSections(true, 'focus', tags).map(section => section.id), ['first','second','unclassified']);
-    assert.deepEqual(listSections(true, 'excluded', tags).map(section => section.id), ['review','broken','extended','hidden']);
+    const excluded = listSections(true, 'excluded', tags);
+    assert.deepEqual(excluded.map(section => section.id), ['review','broken','extended','under50','hidden']);
+    assert.equal(excluded[3].name, 'Under-50');
     assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus','excluded']);
     assert.equal(sectionKey({ status: 'focus', section: 'second', tags: ['first','second'] }), 'focus:second');
     assert.equal(tagRole(tags[2]), 'extended');
+    assert.equal(tagRole(tags[3]), 'under50');
+    assert.equal(tagRole({ id: 'under', name: 'Under-50', filters: {} }), 'under50');
+    assert.equal(tagRole({ id: 'under', name: 'Under-50', role: 'label', filters: {} }), 'label');
 });
 
 test('manual Tags match the saved Tag filter; unsaved rule preview still requires the draft conditions', () => {
