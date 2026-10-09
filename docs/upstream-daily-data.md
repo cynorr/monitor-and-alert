@@ -4,7 +4,7 @@
 
 ## 路径与所有权
 
-- `runtime/massive/daily.sqlite3`：Massive 模块唯一写入，Scan 与 Review 只读。
+- `runtime/massive/daily.sqlite3`：Massive 模块唯一写入，Scan 只读。
 - `runtime/longbridge/bars.sqlite3`：Longbridge 唯一写入，只跟踪当前 Focus 与已接受 Holdings 的并集。
 - `--runtime` 修改整个运行根；显式 `--daily-db` 只读消费外部 SQLite 并禁用内置 Massive 获取。
 

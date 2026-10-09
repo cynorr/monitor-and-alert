@@ -132,8 +132,8 @@ class DataService:
             if section not in (None, 'focus', 'wait', 'unclassified'):
                 self.workspace.move_ticker(ticker, section, 0)
             return {**self.list_state(), 'notice': f"Added {ticker} · {info['name']}"}
-        if action == 'delete':
-            self.workspace.delete_ticker(ticker)
+        if action == 'hide':
+            self.workspace.hide_ticker(ticker)
         elif action == 'move':
             self.workspace.move_ticker(ticker, section, payload.get('index'), list_name=payload.get('list_name', 'focus'))
         elif action == 'keep':

@@ -48,7 +48,7 @@
 
 图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
 
-成交量五日比较的唯一需求见 [Volume comparison](chart-ui.md#volume-comparison)。`calendar.previous_days` 按 candle 日期返回前五个交易日；`indicators.volume_context / volume_comparison` 为同周期建立时间槽索引及均值缓存。Monitor 在历史 revision 变化时重建，open 更新仅读取均值并计算比例；Scan/Review Daily 复用同一函数及已有图表缓存。显示行附带 `volume_comparison: {average: number | null, samples: number, percent: number | null}`，不改 SQLite Bar。chart.ts 在公开十字线回调后按时间戳取得原始显示行，保持比较结果与 Vol 一致；前端只做整数截取和显示。
+成交量五日比较的唯一需求见 [Volume comparison](chart-ui.md#volume-comparison)。`calendar.previous_days` 按 candle 日期返回前五个交易日；`indicators.volume_context / volume_comparison` 为同周期建立时间槽索引及均值缓存。Monitor 在历史 revision 变化时重建，open 更新仅读取均值并计算比例；Scan Daily 复用同一函数及已有图表缓存。显示行附带 `volume_comparison: {average: number | null, samples: number, percent: number | null}`，不改 SQLite Bar。chart.ts 在公开十字线回调后按时间戳取得原始显示行，保持比较结果与 Vol 一致；前端只做整数截取和显示。
 
 chart.ts 的 syncSeries 用公开 data/update API 比较已显示数据：相同时间序列的尾部替换/追加只更新变化项，较早官方修订用 update(row, true)。只有新窗口、时间序列变化或删除点时使用 setData；正常 closed 更新不调用滚动重定位，未知 active volume 只更新 histogram 的 whitespace，不重建 candles/MA。保持 vendor 原样。
 
@@ -64,7 +64,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 - Workbench 持有唯一 Alert Engine，并在正式后台启动/关闭时创建和释放。UI → 同源 Data API → Workbench → Alert Engine → SQLite/后台声音；Alert 不依赖 Scan 算子或图表渲染，不建立第二个进程服务、端口或消息协议。
 - `quotes.py` 继续承担 Quote 的唯一标准化与校验入口，在现有 callback 处派发有效 Regular 最新价。Engine 只接标准化值、报价时间与接收顺序；借用现有 calendar/恢复信号判断交易窗口和重新建立起点，不直接访问 SDK。`pipeline.py` 仍只管理 Massive 准备，与 Alert 检测无关。
-- 当前 scope 由最新 workspace Focus 和按当前纽约日期有效的已接受 Holdings 提供，不能用带 Review 的 `Workbench.symbols` 或 Scan 时返回 null 的显示字段作为白名单。复用 Holdings 现有日期/批次语义，不建第二份账户归属缓存。
+- 当前 scope 由最新 workspace Focus 和按当前纽约日期有效的已接受 Holdings 提供，不能使用 Scan 的展示字段作为白名单。复用 Holdings 现有日期/批次语义，不建第二份账户归属缓存。
 - `alerts/engine.py` 直接管理状态、检测、操作和业务 SQLite，`alerts/sound.py` 管本地声音；函数直接互调，不引入通用 repository、adapter、rules 或恢复框架。UI Alert 交互在 `ui/src/alerts.ts` 内维护：公开 series primitive 的 paneViews 绘制虚线，priceAxisPaneViews 绘制进入价格轴的右箭头，不提供 priceAxisViews 数字标签；应用层 DOM 胶囊使用公开 pane HTMLElement/尺寸/坐标与 primitive.updateAllViews 定位。胶囊与横线共用拖动/删除动作，两图共用 controller 中的改价预览，松手提交一次；不依赖 vendor 内部 DOM。
 - RuntimePaths.alerts_db 为独立 Alert 数据库路径。Alert 与 events 两张业务表保存用户设置及处理状态；前者有独立 ID；Engine 按 symbol 建立内存索引，后者有事件 ID 及 Alert/generation 关联。模式、周期、来源、Scan 日期不参与持久化身份；UI 上下文仍使用原有 request_id/source/socket 检查。
 - SQLite 使用 WAL/FULL，所有修改在同一后台 asyncio loop 内串行提交；触发状态和事件一并提交，之后才播放声音/发送 WS。每份行情仅检查该 symbol 的内存 Active 集合，有实际修改才写库；不保存行情回放日志。事件保留到处理，不以 UI 暂时不可见推断已处理。
@@ -134,11 +134,11 @@ Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一
 
 watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 watcher；线程仅把事件派发回 asyncio loop。默认跟随 days 最新文件；显式 --workspace 监听该文件父目录并固定文件。创建、修改、移动、删除事件触发重读，无定时扫描。自身写入产生的事件在 JSON 相同情况下不重复更新。
 
-List完整需求见 [list-design.md](list-design.md)。Workspace V3直接维护JSON，statuses包含discover/focus/excluded、主section和当日匹配tags，orders是三名单扁平顺序。旧wait一次归Focus，旧hidden归Excluded/Hidden；读取迁移只在内存，下一次实际分类或编辑同步保存。只需这个明确旧版本迁移，不建立通用migration/repository层。Focus与Excluded跨候选空档继承，Discover只保留当日candidate。Hidden七天内不匹配；非Hidden Excluded可恢复Review，Review不强制过期。七天到期后仍匹配负面即可重新排除，不检查历史条件变化。新section成员放队首，同section人工顺序保留。
+List完整需求见 [list-design.md](list-design.md)。Workspace V3直接维护JSON：statuses保存discover/focus/excluded、主section和当日tags；orders维护三名单扁平顺序，excluded_at只属于Hidden。Focus与全部Excluded先跨候选空档继承，Discover只保留当日candidate。inherit_workspace保留到期Hidden供完整特征计算，derive_day_view只读取已分类结果，不处理到期；apply_rules统一判断Hidden期限和机器负面规则，生成完整结果后reclassify一次同步保存。机器排除无期限，确认恢复后候选回Discover、非候选删除；没有已确认负面匹配、且仍有负面规则因缺数据未知时，保留原机器section。AND中已知条件不成立优先于未知结果。新section成员置前，同section人工顺序保留。旧wait归Focus、旧hidden归Excluded/Hidden的现有V2读取迁移只在内存，不建立通用migration层。
 
-preferences 的 activeTag 为 Tag ID 或 null，tags 可为空、最多十个；初始偏好为空选择与空 Tag 数组。前端草稿与基线独立比较，未选 Tag 也可编辑空筛选并保存命名定义；点击已选 Tag 保存 null，规则分类仍读取全部定义。Tag role为setup/extended/broken/under50/label，负面优先级为broken → extended → under50，Setup顺序决定主section。manual_tags_date/manual_section_date/manual_focus_date只在当前名单交易日有效；旧手动标签不驱动新日。删除Tag或修改role后，失效的人工section回归当前有效setup或unclassified。写失败恢复原内存；沿用同步直接写文件与单watcher，不增加锁、临时文件或写队列。数据缺失不淘汰Focus。
+preferences的activeTag为Tag ID或null，tags可为空、最多十个。前端草稿独立，空选择仍可编辑并保存新Tag；点击已选Tag保存null，全部定义仍参与分类。role为setup/extended/broken/under50/label；负面优先级broken → extended → under50，Setup顺序决定主section。manual_tags只允许setup/label，Workbench同时校验，apply_rules清理失效或负面人工ID。manual_tags_date/manual_section_date/manual_focus_date仅当前名单交易日有效；删除或改用途后的人工section回归有效setup/unclassified。写失败恢复原内存，沿用同步保存与单watcher。数据缺失不淘汰Focus。
 
-Workbench.start_background先异步补本地成员feature、重新分类，再启动正式Focus行情；本地准备失败保留名单、显示错误并继续原行情与Massive准备。新截面发布、Tag保存和显式编辑后重评；list_state/GET不写盘、不请求下载。DataService只接收Focus，Workbench在Monitor board额外拼Review本地行。Review只用Massive Daily，加入Focus才扩订阅。HTTP/WS选股source区分watchlist与holdings，同symbol持仓仍能看实时图；成员/Review身份变化更新run_id，清WS revision，避免本地预览切实时图时沿用旧来源bars。
+Workbench.start_background先异步补本地成员feature并分类，再启动正式Focus行情；本地准备失败保留名单、显示错误并继续原行情与Massive准备。新截面成功发布、Tag保存及显式编辑后重评；list_state/GET不写盘、不下载，不增加定时分类。Monitor board只输出Focus，图表统一来自实时DataService；Scan图表使用本地Massive Daily。HTTP/WS保留watchlist/holdings选择来源隔离；_list_context使用日期与Focus成员变化更新run_id并清WS revision。
 
 Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用DataService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有行情循环，按当前成员增删 Quote / Trade 与六周期 candle 订阅；移除时先清 candle，再退订底层行情；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
@@ -180,7 +180,7 @@ list_state增加独立holdings字段：未启用或Scan为null；启用为{data,
 
 workspace.json 的根字段 `pinned:[ticker,...]` 为当日有序软状态；按 ticker 当前归属投影到各 List，保留原 statuses/section/orders。inherit_workspace 在新日清空；apply_rules 去掉消失或跨 List 的成员。pin_ticker/move_pin 使用原同步保存与错误回滚，置顶动作不重跑分类或获取数据。Workbench board 返回 pinned:boolean、pin_index:number|null；独立 DataService 仅在自身附带 Workspace 时提供置顶字段，不覆盖 Workbench 持有的名单状态；list_state 增加 holding_symbols（两模式均提供、含当日清仓）与 current_regular_session（calendar.is_open，不依赖个股Quote）。两字段只提供显示信息，不改变后端名单。
 
-List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,section}`、`{action:"delete",ticker}`、`{action:"move",ticker,list_name,section,index}`（section为潜力Tag ID或unclassified），以及`{action:"tag",ticker,tags:[人工ID]}`、`{action:"keep",ticker}`、`{action:"pin",ticker,pinned:boolean}`、`{action:"pin_move",ticker,index}`。pin_move的index为移除主动ticker后、同List完整置顶区的零基位置（含当前筛选不可见成员）。index 为移除主动ticker后目标section的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
+List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,section}`、`{action:"hide",ticker}`、`{action:"move",ticker,list_name,section,index}`（section为潜力Tag ID或unclassified），以及`{action:"move",tickers,source,target}`（source为三名单，target为discover/focus/hidden；机器Excluded不能手动移到Discover，允许移到Hidden或Focus）、`{action:"tag",ticker,tags:[Setup/Label ID]}`、`{action:"keep",ticker}`、`{action:"pin",ticker,pinned:boolean}`、`{action:"pin_move",ticker,index}`。pin_move的index为移除主动ticker后、同List完整置顶区的零基位置（含当前筛选不可见成员）。index 为移除主动ticker后目标section的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
 
 Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source:"discover",target:"focus"}`。列表状态增加app_mode、date、dates、preferences和mock；历史Scan日期或--symbols不可写。POST /v1/mode切换模式，POST /v1/scan选择/生成日期，POST /v1/preferences同步保存完整偏好；所有写入复用同源检查，body上限64KiB。生成保留同日人工覆盖，同时更新规则标签/分类。
 

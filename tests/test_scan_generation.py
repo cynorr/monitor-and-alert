@@ -140,19 +140,19 @@ def test_workspace_scope_includes_all_inherited_focus_and_excluded_members(tmp_p
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({'version': 3, 'statuses': {
         'FOCUS': {'status': 'focus', 'section': 'unclassified', 'status_at': '2026-09-30'},
-        'REVIEW': {'status': 'excluded', 'section': 'review', 'status_at': '2026-09-30'},
+        'EXTENDED': {'status': 'excluded', 'section': 'extended', 'status_at': '2026-09-30'},
         'BROKEN': {'status': 'excluded', 'section': 'broken', 'status_at': '2026-09-30', 'excluded_at': '2026-09-30'},
         'UNDER': {'status': 'excluded', 'section': 'under50', 'status_at': '2026-09-30', 'excluded_at': '2026-09-30'},
         'HIDDEN': {'status': 'excluded', 'section': 'hidden', 'status_at': '2026-09-29', 'excluded_at': '2026-09-29'},
         'DISCOVER': {'status': 'discover', 'section': 'unclassified', 'status_at': '2026-09-30'},
-    }, 'orders': {'discover': [], 'focus': ['FOCUS'], 'excluded': ['REVIEW', 'BROKEN', 'UNDER', 'HIDDEN']}}))
+    }, 'orders': {'discover': [], 'focus': ['FOCUS'], 'excluded': ['EXTENDED', 'BROKEN', 'UNDER', 'HIDDEN']}}))
     tracked = scan.workspace_scope(tmp_path / 'days', '2026-10-01')
-    assert tracked == {'FOCUS', 'REVIEW', 'BROKEN', 'UNDER', 'HIDDEN'}
+    assert tracked == {'FOCUS', 'EXTENDED', 'BROKEN', 'UNDER', 'HIDDEN'}
     source, calendar, now = small_source(tmp_path, [
         (ticker + '.US', 10., 11., 9., 1)
-        for ticker in ('FOCUS', 'REVIEW', 'BROKEN', 'UNDER', 'HIDDEN', 'DISCOVER')])
+        for ticker in ('FOCUS', 'EXTENDED', 'BROKEN', 'UNDER', 'HIDDEN', 'DISCOVER')])
     snapshot = scan.build_day(source, '2026-10-01', calendar, now, tracked_tickers=tracked)
-    assert snapshot['feature_scope'] == ['BROKEN.US', 'FOCUS.US', 'HIDDEN.US', 'REVIEW.US', 'UNDER.US']
+    assert snapshot['feature_scope'] == ['BROKEN.US', 'EXTENDED.US', 'FOCUS.US', 'HIDDEN.US', 'UNDER.US']
     for row in snapshot['rows']:
         assert not row['candidate'] and row['rfl1m_rank'] is None
         if row['symbol'].removesuffix('.US') in tracked:

@@ -49,7 +49,7 @@ def test_mutations_persist_order_dates_and_preserve_unowned_fields(tmp_path):
     assert ws.add_ticker('HID', 'focus')
     assert ws.data['orders']['focus'][0] == 'HID'
     assert ws.data['statuses']['HID']['extra'] == 2
-    ws.delete_ticker('HID')
+    ws.hide_ticker('HID')
     saved = json.loads(path.read_text())
     assert saved['statuses']['HID']['status'] == 'excluded'
     assert saved['statuses']['HID']['section'] == 'hidden'
@@ -165,16 +165,16 @@ def test_dynamic_universe_retains_existing_state_cancels_removed_and_supports_em
             assert service.sync['PAYS.US', '5m'] is state and state.complete
             pending = asyncio.create_task(asyncio.sleep(60))
             service.sync['NVDA.US', '5m'].task = pending
-            ws.delete_ticker('NVDA')
+            ws.hide_ticker('NVDA')
             await asyncio.sleep(0)
             assert pending.cancelled()
             assert 'NVDA.US' not in service.store.allowed
             assert all(s != 'NVDA.US' for s, _ in service.sync)
             for t in list(ws.tickers()):
-                ws.delete_ticker(t.ticker)
+                ws.hide_ticker(t.ticker)
             assert service.focus[0] == '' and service.board() == [] and service.sync == {}
             ws.add_ticker('AMD', 'wait')
-            assert service.focus[0] == 'AMD.US' and len(service.sync) == 5
+            assert service.focus[0] == 'AMD.US' and len(service.sync) == 6
             assert all(s.pending and s.refresh for s in service.sync.values())
         finally:
             service.store.close()
@@ -282,11 +282,11 @@ def test_list_http_mutations_validation_failure_origin_and_empty_stream(tmp_path
                     message = await stream.receive_json(timeout=2)
                     if message['type'] == 'view': break
                 assert message['request_id'] == 7 and 'bars' in message['charts']['5m']
-                response = await client.post(base + '/v1/list', json={'action': 'delete', 'ticker': 'NVDA'}, headers={'Origin': 'https://outside.example'})
+                response = await client.post(base + '/v1/list', json={'action': 'hide', 'ticker': 'NVDA'}, headers={'Origin': 'https://outside.example'})
                 assert response.status == 403
                 response = await client.post(base + '/v1/list', data='{}', headers={'Content-Type': 'text/plain'})
                 assert response.status == 415
-                response = await client.post(base + '/v1/list', json={'action': 'delete', 'ticker': 'NVDA'})
+                response = await client.post(base + '/v1/list', json={'action': 'hide', 'ticker': 'NVDA'})
                 assert response.status == 200
                 while True:
                     message = await stream.receive_json(timeout=2)

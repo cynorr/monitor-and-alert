@@ -3,7 +3,6 @@ import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
-import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
 import { AlertController } from './alerts.js';
@@ -104,8 +103,8 @@ function state(text, kind = '') {
     }
 }
 function showState(view) {
-    if (appMode === 'scan' || view.read_only_daily) {
-        $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
+    if (appMode === 'scan') {
+        $('daily-state').textContent = view.date ?? '';
         $('intraday-state').textContent = '';
         document.querySelectorAll('.quality').forEach(node => { node.hidden = !view.status.errors.length; node.title = view.status.errors.join('\n'); });
         return;
@@ -137,15 +136,10 @@ function apply(view) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
-    document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     daily.render(view.charts['1d']);
-    if (appMode === 'monitor' && !view.read_only_daily) {
+    if (appMode === 'monitor') {
         intraday.render(view.charts[timeframe]);
         dayLink.restore();
-    }
-    else if (view.read_only_daily) {
-        intraday.reset('review/' + symbol);
-        $('intraday-empty').textContent = 'Add to Focus for live data';
     }
     const extended = extendedQuote(view.quote), quote = extended ?? view.quote.regular;
     document.querySelectorAll('.last-price').forEach(node => node.textContent = money(quote?.last_price));
@@ -171,8 +165,6 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
     timeframe = tf;
     ++epoch;
     currentView = null;
-    const preview = appMode === 'monitor' && isReviewSelection(watchlist.tickers.find(row => row.symbol === next), source);
-    document.querySelectorAll('[data-tf]').forEach(button => { button.disabled = preview; });
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');

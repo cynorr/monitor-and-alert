@@ -76,8 +76,7 @@ class Workbench:
 
     def _list_context(self):
         states = self.workspace.data['statuses']
-        return (self.workspace.date, frozenset(ticker for ticker, state in states.items() if state.get('status') == 'focus'),
-                frozenset(ticker for ticker, state in states.items() if state.get('status') == 'excluded' and state.get('section') == 'review'))
+        return (self.workspace.date, frozenset(ticker for ticker, state in states.items() if state.get('status') == 'focus'))
 
     async def prepare_lists(self):
         """Refresh saved classifications from local Daily; never download on reads."""
@@ -281,13 +280,7 @@ class Workbench:
             result.append({**local.get(row['symbol'], {}), **state, **row,
                            'section': state.get('section', 'unclassified'), 'tags': state.get('tags', []),
                            'manual_tags': state.get('manual_tags', []) if state.get('manual_tags_date') == self.workspace.date else []})
-        if self.only is None:
-            result.extend(row for row in local.values() if row['status'] == 'excluded' and row.get('section') == 'review')
         return result
-
-    def is_review(self, symbol):
-        state = self.workspace.data['statuses'].get(symbol.removesuffix('.US'), {})
-        return state.get('status') == 'excluded' and state.get('section') == 'review'
 
     def previous(self):
         if self.selected_date not in self.previous_cache:
@@ -297,8 +290,7 @@ class Workbench:
     @property
     def symbols(self):
         if self.mode == 'monitor':
-            return list(dict.fromkeys((self.monitor.symbols if self.monitor else []) +
-                                     [row['symbol'] for row in self.scan_board(self.workspace.date) if self.only is None and row['status'] == 'excluded' and row.get('section') == 'review']))
+            return self.monitor.symbols if self.monitor else []
         return [row['symbol'] for row in self.scan_board()]
 
     @property
@@ -323,17 +315,15 @@ class Workbench:
         if self.mode == 'monitor':
             if symbol not in self.symbols:
                 raise ValueError('Ticker is outside this Monitor workspace')
-            if source == 'holdings' or not self.is_review(symbol):
-                self.monitor.select(symbol, timeframe)
+            self.monitor.select(symbol, timeframe)
         elif symbol not in self.symbols:
             raise ValueError('Ticker is outside this Scan workspace')
         self.focus = symbol, timeframe
 
     def view(self, symbol, tf, revisions=None, source='watchlist'):
-        review = self.mode == 'monitor' and source != 'holdings' and self.is_review(symbol)
-        if self.mode == 'monitor' and not review:
+        if self.mode == 'monitor':
             return {**self.monitor.view(symbol, tf, revisions), 'app_mode': 'monitor'}
-        value = self.workspace.date if review else self.selected_date
+        value = self.selected_date
         key = value, symbol
         if key not in self.chart_cache:
             self.chart_cache[key] = daily_chart(self.daily_path, symbol, value, self.calendar)
@@ -341,7 +331,7 @@ class Workbench:
         if revisions and revisions.get('1d') == chart['revision']:
             chart = {key:value for key,value in chart.items() if key not in ('bars','indicators')}
         return {'symbol': symbol, 'timeframe': tf, 'app_mode': self.mode, 'mode': self.mode, 'mock': self.scan_mock,
-                'read_only_daily': review, 'date': value, 'run_id': self.run_id, 'server_time': int(time.time()),
+                'date': value, 'run_id': self.run_id, 'server_time': int(time.time()),
                 'charts': {'1d': chart}, 'summary': summary, 'status': {'stage': 'full','errors': []},
                 'quote': {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}}
 
@@ -382,13 +372,13 @@ class Workbench:
             self.workspace.add_ticker(ticker, 'focus', classification=self.focus_classifications([ticker])[ticker])
             if section != 'unclassified' and existing not in ('discover', 'excluded'):
                 self.workspace.move_ticker(ticker, section, 0)
-        elif action == 'delete':
-            self.workspace.delete_ticker(normalize_ticker(payload['ticker']))
+        elif action == 'hide':
+            self.workspace.hide_ticker(normalize_ticker(payload['ticker']))
         elif action == 'keep':
             self.workspace.keep_ticker(normalize_ticker(payload['ticker']))
         elif action == 'tag':
-            if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags']}:
-                raise ValueError('Unknown Tag')
+            if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags'] if tag['role'] in ('setup', 'label')}:
+                raise ValueError('Manual Tags must be Setup or Label')
             self.workspace.set_manual_tags(normalize_ticker(payload['ticker']), payload['tags'])
         elif action == 'move' and not payload.get('tickers'):
             sections = {'unclassified', 'focus', 'wait'} | {tag['id'] for tag in self.preferences['tags'] if tag['role'] == 'setup'}
@@ -511,8 +501,6 @@ class Workbench:
         if path == '/v1/filter-catalog':
             from .preferences import CATALOG
             return CATALOG
-        if path == '/v1/chart' and self.mode == 'monitor' and self.is_review(query['symbol'][0]):
-            return self.view(query['symbol'][0], query.get('timeframe', ['5m'])[0], source=query.get('source', ['watchlist'])[0])
         if self.mode == 'monitor':
             return await self.monitor.api(path, query)
         if path == '/v1/chart':

@@ -168,7 +168,7 @@ def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data, s
             saved = app.workspace.path.read_bytes()
             await app.action('alerts', {'action':'create','symbol':row['symbol'],'price':15,'mode':'scan'})
             assert app.workspace.path.read_bytes() == saved
-            app.workspace.delete_ticker(ticker)
+            app.workspace.hide_ticker(ticker)
             assert not app.alerts.alerts
             await app.list_action({'action':'move','source':'excluded','target':'focus','tickers':[ticker]})
             assert app.workspace.data['statuses'][ticker]['section'] == 'first'

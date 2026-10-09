@@ -104,7 +104,6 @@ export type View = {
     app_mode?: 'scan' | 'monitor';
     mock?: boolean;
     date?: string;
-    read_only_daily?: boolean;
     charts: Record<string, ChartData>;
     quote: Quote;
     summary: {

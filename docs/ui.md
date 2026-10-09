@@ -54,9 +54,8 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | 场景 | 当前图形 | 含义 |
 | --- | --- | --- |
 | 各 List 置顶 | 向上箭头推至顶线，置顶后蓝色、改为向下取消箭头 | Pin / Unpin：仅改变当日显示位置，保留 section |
-| Discover / Focus 行操作 | 轮廓垃圾桶 | Exclude：移到 Hidden 七天，**不是永久删除股票或数据** |
-| Excluded 的 Hidden / Extended / Broken / Under-50 行操作 | `↩` | Release：解除排除，随后按当前规则重新分类 |
-| Review 行操作 | `+` | Add to Focus，开始实时监控 |
+| Discover / Focus 行操作 | 轮廓垃圾桶 | Move to Hidden：人工屏蔽七个自然日 |
+| Excluded / Hidden 行操作 | `↩` | Release：提前结束屏蔽，仅当天候选回 Discover，再按当前规则分类 |
 | Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
@@ -64,7 +63,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | 图表 / 名单错误 | `!` | 提供当前错误详情，不扩展错误判断范围 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
-- 置顶箭头位于原有行操作左侧，按钮之间留 **10px** 空隙；Web 置顶/垃圾桶按钮为 **24×24px**，图形 **16×16px**；Review 的加号复用共用新增按钮。未置顶时 hover/键盘 focus 可见，置顶后持续显示蓝色，并提供 Unpin 名称和 pressed 状态。
+- 置顶箭头位于原有行操作左侧，按钮之间留 **10px** 空隙；Web 置顶/垃圾桶按钮为 **24×24px**，图形 **16×16px**。未置顶时 hover/键盘 focus 可见，置顶后持续显示蓝色，并提供 Unpin 名称和 pressed 状态。
 - 操作使用完整的英文说明和可访问名称，不能仅靠垃圾桶或 `+` 猜测结果。Tag 定义的 Delete 当前是文字按钮，与名单行的垃圾桶操作不同。
 
 ### Alert 图形
@@ -78,7 +77,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Alert 卡片关闭 | `×` | 手动处理该事件 |
 | Alert 卡片跳转 | `↗` | 打开对应 Monitor 图表并处理事件 |
 
-Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶仍按名单生命周期排除 symbol。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
+Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶按名单生命周期将 symbol 移入 Hidden。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
 
 ### 品牌与平台实现
 
@@ -104,9 +103,9 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 | 模式 | 名单 | 数据与控件 |
 | --- | --- | --- |
 | Scan | Discover / Focus / Excluded 三个入口 | 本地 Massive Daily；日期、Refresh Scan、RFL 排序、批量选择/移动，以及共用 Tag/Filter |
-| Monitor | Focus setup sections、折叠 Review、上方独立 Holdings | Focus/Holdings 实时图；Review 本地 Daily 预览；共用 Tag/Filter |
+| Monitor | Focus setup sections、上方独立 Holdings | 实时 Daily/Intraday；共用 Tag/Filter |
 
-- Discover 和 Excluded 的 Hidden / Extended / Broken / Under-50 仅 Scan 展示。Review 不订阅 Longbridge：选择后显示 Daily 日期，禁用 Intraday 周期按钮，提示 `Add to Focus for live data`；加入 Focus 后才开始实时监控。
+- Discover 与全部 Excluded 仅 Scan 展示本地 Massive Daily；明确加入 Focus 后开始实时监控。
 - 所有常规 List（Scan 与 Monitor）在前端屏蔽当前 Holdings 已有 symbol，含仅保留当天的清仓批次；可见计数、筛选、搜索、导航和批量操作使用同一屏蔽结果。后端名单、归属、Tag、订阅与原有顺序不变。
 - 同 ticker 的 Holdings 仍为独立实时选择。WS 选择携带 `source=holdings` 或 `source=watchlist`；名单刷新、折叠和筛选不得抢走已选持仓的图表。
 - 切换模式同步已打开客户端的展示，后台 Focus 行情和账户刷新持续运行。合成 Scan 标记 MOCK，独立模拟器标记 SIM。
@@ -122,17 +121,17 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 - 同 ticker 只有一行，固定行高 **28px**，主体数据列保持同一水平行；Scan Growth、Tags 与行操作不换行、不增加副标题。
 - **仅 Scan** 的 Growth 依次显示 **1m / 3m / 6m** 三个值，不显示周期 key，以浅色 `|` 分隔。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
 - Tags 列显示轮廓 glyph，图案、尺寸与配色统一见 [Logo / Icon](#logo--icon)。保持 **110px** 列宽下限并为编辑按钮留空隙；最多显示三个 glyph，其余用小号 `+N`，悬停列出完整剩余标签。glyph 悬停显示完整名称与人工 `today` 状态，人工补充仅当日有效，不额外使用蓝色 badge。Tags 与 `+N` 均不换行、不增加行高，不增加测宽或 ResizeObserver。
-- Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑仅修改当日人工补充，Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
+- Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑只提供 Setup/Label，修改当日人工补充；Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
 - NEW / RETURNED 使用 Symbol 旁的小标记；NEW 使用与 EMA10 一致的蓝色 **#2962ff**，RETURNED 保持灰色。ticker 不显示 `.US`。Scan 的成员勾选与图表选中互相独立。
-- Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。Review 显示本地 Daily close，实时涨幅列留空。
+- Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。
 - 选中行保留圆角黑色内边框，不改变背景；仅未选中 hover 行使用灰背景。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
 
 ### Section、顺序与选择
 
-- Discover/Focus 按保存的 **Setup** Tag 顺序分组，最后是 Unclassified；Excluded 固定 **Review / Broken / Extended / Under-50 / Hidden**。一只股票可有多个 Tag、一个主 section。
-- 置顶是独立显示状态，不是 Tag 定义或 section：每个 List 的 Pinned 区域位于该 List 所有 section 之前，支持多个 ticker；原 section 内不重复显示。取消置顶回到仍属的 section 与其原有顺序。置顶遵循 Filter 和持仓屏蔽。Scan/Monitor 共用保存顺序，置顶区可拖动及 Shift+上下重排，不受 RFL 排序影响。Monitor 的 Focus 与 Excluded/Review 各有自己的置顶区。
+- Discover/Focus 按保存的 **Setup** Tag 顺序分组，最后是 Unclassified；Excluded 固定 **Broken / Extended / Under-50 / Hidden**。一只股票可有多个 Tag、一个主 section。
+- 置顶是独立显示状态，不是 Tag 定义或 section：每个 List 的 Pinned 区域位于该 List 所有 section 之前，支持多个 ticker；原 section 内不重复显示。取消置顶回到仍属的 section 与其原有顺序。置顶遵循 Filter 和持仓屏蔽。Scan/Monitor 共用保存顺序，置顶区可拖动及 Shift+上下重排，不受 RFL 排序影响。Monitor 只展示 Focus 的置顶区。
 - Section 之间不画水平线，以标题行和间距区分。
-- Scan 与 Monitor 的折叠状态独立。Review 在 Monitor 默认折叠、Scan 默认展开。非搜索状态 setup 空组也显示；搜索只显示有结果的组。
+- Scan 与 Monitor 的折叠状态独立。非搜索状态 setup 空组也显示；搜索只显示有结果的组。
 - 新进入 section 的成员放**队首**，留在同组的成员保留人工顺序。人工主 section 仅当天有效，名单归属和保存顺序按 List 设计执行。
 - Default order 下，允许在 Discover/Focus setup 组内及组间拖动。落点显示行前/行后线；落在组头或空组插入队首。筛选/搜索可见行作为完整组顺序的锚点，松手立即保存。
 - RFL1M/3M/6M 排序仅改变显示，禁用 Scan 普通 section 人工重排；Excluded 普通分组由规则决定，不提供人工排序。置顶区顺序独立。
@@ -151,14 +150,14 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 
 ### 名单操作与批量移动
 
-- `Add to Focus` 清除排除状态并开始实时监控。行 Exclude 将 Discover/Focus 移到 Hidden 七天；Hidden / Extended / Broken / Under-50 提供 `Release`，当前规则仍可立即重新排除。Review 只有 Add to Focus，可留待处理或规则重分类，没有 Dismiss/Delete。
-- 批量 `Move to Discover` 明确结束 Focus 归属，`Move to Excluded` 表示 Hidden。Select all 勾选当前筛选结果，移动时整块插入队首。日期/名单/Filter 改变清空勾选；Space 切换选中 Scan 行的勾选。
+- `Add to Focus` 清除排除状态并开始实时监控。Discover/Focus 的行垃圾桶提示 `Move to Hidden for 7 days`，只移到 Hidden；仅 Hidden 提供 `Release`。机器 Broken/Extended/Under-50 没有人工 Release 行操作。
+- 批量 `Move to Discover` 结束 Focus 归属或提前释放 Hidden；选择包含机器排除时禁用此按钮。`Move to Hidden` 从 Discover/Focus/机器 Excluded 明确屏蔽七个自然日；仅勾选 Hidden 时禁用。`Move to Focus` 保留明确人工入选。Select all 勾选当前可见筛选结果，移动时整块插入队首。日期/名单/Filter 改变清空勾选；Space 切换选中 Scan 行的勾选。
 - 操作即时写入，保存失败保留原名单并显示简短行内错误。workspace/新日变更自动刷新，不增加 Refresh Workspace 按钮。名单选择消失时改选首个可用成员，空名单清图但保留 Search 和新增入口。
 - 手动/Alert 入选：从 Discover/Excluded 移入 Focus 时，统一按 [List 入选规则](list-design.md#统一移入-focus) 重新匹配并插入对应 section 首位。UI 只提交动作并使用后端结果，不继承来源的 Tag/section。
 
 ### Search 与 Add
 
-- List 模块的 Tag 新增、section 新增和 Review Add to Focus 只使用一套加号按钮样式：26×26px、21px 字号、圆形 hover 背景；Tag 与 section 加号距面板右边同为8px。
+- List 模块的 Tag 新增与 section 新增只使用一套加号按钮样式：26×26px、21px 字号、圆形 hover 背景；Tag 与 section 加号距面板右边同为8px。
 - Search 与可编辑 Focus setup 组的 `+` 共用唯一行内输入，placeholder 始终为 `Search`，不使用新增弹窗。`/` 随时清空并开始 Focus 搜索；Focus 组内 `+` 指定该 section 为新增目标。Esc 退出并恢复全名单。
 - 即时筛选本地 ticker，仅显示匹配组，无空组或 No matches；没有本地结果时隐藏报价列头。搜索临时展示折叠组，选中结果只展开当前模式的对应组。
 - 没有精确本地 ticker 时，停输一秒发起精确查询：Scan 读本地 Daily，Monitor 经后端官方 static_info。查询不保存、不订阅；输入变化或退出后丢弃旧响应。

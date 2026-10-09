@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { matchesFilters, sliderValues } from '../public/filters.js';
 import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
 import { scanProgress, selectionRequest } from '../public/types.js';
-import { collapseKey, growthValue, isReviewSelection, listSections, sectionKey } from '../public/board.js';
+import { collapseKey, growthValue, listSections, sectionKey } from '../public/board.js';
 import { matchesTag, ScanControls } from '../public/scan.js';
 import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
@@ -104,9 +104,9 @@ test('setup sections preserve Tag order; renamed negative and helper labels rema
     ];
     assert.deepEqual(listSections(true, 'focus', tags).map(section => section.id), ['first','second','unclassified']);
     const excluded = listSections(true, 'excluded', tags);
-    assert.deepEqual(excluded.map(section => section.id), ['review','broken','extended','under50','hidden']);
-    assert.equal(excluded[3].name, 'Under-50');
-    assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus','excluded']);
+    assert.deepEqual(excluded.map(section => section.id), ['broken','extended','under50','hidden']);
+    assert.equal(excluded[2].name, 'Under-50');
+    assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus']);
     assert.equal(sectionKey({ status: 'focus', section: 'second', tags: ['first','second'] }), 'focus:second');
     assert.equal(tagRole(tags[1]), 'extended');
     assert.equal(tagRole(tags[2]), 'under50');
@@ -149,21 +149,13 @@ test('appearance edits save independently, survive renaming, and preserve manual
 });
 
 
-test('Scan and Monitor fold independently; the same symbol keeps Review preview separate from Holdings live selection', () => {
-    const folded = new Set([collapseKey(false, 'excluded:review')]);
-    assert.ok(folded.has(collapseKey(false, 'excluded:review')));
-    assert.equal(folded.has(collapseKey(true, 'excluded:review')), false);
-    folded.add(collapseKey(true, 'focus:surf'));
-    assert.equal(folded.has(collapseKey(false, 'focus:surf')), false);
-    const row = { symbol: 'XYZ.US', status: 'excluded', section: 'review' };
-    assert.ok(isReviewSelection(row, 'watchlist'));
-    assert.equal(isReviewSelection(row, 'holdings'), false);
-    const preview = selectionRequest('XYZ.US', '5m', 1, 'monitor', 'watchlist');
-    const live = selectionRequest('XYZ.US', '5m', 2, 'monitor', 'holdings');
-    assert.equal(preview.symbol, live.symbol);
-    assert.equal(preview.source, 'watchlist');
-    assert.equal(live.source, 'holdings');
-    assert.equal(live.request_id, 2);
+test('Scan and Monitor fold independently; selection retains Holdings identity', () => {
+    const folded = new Set([collapseKey(false, 'focus:surf')]);
+    assert.equal(folded.has(collapseKey(true, 'focus:surf')), false);
+    const selection = selectionRequest('XYZ.US', '5m', 2, 'monitor', 'holdings');
+    assert.equal(selection.symbol, 'XYZ.US');
+    assert.equal(selection.source, 'holdings');
+    assert.equal(selection.request_id, 2);
 });
 
 test('Growth formats the raw return percentage without changing its meaning at the multiple threshold', () => {

@@ -123,11 +123,11 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .positive { color: #008f83; }
 .negative { color: #df4543; }
 .row-actions { display: flex; align-items: center; gap: 10px; }
-.delete-ticker, .pin-ticker { width: 24px; height: 24px; color: #7a838e; }
+.hide-ticker, .release-ticker, .pin-ticker { width: 24px; height: 24px; color: #7a838e; }
 .row-actions button { opacity: 0; }
 .symbol-row:hover .row-actions button, .symbol-row:focus-within .row-actions button, .pin-ticker[aria-pressed="true"] { opacity: 1; }
 .pin-ticker:hover, .pin-ticker[aria-pressed="true"] { color: #2962ff; background: #eaf1ff; }
-.delete-ticker:hover { color: #d33838; background: #ffe9e9; }
+.hide-ticker:hover { color: #d33838; background: #ffe9e9; }
 .dragging { opacity: .45; }
 .drop-before { box-shadow: inset 0 2px #2962ff; }
 .drop-after { box-shadow: inset 0 -2px #2962ff; }
@@ -175,7 +175,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .holdings-table.holdings-regular tr > :nth-child(8) { display: none; }
 .holdings-table tfoot td { border-top: 3px double var(--border); font-weight: 600; padding-top: 8px; }
 
-/* Scan reuses the Daily panel and watchlist, with a closed-day review sidebar. */
+/* Scan reuses the Daily panel and watchlist with completed-day data. */
 .mode-switch, .scan-pills { display: flex; gap: 3px; align-items: center; }
 .mode-switch { background: var(--surface-muted); border-radius: 999px; padding: 3px; }
 .mode-switch button, .scan-pills button { border-radius: 999px; padding: 5px 9px; font-size: var(--font-row); white-space: nowrap; }

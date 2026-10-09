@@ -1,8 +1,8 @@
 {
   "status": "OK",
   "start_date": "2024-07-12",
-  "end_date": "2026-10-07",
-  "resultsCount": 3465,
+  "end_date": "2026-10-08",
+  "resultsCount": 3469,
   "results": [
     {
       "id": "E69d6ca86b3758d1626b2a0fd5b12cefe0ac75be322fe36b805b5597178356118",
@@ -16403,7 +16403,7 @@
       "historical_adjustment_factor": 238.095238
     },
     {
-      "id": "E308f13316ea4bc6a0e142cd9d19dd4a9927c5885576f92242eb719c21feb6b1b",
+      "id": "Eddddd6dec896dca093b95f4526cc5afeb762587883b6863d92914a0c1d8c8008",
       "execution_date": "2025-10-27",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -19130,7 +19130,7 @@
       "historical_adjustment_factor": 6.0
     },
     {
-      "id": "Ed26e8dac7dc7cf22ea7996fd78592034173187e7452c0b49109838f6408815a1",
+      "id": "Ed2efadc793f49a38bff002616b5acf9e8117c8b35c270ab7c545269c6aa26928",
       "execution_date": "2026-01-02",
       "split_from": 30.0,
       "split_to": 1.0,
@@ -19271,7 +19271,7 @@
       "split_to": 8.0,
       "ticker": "IBIDY",
       "adjustment_type": "forward_split",
-      "historical_adjustment_factor": 0.125
+      "historical_adjustment_factor": 0.0625
     },
     {
       "id": "E48e44b1448b773e7c07ddc880f3ff8323f5caf787d3d70a1920eb4d8d093cd1b",
@@ -20477,7 +20477,7 @@
       "split_to": 10.0,
       "ticker": "KXIAY",
       "adjustment_type": "forward_split",
-      "historical_adjustment_factor": 0.1
+      "historical_adjustment_factor": 0.033333
     },
     {
       "id": "E2e2d0dfd2ffa57fbbf2a5f4137314b83e1423f14deed40c5d69d083c2b888c2a",
@@ -23855,7 +23855,7 @@
       "historical_adjustment_factor": 25.0
     },
     {
-      "id": "Ef42e81b29689efc7e0db8f11354194b26fa825d40d3a87fcd00ee0b24384a7cf",
+      "id": "E4727fb74a1d41d26ca96d167dcf5dd266792fe2b24a38cd60dd8147f1931e312",
       "execution_date": "2026-04-30",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -25007,6 +25007,15 @@
       "historical_adjustment_factor": 20.0
     },
     {
+      "id": "E11ce7ca91ce71ea6aad97d3c6fd033691277d2de8bec14369587ec41db243096",
+      "execution_date": "2026-05-27",
+      "split_from": 2.0,
+      "split_to": 1.0,
+      "ticker": "SDP",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 2.0
+    },
+    {
       "id": "E79e32768b8bc8b726d4057526c46e7c651746423d82d6124a9bdc76cfa983b9c",
       "execution_date": "2026-05-28",
       "split_from": 3.5,
@@ -25131,15 +25140,6 @@
       "ticker": "SCO",
       "adjustment_type": "reverse_split",
       "historical_adjustment_factor": 4.0
-    },
-    {
-      "id": "E11ce7ca91ce71ea6aad97d3c6fd033691277d2de8bec14369587ec41db243096",
-      "execution_date": "2026-05-28",
-      "split_from": 2.0,
-      "split_to": 1.0,
-      "ticker": "SDP",
-      "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 2.0
     },
     {
       "id": "E19b2650d1050f731992062cf0be113669958d0f1cf263d4fea43cbd2c38e9f2c",
@@ -31188,6 +31188,42 @@
       "ticker": "TOPPY",
       "adjustment_type": "forward_split",
       "historical_adjustment_factor": 0.5
+    },
+    {
+      "id": "Ee8bb6d6182c7716648fb5368586a129f37fa22c926d684a3540e989a13c93ec4",
+      "execution_date": "2026-10-08",
+      "split_from": 1600.0,
+      "split_to": 1.0,
+      "ticker": "BSFC",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 1600.0
+    },
+    {
+      "id": "E220a2a538b3fba9c0310510835d4808b92ec390c6608f8506d1bcd6101c84500",
+      "execution_date": "2026-10-08",
+      "split_from": 10.0,
+      "split_to": 1.0,
+      "ticker": "GLE",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 10.0
+    },
+    {
+      "id": "Ee838be55900ea4159e593a846fafb51945094af7b0b15cad0338cf52107f5f3b",
+      "execution_date": "2026-10-08",
+      "split_from": 5.0,
+      "split_to": 1.0,
+      "ticker": "MGF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 5.0
+    },
+    {
+      "id": "Ed93f14c8546bae5dc8f0789e0f0ea1294a80a4b93efe652135a8fc239a4e91c1",
+      "execution_date": "2026-10-08",
+      "split_from": 6.0,
+      "split_to": 1.0,
+      "ticker": "MIN",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 6.0
     }
   ]
 }

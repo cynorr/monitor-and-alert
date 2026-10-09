@@ -15,6 +15,7 @@ from data_service.indicators import daily_summary
 from data_service.preferences import INITIAL_PREFERENCES, validate_preferences
 from data_service.scan import build_day, daily_chart, publish_day, read_snapshot, candidates
 from data_service.workbench import Workbench
+from data_service.list_rules import apply_rules
 from data_service.workspace import Workspace, derive_day_view, inherit_workspace
 from scripts.build_scan_mock import build_mock
 from simulator.market import Market
@@ -61,10 +62,13 @@ def test_hidden_calendar_boundary_inheritance_and_carried():
             'orders': {'focus':['CARRY'], 'wait':[], 'hidden':['A']}}
     hidden = derive_day_view('2026-09-29', {'A','NEW'}, {'A'}, data)
     assert hidden.excluded == ('A',) and hidden.new == {'NEW'}
-    returned = derive_day_view('2026-09-30', {'A'}, {'A'}, data)
+    inherited = inherit_workspace(data, {'A'}, {'A'}, '2026-09-30')
+    assert 'A' in inherited['statuses']
+    classified = apply_rules(inherited, {'date': '2026-09-30', 'rows': [{'symbol': 'A.US', 'candidate': True}]}, {'tags': []})
+    returned = derive_day_view('2026-09-30', {'A'}, {'A'}, classified)
     assert returned.returned == {'A'} and 'A' in returned.discover and not returned.excluded
     inherited = inherit_workspace(data, {'A'}, {'A'}, '2026-10-01')
-    assert set(inherited['statuses']) == {'CARRY'} and inherited['carried'] == ['CARRY']
+    assert set(inherited['statuses']) == {'CARRY', 'A'} and inherited['carried'] == ['CARRY']
     assert 'A' in inherit_workspace(data, set(), {'A'}, '2026-09-29')['statuses']
 
 
@@ -79,14 +83,14 @@ def test_batch_move_once_and_same_day_generation_keeps_manual_state(app_data):
     ws.move_members(moving, 'discover', 'focus', members, set())
     assert ws.data['orders']['focus'][:2] == moving and len(events) == 1
     before = ws.path.read_bytes()
-    with pytest.raises(ValueError, match='Selection'):
+    with pytest.raises(ValueError, match='destination'):
         ws.move_members(moving, 'discover', 'wait', members, set())
     assert ws.path.read_bytes() == before
     publish_day(ws.root, snapshot)
     assert ws.path.read_bytes() == before
     ws.move_members(['PAYS'], 'focus', 'hidden', members, set())
     assert 'PAYS' in derive_day_view(ws.date, members, set(), ws.data).excluded
-    ws.move_members(['PAYS'], 'hidden', 'discover', members, set())
+    ws.move_members(['PAYS'], 'excluded', 'discover', members, set())
     assert 'PAYS' not in ws.data['statuses'] and 'PAYS' not in ws.data['orders']['discover']
 
 
@@ -453,41 +457,6 @@ def test_local_lists_classify_on_startup_or_tag_save_and_keep_hidden_out_of_matc
     asyncio.run(scenario())
 
 
-def test_review_preview_holdings_source_and_focus_admission_share_only_intended_quotes(app_data):
-    async def scenario():
-        app, brokers = make_app(app_data)
-        app.workspace.data['statuses']['AAPL'] = {'status': 'excluded', 'section': 'review',
-                                                 'status_at': app.workspace.date, 'tags': []}
-        app.workspace.data['orders']['excluded'] = ['AAPL']
-        await app.prepare_lists()
-        await app.switch_mode('monitor')
-        try:
-            assert any(row['ticker'] == 'AAPL' and row['section'] == 'review' for row in app.list_state()['board'])
-            assert 'AAPL.US' in app.symbols and 'AAPL.US' not in app.monitor.symbols
-            before = list(brokers[0].calls)
-            app.select('AAPL.US', '5m')
-            preview = app.view('AAPL.US', '5m')
-            assert preview['read_only_daily'] and set(preview['charts']) == {'1d'}
-            assert brokers[0].calls == before and 'AAPL.US' not in brokers[0].allowed
-
-            app.monitor.update_holdings(['AAPL.US'])
-            app.select('AAPL.US', '5m', source='holdings')
-            live = app.view('AAPL.US', '5m', source='holdings')
-            assert not live.get('read_only_daily') and '5m' in live['charts']
-            assert app.view('AAPL.US', '5m')['read_only_daily']
-            assert not (await app.api('/v1/chart', {'symbol': ['AAPL.US'], 'source': ['holdings']})).get('read_only_daily')
-
-            old_run = app.run_id
-            await app.list_action({'action': 'move', 'source': 'excluded', 'target': 'focus', 'tickers': ['AAPL']})
-            assert app.run_id != old_run
-            assert app.workspace.data['statuses']['AAPL']['status'] == 'focus'
-            assert 'AAPL.US' in app.monitor.symbols
-            assert not app.view('AAPL.US', '5m').get('read_only_daily')
-        finally:
-            await app.close()
-    asyncio.run(scenario())
-
-
 def test_shared_actions_save_primary_section_manual_tags_and_daily_exclusion(app_data):
     async def scenario():
         app, brokers = make_app(app_data)
@@ -503,9 +472,11 @@ def test_shared_actions_save_primary_section_manual_tags_and_daily_exclusion(app
         await app.list_action({'action': 'tag', 'ticker': 'TSLA', 'tags': ['setup']})
         row = next(row for row in app.scan_board() if row['ticker'] == 'TSLA')
         assert row['tags'] == ['setup'] and row['manual_tags'] == ['setup']
-        await app.list_action({'action': 'tag', 'ticker': 'NVDA', 'tags': ['ext']})
-        assert app.workspace.data['statuses']['NVDA']['section'] == 'extended'
-        await app.list_action({'action': 'delete', 'ticker': 'TSLA'})
+        before = app.workspace.path.read_bytes()
+        with pytest.raises(ValueError, match='Setup or Label'):
+            await app.list_action({'action': 'tag', 'ticker': 'NVDA', 'tags': ['ext']})
+        assert app.workspace.path.read_bytes() == before
+        await app.list_action({'action': 'hide', 'ticker': 'TSLA'})
         assert app.workspace.data['statuses']['TSLA']['section'] == 'hidden'
         assert not brokers
     asyncio.run(scenario())

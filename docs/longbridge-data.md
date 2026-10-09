@@ -6,7 +6,7 @@
 
 Longbridge 服务 Monitor 的 Daily / Intraday 图表、实时报价、持仓行情与 Alert。SQLite 是可重建的近期 closed 行情缓存。当前窗口可用于相同周期、相同 Regular 时段的盘中成交量比较；不扩展为长期历史归档或下载研究系统。
 
-只请求和订阅当前 Focus 与当前 Holdings 的并集，含仅保留当天的已清仓批次；同 ticker 共用底层行情。Discover、Excluded（含 Review）使用本地 Massive Daily。Scan/Monitor 切换只改变展示，正式服务的行情、Alert 与账户刷新持续后台运行，关闭网页也不停止服务。
+只请求和订阅当前 Focus 与当前 Holdings 的并集，含仅保留当天的已清仓批次；同 ticker 共用底层行情。Discover、Excluded使用本地 Massive Daily。Scan/Monitor 切换只改变展示，正式服务的行情、Alert 与账户刷新持续后台运行，关闭网页也不停止服务。
 
 Scan 使用 Massive，Monitor 使用 Longbridge；两源分别存库，仅共用 Bar、读取、指标和图表。
 

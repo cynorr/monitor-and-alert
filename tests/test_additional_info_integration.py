@@ -16,8 +16,8 @@ def workbench(tmp_path, monkeypatch):
     day = tmp_path / 'days' / '2026-09-30'
     day.mkdir(parents=True)
     atomic_json(day / 'workspace.json', {
-        'version': 3, 'statuses': {'XYZ': {'status': 'excluded', 'section': 'review'}},
-        'orders': {'discover': [], 'focus': [], 'excluded': ['XYZ']},
+        'version': 3, 'statuses': {'XYZ': {'status': 'focus', 'section': 'unclassified'}},
+        'orders': {'discover': [], 'focus': ['XYZ'], 'excluded': []},
     })
     atomic_json(day / 'scan.json', {'date': '2026-09-30', 'mock': True, 'rows': [
         {'symbol': 'XYZ.US', 'candidate': False, 'close': 10, 'adr20': 5, 'adv20': 6000000}

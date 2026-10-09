@@ -27,7 +27,7 @@
 ## 创建时的名单处理
 
 - 当前 Focus 或 Holdings（含当天清仓保留的 symbols）上创建 Alert，无需新增名单归属。Monitor 的 Holdings-only 选择保持独立，不强制加入 Focus。
-- 在 Scan 的 Discover 或任一 Excluded section（包括 Review、Hidden、Extended、Broken、Under-50）图表上创建 Alert，立即将该 symbol 移入当前 Focus，然后保存 Alert；即使它同时属于 Holdings，这次 Scan 操作也执行入选 Focus。
+- 在 Scan 的 Discover 或任一 Excluded section（包括 Hidden、Extended、Broken、Under-50）图表上创建 Alert，立即将该 symbol 移入当前 Focus，然后保存 Alert；即使它同时属于 Holdings，这次 Scan 操作也执行入选 Focus。
 - 入选不弹确认、不等待下一次扫描，不依靠触发报警才移动。创建完成仍保持 Scan 展示及当前 symbol 选择，新归属及时同步。
 - Alert 入选与手动 Add/Move to Focus 共用 [统一移入 Focus](list-design.md#统一移入-focus) 的清理、重新匹配与 section 首位插入规则，Alert 不维护另一套 Tag 分类算法。
 - 已经属于 Focus 的 symbol 再创建 Alert，不清空其 Tag、人工 section 或现有排序。

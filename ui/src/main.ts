@@ -3,7 +3,6 @@ import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist, type ListState } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
-import { isReviewSelection } from './board.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
 import { AlertController, type AlertEvent, type AlertState } from './alerts.js';
@@ -85,8 +84,8 @@ function state(text: string, kind = '') {
     }
 }
 function showState(view: View) {
-    if (appMode === 'scan' || view.read_only_daily) {
-        $('daily-state').textContent = (view.read_only_daily ? 'Daily preview · ' : '') + (view.date ?? '');
+    if (appMode === 'scan') {
+        $('daily-state').textContent = view.date ?? '';
         $('intraday-state').textContent = '';
         document.querySelectorAll<HTMLElement>('.quality').forEach(node => { node.hidden = !view.status.errors.length; node.title = view.status.errors.join('\n'); });
         return;
@@ -110,10 +109,8 @@ function apply(view: View) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
     currentView = view;
-    document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.disabled = view.read_only_daily === true; });
     daily.render(view.charts['1d']);
-    if (appMode === 'monitor' && !view.read_only_daily) { intraday.render(view.charts[timeframe]); dayLink.restore(); }
-    else if (view.read_only_daily) { intraday.reset('review/' + symbol); $('intraday-empty').textContent = 'Add to Focus for live data'; }
+    if (appMode === 'monitor') { intraday.render(view.charts[timeframe]); dayLink.restore(); }
     const extended = extendedQuote(view.quote), quote = extended ?? view.quote.regular;
     document.querySelectorAll<HTMLElement>('.last-price').forEach(node => node.textContent = money(quote?.last_price));
     document.querySelectorAll<HTMLElement>('.session').forEach(node => { node.hidden = !extended; node.textContent = extended?.trade_session.toUpperCase() ?? ''; });
@@ -137,8 +134,6 @@ function select(next: string, tf: string, source: 'watchlist' | 'holdings' = sel
     timeframe = tf;
     ++epoch;
     currentView = null;
-    const preview = appMode === 'monitor' && isReviewSelection(watchlist.tickers.find(row => row.symbol === next), source);
-    document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.disabled = preview; });
     daily.reset(appMode + '/' + scanDate + '/' + symbol + '/1d');
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll<HTMLElement>('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');

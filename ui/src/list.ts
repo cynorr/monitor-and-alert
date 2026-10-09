@@ -1,7 +1,7 @@
 import { $, money, compact, extendedQuote, type Ticker } from './types.js';
 import type { ScanControls } from './scan.js';
 import type { MassiveState } from './types.js';
-import type { Preferences } from './tags.js';
+import { tagRole, type Preferences } from './tags.js';
 import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import type { HoldingsState } from './holdings.js';
@@ -18,7 +18,7 @@ export class Watchlist {
     selected = '';
     keyboardEnabled = true;
     private editable = false;
-    private collapsed = new Set<string>(['monitor:excluded:review']);
+    private collapsed = new Set<string>();
     private manualEditor = '';
     private preferences?: Preferences;
     private rows = new Map<string, HTMLElement>();
@@ -55,8 +55,6 @@ export class Watchlist {
                 if (tags.has(tagToggle.dataset.manualTag!)) tags.delete(tagToggle.dataset.manualTag!); else tags.add(tagToggle.dataset.manualTag!);
                 void this.mutate({ action: 'tag', ticker: item.ticker, tags: [...tags] }); return;
             }
-            const focus = target.closest<HTMLElement>('[data-to-focus]');
-            if (focus) { void this.mutate({ action: 'move', source: focus.dataset.source, target: 'focus', tickers: [focus.dataset.toFocus] }); return; }
             if (target.closest('[data-candidate]')) { void this.commitSearch(); return; }
             const toggle = target.closest<HTMLElement>('[data-toggle]');
             if (toggle) {
@@ -67,11 +65,11 @@ export class Watchlist {
             const row = target.closest<HTMLElement>('[data-symbol]');
             if (!row) return;
             if (target.matches('[data-check]')) { this.scan?.toggle(row.dataset.symbol!); return; }
-            if (target.closest('.delete-ticker')) {
+            if (target.closest('.hide-ticker,.release-ticker')) {
                 const item = this.tickers.find(t => t.symbol === row.dataset.symbol)!;
-                if (item.status === 'excluded')
+                if (target.closest('.release-ticker'))
                     void this.mutate({ action: 'move', tickers: [item.ticker], source: 'excluded', target: 'discover' });
-                else void this.mutate({ action: 'delete', ticker: item.ticker });
+                else void this.mutate({ action: 'hide', ticker: item.ticker });
             } else if (this.search) this.endSearch(row.dataset.symbol!);
             else this.onSelect(row.dataset.symbol!);
         });
@@ -359,18 +357,19 @@ export class Watchlist {
                 pin.title = `${ticker.pinned ? 'Unpin' : 'Pin'} ${ticker.ticker}`;
                 pin.setAttribute('aria-label', pin.title); pin.setAttribute('aria-pressed', String(!!ticker.pinned));
                 pin.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16${ticker.pinned ? 'M12 8v12M6 14l6 6 6-6' : 'M12 20V8M6 14l6-6 6 6'}"/></svg>`;
-                const action = document.createElement('button'); action.className = 'delete-ticker icon-button';
-                if (ticker.status === 'excluded' && ticker.section === 'review') {
-                    action.className = 'add-button';
-                    action.dataset.toFocus = ticker.ticker; action.dataset.source = 'excluded'; action.textContent = '+';
-                    action.title = `Add ${ticker.ticker} to Focus`;
-                } else if (ticker.status === 'excluded') {
-                    action.textContent = '↩'; action.title = `Release ${ticker.ticker} to Discover`;
-                } else {
-                    action.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
-                    action.title = `Exclude ${ticker.ticker} for 7 days`;
+                cell.append(pin);
+                if (ticker.status !== 'excluded' || ticker.section === 'hidden') {
+                    const action = document.createElement('button');
+                    if (ticker.section === 'hidden') {
+                        action.className = 'release-ticker icon-button';
+                        action.textContent = '↩'; action.title = `Release ${ticker.ticker} to Discover`;
+                    } else {
+                        action.className = 'hide-ticker icon-button';
+                        action.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+                        action.title = `Move ${ticker.ticker} to Hidden for 7 days`;
+                    }
+                    action.setAttribute('aria-label', action.title); cell.append(action);
                 }
-                action.setAttribute('aria-label', action.title); cell.append(pin, action);
             }
             row.append(cell);
         }
@@ -382,6 +381,7 @@ export class Watchlist {
         if (this.manualEditor !== ticker.ticker || !this.editable || ticker.section === 'hidden') return;
         const editor = document.createElement('div'); editor.className = 'manual-tag-editor';
         for (const tag of this.preferences?.tags ?? []) {
+            if (!['setup', 'label'].includes(tagRole(tag))) continue;
             const button = document.createElement('button'); button.dataset.manualTag = tag.id; button.dataset.ticker = ticker.ticker;
             button.textContent = tag.name; button.setAttribute('aria-pressed', String(ticker.manual_tags?.includes(tag.id) ?? false));
             button.title = 'Manual · today only'; editor.append(button);
@@ -410,13 +410,12 @@ export class Watchlist {
             row.querySelectorAll<HTMLElement>('[data-growth]').forEach(cell => { cell.textContent = growthValue(ticker[cell.dataset.growth!]); });
             return;
         }
-        const preview = ticker.status === 'excluded';
         const regular = ticker.quote?.regular, extended = extendedQuote(ticker.quote);
-        const change = preview || !regular?.prev_close ? null : (regular.last_price / regular.prev_close - 1) * 100;
-        const ext = preview || !extended || !regular?.last_price ? null : (extended.last_price / regular.last_price - 1) * 100;
+        const change = !regular?.prev_close ? null : (regular.last_price / regular.prev_close - 1) * 100;
+        const ext = !extended || !regular?.last_price ? null : (extended.last_price / regular.last_price - 1) * 100;
         const percent = (n: number | null, empty: string) => n == null ? empty : `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
-        value('price', money(preview ? ticker.close : regular?.last_price), preview ? 'Latest completed Massive Daily close' : 'Regular last price');
-        value('change', percent(change, preview ? '' : '—'), '', change);
+        value('price', money(regular?.last_price), 'Regular last price');
+        value('change', percent(change, '—'), '', change);
         value('ext', percent(ext, ''), extended ? `${extended.trade_session}: change from regular close` : '', ext);
     }
 
@@ -471,7 +470,6 @@ export class Watchlist {
                 arrow.textContent = collapsed ? '▸' : '▾'; arrow.setAttribute('aria-hidden', 'true');
                 toggle.append(arrow, group.name, countBadge(items.length));
                 toggle.setAttribute('aria-expanded', String(!collapsed));
-                if (group.id === 'review') toggle.title = 'Local Daily preview; Add to Focus starts live monitoring';
                 const add = document.createElement('button'); add.dataset.add = group.id; add.dataset.list = group.list; add.textContent = '+';
                 add.className = 'add-button';
                 add.setAttribute('aria-label', `Add ticker to ${group.name}`); add.disabled = !this.editable;

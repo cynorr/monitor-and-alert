@@ -6,7 +6,7 @@
 
 公司名、行业大类/小类、市值和财报日期都是可缺失的当前参考信息。独立缓存于 `runtime/additional-info/info.sqlite3`，不绑定 Massive 截面、Monitor 行情、Holdings 或 Workspace，不参与筛选、排名、订阅、估值、Alert 或 Ready。
 
-所有读取只用内存缓存；缺失隐藏相应信息，刷新失败保留上次成功结果。启动核心任务后单独安排附加信息后台任务，不等待其读取或下载。Scan/Monitor/Review/Holdings 选择共用同一 symbol 查询；历史 Scan 仍显示当前参考信息，不冒充所选日历史市值或公司资料。
+所有读取只用内存缓存；缺失隐藏相应信息，刷新失败保留上次成功结果。启动核心任务后单独安排附加信息后台任务，不等待其读取或下载。Scan/Monitor/Holdings 选择共用同一 symbol 查询；历史 Scan 仍显示当前参考信息，不冒充所选日历史市值或公司资料。
 
 ## 数据源
 

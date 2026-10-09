@@ -21,7 +21,7 @@ def preferences():
 
 
 def snapshot(day='2026-10-01', **tickers):
-    return {'date': day, 'rows': [{'symbol': ticker + '.US', 'candidate': True, **fields} for ticker, fields in tickers.items()]}
+    return {'date': day, 'rows': [{'symbol': ticker + '.US', 'candidate': True, 'extended_k': 0, 'broken_k': 0, 'below_days': 0, 'ma_arrangement': 'ema10_lead', **fields} for ticker, fields in tickers.items()]}
 
 
 def excluded(ticker, section, at='2026-10-01'):
@@ -77,31 +77,44 @@ def test_hidden_skips_all_matching_and_survives_candidate_gaps_until_day_seven()
     ('broken', {'broken_k': 2, 'below_days': 3}),
     ('under50', {'ma_arrangement': 'under50'}),
 ])
-def test_negative_deadline_not_extended_by_daily_matching_but_resets_after_expiry(section, fields):
-    data = excluded('EXT', section)
-    result = apply_rules(data, snapshot('2026-10-07', EXT=fields), preferences())
-    assert result['statuses']['EXT']['excluded_at'] == '2026-10-01'
-    result = apply_rules(result, snapshot('2026-10-08', EXT=fields), preferences())
+def test_machine_exclusions_have_no_deadline_and_reassign_on_each_scan(section, fields):
+    result = apply_rules(excluded('EXT', section), snapshot('2026-10-02', EXT=fields), preferences())
     assert result['statuses']['EXT']['section'] == section
-    assert result['statuses']['EXT']['excluded_at'] == '2026-10-08'
-    assert apply_rules(result, snapshot('2026-10-08', EXT=fields), preferences()) == result
+    assert 'excluded_at' not in result['statuses']['EXT']
+    assert apply_rules(result, snapshot('2026-10-02', EXT=fields), preferences()) == result
+    result = apply_rules(result, snapshot('2026-10-03', EXT={'ma_arrangement': 'under50'}), preferences())
+    assert result['statuses']['EXT']['section'] == 'under50'
 
 
 @pytest.mark.parametrize('section', ['broken', 'extended', 'under50'])
-def test_review_persists_without_setup_or_ranking_then_negative_reassigns(section):
-    result = apply_rules(excluded('POT', section), snapshot('2026-10-02', POT={'candidate': False, 'ema10_touch_days_5d': 4}), preferences())
-    assert result['statuses']['POT']['section'] == 'review'
-    assert 'excluded_at' not in result['statuses']['POT']
-    result = apply_rules(result, snapshot('2026-10-20', POT={'candidate': False}), preferences())
-    assert result['statuses']['POT']['section'] == 'review'
-    assert result['statuses']['POT']['tags'] == []
-    result = apply_rules(result, snapshot('2026-10-21', POT={'candidate': False, 'extended_k': 2}), preferences())
-    assert result['statuses']['POT']['section'] == 'extended'
-    assert result['statuses']['POT']['excluded_at'] == '2026-10-21'
+@pytest.mark.parametrize('candidate', [True, False])
+@pytest.mark.parametrize('setup', [True, False])
+def test_recovery_immediately_returns_only_today_candidates_and_never_enters_focus(section, candidate, setup):
+    result = apply_rules(excluded('POT', section), snapshot('2026-10-02', POT={
+        'candidate': candidate, 'ema10_touch_days_5d': 4 if setup else 0}), preferences())
+    if candidate:
+        assert result['statuses']['POT']['status'] == 'discover'
+        assert result['statuses']['POT']['section'] == ('surf' if setup else 'unclassified')
+        assert result['statuses']['POT']['released_at'] == '2026-10-02'
+        assert 'excluded_at' not in result['statuses']['POT']
+    else:
+        assert 'POT' not in result['statuses']
+    assert not result['orders']['focus']
 
 
-def test_under50_classifies_focus_discover_and_review_with_stable_role_and_priority():
-    data = excluded('REV', 'review')
+def test_missing_negative_features_keep_machine_exclusion_but_known_false_and_condition_can_release():
+    data = excluded('OLD', 'broken')
+    unknown = snapshot('2026-10-02', OLD={'below_days': 3, 'broken_k': None})
+    result = apply_rules(data, unknown, preferences())
+    assert result['statuses']['OLD']['section'] == 'broken'
+    result = apply_rules(result, snapshot('2026-10-02', OLD={'below_days': 0, 'broken_k': None}), preferences())
+    assert result['statuses']['OLD']['status'] == 'discover'
+    absent = apply_rules(excluded('GONE', 'extended'), snapshot('2026-10-02'), preferences())
+    assert absent['statuses']['GONE']['section'] == 'extended'
+
+
+def test_under50_classifies_all_lists_with_stable_role_and_priority():
+    data = excluded('EXT', 'extended')
     data['statuses'].update({
         'FOC': {'status': 'focus', 'section': 'unclassified'},
         'HID': {'status': 'excluded', 'section': 'hidden', 'excluded_at': '2026-10-01'},
@@ -109,11 +122,11 @@ def test_under50_classifies_focus_discover_and_review_with_stable_role_and_prior
     prefs = validate_preferences(preferences())
     prefs['tags'][-1]['name'] = 'Below long MA'
     rows = snapshot(FOC={'candidate': False, 'ma_arrangement': 'under50'}, DISC={'ma_arrangement': 'under50'},
-                    REV={'candidate': False, 'ma_arrangement': 'under50'}, HID={'ma_arrangement': 'under50'},
+                    EXT={'candidate': False, 'ma_arrangement': 'under50'}, HID={'ma_arrangement': 'under50'},
                     BOTH={'ma_arrangement': 'under50', 'extended_k': 2},
                     ALL={'ma_arrangement': 'under50', 'extended_k': 2, 'broken_k': 2, 'below_days': 3})
     result = apply_rules(data, rows, prefs)
-    for ticker in ('FOC', 'DISC', 'REV'):
+    for ticker in ('FOC', 'DISC', 'EXT'):
         assert result['statuses'][ticker]['status'] == 'excluded'
         assert result['statuses'][ticker]['section'] == 'under50'
         assert result['statuses'][ticker]['tags'] == ['under-tag']
@@ -126,16 +139,26 @@ def test_under50_classifies_focus_discover_and_review_with_stable_role_and_prior
 
 
 @pytest.mark.parametrize('candidate', [True, False])
-def test_under50_without_negative_or_setup_releases_at_seven_days(candidate):
-    data = excluded('OLD', 'under50')
-    result = apply_rules(data, snapshot('2026-10-07', OLD={'candidate': candidate}), preferences())
-    assert result['statuses']['OLD']['section'] == 'under50'
-    result = apply_rules(result, snapshot('2026-10-08', OLD={'candidate': candidate}), preferences())
+def test_expired_hidden_is_inherited_until_prepared_features_classify_it(candidate):
+    data = excluded('OLD', 'hidden')
+    inherited = inherit_workspace(data, set(), set(), '2026-10-08')
+    assert inherited['statuses']['OLD']['section'] == 'hidden'
+    result = apply_rules(inherited, snapshot('2026-10-08', OLD={'candidate': candidate}), preferences())
+    assert ('OLD' in result['statuses']) == candidate
     if candidate:
         assert result['statuses']['OLD']['status'] == 'discover'
-        assert result['statuses']['OLD']['released_at'] == '2026-10-08'
-    else:
-        assert 'OLD' not in result['statuses']
+    negative = apply_rules(inherited, snapshot('2026-10-08', OLD={'candidate': False, 'extended_k': 2}), preferences())
+    assert negative['statuses']['OLD']['section'] == 'extended'
+    assert 'excluded_at' not in negative['statuses']['OLD']
+
+
+def test_manual_negative_tags_cannot_keep_an_exclusion():
+    data = excluded('OLD', 'extended')
+    data['statuses']['OLD'].update(manual_tags=['ext', 'surf'], manual_tags_date='2026-10-02')
+    result = apply_rules(data, snapshot('2026-10-02', OLD={}), preferences())
+    assert result['statuses']['OLD']['status'] == 'discover'
+    assert result['statuses']['OLD']['tags'] == ['surf']
+    assert result['statuses']['OLD']['manual_tags'] == ['surf']
 
 
 @pytest.mark.parametrize('fields,tag', [({'extended_k': 2}, 'ext'), ({'ma_arrangement': 'under50'}, 'under-tag')])

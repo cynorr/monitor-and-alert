@@ -44,21 +44,21 @@ Daily与split统一按最新成熟交易日判断，保留ET18点门槛；周末
 
 需求背景与归属设计见 [list-design.md](list-design.md)，显示与交互的唯一规范见 [ui.md 的 List UI 章节](ui.md#list-ui)。
 
-Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus、独立 Holdings 和折叠 Review；Discover / Hidden / Extended / Broken / Under-50 不订阅 Longbridge。Review 预览来自本地 Massive Daily，加入 Focus 后才实时订阅；Excluded 盘中恢复依赖下一个完成日扫描或人工加入。
+Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 使用本地 Massive Daily，不订阅 Longbridge。Excluded 的恢复在完成日数据准备后判断，盘中明确入选 Focus 才开始实时监控。
 
 候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、Focus和全部Excluded（含Hidden）均计算完整特征与Growth所用RFL数值，即使继承成员不在候选或前50也继续计算，不为名单另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。已有人工成员不因候选门槛自动删除，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 
-Tag 保存条件与用途：Setup用于潜力section/Review，Extended、Broken和Under-50用于淘汰，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可以匹配多个Tag，按Setup定义顺序选一个主section；未匹配为Unclassified。
+Tag 保存条件与用途：Setup用于Discover/Focus分组，Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可匹配多个Tag，按Setup定义顺序选主section；未匹配为Unclassified。人工补充仅允许Setup/Label。
 
 Tag 选择可为空，点击已选 Tag 再次取消；空选择不应用保存 Tag 筛选，全部定义仍参与自动分类。
 
 Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑定。编辑外观草稿继续使用已指派及人工补充的匹配结果，只有修改条件才进入条件预览，不因调颜色改变名单归属或订阅。
 
-Discover、Focus及非Hidden Excluded匹配负面规则立即进入Excluded对应section，优先级为Broken → Extended → Under-50；非Hidden Excluded不满足负面规则且匹配Setup进入Review。Review不强制每日清空，无Dismiss。Hidden表示人工未分类排除，七天内不参与规则判断。Hidden/Extended/Broken/Under-50七个自然日到期后解除本次排除、再次按规则分类；仍匹配负面条件继续排除，无释放保护期；重复匹配不每日续期。Review保留到人工处理或新负面判断。
+完成日Daily和feature准备后，统一重评Discover、Focus与全部Excluded。负面优先级为Broken → Extended → Under-50；机器排除没有七天期限，确认不匹配任何负面条件后，仅当天候选回Discover，否则退出名单。恢复后的Setup只负责分组，不自动进入Focus。没有已确认负面匹配、且仍有负面判断因缺数据未知时，保留原机器section；已知不成立的AND条件可确定不匹配。Hidden只有人工屏蔽七个自然日，期限内跳过规则判断但计算完整特征；到期保留在准备范围内，随后按同一规则分类。一次计算最终结果并保存，不增加定时扫描。
 
 规则Tag每天重算；人工补Tag、主section和保留Focus例外仅当天有效。Focus成员及同section内部人工排序跨日保留，新进入section成员置顶。没有匹配Tag不淘汰Focus。人工入选Focus当天优先，仍显示机器负面标签，次日重新接受规则。当日置顶独立于Tag和section，顺序跨Scan/Monitor共享；新置顶后黑框和图表移到下一个可见成员，取消置顶保留当前选择并回原section，跨List取消，新完成日继承时清空，同日刷新/重启保留。临时Filter只改变显示，不移动名单或改变订阅；修改草稿预览，Save才更新条件并重新分类已有本地截面。
 
-Add to Focus清除排除状态并开始订阅；Exclude for 7 days（包括行删除）进入Hidden；Move to Discover/Release解除归属，仅当日候选返回Discover并立即按已有规则分类。扫描初筛和RFL排名不受Tag影响。批量操作一次同步落盘，历史日期名单只读。旧Focus/Wait合并为Focus，旧Hidden转Excluded/Hidden并保留期限。
+Add to Focus清除排除状态并开始订阅；Move to Hidden（行垃圾桶及批量操作）明确屏蔽七个自然日。Move to Discover结束Focus归属或提前释放Hidden，仅当天候选返回Discover并立即按当前规则分类；机器section没有人工Release。扫描初筛和RFL排名不受Tag影响。批量操作一次同步落盘，历史日期名单只读。旧Focus/Wait合并为Focus，旧Hidden转Excluded/Hidden并保留期限。
 
 搜索仍使用列表上方Search与/入口。Monitor通过同一Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整 section，本次不新增 Quote 形态规则。保存失败回退内存并显示错误。
 

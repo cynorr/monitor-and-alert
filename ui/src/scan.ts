@@ -138,7 +138,7 @@ export class ScanControls {
     visible(rows: Ticker[]) {
         rows = this.available(rows);
         const sort = this.enabled ? this.preferences?.sort ?? 'default' : 'default';
-        const inList = (row: Ticker) => this.enabled ? row.status === this.activeList : row.status === 'focus' || (row.status === 'excluded' && row.section === 'review');
+        const inList = (row: Ticker) => this.enabled ? row.status === this.activeList : row.status === 'focus';
         const useTags = this.preferences ? this.useAssignedTags() : false;
         return rows.filter(row => inList(row) && (!this.draft || matchesTag(row, this.draft, useTags)))
             .sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) ||
@@ -231,9 +231,15 @@ export class ScanControls {
         $('filter-rules').querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(node => { node.disabled = this.pending; });
         this.panel?.render(this.draft.filters, available);
         $('filter-count').replaceChildren(countBadge(Object.keys(this.draft.filters).length));
-        const all = $('scan-select-all') as HTMLInputElement, count = filtered.filter(row => this.selected.has(row.symbol)).length;
+        const selected = filtered.filter(row => this.selected.has(row.symbol));
+        const all = $('scan-select-all') as HTMLInputElement, count = selected.length;
         all.checked = !!filtered.length && count === filtered.length; all.indeterminate = count > 0 && count < filtered.length; all.disabled = !this.editable || this.pending || !filtered.length;
-        $('scan-move').querySelectorAll<HTMLButtonElement>('[data-target]').forEach(button => { button.disabled = !this.editable || this.pending || !count || button.dataset.target === this.activeList; });
+        $('scan-move').querySelectorAll<HTMLButtonElement>('[data-target]').forEach(button => {
+            const target = button.dataset.target;
+            button.disabled = !this.editable || this.pending || !count || target === this.activeList ||
+                (target === 'hidden' && selected.every(row => row.section === 'hidden')) ||
+                (target === 'discover' && this.activeList === 'excluded' && selected.some(row => row.section !== 'hidden'));
+        });
         ($('scan-refresh') as HTMLButtonElement).disabled = this.pending || this.serverRunning;
         for (const id of ['scan-date', 'scan-sort', 'tag-name', 'tag-cancel', 'tag-delete', 'clear-filters', 'tag-icon', 'tag-color', 'tag-background'])
             ($(id) as HTMLInputElement | HTMLButtonElement).disabled = this.pending;
