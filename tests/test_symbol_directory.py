@@ -23,15 +23,15 @@ def other(*rows):
     return '\n'.join((OTHER_HEADER, *rows, f'File Creation Time: {CREATED}||||||')) + '\n'
 
 
-def test_primary_symbols_etf_flags_optional_names_and_source_footer():
+def test_primary_symbols_only_etf_flags_and_source_footer():
     result = directory.combine(
         nasdaq('AAPL|Apple Inc. - Common Stock |Q|N|N|100|N|N', 'AAPLX|Leveraged ETF|Q|N|N|100|Y|N',
                'MISSING| |Q|N|N|100|N|N'),
         other('BRK.B|Berkshire Hathaway Class B|N|BRK.B|N|100|N|BRK/B',
               'UWMC.V|UWM Holdings Corporation Rights when issued|N|UWMCrw|N|100|N|UWMC^#'))
-    assert result['symbols']['AAPL.US'] == {'name': 'Apple Inc. - Common Stock', 'etf': False}
+    assert result['symbols']['AAPL.US'] == {'etf': False}
     assert result['symbols']['AAPLX.US']['etf']
-    assert result['symbols']['MISSING.US'] == {'name': None, 'etf': False}
+    assert result['symbols']['MISSING.US'] == {'etf': False}
     assert 'BRK.B.US' in result['symbols'] and 'BRK/B.US' not in result['symbols']
     assert 'UWMC.V.US' in result['symbols'] and 'UWMC^#.US' not in result['symbols']
     assert result['sources']['files']['otherlisted.txt']['creation_time'] == CREATED
@@ -74,8 +74,8 @@ def test_pull_requests_two_free_files_and_cache_reader_supports_plain_mock(tmp_p
     result = asyncio.run(directory.update(path, fetch))
     assert calls == list(directory.SOURCES.values())
     assert directory.read_directory(path) == result
-    atomic_json(path, directory.make_snapshot({'MOCK.US': {'name': None, 'etf': False}}))
-    assert directory.read_directory(path)['symbols']['MOCK.US']['name'] is None
+    atomic_json(path, directory.make_snapshot({'MOCK.US': {'etf': False}}))
+    assert directory.read_directory(path)['symbols']['MOCK.US'] == {'etf': False}
     path.unlink()
     with pytest.raises(ValueError, match='pull_symbol_directory'):
         directory.read_directory(path)

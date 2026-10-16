@@ -137,7 +137,8 @@ def test_quote_pipeline_accepts_same_second_push_rejects_old_snapshot_and_resets
     assert [q['last_price'] for q in received] == [9,10,10]
 
 
-def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data):
+@pytest.mark.parametrize('source', ['discover', 'under50'])
+def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data, source):
     async def scenario():
         app, brokers = make_app(app_data)
         try:
@@ -146,13 +147,20 @@ def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data):
             app.preferences['tags'].extend([
                 {'id':'first', 'name':'Surf', 'role':'setup', 'filters':{'adr20':{'min':0}}},
                 {'id':'second', 'name':'Bounce', 'role':'setup', 'filters':{'adr20':{'min':0}}}])
+            matched = ['first', 'second']
+            if source == 'under50':
+                app.preferences['tags'].append({'id':'under', 'name':'Under-50', 'role':'under50', 'filters':{'adr20':{'min':0}}})
+                matched.append('under')
             await app.prepare_lists()
             state = app.workspace.data['statuses'].setdefault(ticker, {'status':'discover'})
+            assert state['status'] == ('excluded' if source == 'under50' else 'discover')
+            if source == 'under50':
+                assert state['section'] == 'under50'
             state.update(tags=['stale'], manual_tags=['second'], manual_tags_date=app.workspace.date,
                          manual_section_date=app.workspace.date, section='second')
             result = await app.action('alerts', {'action':'create','symbol':row['symbol'],'price':12.345,'mode':'scan'})
             selected = app.workspace.data['statuses'][ticker]
-            assert selected['section'] == 'first' and selected['tags'] == ['first','second']
+            assert selected['section'] == 'first' and selected['tags'] == matched
             assert 'manual_tags' not in selected and 'manual_section_date' not in selected
             assert app.workspace.data['orders']['focus'][0] == ticker
             assert result['alerts'][0]['price_cents'] == 1235 and not brokers
@@ -160,7 +168,7 @@ def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data):
             saved = app.workspace.path.read_bytes()
             await app.action('alerts', {'action':'create','symbol':row['symbol'],'price':15,'mode':'scan'})
             assert app.workspace.path.read_bytes() == saved
-            app.workspace.delete_ticker(ticker)
+            app.workspace.hide_ticker(ticker)
             assert not app.alerts.alerts
             await app.list_action({'action':'move','source':'excluded','target':'focus','tickers':[ticker]})
             assert app.workspace.data['statuses'][ticker]['section'] == 'first'
@@ -239,4 +247,65 @@ def test_focus_saved_alert_write_rejected_returns_explicit_partial_result(app_da
             assert not result['alerts']
         finally:
             await app.close()
+    asyncio.run(scenario())
+
+
+def test_sound_only_follows_committed_new_events_and_restart_keeps_cards(tmp_path, cal):
+    from data_service.alerts.sound import AlertSound
+    sound = AlertSound()
+    clock = lambda: at('2026-10-05T09:31:00')
+    path = tmp_path / 'alerts.sqlite3'
+    value = AlertEngine(path, cal, clock=clock, sound=sound)
+    value.maintain({'NVDA.US'}, True)
+    alert = value.create('NVDA.US', 10)
+    tick(value, 9); tick(value, 10)
+    tick(value, 9); tick(value, 11)
+    assert sound.queue.qsize() == 1
+    assert sound.queue.get_nowait() == 'up'
+    sound.queue.task_done()
+    value.rearm(alert['id'], 10, 1)
+    tick(value, 10)
+    assert sound.queue.get_nowait() == 'down'
+    sound.queue.task_done()
+    events = value.state()['events']
+    assert len(events) == 2
+    value.close()
+    restored = AlertEngine(path, cal, clock=clock, sound=sound)
+    try:
+        assert restored.state()['events'] == events
+        assert restored.state()['sound'] == {'enabled': True, 'error': None}
+        assert 'notification' not in restored.state()
+        assert sound.queue.empty()
+        restored.acknowledge(events[0]['id'])
+        assert len(restored.state()['events']) == 1 and sound.queue.empty()
+    finally:
+        restored.close()
+
+
+def test_failed_trigger_save_does_not_play_sound(engine):
+    from data_service.alerts.sound import AlertSound
+    value, _ = engine
+    value.sound = sound = AlertSound()
+    value.create('NVDA.US', 10)
+    tick(value, 9)
+    value.db.execute('PRAGMA query_only=ON')
+    tick(value, 10)
+    assert not value.state()['events'] and sound.queue.empty()
+    assert value.state()['error'] == 'Could not save alert trigger'
+
+
+def test_workbench_sound_lifecycle_and_mock_defaults(app_data):
+    from data_service.alerts.sound import AlertSound
+    async def scenario():
+        app, _ = make_app(app_data)
+        assert app.sound is None and app.alert_state()['sound']['enabled'] is False
+        app.sound = app.alerts.sound = AlertSound()
+        await app.start_background()
+        task = app.sound_task
+        assert task is not None
+        await app.close()
+        assert task.cancelled() and app.sound_task is None
+        formal, _ = make_app(app_data, mock=False)
+        assert isinstance(formal.sound, AlertSound) and formal.alerts.sound is formal.sound
+        await formal.close()
     asyncio.run(scenario())

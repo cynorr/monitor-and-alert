@@ -148,6 +148,7 @@ def test_today_entry_daily_pnl_uses_cost_even_without_previous_close(session):
     sequence = result['holdings'][0]['sequences'][0]
     assert sequence['day_reference_price'] == D(10)
     assert sequence['day_reference_source'] == 'entry'
+    assert sequence['is_new']
     assert sequence['day_pnl'] == D(75)
     assert sequence['total_pnl'] == D(75) and sequence['total_pnl_percent'] == D(10)
     assert result['summary']['pnl'] == D(75) and result['summary']['day_pnl'] == D(75)
@@ -163,6 +164,7 @@ def test_mixed_old_and_today_merged_buys_weight_daily_basis_and_reset_tomorrow()
     sequence = result['holdings'][0]['sequences'][0]
     assert sequence['day_reference_price'] == D('12.5')
     assert sequence['day_reference_source'] == 'mixed'
+    assert not sequence['is_new']
     assert sequence['day_pnl'] == D(150)
     assert sequence['total_pnl'] == D(300)
     tomorrow = value_positions(base, quotes, '2026-09-18')['holdings'][0]['sequences'][0]
@@ -176,7 +178,50 @@ def test_closed_today_bought_today_retains_realized_pnl_without_a_quote():
     sequence = result['holdings'][0]['sequences'][0]
     assert sequence['closed_today'] and sequence['day_pnl'] == D(-10)
     assert sequence['total_pnl'] == D(-10)
-    assert result['summary']['pnl'] == 0 and result['summary']['day_pnl'] == 0
+    assert sequence['is_new']
+    assert result['summary'] == {'pnl': D(0), 'pnl_percent': None, 'day_pnl': D(-10)}
+
+
+def test_daily_total_includes_today_closed_profit_but_return_totals_only_include_open_shares():
+    raw = snapshot([activity('old', 'BUY', '100', '10', '2026-09-15'),
+                    activity('previous-sale', 'SELL', '20', '12', '2026-09-16'),
+                    activity('close', 'SELL', '80', '9', '2026-09-17'),
+                    activity('rebuy', 'BUY', '20', '12', '2026-09-17')], '20')
+    base = build(raw, [{'ticker': 'XYZ', 'buys': ['old'], 'sells': ['previous-sale', 'close']}])
+    quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 13, 'prev_close': 11, 'trade_session': 'Intraday'}}}
+    result = value_positions(base, quotes)
+    closed, current = result['holdings'][0]['sequences']
+    assert closed['day_pnl'] == D(-160)  # Today's 80-share sale, not yesterday's realized gain.
+    assert current['day_pnl'] == D(20) and current['is_new'] and not closed['is_new']
+    assert result['summary']['day_pnl'] == D(-140)
+    assert result['summary']['pnl'] == D(20)
+    assert result['summary']['pnl_percent'] == D(20) / D(240) * 100
+    tomorrow = value_positions(base, quotes, '2026-09-18')
+    assert len(tomorrow['holdings'][0]['sequences']) == 1
+    assert not tomorrow['holdings'][0]['sequences'][0]['is_new']
+    assert tomorrow['summary']['day_pnl'] == D(40)
+    assert tomorrow['summary']['pnl'] == D(20)
+
+
+def test_missing_closed_daily_baseline_prevents_partial_daily_total():
+    raw = snapshot([activity('old', 'BUY', '10', '10', '2026-09-16'),
+                    activity('close', 'SELL', '10', '9', '2026-09-17'),
+                    activity('new', 'BUY', '20', '12', '2026-09-17')], '20')
+    base = build(raw, [{'ticker': 'XYZ', 'buys': ['old'], 'sells': ['close']}])
+    quotes = {'XYZ.US': {'Intraday': {'timestamp': 100, 'last_price': 13, 'trade_session': 'Intraday'}}}
+    result = value_positions(base, quotes)
+    closed, current = result['holdings'][0]['sequences']
+    assert closed['day_pnl'] is None and current['day_pnl'] == D(20)
+    assert result['summary']['day_pnl'] is None
+    assert result['summary']['pnl'] == D(20)
+
+
+def test_new_holding_uses_new_york_day_and_expires_without_an_account_refresh():
+    raw = snapshot([activity('new', 'BUY', '10', '10', '2026-09-17')], '10')
+    raw['fetched_at'] = '2026-09-18T02:00:00Z'  # Still Sep 17 in New York.
+    base = build(raw, [])
+    assert value_positions(base, {})['holdings'][0]['sequences'][0]['is_new']
+    assert not value_positions(base, {}, '2026-09-18')['holdings'][0]['sequences'][0]['is_new']
 
 
 def test_holdings_uses_same_corrected_daily_close_as_watchlist(app_data):
@@ -204,15 +249,39 @@ def test_refresh_is_immediate_and_failed_fetch_or_accounting_preserves_snapshot(
         client.fail = True
         assert not await holdings.refresh()
         assert holdings.base is previous and 'secret-key' not in holdings.error
+        assert holdings.state()['error_kind'] == 'request'
         client.fail = False
         client.raw['positions']['results'][0]['units'] = '76'
         assert not await holdings.refresh()
         assert holdings.base is previous
+        assert holdings.state()['error_kind'] == 'accounting'
         client.raw['positions']['results'][0]['units'] = '75'
         assert await holdings.refresh() and holdings.error is None
+        assert holdings.state()['error_kind'] is None
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         assert client.closed
+    asyncio.run(scenario())
+
+
+def test_refresh_error_details_cover_empty_timeout_storage_and_redaction(tmp_path):
+    async def scenario():
+        client = FakeSnapTrade(raw_snapshot())
+        holdings = Holdings(client, rules(tmp_path))
+        previous = holdings.base
+        async def timeout():
+            raise TimeoutError()
+        with patch.object(client, 'refresh', timeout):
+            assert not await holdings.refresh()
+        assert holdings.state()['error_kind'] == 'request'
+        assert holdings.error == 'Request timed out' and holdings.base is previous
+        with patch.object(client, 'commit', side_effect=PermissionError('Cannot save secret-key')):
+            assert not await holdings.refresh()
+        state = holdings.state()
+        assert state['error_kind'] == 'storage'
+        assert state['error'] == 'Cannot save [REDACTED]' and holdings.base is previous
+        assert await holdings.refresh()
+        assert holdings.state()['error'] is None and holdings.state()['error_kind'] is None
     asyncio.run(scenario())
 
 
@@ -335,8 +404,8 @@ def test_independent_membership_shares_market_state_and_never_changes_workspace(
         service.update_tickers([])
         assert service.symbols == ['XYZ.US', 'OTHER.US']
         assert service.sync['XYZ.US', '5m'] is existing
-        service.select('OTHER.US', '4h')
-        assert set(service.view('OTHER.US', '4h')['charts']) == {'1d', '4h'}
+        service.select('OTHER.US', '2h')
+        assert set(service.view('OTHER.US', '2h')['charts']) == {'1d', '2h'}
         service.update_holdings(['XYZ.US'])
         assert 'OTHER.US' not in service.store.allowed and service.focus[0] == 'XYZ.US'
         service.update_holdings([])
@@ -368,11 +437,11 @@ def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_background
         await asyncio.sleep(.05)
         assert client.calls == 1 and 'XYZ.US' in app.symbols
         for _ in range(30):
-            if app.monitor.view('XYZ.US', '4h')['charts']['1d']['bars'] and app.monitor.view('XYZ.US', '4h')['charts']['4h']['bars']:
+            if app.monitor.view('XYZ.US', '2h')['charts']['1d']['bars'] and app.monitor.view('XYZ.US', '2h')['charts']['2h']['bars']:
                 break
             await asyncio.sleep(.05)
-        assert app.monitor.view('XYZ.US', '4h')['charts']['1d']['bars']
-        assert app.monitor.view('XYZ.US', '4h')['charts']['4h']['bars']
+        assert app.monitor.view('XYZ.US', '2h')['charts']['1d']['bars']
+        assert app.monitor.view('XYZ.US', '2h')['charts']['2h']['bars']
         app.monitor.update_tickers([Ticker('XYZ.US', 'XYZ', 'focus')])
         assert app.symbols.count('XYZ.US') == 1
         runner = web.AppRunner(create_app(app))
@@ -385,12 +454,12 @@ def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_background
                 assert response.status == 200 and (await response.json())['data']['holdings'][0]['ticker'] == 'XYZ'
                 async with session.ws_connect(base + '/v1/stream') as ws:
                     assert ws.compress == 0
-                    await ws.send_json({'type': 'select', 'symbol': 'XYZ.US', 'timeframe': '4h', 'request_id': 42, 'mode': 'monitor'})
+                    await ws.send_json({'type': 'select', 'symbol': 'XYZ.US', 'timeframe': '2h', 'request_id': 42, 'mode': 'monitor'})
                     while True:
                         message = await ws.receive_json(timeout=2)
                         if message['type'] == 'list': assert message['holdings']['data']['holdings'][0]['ticker'] == 'XYZ'
                         if message['type'] == 'view' and message['request_id'] == 42: break
-                    assert set(message['charts']) == {'1d', '4h'}
+                    assert set(message['charts']) == {'1d', '2h'}
                     assert client.calls == 1  # HTTP/WS reads do not trigger acquisition.
                     client.fail = True
                     previous = app.holdings.base

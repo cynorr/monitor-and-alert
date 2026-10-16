@@ -240,7 +240,6 @@ export class AlertController {
                 void this.mutate({ action: 'delete', id: this.selected });
             }
         }, true);
-        $('alert-notifications').addEventListener('click', () => { void this.mutate({ action: 'notifications' }); });
         $('alert-error-close').addEventListener('click', () => { this.error = ''; this.render(); });
     }
     update(value) {
@@ -289,8 +288,6 @@ export class AlertController {
         try {
             await this.jump(event);
             await this.mutate({ action: 'acknowledge', event_id: event.id });
-            if (location.hash === '#alert=' + event.id)
-                history.replaceState(null, '', location.pathname);
         }
         catch (error) {
             this.error = error.message;
@@ -302,14 +299,10 @@ export class AlertController {
     }
     render() {
         const value = this.value;
-        const notification = value?.notification;
-        const note = $('alert-notifications');
-        note.hidden = !notification || (notification.authorization === 'authorized' && notification.sound && notification.alerts === true && !notification.error);
-        note.disabled = !notification?.available;
-        note.textContent = notification?.error ?? (notification?.authorization === 'not_determined' ? 'Enable notifications' : notification?.authorization === 'authorized' ? 'Notification sound/display is off' : notification?.available ? 'Notification settings' : 'Open Market Monitor.app for notifications');
         const error = $('alert-error');
-        error.hidden = !this.error && !value?.error;
-        $('alert-error-message').textContent = this.error || value?.error || '';
+        const message = this.error || value?.error || value?.sound.error || '';
+        error.hidden = !message;
+        $('alert-error-message').textContent = message;
         const stack = $('alert-cards');
         const focused = document.activeElement?.dataset.alertAction;
         const focusEvent = document.activeElement?.dataset.event;

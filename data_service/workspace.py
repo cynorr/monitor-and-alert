@@ -43,7 +43,7 @@ def normalize_ticker(value: str) -> str:
 
 
 def empty_workspace() -> dict[str, Any]:
-    return {'version': WORKSPACE_VERSION, 'carried': [], 'statuses': {},
+    return {'version': WORKSPACE_VERSION, 'carried': [], 'statuses': {}, 'pinned': [],
             'orders': {status: [] for status in ORDERED_STATUSES}}
 
 
@@ -85,9 +85,12 @@ def migrate_workspace(data: dict, selected_date: str | None = None) -> dict:
             state.update(status='excluded', section='hidden')
         state.setdefault('section', 'unclassified' if state.get('status') != 'excluded' else 'hidden')
         state.setdefault('tags', [])
-        if state.get('status') == 'excluded' and state['section'] != 'review':
+        if state.get('status') == 'excluded' and state['section'] == 'hidden':
             state.setdefault('excluded_at', state.get('status_at', selected_date or date.today().isoformat()))
+        else:
+            state.pop('excluded_at', None)
     result['orders'] = _workspace_orders(result)
+    result['pinned'] = list(dict.fromkeys(ticker for ticker in result.get('pinned', []) if ticker in states))
     return result
 
 
@@ -97,13 +100,14 @@ def inherit_workspace(previous: dict | None, previous_candidates: set[str],
     if previous is None:
         return empty_workspace()
     result = migrate_workspace(previous, selected_date)
+    result['pinned'] = []
     states = result['statuses']
     for ticker, state in list(states.items()):
-        if state.get('status') == 'discover' or (state.get('section') == 'hidden' and not is_hidden(state, selected_date)):
+        if state.get('status') == 'discover':
             del states[ticker]
             continue
         state['tags'] = []
-        for key in ('manual_focus_date', 'manual_section_date', 'manual_tags_date', 'manual_tags'):
+        for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date', 'manual_tags_date', 'manual_tags'):
             state.pop(key, None)
     result['carried'] = sorted(ticker for ticker, state in states.items() if state.get('status') == 'focus')
     result['orders'] = _workspace_orders(result)
@@ -136,20 +140,16 @@ def derive_day_view(selected_date: str, candidates: set[str], previous_candidate
     data = migrate_workspace(workspace, selected_date)
     statuses = data['statuses']
     returned = set()
-    for ticker, state in list(statuses.items()):
-        if state.get('section') == 'hidden' and not is_hidden(state, selected_date):
-            if ticker in candidates:
-                returned.add(ticker)
-                state.update(status='discover', section='unclassified', tags=[])
-            else:
-                del statuses[ticker]
+    for ticker, state in statuses.items():
         if state.get('manual_tags_date') != selected_date:
             state['manual_tags'] = []
         if state.get('released_at') == selected_date:
             returned.add(ticker)
     focus = {ticker for ticker, state in statuses.items() if state.get('status') == 'focus'}
     excluded = {ticker for ticker, state in statuses.items() if state.get('status') == 'excluded'}
-    discover = candidates - focus - excluded
+    manual = {ticker for ticker, state in statuses.items()
+              if state.get('status') == 'discover' and state.get('manual_discover_date') == selected_date}
+    discover = (candidates | manual) - focus - excluded
     for ticker in discover:
         statuses.setdefault(ticker, {'status': 'discover', 'section': 'unclassified', 'tags': []})
     for ticker, state in list(statuses.items()):
@@ -206,15 +206,32 @@ class Workspace:
             order[:] = [item for item in order if item != ticker]
 
     def _focus(self, ticker, classification=None):
+        self._unpin(ticker)
         state = self.data['statuses'].setdefault(ticker, {})
-        for key in ('tags', 'manual_tags', 'manual_tags_date', 'manual_section_date', 'excluded_at', 'released_at'):
+        for key in ('tags', 'manual_tags', 'manual_tags_date', 'manual_section_date', 'manual_discover_date', 'excluded_at', 'released_at'):
             state.pop(key, None)
         state.update(status='focus', section='unclassified', tags=[], status_at=self.date, manual_focus_date=self.date)
         state.update(classification or {})
 
     def add_ticker(self, ticker, section='focus', *, classification=None):
-        if section not in ('focus', 'wait'):
+        if section not in ('discover', 'focus', 'wait'):
             raise ValueError('Invalid list')
+        if section == 'discover':
+            existing = self.section(ticker)
+            if existing not in (None, 'discover'):
+                return False
+            if existing == 'discover':
+                self.pin_ticker(ticker, True)
+                return True
+            previous = deepcopy(self.data)
+            self._remove_order(ticker)
+            self.data['orders']['discover'].insert(0, ticker)
+            self.data['statuses'].setdefault(ticker, {}).update(
+                status='discover', section='unclassified', tags=[], status_at=self.date, manual_discover_date=self.date)
+            self._unpin(ticker)
+            self.data['pinned'].insert(0, ticker)
+            self.save(previous)
+            return True
         if self.section(ticker) == 'focus':
             return self.keep_ticker(ticker)
         previous = deepcopy(self.data)
@@ -234,14 +251,15 @@ class Workspace:
         self.save(previous)
         return True
 
-    def delete_ticker(self, ticker):
+    def hide_ticker(self, ticker):
         if ticker not in self.data['statuses']:
             raise ValueError('Ticker is not in the workspace')
         previous = deepcopy(self.data)
+        self._unpin(ticker)
         self._remove_order(ticker)
         state = self.data['statuses'][ticker]
         state.update(status='excluded', section='hidden', tags=[], status_at=self.date, excluded_at=self.date)
-        for key in ('manual_focus_date', 'manual_section_date', 'manual_tags', 'manual_tags_date'):
+        for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date', 'manual_tags', 'manual_tags_date'):
             state.pop(key, None)
         self.data['orders']['excluded'].insert(0, ticker)
         self.save(previous)
@@ -266,17 +284,19 @@ class Workspace:
         self.save(previous)
 
     def move_members(self, tickers, source, target, candidates, previous_candidates, *, classifications=None):
-        source = {'wait': 'focus', 'hidden': 'excluded'}.get(source, source)
-        target = {'wait': 'focus', 'hidden': 'excluded'}.get(target, target)
-        if source == target or target not in ORDERED_STATUSES:
+        if source == target or source not in ORDERED_STATUSES or target not in ('discover', 'focus', 'hidden'):
             raise ValueError('Choose a different destination list')
         if not tickers or len(set(tickers)) != len(tickers):
             raise ValueError('Select unique tickers')
         view = derive_day_view(self.date, candidates, previous_candidates, self.data)
         if not set(tickers) <= set(view.as_dict()['lists'].get(source, [])):
             raise ValueError('Selection has changed; select again')
+        if source == 'excluded' and target == 'discover' and any(
+                self.data['statuses'][ticker].get('section') != 'hidden' for ticker in tickers):
+            raise ValueError('Machine exclusions are released by scan rules')
         previous = deepcopy(self.data)
         for ticker in tickers:
+            self._unpin(ticker)
             self._remove_order(ticker)
             if target == 'discover':
                 self.data['statuses'].pop(ticker, None)
@@ -286,9 +306,36 @@ class Workspace:
                 self._focus(ticker, (classifications or {}).get(ticker))
             else:
                 self.data['statuses'].setdefault(ticker, {}).update(status='excluded', section='hidden', tags=[], status_at=self.date, excluded_at=self.date)
-                for key in ('manual_focus_date', 'manual_section_date', 'manual_tags', 'manual_tags_date'):
+                for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date', 'manual_tags', 'manual_tags_date'):
                     self.data['statuses'][ticker].pop(key, None)
-        self.data['orders'][target] = [ticker for ticker in tickers if ticker in self.data['statuses']] + self.data['orders'][target]
+        destination = 'excluded' if target == 'hidden' else target
+        self.data['orders'][destination] = [ticker for ticker in tickers if ticker in self.data['statuses']] + self.data['orders'][destination]
+        self.save(previous)
+
+    def _unpin(self, ticker):
+        self.data['pinned'] = [item for item in self.data['pinned'] if item != ticker]
+
+    def pin_ticker(self, ticker, pinned):
+        if ticker not in self.data['statuses'] or not isinstance(pinned, bool):
+            raise ValueError('Choose a workspace ticker and pin state')
+        if (ticker in self.data['pinned']) == pinned:
+            return
+        previous = deepcopy(self.data)
+        self._unpin(ticker)
+        if pinned:
+            self.data['pinned'].insert(0, ticker)
+        self.save(previous)
+
+    def move_pin(self, ticker, index):
+        if ticker not in self.data['pinned'] or not isinstance(index, int) or isinstance(index, bool) or index < 0:
+            raise ValueError('Choose a pinned ticker and position')
+        previous = deepcopy(self.data)
+        list_name = self.section(ticker)
+        self._unpin(ticker)
+        order = self.data['pinned']
+        positions = [i for i, item in enumerate(order) if self.section(item) == list_name]
+        at = positions[index] if index < len(positions) else (positions[-1] + 1 if positions else 0)
+        order.insert(at, ticker)
         self.save(previous)
 
     def set_manual_tags(self, ticker, tag_ids):

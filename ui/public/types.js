@@ -11,16 +11,13 @@ export function defaultTimeframe(now = Date.now()) {
     return period === 60 ? '1h' : `${period}m`;
 }
 export function scanProgress(value) {
-    const labels = { daily: 'Downloading daily', splits: 'Updating splits', bars: 'Building daily bars', features: 'Preparing scan' };
+    const labels = { daily: 'Downloading daily', splits: 'Updating splits', bars: 'Building daily bars', features: 'Building features' };
     const stages = Object.entries(labels);
-    const ready = value.features.date;
-    const completed = value.features.updated_at ? new Date(value.features.updated_at) : null;
-    const stamp = completed && Number.isFinite(completed.getTime()) ? ' · ' + nyTime.format(completed) + ' ET' : '';
     const errors = [value.error, ...stages.map(([key]) => value[key].error)].filter((error) => !!error);
     const active = stages.find(([key]) => value[key].status === 'running');
-    const progress = active?.[1] ?? (value.running ? 'Preparing scan' : errors.length ? 'Refresh failed' : !ready ? 'Scan not ready' : '');
-    const text = [ready ? 'Scan Ready ' + ready + stamp : '', progress].filter(Boolean).join(' · ');
-    return { text, error: errors.length > 0, title: errors.join('\n') || 'Latest completed scan; target ' + value.target_date };
+    const progress = active?.[1] ?? (value.running ? 'Preparing scan' : errors.length ? 'Refresh failed' : !value.ready ? 'Scan not ready' : '');
+    const text = progress ? progress + ' · ' + value.target_date : '';
+    return { text, error: errors.length > 0, title: errors.join('\n') || text };
 }
 export function extendedQuote(quote) {
     if (!quote)

@@ -8,9 +8,9 @@ import exchange_calendars as xcals
 
 ET = ZoneInfo('America/New_York')
 UTC = timezone.utc
-PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '2h': 120, '4h': 240, '1d': 0}
-PHASES = ('1d', '5m', '15m', '30m', '1h')
-INTRADAY = ('5m', '15m', '30m', '1h', '2h', '4h')
+PERIODS = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '2h': 120, '1d': 0}
+PHASES = ('1d', '5m', '15m', '30m', '1h', '2h')
+INTRADAY = ('5m', '15m', '30m', '1h', '2h')
 
 
 def timestamp(value: datetime) -> int:
@@ -37,6 +37,11 @@ class TradingCalendar:
         if start > end:
             return []
         return [t.date() for t in self.calendar.sessions_in_range(start.isoformat(), end.isoformat())]
+
+    @lru_cache(maxsize=6000)
+    def previous_days(self, day: date, count: int = 5) -> tuple[date, ...]:
+        return tuple(self.days(day - timedelta(days=count * 2 + 30),
+                               day - timedelta(days=1))[-count:])
 
     def completed_days(self, now: int, count: int) -> list[date]:
         today = datetime.fromtimestamp(now, ET).date()
@@ -81,6 +86,14 @@ class TradingCalendar:
     def is_open(self, now: int) -> bool:
         session = self.session(datetime.fromtimestamp(now, ET).date())
         return bool(session and session[0] <= now < session[1])
+
+    def window_session(self, now: int) -> tuple[str, str]:
+        day = datetime.fromtimestamp(now, ET).date()
+        session = self.session(day)
+        if session:
+            return day.isoformat(), 'pre' if now < session[0] else 'regular'
+        previous = self.days(day - timedelta(days=15), day)[-1]
+        return previous.isoformat(), 'regular'
 
     def active_start(self, timeframe: str, now: int) -> int | None:
         day = datetime.fromtimestamp(now, ET).date()

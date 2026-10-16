@@ -40,14 +40,14 @@ async def run(args):
         async with ClientSession() as client:
             async with client.ws_connect(f'http://127.0.0.1:{args.port}/v1/stream') as ws:
                 await ws.send_json({'type': 'select', 'symbol': tickers[0].symbol,
-                                    'timeframe': '4h', 'request_id': 1})
+                                    'timeframe': '2h', 'request_id': 1})
                 deadline = time.monotonic() + args.duration
                 while time.monotonic() < deadline:
                     if task.done(): task.result()
                     view = await ws.receive_json(timeout=15)
                     if view.get('request_id') == 1:
                         counts['messages'] += 1
-                        counts['history_snapshots'] += int('bars' in view['charts']['4h'])
+                        counts['history_snapshots'] += int('bars' in view['charts']['2h'])
             async with client.ws_connect(f'http://127.0.0.1:{args.port}/v1/stream') as ws:
                 view = await ws.receive_json(timeout=10)
                 while view.get('type') != 'view':
@@ -70,7 +70,7 @@ async def run(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--symbols', nargs='+', required=True, help='Subset of current workspace focus/wait')
+    parser.add_argument('--symbols', nargs='+', required=True, help='Subset of current workspace Focus')
     parser.add_argument('--duration', type=float, default=60)
     parser.add_argument('--port', type=int, default=28766)
     args = parser.parse_args()

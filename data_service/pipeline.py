@@ -50,7 +50,6 @@ class MassivePipeline:
 
     def _hydrate(self):
         target = daily.target_date(self.calendar)
-        split_target = daily.mature_date()
         try:
             saved = json.loads(self.paths.pipeline_status.read_bytes())
         except (OSError, ValueError):
@@ -60,7 +59,7 @@ class MassivePipeline:
             previous = saved.get(name, {}) if isinstance(saved, dict) else {}
             if not isinstance(previous, dict):
                 previous = {}
-            self._data[name] = {'status': 'idle', 'target': split_target.isoformat() if name == 'splits' else target.isoformat(),
+            self._data[name] = {'status': 'idle', 'target': target.isoformat(),
                                 'updated_at': previous.get('updated_at'), 'error': None}
         self._data['bars']['input_revision'] = None
         self._data['features'].update(date=None, input_revision=None)
@@ -77,7 +76,7 @@ class MassivePipeline:
             pass
         try:
             split_data = splits.read_existing(self.paths.splits_file)
-            if split_data and split_data['end_date'] == split_target and split_data['start_date'] <= daily.shift_year(split_target, -2):
+            if split_data and split_data['end_date'] >= target and split_data['start_date'] <= daily.shift_year(target, -2):
                 self._ready('splits', self.paths.splits_file)
         except (OSError, ValueError, TypeError, KeyError, OverflowError):
             pass
@@ -200,7 +199,6 @@ class MassivePipeline:
             return None
         self._running = True
         target = date.fromisoformat(self._data['target_date'])
-        split_target = date.fromisoformat(self._data['splits']['target'])
         snapshot = None
         try:
             # The standalone directory pull is a prerequisite, never a Massive request.
@@ -219,7 +217,7 @@ class MassivePipeline:
                     return None
                 self._data['bars']['status'] = 'idle'
             if self._data['splits']['status'] != 'ready':
-                ok, _ = await self._step('splits', lambda: splits.update(self.paths.splits_file, split_target, self._fetch_json))
+                ok, _ = await self._step('splits', lambda: splits.update(self.paths.splits_file, target, self._fetch_json))
                 if not ok:
                     return None
                 self._data['bars']['status'] = 'idle'

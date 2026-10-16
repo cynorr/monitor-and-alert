@@ -72,7 +72,7 @@ def test_store_closed_only_upsert_and_whitelist(store):
     ts = at('2026-09-18T09:30')
     with pytest.raises(ValueError, match='Forming'):
         store.upsert([bar(ts)], ts + 299)
-    with pytest.raises(ValueError, match='outside focus/wait'):
+    with pytest.raises(ValueError, match='outside Focus and Holdings'):
         store.upsert([bar(ts, symbol='NO.US')], ts + 300)
     store.upsert([bar(ts, volume=10)], ts + 300)
     store.upsert([bar(ts, volume=99)], ts + 300)
@@ -86,8 +86,8 @@ def install_batch(store, cal, now, symbol='PAYS.US', tf='5m', run='run', count=8
     days = cal.completed_days(now, 100) + [datetime.fromtimestamp(now, ET).date()]
     times = sorted(set(ts for d in days for ts, end in cal.grid(d, tf) if end <= now))[-count:]
     rows = [bar(ts, tf, symbol) for ts in times]
-    store.upsert(rows, now, {'symbol': symbol, 'timeframe': tf, 'run_id': run, 'as_of': now,
-                            'returned_count': len(rows), 'window_start': times[0], 'rejected': []})
+    store.upsert(rows, now, {'symbol': symbol, 'timeframe': tf, 'as_of': now, 'session': cal.window_session(now),
+                            'returned_count': len(rows)})
     return rows
 
 
@@ -113,7 +113,7 @@ def test_quote_is_cumulative_separated_and_monotonic(cal):
 def test_api_blocks_nonuniverse_and_returns_lightweight_chart_rows(tmp_path, cal):
     service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, calendar=cal)
     try:
-        with pytest.raises(ValueError, match='outside focus/wait'):
+        with pytest.raises(ValueError, match='outside Focus and Holdings'):
             asyncio.run(service.api('/v1/bars', {'symbol': ['AAPL.US']}))
         ts = at('2026-09-17T09:30')
         service.store.upsert([bar(ts)], ts + 300)

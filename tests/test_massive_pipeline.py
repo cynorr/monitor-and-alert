@@ -28,14 +28,14 @@ def raw_day(calendar, day, *, volume=500_000.25):
                          'vw': 10.5, 'n': 1, 't': calendar.grid(day, '1d')[0][0] * 1000}]}
 
 
-def inputs(tmp_path):
+def inputs(tmp_path, target=TARGET):
     paths = RuntimePaths(tmp_path)
     atomic_json(paths.symbol_directory, make_snapshot({'TEST.US': {'name': None, 'etf': False, 'test_issue': False}}))
-    calendar = TradingCalendar(TARGET)
-    for day in calendar.days(TARGET - timedelta(days=14), TARGET):
+    calendar = TradingCalendar(target)
+    for day in calendar.days(target - timedelta(days=14), target):
         atomic_json(paths.daily_dir / f'{day}.json', raw_day(calendar, day))
-    atomic_json(paths.splits_file, {'status': 'OK', 'start_date': '2024-07-12', 'end_date': str(TARGET),
-                                   'resultsCount': 1, 'results': [split_event('split', '2026-09-25')]})
+    atomic_json(paths.splits_file, {'status': 'OK', 'start_date': '2024-07-12', 'end_date': str(target),
+                                   'resultsCount': 1, 'results': [split_event('split', str(target - timedelta(days=7)))]})
     return paths, calendar
 
 
@@ -139,6 +139,37 @@ def test_ready_restart_skips_credentials_and_network(tmp_path, monkeypatch):
     assert saved['ready'] and not saved['running'] and 'extended' not in saved
 
 
+@pytest.mark.parametrize('mature,coverage_end', [(date(2026, 7, 3), date(2026, 7, 2)),
+                                              (date(2026, 7, 4), date(2026, 7, 4)),
+                                              (date(2026, 7, 5), date(2026, 7, 2))])
+def test_holiday_and_weekend_skip_all_completed_stages(tmp_path, monkeypatch, mature, coverage_end):
+    target = date(2026, 7, 2)
+    paths, calendar = inputs(tmp_path, target)
+    split_data = json.loads(paths.splits_file.read_bytes())
+    split_data['start_date'] = str(daily.shift_year(target, -2))
+    split_data['end_date'] = str(coverage_end)
+    atomic_json(paths.splits_file, split_data)
+    meta = build.build(paths, target, calendar)
+    snapshot = build_day(paths.daily_db, str(target), calendar)
+    snapshot.update(input_revision=meta['input_revision'], updated_at=pipeline.updated_at())
+    publish_day(paths.days, snapshot)
+    artifacts = [paths.splits_file, paths.daily_db, *paths.daily_dir.glob('*.json'),
+                 *paths.days.glob('*/*.json')]
+    before = {path: path.stat().st_mtime_ns for path in artifacts}
+    monkeypatch.setattr(daily, 'mature_date', lambda now=None: mature)
+    app = MassivePipeline(paths, calendar)
+    async def unexpected_step(*args):
+        pytest.fail('Completed trading date must not download or rebuild any stage')
+    monkeypatch.setattr(app, '_step', unexpected_step)
+    for _ in range(2):
+        assert asyncio.run(app.run()) is None
+        state = app.state()
+        assert state['ready'] and state['target_date'] == str(target)
+        assert all(state[name]['target'] == str(target) for name in pipeline.STAGES)
+    assert app.session is None
+    assert before == {path: path.stat().st_mtime_ns for path in artifacts}
+
+
 def test_interrupted_status_does_not_override_artifact_readiness(tmp_path, monkeypatch):
     paths, calendar = inputs(tmp_path)
     fixed_dates(monkeypatch, calendar)
@@ -173,6 +204,10 @@ def test_feature_failure_reports_once(tmp_path, monkeypatch):
     assert state['features']['date'] == previous['date'] and state['features']['updated_at'] == previous['updated_at']
     assert 'TOP_SECRET_VALUE' not in json.dumps(state) and 'https://' not in json.dumps(state)
     assert json.loads((paths.days / previous['date'] / 'scan.json').read_bytes()) == previous
+    monkeypatch.setattr(pipeline, 'build_day', build_day)
+    monkeypatch.setattr(app, '_fetch_json', lambda url: pytest.fail('Retry must reuse completed Daily and splits'))
+    assert asyncio.run(app.run())['date'] == str(TARGET)
+    assert app.state()['ready'] and called['bars'] == 1
 
 
 def test_success_publishes_revision_and_callback(tmp_path, monkeypatch):
@@ -188,6 +223,21 @@ def test_success_publishes_revision_and_callback(tmp_path, monkeypatch):
     assert json.loads(paths.pipeline_status.read_bytes()) == state
     restored = MassivePipeline(paths, calendar)
     assert restored.state()['ready']
+
+
+def test_local_scan_command_keeps_latest_date_ready(tmp_path, monkeypatch):
+    from data_service.__main__ import main
+    paths, calendar = inputs(tmp_path)
+    fixed_dates(monkeypatch, calendar)
+    app = MassivePipeline(paths, calendar)
+    asyncio.run(app.run())
+    assert main(['scan', '--runtime', str(tmp_path)]) == 0
+    restored = MassivePipeline(paths, calendar)
+    async def unexpected_step(*args):
+        pytest.fail('Local CLI rebuild must not cause another feature build at startup')
+    monkeypatch.setattr(restored, '_step', unexpected_step)
+    assert restored.state()['ready']
+    assert asyncio.run(restored.run()) is None
 
 
 def test_split_failure_blocks_adjusted_publication_without_repeating_daily(tmp_path, monkeypatch):
@@ -264,6 +314,9 @@ def test_status_write_failure_does_not_claim_ready(tmp_path, monkeypatch):
 def test_force_refreshes_splits_but_preserves_raw_and_workspace(tmp_path, monkeypatch):
     paths, calendar = inputs(tmp_path)
     fixed_dates(monkeypatch, calendar)
+    split_data = json.loads(paths.splits_file.read_bytes())
+    split_data['end_date'] = str(TARGET + timedelta(days=2))
+    atomic_json(paths.splits_file, split_data)
     app = MassivePipeline(paths, calendar)
     asyncio.run(app.run())
     raw = {p.name: p.read_bytes() for p in paths.daily_dir.glob('*.json')}
@@ -276,6 +329,8 @@ def test_force_refreshes_splits_but_preserves_raw_and_workspace(tmp_path, monkey
     monkeypatch.setattr(app, '_fetch_json', fetch)
     snapshot = asyncio.run(app.run(force=True))
     assert len(urls) == 1 and '/stocks/v1/splits' in urls[0]
+    assert 'execution_date.lte=2026-10-01' in urls[0]
+    assert json.loads(paths.splits_file.read_bytes())['end_date'] == str(TARGET)
     assert app.state()['ready'] and snapshot['input_revision'] == app.state()['bars']['input_revision']
     assert workspace.read_bytes() == before
     assert raw == {p.name: p.read_bytes() for p in paths.daily_dir.glob('*.json')}

@@ -4,24 +4,63 @@ import { readFileSync } from 'node:fs';
 import { matchesFilters, sliderValues } from '../public/filters.js';
 import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
 import { scanProgress, selectionRequest } from '../public/types.js';
-import { collapseKey, growthValue, isReviewSelection, listSections, sectionKey } from '../public/board.js';
+import { collapseKey, growthValue, listSections, sectionKey } from '../public/board.js';
 import { matchesTag, ScanControls } from '../public/scan.js';
+import { Watchlist } from '../public/list.js';
 import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
 
-test('scan progress keeps last ready date and seconds visible during preparation or errors', () => {
+test('Scan global search reuses add into Discover; explicit Focus section targets remain unchanged', async () => {
+    const list = Object.create(Watchlist.prototype);
+    list.input = { value: '', focus() {} };
+    list.endDrag = () => {};
+    let destination;
+    list.changeSearch = (section, target) => { destination = [section, target]; };
+    list.scan = { enabled: true };
+    list.beginSearch();
+    assert.deepEqual(destination, ['unclassified', 'discover']);
+    list.beginSearch('surf', 'focus');
+    assert.deepEqual(destination, ['surf', 'focus']);
+    list.scan.enabled = false;
+    list.beginSearch();
+    assert.deepEqual(destination, ['unclassified', 'focus']);
+
+    const calls = [];
+    list.scan = { enabled: true, available: () => [], showList: async target => calls.push(['show', target]) };
+    list.search = { list: 'discover', section: 'unclassified', candidate: { ticker: 'GLOBAL' } };
+    list.query = () => 'GLOBAL';
+    list.mutate = async payload => { calls.push(payload); return { board: [{ ticker: 'GLOBAL', symbol: 'GLOBAL.US' }] }; };
+    list.endSearch = symbol => calls.push(['select', symbol]);
+    await list.commitSearch();
+    assert.deepEqual(calls, [
+        { action: 'add', ticker: 'GLOBAL', list_name: 'discover', section: 'unclassified' },
+        ['show', 'discover'], ['select', 'GLOBAL.US'],
+    ]);
+    calls.length = 0;
+    list.scan.available = () => [{ ticker: 'GLOBAL', symbol: 'GLOBAL.US', status: 'discover', pinned: false }];
+    await list.commitSearch();
+    assert.deepEqual(calls, [
+        { action: 'pin', ticker: 'GLOBAL', pinned: true }, ['show', 'discover'], ['select', 'GLOBAL.US'],
+    ]);
+});
+
+test('scan progress hides Ready and shows only target-date preparation or errors', () => {
     const stage = { status: 'ready', target: '2026-10-02', updated_at: null, error: null };
     const state = { target_date: '2026-10-02', running: false, ready: true,
         daily: { ...stage }, splits: { ...stage }, bars: { ...stage, input_revision: 'old' },
-        features: { ...stage, date: '2026-10-01', input_revision: 'old', updated_at: '2026-10-01T23:01:02+00:00' } };
-    assert.equal(scanProgress(state).text, 'Scan Ready 2026-10-01 · 19:01:02 ET');
+        features: { ...stage, date: '2026-10-02', input_revision: 'old', updated_at: '2026-10-02T23:01:02+00:00' } };
+    assert.equal(scanProgress(state).text, '');
+    state.ready = false;
+    state.features.date = '2026-10-01';
+    assert.equal(scanProgress(state).text, 'Scan not ready · 2026-10-02');
     state.running = true;
     state.daily.status = 'running';
-    assert.match(scanProgress(state).text, /Scan Ready 2026-10-01.*Downloading daily/);
+    assert.equal(scanProgress(state).text, 'Downloading daily · 2026-10-02');
     state.running = false;
     state.daily.status = 'error';
     state.daily.error = 'daily: Massive HTTP 503';
     assert.ok(scanProgress(state).error);
+    assert.equal(scanProgress(state).text, 'Refresh failed · 2026-10-02');
     assert.equal(scanProgress(state).title, state.daily.error);
     state.daily.error = null;
     state.error = 'Pipeline status could not be saved';
@@ -79,7 +118,7 @@ test('draft edits leave saved filters intact until explicit save, and cancellati
 });
 
 test('new Tags have independent filters, unique names and a ten-Tag limit', () => {
-    const tags = [{ id: 'default', name: 'Default', filters: { below_days: { min: 2 } } }];
+    const tags = [{ id: 'surf', name: 'Surf-10', filters: { below_days: { min: 2 } } }];
     const result = withSavedTag(tags, { id: 'new', name: ' Bounce ', filters: tags[0].filters });
     assert.equal(result[1].name, 'Bounce');
     result[1].filters.below_days.min = 5;
@@ -92,17 +131,22 @@ test('new Tags have independent filters, unique names and a ten-Tag limit', () =
 
 test('setup sections preserve Tag order; renamed negative and helper labels remain outside setup sections', () => {
     const tags = [
-        { id: 'default', name: 'Default', filters: {} },
         { id: 'first', name: 'Surf-20', role: 'setup', filters: {} },
         { id: 'negative', name: 'Too far', role: 'extended', filters: {} },
+        { id: 'under', name: 'Below long MA', role: 'under50', filters: {} },
         { id: 'helper', name: 'Higher lows', role: 'label', filters: {} },
         { id: 'second', name: 'Bounce-10', role: 'setup', filters: {} },
     ];
     assert.deepEqual(listSections(true, 'focus', tags).map(section => section.id), ['first','second','unclassified']);
-    assert.deepEqual(listSections(true, 'excluded', tags).map(section => section.id), ['review','broken','extended','hidden']);
-    assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus','excluded']);
+    const excluded = listSections(true, 'excluded', tags);
+    assert.deepEqual(excluded.map(section => section.id), ['broken','extended','under50','hidden']);
+    assert.equal(excluded[2].name, 'Under-50');
+    assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus']);
     assert.equal(sectionKey({ status: 'focus', section: 'second', tags: ['first','second'] }), 'focus:second');
-    assert.equal(tagRole(tags[2]), 'extended');
+    assert.equal(tagRole(tags[1]), 'extended');
+    assert.equal(tagRole(tags[2]), 'under50');
+    assert.equal(tagRole({ id: 'under', name: 'Under-50', filters: {} }), 'under50');
+    assert.equal(tagRole({ id: 'under', name: 'Under-50', role: 'label', filters: {} }), 'label');
 });
 
 test('manual Tags match the saved Tag filter; unsaved rule preview still requires the draft conditions', () => {
@@ -130,6 +174,7 @@ test('appearance edits save independently, survive renaming, and preserve manual
     assert.equal(saved.appearance.color, '#e4b400');
     const controls = Object.create(ScanControls.prototype);
     controls.enabled = false;
+    controls.holdingSymbols = new Set();
     controls.preferences = { activeTag: saved.id, tags: [saved] };
     controls.draft = draft;
     const row = { status: 'focus', tags: ['surf'], manual_tags: ['surf'], below_days: 3 };
@@ -139,21 +184,13 @@ test('appearance edits save independently, survive renaming, and preserve manual
 });
 
 
-test('Scan and Monitor fold independently; the same symbol keeps Review preview separate from Holdings live selection', () => {
-    const folded = new Set([collapseKey(false, 'excluded:review')]);
-    assert.ok(folded.has(collapseKey(false, 'excluded:review')));
-    assert.equal(folded.has(collapseKey(true, 'excluded:review')), false);
-    folded.add(collapseKey(true, 'focus:surf'));
-    assert.equal(folded.has(collapseKey(false, 'focus:surf')), false);
-    const row = { symbol: 'XYZ.US', status: 'excluded', section: 'review' };
-    assert.ok(isReviewSelection(row, 'watchlist'));
-    assert.equal(isReviewSelection(row, 'holdings'), false);
-    const preview = selectionRequest('XYZ.US', '5m', 1, 'monitor', 'watchlist');
-    const live = selectionRequest('XYZ.US', '5m', 2, 'monitor', 'holdings');
-    assert.equal(preview.symbol, live.symbol);
-    assert.equal(preview.source, 'watchlist');
-    assert.equal(live.source, 'holdings');
-    assert.equal(live.request_id, 2);
+test('Scan and Monitor fold independently; selection retains Holdings identity', () => {
+    const folded = new Set([collapseKey(false, 'focus:surf')]);
+    assert.equal(folded.has(collapseKey(true, 'focus:surf')), false);
+    const selection = selectionRequest('XYZ.US', '5m', 2, 'monitor', 'holdings');
+    assert.equal(selection.symbol, 'XYZ.US');
+    assert.equal(selection.source, 'holdings');
+    assert.equal(selection.request_id, 2);
 });
 
 test('Growth formats the raw return percentage without changing its meaning at the multiple threshold', () => {

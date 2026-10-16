@@ -10,18 +10,18 @@ from data_service.workspace import Workspace, derive_day_view, empty_workspace, 
 
 
 def preferences():
-    return {'activeList': 'discover', 'sort': 'default', 'activeTag': 'default', 'tags': [
-        {'id': 'default', 'name': 'Default', 'filters': {}},
+    return {'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': [
         {'id': 'ext', 'name': 'Extended', 'filters': {'extended_k': {'min': 1.5}}},
         {'id': 'broken-tag', 'name': 'Broken', 'filters': {'broken_k': {'min': 1}, 'below_days': {'min': 2}}},
         {'id': 'surf', 'name': 'Surf-10', 'filters': {'ema10_touch_days_5d': {'min': 3}}},
         {'id': 'body-label', 'name': 'Large body', 'role': 'label', 'filters': {'adr20': {'min': 5}}},
         {'id': 'empty', 'name': 'Empty', 'filters': {}},
+        {'id': 'under-tag', 'name': 'Under-50', 'filters': {'ma_arrangement': {'values': ['under50']}}},
     ]}
 
 
 def snapshot(day='2026-10-01', **tickers):
-    return {'date': day, 'rows': [{'symbol': ticker + '.US', 'candidate': True, **fields} for ticker, fields in tickers.items()]}
+    return {'date': day, 'rows': [{'symbol': ticker + '.US', 'candidate': True, 'extended_k': 0, 'broken_k': 0, 'below_days': 0, 'ma_arrangement': 'ema10_lead', **fields} for ticker, fields in tickers.items()]}
 
 
 def excluded(ticker, section, at='2026-10-01'):
@@ -29,6 +29,21 @@ def excluded(ticker, section, at='2026-10-01'):
     data['statuses'][ticker] = {'status': 'excluded', 'section': section, 'status_at': at, 'excluded_at': at, 'tags': []}
     data['orders']['excluded'] = [ticker]
     return data
+
+
+def test_manual_discover_survives_same_day_rules_but_is_not_carried():
+    data = empty_workspace()
+    data['statuses']['MANUAL'] = {'status': 'discover', 'section': 'unclassified', 'manual_discover_date': '2026-10-01'}
+    data['orders']['discover'] = ['MANUAL']
+    data['pinned'] = ['MANUAL']
+    scan = snapshot(MANUAL={'candidate': False, 'extended_k': 3})
+    result = apply_rules(data, scan, validate_preferences(preferences()))
+    assert result['statuses']['MANUAL']['status'] == 'discover'
+    assert 'ext' in result['statuses']['MANUAL']['tags']
+    assert result['pinned'] == ['MANUAL']
+    assert derive_day_view(scan['date'], set(), set(), result).discover == ('MANUAL',)
+    following = inherit_workspace(result, set(), set(), '2026-10-02')
+    assert not following['statuses'] and not following['pinned']
 
 
 def test_matching_finite_missing_and_inclusive_bounds():
@@ -45,7 +60,7 @@ def test_discover_and_focus_negative_rules_broken_priority_and_tag_roles():
     data = empty_workspace()
     data['statuses']['FOCUS'] = {'status': 'focus', 'section': 'unclassified'}
     prefs = validate_preferences(preferences())
-    prefs['tags'][1]['name'] = 'Stretched'  # Stable role survives a rename.
+    prefs['tags'][0]['name'] = 'Stretched'  # Stable role survives a rename.
     result = apply_rules(data, snapshot(FOCUS={'extended_k': 2}, DISC={'extended_k': 2, 'broken_k': 2, 'below_days': 3},
                                         AUX={'adr20': 7}, POT={'ema10_touch_days_5d': 4, 'adr20': 7}), prefs)
     assert result['statuses']['FOCUS']['section'] == 'extended'
@@ -61,7 +76,7 @@ def test_discover_and_focus_negative_rules_broken_priority_and_tag_roles():
 def test_hidden_skips_all_matching_and_survives_candidate_gaps_until_day_seven():
     data = excluded('HID', 'hidden')
     inherited = inherit_workspace(data, {'HID'}, set(), '2026-10-05')
-    result = apply_rules(inherited, snapshot('2026-10-05', HID={'candidate': False, 'ema10_touch_days_5d': 5, 'extended_k': 3}), preferences())
+    result = apply_rules(inherited, snapshot('2026-10-05', HID={'candidate': False, 'ema10_touch_days_5d': 5, 'extended_k': 3, 'ma_arrangement': 'under50'}), preferences())
     assert result['statuses']['HID']['section'] == 'hidden'
     assert result['statuses']['HID']['tags'] == []
     result = apply_rules(result, snapshot('2026-10-08', HID={'ema10_touch_days_5d': 5}), preferences())
@@ -72,29 +87,97 @@ def test_hidden_skips_all_matching_and_survives_candidate_gaps_until_day_seven()
     assert view.returned == {'HID'}
 
 
-def test_negative_deadline_not_extended_by_daily_matching_but_resets_after_expiry():
+@pytest.mark.parametrize('section,fields', [
+    ('extended', {'extended_k': 2}),
+    ('broken', {'broken_k': 2, 'below_days': 3}),
+    ('under50', {'ma_arrangement': 'under50'}),
+])
+def test_machine_exclusions_have_no_deadline_and_reassign_on_each_scan(section, fields):
+    result = apply_rules(excluded('EXT', section), snapshot('2026-10-02', EXT=fields), preferences())
+    assert result['statuses']['EXT']['section'] == section
+    assert 'excluded_at' not in result['statuses']['EXT']
+    assert apply_rules(result, snapshot('2026-10-02', EXT=fields), preferences()) == result
+    result = apply_rules(result, snapshot('2026-10-03', EXT={'ma_arrangement': 'under50'}), preferences())
+    assert result['statuses']['EXT']['section'] == 'under50'
+
+
+@pytest.mark.parametrize('section', ['broken', 'extended', 'under50'])
+@pytest.mark.parametrize('candidate', [True, False])
+@pytest.mark.parametrize('setup', [True, False])
+def test_recovery_immediately_returns_only_today_candidates_and_never_enters_focus(section, candidate, setup):
+    result = apply_rules(excluded('POT', section), snapshot('2026-10-02', POT={
+        'candidate': candidate, 'ema10_touch_days_5d': 4 if setup else 0}), preferences())
+    if candidate:
+        assert result['statuses']['POT']['status'] == 'discover'
+        assert result['statuses']['POT']['section'] == ('surf' if setup else 'unclassified')
+        assert result['statuses']['POT']['released_at'] == '2026-10-02'
+        assert 'excluded_at' not in result['statuses']['POT']
+    else:
+        assert 'POT' not in result['statuses']
+    assert not result['orders']['focus']
+
+
+def test_missing_negative_features_keep_machine_exclusion_but_known_false_and_condition_can_release():
+    data = excluded('OLD', 'broken')
+    unknown = snapshot('2026-10-02', OLD={'below_days': 3, 'broken_k': None})
+    result = apply_rules(data, unknown, preferences())
+    assert result['statuses']['OLD']['section'] == 'broken'
+    result = apply_rules(result, snapshot('2026-10-02', OLD={'below_days': 0, 'broken_k': None}), preferences())
+    assert result['statuses']['OLD']['status'] == 'discover'
+    absent = apply_rules(excluded('GONE', 'extended'), snapshot('2026-10-02'), preferences())
+    assert absent['statuses']['GONE']['section'] == 'extended'
+
+
+def test_under50_classifies_all_lists_with_stable_role_and_priority():
     data = excluded('EXT', 'extended')
-    result = apply_rules(data, snapshot('2026-10-07', EXT={'extended_k': 2}), preferences())
-    assert result['statuses']['EXT']['excluded_at'] == '2026-10-01'
-    result = apply_rules(result, snapshot('2026-10-08', EXT={'extended_k': 2}), preferences())
-    assert result['statuses']['EXT']['section'] == 'extended'
-    assert result['statuses']['EXT']['excluded_at'] == '2026-10-08'
-    assert apply_rules(result, snapshot('2026-10-08', EXT={'extended_k': 2}), preferences()) == result
+    data['statuses'].update({
+        'FOC': {'status': 'focus', 'section': 'unclassified'},
+        'HID': {'status': 'excluded', 'section': 'hidden', 'excluded_at': '2026-10-01'},
+    })
+    prefs = validate_preferences(preferences())
+    prefs['tags'][-1]['name'] = 'Below long MA'
+    rows = snapshot(FOC={'candidate': False, 'ma_arrangement': 'under50'}, DISC={'ma_arrangement': 'under50'},
+                    EXT={'candidate': False, 'ma_arrangement': 'under50'}, HID={'ma_arrangement': 'under50'},
+                    BOTH={'ma_arrangement': 'under50', 'extended_k': 2},
+                    ALL={'ma_arrangement': 'under50', 'extended_k': 2, 'broken_k': 2, 'below_days': 3})
+    result = apply_rules(data, rows, prefs)
+    for ticker in ('FOC', 'DISC', 'EXT'):
+        assert result['statuses'][ticker]['status'] == 'excluded'
+        assert result['statuses'][ticker]['section'] == 'under50'
+        assert result['statuses'][ticker]['tags'] == ['under-tag']
+    assert result['statuses']['HID']['section'] == 'hidden'
+    assert result['statuses']['HID']['tags'] == []
+    assert result['statuses']['BOTH']['section'] == 'extended'
+    assert result['statuses']['ALL']['section'] == 'broken'
+    assert result['statuses']['ALL']['tags'] == ['ext', 'broken-tag', 'under-tag']
+    assert workspace_tickers(result) == []
 
 
-def test_review_persists_without_setup_or_ranking_then_negative_reassigns():
-    result = apply_rules(excluded('POT', 'broken'), snapshot('2026-10-02', POT={'candidate': False, 'ema10_touch_days_5d': 4}), preferences())
-    assert result['statuses']['POT']['section'] == 'review'
-    assert 'excluded_at' not in result['statuses']['POT']
-    result = apply_rules(result, snapshot('2026-10-20', POT={'candidate': False}), preferences())
-    assert result['statuses']['POT']['section'] == 'review'
-    assert result['statuses']['POT']['tags'] == []
-    result = apply_rules(result, snapshot('2026-10-21', POT={'candidate': False, 'extended_k': 2}), preferences())
-    assert result['statuses']['POT']['section'] == 'extended'
-    assert result['statuses']['POT']['excluded_at'] == '2026-10-21'
+@pytest.mark.parametrize('candidate', [True, False])
+def test_expired_hidden_is_inherited_until_prepared_features_classify_it(candidate):
+    data = excluded('OLD', 'hidden')
+    inherited = inherit_workspace(data, set(), set(), '2026-10-08')
+    assert inherited['statuses']['OLD']['section'] == 'hidden'
+    result = apply_rules(inherited, snapshot('2026-10-08', OLD={'candidate': candidate}), preferences())
+    assert ('OLD' in result['statuses']) == candidate
+    if candidate:
+        assert result['statuses']['OLD']['status'] == 'discover'
+    negative = apply_rules(inherited, snapshot('2026-10-08', OLD={'candidate': False, 'extended_k': 2}), preferences())
+    assert negative['statuses']['OLD']['section'] == 'extended'
+    assert 'excluded_at' not in negative['statuses']['OLD']
 
 
-def test_manual_focus_and_tags_only_current_day_and_new_section_members_lead(tmp_path):
+def test_manual_negative_tags_cannot_keep_an_exclusion():
+    data = excluded('OLD', 'extended')
+    data['statuses']['OLD'].update(manual_tags=['ext', 'surf'], manual_tags_date='2026-10-02')
+    result = apply_rules(data, snapshot('2026-10-02', OLD={}), preferences())
+    assert result['statuses']['OLD']['status'] == 'discover'
+    assert result['statuses']['OLD']['tags'] == ['surf']
+    assert result['statuses']['OLD']['manual_tags'] == ['surf']
+
+
+@pytest.mark.parametrize('fields,tag', [({'extended_k': 2}, 'ext'), ({'ma_arrangement': 'under50'}, 'under-tag')])
+def test_manual_focus_and_tags_only_current_day_and_new_section_members_lead(tmp_path, fields, tag):
     folder = tmp_path / '2026-10-01'
     folder.mkdir()
     path = folder / 'workspace.json'
@@ -106,14 +189,14 @@ def test_manual_focus_and_tags_only_current_day_and_new_section_members_lead(tmp
     ws = Workspace(path)
     ws.add_ticker('NEW')
     ws.set_manual_tags('NEW', ['surf'])
-    ws.reclassify(snapshot(OLD={'ema10_touch_days_5d': 4}, NEXT={'ema10_touch_days_5d': 4}, NEW={'extended_k': 2}), preferences())
+    ws.reclassify(snapshot(OLD={'ema10_touch_days_5d': 4}, NEXT={'ema10_touch_days_5d': 4}, NEW=fields), preferences())
     assert ws.data['orders']['focus'] == ['NEW', 'NEXT', 'OLD']
     assert ws.data['statuses']['NEW']['section'] == 'surf'
-    assert ws.data['statuses']['NEW']['tags'] == ['ext', 'surf']
+    assert set(ws.data['statuses']['NEW']['tags']) == {tag, 'surf'}
     inherited = inherit_workspace(ws.data, {'OLD', 'NEW', 'NEXT'}, {'OLD', 'NEW', 'NEXT'}, '2026-10-02')
-    result = apply_rules(inherited, snapshot('2026-10-02', OLD={'ema10_touch_days_5d': 4}, NEXT={'ema10_touch_days_5d': 4}, NEW={'extended_k': 2}), preferences())
+    result = apply_rules(inherited, snapshot('2026-10-02', OLD={'ema10_touch_days_5d': 4}, NEXT={'ema10_touch_days_5d': 4}, NEW=fields), preferences())
     assert result['statuses']['NEW']['status'] == 'excluded'
-    assert result['statuses']['NEW']['tags'] == ['ext']
+    assert result['statuses']['NEW']['tags'] == [tag]
     assert result['orders']['focus'] == ['NEXT', 'OLD']
 
 
@@ -161,4 +244,4 @@ def test_migration_combines_focus_wait_and_preferences_without_candidate_carry()
     prefs = preferences()
     prefs['activeList'] = 'hidden'
     assert validate_preferences(prefs)['activeList'] == 'excluded'
-    assert prefs['tags'][1]['role'] == 'extended'
+    assert prefs['tags'][0]['role'] == 'extended'

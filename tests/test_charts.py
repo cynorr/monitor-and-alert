@@ -1,6 +1,5 @@
 import asyncio
 import json
-import sqlite3
 import time
 from datetime import datetime
 from types import SimpleNamespace
@@ -8,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 from aiohttp import ClientSession, web
 
-from data_service.calendar import PHASES
 from data_service.charts import ChartCache
 from data_service.config import Ticker
 from data_service.downloader import BarDownloader
@@ -17,63 +15,7 @@ from data_service.indicators import series, preview, daily_summary
 from data_service.service import DataService
 from data_service.store import BarStore, Bar
 from data_service.broker import RateLimiter
-from test_data_service import cal, store, at, bar, raw, install_batch
-
-
-def quote(ts, price=11, volume=100, session='Intraday'):
-    return {'timestamp': ts, 'last_price': price, 'cumulative_volume': volume, 'trade_session': session}
-
-
-def test_active_five_restart_boundary_and_official_replacement(store, cal):
-    cache = ChartCache(store, cal)
-    now = at('2026-09-18T10:03')
-    start = at('2026-09-18T10:00')
-    cache.apply_quote('PAYS.US', quote(now, 15))
-    cache.apply_quote('PAYS.US', quote(now + 1, 17))
-    cache.apply_quote('PAYS.US', quote(now + 2, 14))
-    active = cache.forming('PAYS.US', '5m', now + 2)
-    assert (active['open'], active['high'], active['low'], active['close']) == (15, 17, 14, 14)
-    assert not store.bars('PAYS.US', '5m')
-    assert cache.forming('PAYS.US', '5m', start + 300) is None
-    store.upsert([bar(start)], start + 301)
-    cache.apply_quote('PAYS.US', quote(start + 301, 20))
-    view = cache.chart('PAYS.US', '5m', start + 301)
-    assert view['bars'][-1]['open'] == 10
-    assert view['active']['time'] == start + 300 and view['active']['open'] == 20
-    cache.apply_quote('PAYS.US', quote(start + 302, 500, session='Post'))
-    assert cache.forming('PAYS.US', '5m', start + 302)['close'] == 20
-    assert cache.forming('PAYS.US', '5m', at('2026-09-18T16:00')) is None
-
-
-def test_larger_candle_rebuilds_from_official_five(store, cal):
-    cache = ChartCache(store, cal)
-    now = at('2026-09-18T10:13')
-    opened = at('2026-09-18T10:00')
-    cache.apply_quote('PAYS.US', quote(now, 20))
-    assert cache.forming('PAYS.US', '15m', now)['open'] == 20
-    store.upsert([Bar('PAYS.US', '5m', opened, 10, 30, 8, 25, 20),
-                  Bar('PAYS.US', '5m', opened + 300, 25, 26, 18, 19, 30)], now)
-    active = cache.forming('PAYS.US', '15m', now)
-    assert (active['open'], active['high'], active['low'], active['close']) == (10, 30, 8, 20)
-    daily = cache.forming('PAYS.US', '1d', now)
-    assert daily['volume'] == 100
-
-
-def test_volume_uses_quote_delta_and_waits_for_closed_part(store, cal):
-    cache = ChartCache(store, cal)
-    now = at('2026-09-18T09:41')
-    opened = at('2026-09-18T09:30')
-    cache.apply_quote('PAYS.US', quote(now - 61, volume=10_000))
-    cache.apply_quote('PAYS.US', quote(now, volume=10_050))
-    store.upsert([bar(opened, volume=20)], now)
-    assert cache.forming('PAYS.US', '5m', now)['volume'] == 50
-    assert cache.forming('PAYS.US', '15m', now)['volume'] is None
-    store.upsert([bar(opened + 300, volume=30)], now)
-    assert cache.forming('PAYS.US', '15m', now)['volume'] == 100
-    cache.apply_quote('PAYS.US', quote(now + 1, volume=9999))
-    assert cache.forming('PAYS.US', '5m', now + 1)['volume'] is None
-    cache.apply_quote('PAYS.US', quote(at('2026-09-21T09:31'), volume=17))
-    assert cache.forming('PAYS.US', '5m', at('2026-09-21T09:31'))['volume'] is None
+from test_data_service import cal, store, at, bar, raw
 
 
 def test_live_ema_uses_closed_anchor_and_sma_requires_50():
@@ -89,12 +31,8 @@ def test_live_ema_uses_closed_anchor_and_sma_requires_50():
     assert len(series(rows)['series']['ema10']) == 40
 
 
-def test_turnover_migration_and_indicator_invalidation(tmp_path, cal):
-    path = tmp_path / 'old.sqlite3'
-    db = sqlite3.connect(path)
-    db.execute('CREATE TABLE bars(symbol TEXT, timeframe TEXT, ts INTEGER, open REAL, high REAL, low REAL, close REAL, volume INTEGER, PRIMARY KEY(symbol,timeframe,ts))')
-    db.close()
-    store = BarStore(path, cal, {'PAYS.US'})
+def test_turnover_and_indicator_invalidation(tmp_path, cal):
+    store = BarStore(tmp_path / 'bars.sqlite3', cal, {'PAYS.US'})
     try:
         now = at('2026-09-18T12:00')
         days = cal.completed_days(now, 20)
@@ -125,7 +63,7 @@ def test_bad_turnover_falls_back_without_rejecting_valid_ohlc(store, cal):
         async def candles(self, *args, **kwargs):
             return [SimpleNamespace(**vars(raw(ts)), turnover=float('nan'))]
     batch = asyncio.run(BarDownloader(Fake(), store, cal, clock=lambda: ts + 300).fetch('PAYS.US', '5m'))
-    assert not batch['rejected']
+    assert batch['returned_count'] == 1
     assert store.bars('PAYS.US', '5m')[0].turnover is None
 
 
@@ -190,17 +128,6 @@ def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
         service.store.close()
 
 
-def test_rejected_prefix_cannot_supply_live_volume(store, cal):
-    now = at('2026-09-18T09:41')
-    rows = install_batch(store, cal, now, count=2)
-    batch = store.batch('PAYS.US', '5m')
-    batch['rejected'] = [{'ts': rows[0].ts, 'error':'official revision invalid'}]
-    store.upsert([], now, batch)
-    cache = ChartCache(store, cal)
-    cache.apply_quote('PAYS.US', quote(now))
-    assert cache.forming('PAYS.US', '5m', now)['volume'] is None
-
-
 def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
     from data_service.quotes import QuoteService
     now = int(time.time()) - 3
@@ -215,18 +142,6 @@ def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
     assert q.values['PAYS.US']['Post']['last_price'] == 12
     assert q.values['PAYS.US']['Intraday']['cumulative_volume'] == 100
     assert q.push_count == 0
-
-
-def test_incremental_valid_revision_clears_rejection(store, cal):
-    now = at('2026-09-18T09:41')
-    rows = install_batch(store, cal, now, count=2)
-    batch = store.batch('PAYS.US', '5m')
-    batch['rejected'] = [{'ts': rows[0].ts, 'error':'invalid'}]
-    store.upsert([], now, batch)
-    class Fake:
-        async def candles(self, *args, **kwargs): return [raw(rows[0].ts)]
-    asyncio.run(BarDownloader(Fake(), store, cal, clock=lambda: now).fetch('PAYS.US', '5m', count=2))
-    assert store.batch('PAYS.US', '5m')['rejected'] == []
 
 
 def test_broker_request_budget_shared_by_all_callers():

@@ -2,11 +2,11 @@
 import asyncio
 import json
 import time
-from dataclasses import replace
 
 import pytest
 
 from data_service.broker import Broker, RateLimiter
+from data_service.calendar import PHASES
 from data_service.config import Ticker
 from data_service.downloader import BarDownloader
 from data_service.service import DataService
@@ -49,7 +49,7 @@ def test_range_contradiction_is_retained_logged_and_never_retried(tmp_path, cal,
 
 
 @pytest.mark.parametrize('kind', ['nan', 'negative_volume', 'duplicate', 'extended'])
-def test_unplottable_response_does_not_leave_old_revision(store, cal, kind):
+def test_unplottable_response_preserves_old_window(store, cal, kind):
     ts = at('2026-09-18T09:30'); now = ts + 301
     store.upsert([bar(ts)], now)
     item = raw(ts)
@@ -58,8 +58,9 @@ def test_unplottable_response_does_not_leave_old_revision(store, cal, kind):
     if kind == 'extended': item.trade_session = 'Pre'
     class Fake:
         async def candles(self, *args, **kwargs): return [item, item] if kind == 'duplicate' else [item]
-    result = asyncio.run(BarDownloader(Fake(), store, cal, lambda: now).fetch('PAYS.US', '5m'))
-    assert result['rejected'] and not store.bars('PAYS.US', '5m')
+    with pytest.raises(ValueError):
+        asyncio.run(BarDownloader(Fake(), store, cal, lambda: now).fetch('PAYS.US', '5m'))
+    assert store.bars('PAYS.US', '5m') == [bar(ts)]
     assert not DataValidator(store, cal).check('PAYS.US', '5m', now)['complete']
     assert not (store.path.parent / 'invalid_ohlc.jsonl').exists()
 
@@ -133,7 +134,7 @@ def test_missing_latest_closed_target_triggers_full_retry(tmp_path, cal):
     try:
         key=('PAYS.US','5m')
         asyncio.run(service._execute(key))
-        assert 'Missing 1 bars' in service.sync[key].error
+        assert 'Missing latest closed' in service.sync[key].error
         assert service.sync[key].refresh and not service.sync[key].alert
         assert service.validator.check(*key,now)['missing'] == [start+600]
     finally: service.store.close()
@@ -166,8 +167,6 @@ def test_partial_and_full_status_and_no_redundant_price_revision(tmp_path, cal):
         rev=service.store.revisions['PAYS.US','5m']
         service.store.upsert(rows,now)
         assert service.store.revisions['PAYS.US','5m']==rev
-        with pytest.raises(ValueError,match='official'):
-            service.store.upsert([replace(rows[0],timeframe='2h')],now)
     finally: service.store.close()
 
 
@@ -216,9 +215,9 @@ def test_scheduler_selection_priority_and_bad_symbol_isolation(tmp_path,cal):
         assert broker.calls[:2]==[('PAYS.US','5m'),('PAYS.US','1d')]
         assert broker.maximum==5
         assert service.status('PAYS.US',now)['stage']=='full'
-        assert len(service.status('BLSH.US',now)['errors'])==5
+        assert len(service.status('BLSH.US',now)['errors'])==len(PHASES)
         service.recover()
-        service.select('BLSH.US','4h')
+        service.select('BLSH.US','2h')
         assert service.priority(('BLSH.US','5m'))<service.priority(('PAYS.US','5m'))
     finally: service.store.close()
 

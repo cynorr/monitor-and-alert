@@ -343,6 +343,7 @@ def value_positions(base, quotes, as_of=None):
             total = sequence['realized_pnl'] if closed else unrealized
             items.append({**sequence, 'market_value': sequence['held_quantity'] * price,
                           'holding_days': holding_days(sequence['opened_on'], as_of),
+                          'is_new': sequence['opened_on'] == as_of,
                           'unrealized_pnl': unrealized,
                           'unrealized_pnl_percent': (price / sequence['buy_price'] - 1) * 100,
                           'total_pnl': total, 'total_pnl_percent': total / sequence['buy_value'] * 100 if closed else (price / sequence['buy_price'] - 1) * 100,
@@ -359,7 +360,7 @@ def value_positions(base, quotes, as_of=None):
     open_rows = [s for h in holdings for s in h['sequences'] if not s['closed_today']]
     total_pnl = sum((s['total_pnl'] for s in open_rows), D(0))
     remaining_cost = sum((s['held_quantity'] * s['buy_price'] for s in open_rows), D(0))
-    day_values = [s['day_pnl'] for s in open_rows]
+    day_values = [s['day_pnl'] for h in holdings for s in h['sequences']]
     day_pnl = sum(day_values, D(0)) if all(value is not None for value in day_values) else None
     return {**base, 'holdings': holdings,
             'funds': {**base['funds'], 'stock_market_value': market_value,
@@ -372,12 +373,18 @@ class Holdings:
     def __init__(self, client, rules: Path, *, interval=30):
         self.client, self.rules, self.interval = client, rules, interval
         self.base, self.error, self.loading = None, None, True
+        self.error_kind = None
         # A previous accepted raw snapshot can supply fallback values at startup.
         if client.raw:
             try:
                 self.base = build(client.raw, read_rules(client.raw, rules))
             except Exception as exc:
-                self.error = redact(str(exc), client.secrets)
+                self._set_error(exc, 'accounting')
+
+    def _set_error(self, exc, kind):
+        message = str(exc).strip() or ('Request timed out' if isinstance(exc, TimeoutError) else type(exc).__name__)
+        self.error = redact(message, self.client.secrets)
+        self.error_kind = kind
 
     @property
     def symbols(self):
@@ -390,20 +397,23 @@ class Holdings:
 
     def state(self, quotes=None, as_of=None):
         return {'data': json.loads(dumps(value_positions(self.base, quotes or {}, as_of))) if self.base else None,
-                'loading': self.loading, 'error': self.error}
+                'loading': self.loading, 'error': self.error, 'error_kind': self.error_kind}
 
     async def refresh(self):
+        kind = 'request'
         try:
             raw = await self.client.refresh()
+            kind = 'accounting'
             base = build(raw, read_rules(raw, self.rules))
+            kind = 'storage'
             self.client.commit(raw)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            self.error = redact(str(exc), self.client.secrets)
+            self._set_error(exc, kind)
             return False
         else:
-            self.base, self.error = base, None
+            self.base, self.error, self.error_kind = base, None, None
             return True
         finally:
             self.loading = False

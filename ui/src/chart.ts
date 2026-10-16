@@ -1,6 +1,6 @@
-import type { IChartApi, ISeriesApi, IPriceLine, UTCTimestamp, Time, CandlestickData, LineData, HistogramData } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, IPriceLine, UTCTimestamp, Time, CandlestickData, LineData, AutoscaleInfo } from 'lightweight-charts';
 import type * as ChartLibrary from 'lightweight-charts';
-import { $, money, compact, dayKey, type Row, type Point, type ChartData } from './types.js';
+import { $, money, compact, dayKey, type Row, type Point, type ChartData, type Quote } from './types.js';
 import { BAR_SPACING, VOLUME_PANE_RATIO } from './chart-settings.js';
 declare global {
     interface Window {
@@ -11,6 +11,22 @@ const L = window.LightweightCharts;
 const dateFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 function dateOf(t: Time) { return typeof t === 'number' ? new Date(t * 1000) : typeof t === 'string' ? new Date(t) : new Date(Date.UTC(t.year, t.month - 1, t.day, 12)); }
+function syncSeries<T extends 'Candlestick' | 'Histogram' | 'Line'>(series: ISeriesApi<T>, rows: ReturnType<ISeriesApi<T>['data']>) {
+    const previous = series.data();
+    if (!previous.length && !rows.length) return false;
+    // A new window needs setData; replacing a provisional tail uses update.
+    if (!previous.length || rows.length < previous.length || previous.some((row, i) => row.time !== rows[i].time)) {
+        series.setData([...rows]);
+        return true;
+    }
+    for (let i = 0; i < rows.length; i++) {
+        const old = previous[i] as unknown as Record<string, unknown> | undefined;
+        const row = rows[i] as unknown as Record<string, unknown>;
+        if (!old || Object.keys({ ...old, ...row }).some(key => old[key] !== row[key]))
+            series.update(rows[i], i < previous.length - 1);
+    }
+    return false;
+}
 export class Panel {
     chart: IChartApi;
     candles: ISeriesApi<'Candlestick'>;
@@ -25,6 +41,7 @@ export class Panel {
     hoveredTime?: number;
     precision = 2;
     private linkedPrice?: { series: ISeriesApi<'Candlestick'> | ISeriesApi<'Histogram'>; line: IPriceLine };
+    private sessionPrice?: { line: IPriceLine; price: number };
     onHover: (row?: Row, price?: number, paneIndex?: number, time?: number) => void = () => { };
     onSelect: (row: Row) => void = () => { };
     constructor(public id: string, public daily: boolean) {
@@ -37,7 +54,13 @@ export class Panel {
             localization: { locale: 'en-US', timeFormatter: (t: Time) => daily ? dayKey(Number(t)) : `${dayKey(Number(t))} ${timeFormat.format(dateOf(t))}` },
             crosshair: { mode: L.CrosshairMode.Normal, vertLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
         });
-        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false });
+        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false,
+            autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
+                const info = original();
+                if (!info?.priceRange) return info;
+                if (!this.sessionPrice) return info;
+                return { ...info, priceRange: { minValue: Math.min(info.priceRange.minValue, this.sessionPrice.price), maxValue: Math.max(info.priceRange.maxValue, this.sessionPrice.price) } };
+            } });
         const colors = { ema10: '#2962ff', ema20: '#e4b400', [daily ? 'sma50' : 'sma65']: '#e53935' };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
@@ -55,8 +78,9 @@ export class Panel {
         if (mainPane) observer.observe(mainPane);
         this.chart.subscribeCrosshairMove(param => {
             const candle = param.seriesData.get(this.candles) as CandlestickData | undefined;
-            const volume = param.seriesData.get(this.volume) as HistogramData | undefined;
-            const row = candle ? { ...candle, time: Number(candle.time), volume: volume?.value ?? null } : undefined;
+            // The library supplies the time; the original row owns Vol and its comparison.
+            const time = candle ? Number(candle.time) : undefined;
+            const row = time === this.active?.time ? this.active ?? undefined : this.rows.find(row => row.time === time);
             this.showHover(row);
             // Link the pointer's value, never the candle close or histogram value.
             if (param.sourceEvent) {
@@ -86,6 +110,7 @@ export class Panel {
         this.days.clear();
         this.indicators = {};
         this.active = null;
+        this.setSessionPrices();
         this.fitted = false;
         this.hoveredTime = undefined;
         this.clearLinkedPrice();
@@ -101,10 +126,26 @@ export class Panel {
         }
     }
     candle(row: Row): CandlestickData { return { time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close }; }
+    setSessionPrices(quote?: Quote) {
+        const regular = quote?.regular, pre = quote?.extended.Pre;
+        const value = regular ?? pre ?? quote?.extended.Post;
+        const current = this.sessionPrice;
+        this.candles.applyOptions({ lastValueVisible: !value });
+        if (!value) {
+            if (current) this.candles.removePriceLine(current.line);
+            this.sessionPrice = undefined;
+            return;
+        }
+        const price = value.last_price;
+        const color = regular ? (price >= (regular.prev_close ?? price) ? '#26a69a' : '#ef5350') : pre ? '#e4b400' : '#2962ff';
+        const options = { price, color, lineVisible: false, axisLabelVisible: true, axisLabelColor: color, axisLabelTextColor: pre ? '#171b20' : '#ffffff', title: '' };
+        if (current) { current.price = price; current.line.applyOptions(options); }
+        else this.sessionPrice = { line: this.candles.createPriceLine(options), price };
+    }
     histogram(row: Row) { return row.volume == null ? { time: row.time as UTCTimestamp } : { time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? '#26a69a99' : '#ef535099' }; }
     render(data: ChartData) {
         const next = data.active;
-        const rebuild = data.bars !== undefined || this.active?.time !== next?.time || (!!this.active && this.active.volume !== null && next?.volume === null);
+        const rebuild = data.bars !== undefined || this.active?.time !== next?.time;
         if (data.bars !== undefined) {
             this.rows = data.bars;
             this.indicators = data.indicators ?? {};
@@ -128,13 +169,13 @@ export class Panel {
                 items.push(row);
                 this.days.set(day, items);
             }
-            this.candles.setData(rows.map(row => this.candle(row)));
-            this.volume.setData(rows.map(row => this.histogram(row)));
+            const replaced = syncSeries(this.candles, rows.map(row => this.candle(row)));
+            syncSeries(this.volume, rows.map(row => this.histogram(row)));
             for (const [name, line] of Object.entries(this.lines))
-                line.setData([...(this.indicators[name] ?? []), ...(data.indicator_preview[name] ? [data.indicator_preview[name]] : [])] as LineData[]);
-            if (this.fitted && browsing && timeRange)
+                syncSeries(line, [...(this.indicators[name] ?? []), ...(data.indicator_preview[name] ? [data.indicator_preview[name]] : [])] as LineData[]);
+            if (replaced && this.fitted && browsing && timeRange)
                 scale.setVisibleRange(timeRange);
-            else if (this.fitted)
+            else if (replaced && this.fitted)
                 scale.scrollToPosition(1, false);
         }
         else if (next) {
@@ -163,7 +204,14 @@ export class Panel {
         }
     }
     showCandleInfo(row?: Row) {
-        $(this.id + '-volume').textContent = `Vol ${compact(row?.volume)}`;
+        const volume = $(this.id + '-volume');
+        const comparison = row?.volume_comparison;
+        const percent = comparison?.percent;
+        volume.textContent = `Vol ${compact(row?.volume)} · 5D Avg ${percent == null ? '—' : Math.trunc(percent) + '%'}`;
+        volume.title = row?.time === this.active?.time && row ? (row.volume == null ? 'Current candle volume unavailable'
+            : this.daily ? 'Current daily cumulative volume' : 'Volume for the current intraday candle') : 'Volume for this candle';
+        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${compact(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average.`
+            : '\nPrevious 5 trading days: comparison unavailable.';
         const node = $(this.id + '-ohlc');
         if (!row) { node.textContent = '—'; return; }
         const range = row.low > 0 ? ((row.high - row.low) / row.low * 100).toFixed(2) + '%' : '—';

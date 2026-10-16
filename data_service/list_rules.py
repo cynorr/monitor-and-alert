@@ -3,38 +3,49 @@ from copy import deepcopy
 import math
 
 from .preferences import tag_role
-from .workspace import HIDDEN_DAYS, _status_age, is_hidden, migrate_workspace
+from .workspace import is_hidden, migrate_workspace
+
+NEGATIVE_ROLES = ('broken', 'extended', 'under50')
 
 
-def matches_filters(row, filters):
-    """Same inclusive bounds / explicit exclusive maximum as UI filters.ts."""
+def _filter_result(row, filters):
+    """True/False for known conditions; None when missing values prevent a decision."""
+    missing = False
     for key, rule in filters.items():
         if not any(bound in rule for bound in ('min', 'max', 'values')):
             continue
         value = row.get(key)
         if value is None:
-            return False
+            missing = True
+            continue
         if 'values' in rule:
             if value not in rule['values']:
                 return False
             continue
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-            return False
+            missing = True
+            continue
         if 'min' in rule and value < rule['min']:
             return False
         if 'max' in rule and (value >= rule['max'] if rule.get('maxExclusive') else value > rule['max']):
             return False
-    return True
+    return None if missing else True
+
+
+def matches_filters(row, filters):
+    """Same inclusive bounds / explicit exclusive maximum as UI filters.ts."""
+    return _filter_result(row, filters) is True
 
 
 def active_tag(tag):
-    return tag['id'] != 'default' and any(any(bound in rule for bound in ('min', 'max', 'values'))
+    return any(any(bound in rule for bound in ('min', 'max', 'values'))
                                         for rule in tag.get('filters', {}).values())
 
 
 def matched_tags(row, definitions, manual=()):
-    return [tag for tag in definitions if tag['id'] != 'default' and
-            (tag['id'] in manual or (active_tag(tag) and matches_filters(row, tag['filters'])))]
+    return [tag for tag in definitions
+            if (tag['id'] in manual and tag_role(tag) in ('setup', 'label')) or
+            (active_tag(tag) and matches_filters(row, tag['filters']))]
 
 
 def focus_classification(row, preferences):
@@ -44,7 +55,7 @@ def focus_classification(row, preferences):
 
 
 def apply_rules(workspace, snapshot, preferences, selected_date=None):
-    """Return a new workspace; only Focus is eligible for Longbridge membership."""
+    """Return a new workspace; only Focus joins full Monitor data and Alert scope."""
     selected_date = selected_date or snapshot['date']
     result = migrate_workspace(workspace, selected_date)
     states = result['statuses']
@@ -52,9 +63,12 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
     rows = {row['symbol'].removesuffix('.US'): row for row in snapshot['rows']}
     candidates = {ticker for ticker, row in rows.items() if row.get('candidate')}
     definitions = preferences['tags']
-    tag_ids = {tag['id'] for tag in definitions if tag['id'] != 'default'}
+    manual_ids = {tag['id'] for tag in definitions if tag_role(tag) in ('setup', 'label')}
+    negative_definitions = [tag for tag in definitions if tag_role(tag) in NEGATIVE_ROLES and active_tag(tag)]
     setup_sections = {'unclassified'} | {tag['id'] for tag in definitions if tag_role(tag) == 'setup'}
-    scope = candidates | {ticker for ticker, state in states.items() if state.get('status') in ('focus', 'excluded')}
+    manual_discover = {ticker for ticker, state in states.items()
+                       if state.get('status') == 'discover' and state.get('manual_discover_date') == selected_date}
+    scope = candidates | manual_discover | {ticker for ticker, state in states.items() if state.get('status') in ('focus', 'excluded')}
 
     for ticker in sorted(scope):
         state = states.setdefault(ticker, {'status': 'discover', 'section': 'unclassified', 'status_at': selected_date})
@@ -64,49 +78,50 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
             state.pop('manual_tags_date', None)
             continue
 
-        expired = state.get('status') == 'excluded' and state.get('section') != 'review' and (
-            _status_age(selected_date, state.get('excluded_at', state.get('status_at', selected_date))) >= HIDDEN_DAYS)
-        hidden_expired = expired and state.get('section') == 'hidden'
-        if hidden_expired:
+        if state.get('status') == 'excluded' and state.get('section') == 'hidden':
             state.update(status='discover', section='unclassified', released_at=selected_date)
             state.pop('excluded_at', None)
 
         if state.get('manual_tags_date') != selected_date:
             state.pop('manual_tags', None)
             state.pop('manual_tags_date', None)
-        manual = set(state.get('manual_tags', [])) & tag_ids
-        matched = matched_tags(rows.get(ticker, {}), definitions, manual)
+        manual = [tag for tag in state.get('manual_tags', []) if tag in manual_ids]
+        if manual:
+            state['manual_tags'] = manual
+        else:
+            state.pop('manual_tags', None)
+            state.pop('manual_tags_date', None)
+        row = rows.get(ticker, {})
+        matched = matched_tags(row, definitions, manual)
         state['tags'] = [tag['id'] for tag in matched]
         potential = [tag['id'] for tag in matched if tag_role(tag) == 'setup']
-        negative = next((role for role in ('broken', 'extended') if any(tag_role(tag) == role for tag in matched)), None)
+        negative = next((role for role in NEGATIVE_ROLES if any(tag_role(tag) == role for tag in matched)), None)
         manual_focus = state.get('status') == 'focus' and state.get('manual_focus_date') == selected_date
 
-        if negative and not manual_focus:
-            if state.get('status') != 'excluded' or state.get('section') == 'review' or expired:
-                state['excluded_at'] = selected_date
+        if negative and not manual_focus and ticker not in manual_discover:
             state.update(status='excluded', section=negative)
+            state.pop('excluded_at', None)
             state.pop('manual_section_date', None)
         elif state.get('status') == 'excluded':
-            if potential:
-                state.update(section='review')
-                state.pop('excluded_at', None)
-            elif state.get('section') != 'review' and expired:
-                state.update(status='discover', section='unclassified', released_at=selected_date)
-                state.pop('excluded_at', None)
+            if state.get('section') in NEGATIVE_ROLES and any(
+                    _filter_result(row, tag['filters']) is None for tag in negative_definitions):
+                continue
+            state.update(status='discover', section=potential[0] if potential else 'unclassified', released_at=selected_date)
+            state.pop('excluded_at', None)
+            state.pop('manual_section_date', None)
+            state.pop('manual_focus_date', None)
         elif state.get('manual_section_date') != selected_date or state.get('section') not in setup_sections:
             state['section'] = potential[0] if potential else 'unclassified'
             state.pop('manual_section_date', None)
 
-        # A release returns only actual candidates; Review and Focus may outlive rankings.
-        if state.get('status') == 'discover' and ticker not in candidates:
+        # Only actual candidates return to Discover; Focus and negative results may outlive rankings.
+        if state.get('status') == 'discover' and ticker not in candidates | manual_discover:
             del states[ticker]
         else:
-            if state.get('section') == 'review':
-                state.pop('manual_section_date', None)
             state.setdefault('status_at', selected_date)
 
     for ticker, state in list(states.items()):
-        if state.get('status') == 'discover' and ticker not in candidates:
+        if state.get('status') == 'discover' and ticker not in candidates | manual_discover:
             del states[ticker]
 
     # Moved/new members lead their section; unchanged members retain manual order.
@@ -119,4 +134,6 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
         incoming = sorted(members - set(unchanged))
         orders[status] = incoming + unchanged
     result['orders'] = orders
+    result['pinned'] = [ticker for ticker in result['pinned'] if ticker in states and
+                        previous_states[ticker].get('status') == states[ticker].get('status')]
     return result

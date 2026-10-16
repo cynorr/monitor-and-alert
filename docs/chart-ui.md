@@ -1,6 +1,6 @@
 # Chart UI
 
-Updated: 2026-10-06. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Data and indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
+Updated: 2026-10-08. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
 
 ## Implementation principle
 
@@ -32,26 +32,43 @@ The default volume divider is moderately higher than before; it remains adjustab
 - Hide the persistent last-price horizontal line on candles, moving averages and volume. The reference lines are the freely moving dashed horizontal/vertical crosshair and its native axis labels; do not add a fixed price reference line.
 - All dashed chart lines use the same thin segment pattern: **1px width, 6px segment / 6px gap**, with flat ends. Use built-in `LineStyle.LargeDashed` for horizontal/vertical crosshairs and the matching pattern for Alert primitives. Apply this to Scan, Monitor, all periods, main and volume panes; do not use dots or short dotted-looking dashes.
 - User-created Alert lines are defined separately in [alert.md](alert.md); saved thresholds do not enable the last-price reference line above.
+- Latest-day Scan uses one right-axis numeric live-price label for the current session only: Pre uses EMA20 yellow **#e4b400** with dark text; Regular uses teal **#26a69a** or red **#ef5350** against Longbridge's previous close (teal when unavailable); Post uses EMA10 blue **#2962ff** with white text. Regular/Post use white text. The backend selects the active session; the frontend does not infer it from cached quote timestamps. Reuse one public createPriceLine with lineVisible=false and axisLabelVisible=true; hide the candle's native closed-price label while the live label is present, and restore it when absent. No horizontal line, extra header text or list columns. Remove the live label on missing/stale values, symbol/mode/date reset or historical Scan. The default automatic price range includes the active price using public autoscaleInfoProvider; native manual scaling is retained. The label never alters Massive candles, volume or indicators. Session and freshness rules belong to [Longbridge data](longbridge-data.md#定位与范围).
 - Use `CrosshairMode.Normal` in both Monitor charts and Scan; no magnet or price snap. The linked peer uses the mouse-driven price or volume value, never candle close or the histogram bar's value.
 - Chart branding and attribution follow [Logo / Icon](ui.md#logo--icon).
 
 ## Headers and information
 
-- Chart headers are **120px** high with one bottom border. Daily shows the symbol at top-left, with no Daily tag, followed by the optional Nasdaq Trader Security Name in smaller **15px** muted text. Long names stay on one line with ellipsis and a full-name tooltip; missing names and cleared selections hide the name. Scan, Monitor, Review and Holdings selections share the local `.US` name lookup. Selecting or reading a chart never fetches names.
-- Intraday shows the current price at top-left with the same **28px** size, weight and color as the Daily symbol. Its ET clock is **15px**. The extended-session pill sits immediately to the clock's left, both **26px** high; regular sessions show no pill. Period controls sit on the next row.
+- Chart headers are **120px** high with one bottom border. Daily shows the symbol at top-left, with no Daily tag. Optional company name sits immediately to its right, sharing the text baseline, in smaller **15px** muted text. The next **22px** row shows the concise classification at **11px**, matching the EMA/SMA legend size; ADR20/ADV20 move down one row. Optional Daily Sell/Bid and Buy/Ask pills share the metrics row to preserve the header height. Category wording and deduplication are maintained only in Additional Info.
+- Earnings text sits immediately to the left of the Daily Go to latest circular button, with **12px** dark **#293341** text and **26px** line height, matching the Intraday ET clock. Company name, classification and earnings stay on one line with ellipsis; earnings truncate the report label first and preserve the day countdown. Tooltips provide full text, dates and source timestamps. Missing values and cleared selections hide the corresponding text.
+- Scan, Monitor and Holdings share the independent current `.US` Additional Info lookup. Historical Scan does not display historical company metadata. Data sources, Python name cleanup, optionality, refresh and earnings wording/date selection are maintained only in [Additional Info](additional-info.md); selecting or reading a chart never fetches it.
+- Intraday shows the current price at top-left with the same **28px** size, weight and color as the Daily symbol. Its ET clock is **12px**, colored **#293341**. The extended-session pill sits immediately to the clock's left, both **26px** high; regular sessions show no pill. Period controls sit on the next row. Optional `Market Cap` sits below these controls, at **11px** in black **#000**, matching the EMA/SMA legend size. Its compact value omits the dollar sign (for example `Market Cap 1.5B`). Intraday Sell/Bid and Buy/Ask pills share this row; there is no Daily market-cap label.
 - Only Daily displays ADR20 and ADV20, using the same formulas in both modes: recent up to 20 closed records, mean `(H-L)/L×100` and mean `close×volume`. Intraday displays the current price and any extended-session pill. Available Sell/Bid and Buy/Ask quotes remain optional.
+- Chart legends, the List Tag/Filter labels and List column titles share a **4px** label-box-to-rule gap (`--label-rule-gap`); their small text uses a **16px** line height. Header boundaries keep their fixed height.
 - EMA/SMA legends pair colored line swatches with concise labels: EMA 10, EMA 20, and SMA 50 for Daily or SMA 65 for Intraday. They do not show current indicator values; unavailable indicator lines and legends remain absent.
 - OHLC sits immediately below the aligned black horizontal border on each chart, at **15px**; ADR/ADV also use **15px**. OHLC fields stay together and wrap on narrow panels. Native chart axes use **12px**. Shared CSS font variables keep other small labels at **11px**, list values at **12px** and body text at **13px**.
 - Range is `(H-L)/L × 100%`. H/L values and Range value are black; other labels and values retain their original color.
-- The volume value uses **`Vol` + compact value** (for example `Vol 1.38M`) at a fixed top-right position within the volume pane. Hover or a linked crosshair shows the volume of the corresponding bar, matching the OHLC bar. Leaving or clearing the crosshair restores the latest bar's volume. Quote refreshes must not replace the hovered value. The label position follows native pane resizing.
-- Active volume comes from the backend's estimate; missing initialization after startup/recovery remains empty until usable, and closed official bars replace estimates. Data formulas are maintained in [behavior.md](behavior.md#图表周期与指标).
+- The volume readout, its five-day comparison and hover behavior follow [Volume comparison](#volume-comparison).
+- Active OHLCV comes directly from the corresponding SDK candle; official closed bars replace provisional values. Data handling is maintained in [longbridge-data.md](longbridge-data.md).
 - Lightweight Charts does not supply a TradingView-style instrument/OHLC header; the small DOM legends use subscribeCrosshairMove and seriesData.
 - Headers omit market/currency, adjustment/session metadata, bar counts and branding/footer strips. Validation sample counts remain backend diagnostics.
+
+## Volume comparison
+
+- Every chart's volume pane shows **`Vol 1.38M · 5D Avg 125%`** at its fixed top-right position. `Vol` and the comparison always refer to the same candle. The position follows native pane resizing. This applies to Monitor Daily/Intraday and Scan Daily.
+- Percentage = candle volume / mean reference volume × 100. **100% means the historical average**, 150% means 1.5 times that average. Display only the integer portion, truncating rather than rounding (125.9% → 125%); retain full precision in calculation. Use exactly `5D Avg`.
+- Anchor the reference window to the displayed candle's New York trading date: use the **five exchange trading sessions strictly before that date**, excluding the displayed session. Historical hover uses that historical date, not today's date.
+- Daily uses the available Daily volumes within those sessions. Intraday uses only the selected period and the same Regular time slot, identified by its New York start time. For example, the second 15m candle compares 09:45–10:00 ET across the prior five sessions. Missing candles do not shift later slots; DST does not change the local-time match.
+- Open and closed candles use the same calculation. The current open volume is compared with historical completed candles for the full corresponding window. Do not extrapolate, normalize by elapsed time or use smaller periods to assemble the reference.
+- Use the available matching samples within the fixed five-session window; do not count absence as zero or reach farther back to fill five samples. Valid zero volumes count as samples. Shortened session-final candles keep their time slot; absent afternoon candles on early-close days are skipped. No samples or a zero historical average produces `5D Avg —`.
+- Hovering candles or volume, including a linked crosshair, shows that candle's Vol and comparison together, matching its OHLC. Clearing or leaving hover restores the last candle, including the current Regular open candle. Live updates refresh a hovered open candle, and preserve a hovered closed candle's readout.
+- The tooltip identifies current Daily cumulative volume, current Intraday candle volume or historical candle volume, and includes the historical mean, actual sample count and `100% = average`. Missing volume remains unavailable.
+- Calculate in Python with the shared trading calendar and existing history cache; send `volume_comparison: {average, samples, percent}` alongside each displayed row. The frontend formats and selects the corresponding result. Each source uses its own historical data; no new requests, subscriptions, persistence or cross-source comparisons are introduced.
 
 ## Mouse, zoom and periods
 
 - Use native pan, zoom, price scaling, pane resizing and scrollToRealTime. Realtime updates preserve a historical viewport.
-- On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and `[0,5)` minutes → 5m, `[5,15)` → 15m, `[15,30)` → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h/4h are manual only. Controls: **5m, 15m, 30m, 1h, 2h, 4h**.
+- A closed boundary or refresh retains the previous complete chart until the official replacement and usable active data arrive together. Routine tail replacement/append uses public series updates without clearing candles, rebuilding all history or resetting the viewport. The final Regular candle stays visible while its official replacement is pending.
+- On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and `[0,5)` minutes → 5m, `[5,15)` → 15m, `[15,30)` → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h is manual only. Controls: **5m, 15m, 30m, 1h, 2h**.
 - `↦` means Go to latest: return to the latest available trading day while retaining the chart's zoom. Period changes preserve the selected day when that day exists in the new period.
 
 ## Linked trading day
@@ -66,9 +83,9 @@ The default volume divider is moderately higher than before; it remains adjustab
 ## Data boundaries
 
 - Keep mode, request_id, source and socket identity checks. Mode/date changes reset chart context; backend run_id changes force full history. Indicators are calculated only in Python; reading or selecting charts does not trigger downloads.
-- 2h/4h derive from official closed 5m bars. Missing official 15m/30m/1h history uses the same in-memory conversion; official data replaces it on the next update.
-- 1000 5m bars span roughly 13 full sessions; derived periods share that coverage. Insufficient SMA65 history leaves the line absent.
-- Scan and Review use completed local Daily bars without an active candle or Intraday data. Review's disabled Intraday controls and Add to Focus prompt follow [List UI](ui.md#展示范围与控件).
+- All six Monitor periods use their own official closed history and SDK open candles.
+- Each period has its own loaded window. Insufficient SMA65 history leaves the line absent. Longbridge cache freshness and source boundaries follow [longbridge-data.md](longbridge-data.md).
+- Scan uses completed local Daily bars without an active candle or Intraday data.
 
 ## Alert interaction
 
@@ -76,6 +93,6 @@ Alert 在 Scan/Monitor 的创建、选择、改价、删除与跨图同步只在
 
 ## Chart status
 
-- Live Monitor: Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all five official periods complete, hidden after three seconds. Routine closed updates do not restart the timer.
+- Live Monitor: show a muted Refreshing label while a previously loaded Daily or 5m window awaits refresh; keep existing charts and live prices visible. Otherwise Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all six official periods complete, hidden after three seconds. Routine closed updates do not restart the timer.
 - Exhausted history retries and connection failures use one exclamation icon with reason on hover, retaining existing charts. Finite positive OHLC range contradictions do not produce UI warnings or retries; display official values unchanged.
-- Scan and Review use their local Daily date/status rather than live five-period readiness. Scan's separate Ready date and refresh controls follow [List UI](ui.md#scan-日期与-ready).
+- Scan uses its local Daily date/status rather than live six-period readiness. Scan's date, preparation status and refresh controls follow [List UI](ui.md#scan-日期与准备状态).

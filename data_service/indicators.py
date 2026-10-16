@@ -1,8 +1,36 @@
 """Pure calculations. Live previews always start from closed-bar state."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
+
+from .calendar import ET
+
+
+def volume_key(row, timeframe):
+    local = datetime.fromtimestamp(row['time'], ET)
+    return local.date(), 0 if timeframe == '1d' else local.hour * 60 + local.minute
+
+
+def volume_context(rows, timeframe):
+    return {'history': {volume_key(row, timeframe): row['volume'] for row in rows
+                        if row['volume'] is not None}, 'baselines': {}}
+
+
+def volume_comparison(row, timeframe, calendar, context):
+    """Compare one candle with available matching slots in the prior five sessions."""
+    day, slot = key = volume_key(row, timeframe)
+    if key not in context['baselines']:
+        history = context['history']
+        samples = [history[d, slot] for d in calendar.previous_days(day) if (d, slot) in history]
+        context['baselines'][key] = {'average': sum(samples) / len(samples) if samples else None,
+                                     'samples': len(samples)}
+    baseline = context['baselines'][key]
+    average = baseline['average']
+    percent = row['volume'] / average * 100 if row['volume'] is not None and average else None
+    return {**baseline, 'percent': percent}
 
 
 def ema_step(previous, close, period):

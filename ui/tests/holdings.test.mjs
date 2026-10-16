@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sortedHoldingRows } from '../public/holdings.js';
+import { holdingsErrorAdvice, sortedHoldingRows } from '../public/holdings.js';
 
 const fields = ['market_value', 'holding_days', 'total_pnl_percent', 'total_pnl', 'sold_percent', 'day_pnl'];
 function holding(ticker, value, id = ticker) {
@@ -9,6 +9,15 @@ function holding(ticker, value, id = ticker) {
     }] };
 }
 const symbols = rows => rows.map(row => row.holding.ticker);
+
+test('refresh advice distinguishes retryable account requests, trade checks and local cache writes', () => {
+    assert.match(holdingsErrorAdvice('request').action, /network and SnapTrade/);
+    assert.match(holdingsErrorAdvice('accounting').action, /restarting will not resolve/);
+    assert.match(holdingsErrorAdvice('storage').action, /disk space/);
+    for (const kind of [null, undefined]) {
+        assert.match(holdingsErrorAdvice(kind).action, /share the details with Codex/);
+    }
+});
 
 test('all eight numeric columns sort descending using numbers, including losses', () => {
     const data = [holding('SMALL', '2'), holding('NEG', '-10'), holding('BIG', '12')];

@@ -16,11 +16,5 @@ massive-token.txt
 *.egg-info/
 build/
 dist/
-macos/build/
 
 ui/node_modules/
-
-# Imported reference project; its source/data are migrated into maintained paths.
-/qull-scan-data-pipeline/
-/qull-scan-workspace/
-/schwab-review/

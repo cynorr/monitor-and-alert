@@ -1,4 +1,4 @@
-"""Free Nasdaq Trader ETF classifications and names, independent of Massive."""
+"""Free Nasdaq Trader ETF flags, used only for screening eligibility."""
 import asyncio
 from datetime import datetime, timezone
 import json
@@ -67,7 +67,7 @@ def parse_text(text, filename):
             raise ValueError('Invalid or duplicate Nasdaq directory ticker')
         if row['ETF'] not in {'Y', 'N'}:
             raise ValueError('Nasdaq directory ETF must be Y or N')
-        symbols[ticker + '.US'] = {'name': row['Security Name'].strip() or None, 'etf': row['ETF'] == 'Y'}
+        symbols[ticker + '.US'] = {'etf': row['ETF'] == 'Y'}
     return symbols, {'url': SOURCES[filename], 'creation_time': creation_time, 'row_count': len(symbols)}
 
 

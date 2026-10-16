@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 import time
 import uuid
 from dataclasses import asdict, dataclass
@@ -10,7 +9,7 @@ from pathlib import Path
 
 from .calendar import ET, PHASES, INTRADAY, TradingCalendar
 from .charts import ChartCache, bar_row
-from .downloader import BarDownloader
+from .downloader import BarDownloader, parse_candle, append_ohlc_log, ohlc_comparison
 from .quotes import QuoteService
 from .store import BarStore
 from .validator import DataValidator
@@ -35,6 +34,7 @@ class DataService:
     def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None):
         self.tickers = tickers
         self.holdings_symbols = []
+        self.scan_symbols = []
         self.symbols = [t.symbol for t in tickers]
         self.runtime, self.broker = runtime, broker
         self.now = clock or time.time
@@ -42,14 +42,15 @@ class DataService:
         self.calendar = calendar or TradingCalendar()
         self.store = BarStore(bars_path or runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
         self.validator = DataValidator(self.store, self.calendar)
-        self.charts = ChartCache(self.store, self.calendar)
+        self.charts = ChartCache(self.store, self.calendar, ready=self.window_ready)
         self.alerts = alerts
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
         self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
-                                   on_reconnect=lambda: self.recover(reset_alerts=False),
-                                   on_reset=alerts.reset if alerts else None) if broker else None
+                                   on_reconnect=self.refresh_windows, on_reset=self.reset_realtime,
+                                   on_candle=self.apply_candle) if broker else None
         self.run_id = uuid.uuid4().hex
         self.started_at = int(self.now())
+        self.session = self.calendar.window_session(self.started_at)
         self.focus = (self.symbols[0] if self.symbols else '', '5m')
         self.sync = {(symbol, tf): SyncState() for symbol in self.symbols for tf in PHASES}
         self.workspace = None
@@ -77,14 +78,23 @@ class DataService:
         self.holdings_symbols = list(symbols)
         self._update_symbols()
 
+    def update_scan_symbols(self, symbols):
+        self.scan_symbols = list(dict.fromkeys(symbols))
+        self._update_quote_scope()
+
+    def _update_quote_scope(self):
+        if self.broker:
+            self.broker.allowed = frozenset(self.symbols) | set(self.scan_symbols)
+            self.broker.candle_allowed = frozenset(self.symbols)
+        if self.quotes:
+            self.quotes.set_symbols(self.symbols, self.scan_symbols)
+
     def _update_symbols(self):
         symbols = list(dict.fromkeys([t.symbol for t in self.tickers] + self.holdings_symbols))
         removed = set(self.symbols) - set(symbols)
         added = set(symbols) - set(self.symbols)
         self.symbols = symbols
         self.store.allowed = frozenset(symbols)
-        if self.broker:
-            self.broker.allowed = frozenset(symbols)
         for key in list(self.sync):
             if key[0] in removed:
                 state = self.sync.pop(key)
@@ -96,15 +106,16 @@ class DataService:
             for tf in PHASES:
                 self.sync[symbol, tf] = SyncState()
         for symbol in removed:
-            for cache in (self.charts.active, self.charts.quotes, self.charts.volume_baselines):
-                cache.pop(symbol, None)
+            for cache in (self.charts.active, self.charts.views):
+                for key in [key for key in cache if key[0] == symbol]:
+                    cache.pop(key)
         if self.focus[0] not in symbols:
             self.focus = (symbols[0] if symbols else '', self.focus[1])
-        if self.quotes and (added or removed):
-            self.quotes.set_symbols(symbols)
+        self._update_quote_scope()
 
     def list_state(self):
         return {'board': self.board(), 'mode': self.mode,
+                'current_regular_session': self.calendar.is_open(int(self.now())),
                 'editable': self.workspace is not None and self.workspace_subset is None,
                 'workspace_error': self.workspace.error if self.workspace else None}
 
@@ -130,14 +141,18 @@ class DataService:
             if section not in (None, 'focus', 'wait', 'unclassified'):
                 self.workspace.move_ticker(ticker, section, 0)
             return {**self.list_state(), 'notice': f"Added {ticker} · {info['name']}"}
-        if action == 'delete':
-            self.workspace.delete_ticker(ticker)
+        if action == 'hide':
+            self.workspace.hide_ticker(ticker)
         elif action == 'move':
             self.workspace.move_ticker(ticker, section, payload.get('index'), list_name=payload.get('list_name', 'focus'))
         elif action == 'keep':
             self.workspace.add_ticker(ticker, 'focus')
         elif action == 'tag':
             self.workspace.set_manual_tags(ticker, payload.get('tags', []))
+        elif action == 'pin':
+            self.workspace.pin_ticker(ticker, payload['pinned'])
+        elif action == 'pin_move':
+            self.workspace.move_pin(ticker, payload['index'])
         else:
             raise ValueError('Unknown list action')
         return self.list_state()
@@ -151,46 +166,73 @@ class DataService:
             raise ValueError('Invalid intraday timeframe')
         self.focus = (symbol, timeframe)
 
-    def recover(self, *, reset_alerts=True):
-        # A recovery cannot attribute missed Quote increments to the active bucket.
-        self.charts.volume_baselines.clear()
-        self.charts.quotes.clear()
-        if self.alerts and reset_alerts:
+    def reset_realtime(self):
+        self.charts.active.clear()
+        if self.alerts:
             self.alerts.reset()
-        for active in self.charts.active.values():
-            active['volume'] = None
+
+    def recover(self):
+        self.reset_realtime()
+        if self.quotes:
+            self.quotes.restart()
+        self.refresh_windows()
+
+    def refresh_windows(self):
         for state in self.sync.values():
             state.pending = state.refresh = True
             state.complete = False
             state.due = state.attempt = 0
             state.limit = 4
 
+    def window_ready(self, symbol, tf, now=None):
+        now = int(self.now()) if now is None else now
+        if self.broker is None:
+            return self.validator.check(symbol, tf, now)['complete']
+        return self.session == self.calendar.window_session(now) and self.sync[symbol, tf].complete
+
     def apply_quote(self, symbol, quote):
         if self.alerts:
             self.alerts.quote(symbol, quote)
-        self.charts.apply_quote(symbol, quote)
+
+    def apply_candle(self, symbol, tf, item, *, initial=False):
+        self.store.check(symbol)
+        now = int(self.now())
+        bar = parse_candle(item, symbol, tf, self.calendar, now, closed=False)
+        if bar.invalid_range:
+            append_ohlc_log(self.store.path.parent / 'invalid_ohlc.jsonl', [ohlc_comparison(
+                bar, self.calendar, now, 'Intraday',
+                {key: str(getattr(item, key)) for key in ('open', 'high', 'low', 'close', 'volume')})])
+        # Only the history pull writes closed bars, including SDK-confirmed candles.
+        if bar.ts == self.calendar.active_start(tf, now):
+            self.charts.apply_candle(symbol, tf, bar_row(bar), initial=initial)
+            return True
+        return False
 
     def priority(self, key):
         symbol, tf = key
         state = self.sync[key]
         selected = symbol == self.focus[0]
+        order = ('5m', '1d', *PHASES[2:])
         if not state.refresh:
             return (-2 if selected else -1, 0)
         if selected and tf in ('5m', '1d', self.focus[1]):
-            return (0, ('5m', '1d', '15m', '30m', '1h').index(tf))
-        return (('5m', '1d', '15m', '30m', '1h').index(tf) + 1, self.symbols.index(symbol))
+            return (0, order.index(tf))
+        return (order.index(tf) + 1, self.symbols.index(symbol))
 
     async def _execute(self, key):
         state = self.sync[key]
         count = 1000 if state.refresh else 2
         state.refresh = False
         try:
-            await self.downloader.fetch(*key, count=count, background=state.background)
+            batch = await self.downloader.fetch(*key, count=count, background=state.background)
+            if batch is None:
+                state.refresh = state.pending = True
+                state.complete = False
+                state.due = 0
+                return
             check = self.validator.check(*key, int(self.now()))
             if not check['complete']:
                 raise ValueError('; '.join(check['errors']))
-        except sqlite3.Error:
-            raise
         except Exception as exc:
             state.error = str(exc)
             state.complete = False
@@ -210,6 +252,10 @@ class DataService:
             state.attempt, state.limit, state.due = 0, 4, 0
 
     def _schedule(self, now):
+        session = self.calendar.window_session(now)
+        if session != self.session:
+            self.session = session
+            self.recover()
         targets = {tf: self.calendar.latest_closed(tf, now) for tf in PHASES}
         for (symbol, tf), state in self.sync.items():
             if state.pending or state.task is not None or state.target == targets[tf]:
@@ -273,16 +319,24 @@ class DataService:
             completed = [tf for tf, check in checks.items() if check['complete']]
             errors = [f"{tf}: {error}" for tf, check in checks.items() for error in check['errors']]
         else:
-            completed = [tf for tf in PHASES if self.sync[symbol, tf].complete]
+            completed = [tf for tf in PHASES if self.window_ready(symbol, tf, now)]
             errors = [f"{tf}: {self.sync[symbol, tf].error}" for tf in PHASES if self.sync[symbol, tf].alert]
+            for tf in PHASES:
+                batch = self.store.batch(symbol, tf)
+                if batch and batch.get('rejected'):
+                    errors.extend(f"{tf} history: {row['ts']}: {row['error']}" for row in batch['rejected'])
+            if self.quotes:
+                errors.extend(f'{tf} live: {error}' for (s, tf), error in self.quotes.candle_errors.items() if s == symbol)
         level = 'full' if len(completed) == len(PHASES) else 'basic' if all(tf in completed for tf in ('1d', '5m')) else 'loading'
-        return {'stage': level, 'errors': errors}
+        refreshing = level == 'loading' and any(
+            tf not in completed and self.store.batch(symbol, tf) for tf in ('1d', '5m'))
+        return {'stage': level, 'errors': errors, 'refreshing': bool(refreshing)}
 
     def quote(self, symbol, now):
         result = self.quotes.output(symbol, now) if self.quotes else {
             'symbol': symbol, 'regular': None, 'extended': {}, 'connection_health': 'DISCONNECTED', 'error': None}
         regular = result['regular']
-        if regular:
+        if regular and self.window_ready(symbol, '1d', now):
             day = datetime.fromtimestamp(regular['timestamp'], ET).date()
             previous = next((b['close'] for b in reversed(self.charts.closed(symbol, '1d')[1])
                              if datetime.fromtimestamp(b['time'], ET).date() < day), None)
@@ -305,11 +359,13 @@ class DataService:
 
     def board(self):
         now = int(self.now())
+        pins = {ticker: index for index, ticker in enumerate(self.workspace.data['pinned'])} if self.workspace else {}
         result = []
         for ticker in self.tickers:
             state = self.status(ticker.symbol, now)
             member = self.workspace.data['statuses'].get(ticker.ticker, {}) if self.workspace else {}
             result.append({**member, **asdict(ticker), 'quote': self.quote(ticker.symbol, now),
+                           **({'pinned': ticker.ticker in pins, 'pin_index': pins.get(ticker.ticker)} if self.workspace else {}),
                            'errors': state['errors']})
         return result
 
@@ -342,14 +398,9 @@ class DataService:
                 raise ValueError('symbol is required')
             tf = query.get('timeframe', ['5m'])[0]
             if tf not in PHASES:
-                raise ValueError('timeframe must be 1d, 5m, 15m, 30m or 1h')
-            limit = int(query.get('limit', ['1000'])[0])
-            if not 1 <= limit <= 10000:
-                raise ValueError('limit must be 1..10000')
-            start, end = int(query.get('from', ['0'])[0]), int(query.get('to', [str(now)])[0])
-            if start > end:
-                raise ValueError('from must not exceed to')
-            return {'symbol': symbol, 'timeframe': tf, 'adjust_type': 'NoAdjust',
+                raise ValueError('timeframe must be ' + ', '.join(PHASES))
+            return {'symbol': symbol, 'timeframe': tf, 'adjust_type': 'ForwardAdjust',
                     'session': 'regular', 'closed_only': True,
-                    'bars': [bar_row(b) for b in self.store.bars(symbol, tf, start, end, limit)]}
+                    'current': self.window_ready(symbol, tf, now),
+                    'bars': [bar_row(b) for b in self.store.window(symbol, tf)]}
         raise KeyError(path)

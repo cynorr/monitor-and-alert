@@ -35,7 +35,7 @@ def price_cents(value):
 
 
 class AlertEngine:
-    def __init__(self, path, calendar, *, clock=time.time, notifier=None):
+    def __init__(self, path, calendar, *, clock=time.time, sound=None):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
@@ -52,7 +52,7 @@ class AlertEngine:
                 actual_price REAL NOT NULL, quote_time INTEGER NOT NULL,
                 fired_at REAL NOT NULL, handled_at REAL);
         ''')
-        self.calendar, self.now, self.notifier = calendar, clock, notifier
+        self.calendar, self.now, self.sound = calendar, clock, sound
         self.alerts = {row['id']: dict(row) for row in self.db.execute('SELECT * FROM alerts')}
         self.by_symbol = {}
         self.baselines, self.latest = {}, {}
@@ -161,8 +161,6 @@ class AlertEngine:
             self.alerts.pop(alert['id'])
             self.baselines.pop(alert['id'], None)
         self._changed()
-        if self.notifier:
-            self.notifier.remove(event_id)
 
     def quote(self, symbol, quote):
         now = self.now()
@@ -206,17 +204,14 @@ class AlertEngine:
                     continue
                 self.alerts[alert['id']] = dict(alert, state='triggered', updated_at=now)
                 self._changed()
-                if self.notifier:
-                    self.notifier.send(event)
+                if self.sound:
+                    self.sound.play(direction)
 
     def state(self):
-        notification = self.notifier.status() if self.notifier else {
-            'available': False, 'authorization': 'unavailable', 'sound': False,
-            'error': 'Open Market Monitor.app for macOS notifications'}
         return {'revision': self.revision, 'alerts': list(self.alerts.values()),
                 'events': [dict(row) for row in self.db.execute('SELECT * FROM events WHERE handled_at IS NULL ORDER BY fired_at DESC, rowid DESC')],
                 'eligible_symbols': sorted(self.allowed), 'scope_known': self.scope_known,
-                'notification': notification, 'error': self.error}
+                'sound': self.sound.state() if self.sound else {'enabled': False, 'error': None}, 'error': self.error}
 
     def close(self):
         self.db.close()
