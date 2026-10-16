@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-09。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-10-16。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -44,7 +44,7 @@
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；candle preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
-持仓数据需求只在 [holdings-data.md](holdings-data.md) 维护，显示交互见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度使用同样CSS的临时隐藏副本测量，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。Workbench.list_state用已有calendar.is_open与服务时钟提供current_regular_session，main.ts同时交给Watchlist与Holdings，前端不新增日历、HTTP、券商请求或后台任务，金额仍为后端Decimal字符串，计算语义以Holdings数据需求为准。后端is_new随纽约日期变化，前端复用List标记；账户更新时间显隐由Holdings.tick复用main.ts已有秒级时钟更新，不重排表格或增加账户请求。
+持仓数据需求只在 [holdings-data.md](holdings-data.md) 维护，显示交互见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度使用同样CSS的临时隐藏副本测量，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。Workbench.list_state用已有calendar.is_open与服务时钟提供current_regular_session，main.ts同时交给Watchlist与Holdings，前端不新增日历、HTTP、券商请求或后台任务，金额仍为后端Decimal字符串，计算语义以Holdings数据需求为准。后端is_new随纽约日期变化，前端复用List标记；账户更新时间显隐由Holdings.tick复用main.ts已有秒级时钟更新，不重排表格或增加账户请求。圆圈错误按钮与Chart共用绘制CSS，使用独立holdings-warning状态标记；详情面板只在点击时打开，保持相同文本节点以允许复制，成功/关闭操作收起，不建立通知或错误历史框架。
 
 图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
 
@@ -52,7 +52,7 @@
 
 chart.ts 的 syncSeries 用公开 data/update API 比较已显示数据：相同时间序列的尾部替换/追加只更新变化项，较早官方修订用 update(row, true)。只有新窗口、时间序列变化或删除点时使用 setData；正常 closed 更新不调用滚动重定位，未知 active volume 只更新 histogram 的 whitespace，不重建 candles/MA。保持 vendor 原样。
 
-List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局部 AI 约束见 ui/src/AGENTS.md。board.listColumns分别定义Scan/Monitor列和宽度，list.ts共用它创建标题和行，按data-field更新单元，不依赖children位置；Monitor无Growth渲染。board.growthValue仅供Scan格式化RFL，原始百分比及排名不变。ScanControls.available统一屏蔽holding_symbols，供筛选/计数/搜索/导航/批量操作使用；原board仍保留完整后端成员。CSS维护独立列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
+List UI 的唯一要求入口为 [ui.md 的 List UI 章节](ui.md#list-ui)，局部 AI 约束见 ui/src/AGENTS.md。board.listColumns分别定义Scan/Monitor列和宽度，list.ts共用它创建标题和行，按data-field更新单元，不依赖children位置；Monitor无Growth渲染。ScanControls持有唯一sortControl及其事件，list.ts在Scan列头中挂载，模式切换重建列头时复用同一控件。board.growthValue仅供Scan格式化RFL，原始百分比及排名不变；三个值用等宽CSS grid及子列边框对齐。ScanControls.available统一屏蔽holding_symbols，供筛选/计数/搜索/导航/批量操作使用；原board仍保留完整后端成员。导航与日期控件用单行flex布局，CSS维护独立列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
 
 Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted',backgroundColor}`，不从显示名称反推已保存外观，也不影响 role、filters、分类与订阅。前端只为旧偏好中缺失的外观初始化默认值，下次偏好保存持久化；后端校验内置 icon、背景枚举与六位 HEX 颜色，不接收任意 SVG/URL/CSS。列表和编辑 preview 复用 `tag-appearance.ts`，无外部图标依赖。固定展示数量不引入测宽监听。Save/Cancel 检查完整 Tag 草稿，筛选预览只检查条件变化，外观编辑保留人工匹配成员。图形要求统一见 [Logo / Icon](ui.md#logo--icon)，名单排布见 [List UI](ui.md#list-ui)。
 
@@ -176,7 +176,7 @@ Quote 接收不按 UI 选择筛选；regular/pre/post/overnight 共用 apply，s
 
 UI 图表只通过 `/v1/stream`：select消息含symbol/timeframe/request_id/mode/source；source为watchlist或holdings，省略时按watchlist；旧模拟器仍可省略mode。初次、选择、重连为完整 bars+指标；常规只传 active/indicator_preview/status，历史改变才重发。约 5Hz 图表预览、1Hz 独立 list 消息。list 不依赖选中 symbol/request_id，所以删空、删当前项或重连时仍可刷新名单；图表继续保留 request_id 校验。run_id标识后端实例和当前数据上下文，request_id 与 socket identity 防止串图。保留 heartbeat、慢客户端独立发送任务和 Origin 校验；不新增差量重放协议。
 
-list_state增加独立holdings字段：未启用或Scan为null；启用为{data,loading,error}。data保留旧fetched_at/source_timestamps/positions_as_of/pnl_basis/funds/summary/holdings契约和Decimal字符串，holding增加price_source/price_timestamp/price_session、change_percent/extended_percent/day_reference_price；sequence与summary包含可空day_pnl；sequence增加is_new、closed_today、day_reference_price/day_reference_source，日期由Workbench现有时钟转纽约日期传入。total_pnl/total_pnl_percent字段名保留，余仓值改为仅未实现盈亏，summary.pnl/pnl_percent只统计余仓，百分比以余仓成本为分母；summary.day_pnl合计所有显示批次（含当日清仓），任一缺值则整体为空。build从positions加当日SELL发现显示范围，同一current_trades/sequences完成数量与归属核对；不靠上次页面状态保留清仓。Workbench通过monitor.quote读取与观察名单相同的Daily修正基准，再由holdings.py用Decimal重算日盈亏；缺基准不返回部分总额。无新增SDK请求、下载任务或缓存文件。GET /v1/holdings返回同一只读状态；请求不刷新账户、不安排历史。Account Value从估值市值加SnapTrade现金计算，原details账户总值仍在原始缓存，不冒充相同时刻的券商官方净值。本机WS关闭可选压缩，避免大图表/持仓快照发送时快速重载遗留aiohttp压缩后台task。
+list_state增加独立holdings字段：未启用或Scan为null；启用为{data,loading,error,error_kind}。error_kind为当前失败阶段request/accounting/storage或null，由Holdings刷新边界统一设置；成功时与error一同清除，前端集中映射简短原因/建议，详情用脱敏error原文，不逐层传UI文案、不解析异常字符串猜分类。data保留旧fetched_at/source_timestamps/positions_as_of/pnl_basis/funds/summary/holdings契约和Decimal字符串，holding增加price_source/price_timestamp/price_session、change_percent/extended_percent/day_reference_price；sequence与summary包含可空day_pnl；sequence增加is_new、closed_today、day_reference_price/day_reference_source，日期由Workbench现有时钟转纽约日期传入。total_pnl/total_pnl_percent字段名保留，余仓值改为仅未实现盈亏，summary.pnl/pnl_percent只统计余仓，百分比以余仓成本为分母；summary.day_pnl合计所有显示批次（含当日清仓），任一缺值则整体为空。build从positions加当日SELL发现显示范围，同一current_trades/sequences完成数量与归属核对；不靠上次页面状态保留清仓。Workbench通过monitor.quote读取与观察名单相同的Daily修正基准，再由holdings.py用Decimal重算日盈亏；缺基准不返回部分总额。无新增SDK请求、下载任务或缓存文件。GET /v1/holdings返回同一只读状态；请求不刷新账户、不安排历史。Account Value从估值市值加SnapTrade现金计算，原details账户总值仍在原始缓存，不冒充相同时刻的券商官方净值。本机WS关闭可选压缩，避免大图表/持仓快照发送时快速重载遗留aiohttp压缩后台task。
 
 workspace.json 的根字段 `pinned:[ticker,...]` 为当日有序软状态；按 ticker 当前归属投影到各 List，保留原 statuses/section/orders。inherit_workspace 在新日清空；apply_rules 去掉消失或跨 List 的成员。pin_ticker/move_pin 使用原同步保存与错误回滚，置顶动作不重跑分类或获取数据。Workbench board 返回 pinned:boolean、pin_index:number|null；独立 DataService 仅在自身附带 Workspace 时提供置顶字段，不覆盖 Workbench 持有的名单状态；list_state 增加 holding_symbols（两模式均提供、含当日清仓）与 current_regular_session（calendar.is_open，不依赖个股Quote）。两字段只提供显示信息，不改变后端名单。
 

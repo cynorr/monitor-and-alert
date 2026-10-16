@@ -7,7 +7,7 @@ export function listColumns(scan, regular) {
     if (scan)
         return [symbol, price, { field: 'adr', label: 'ADR20', width: 'minmax(64px,.7fr)' },
             { field: 'adv', label: 'ADV20', width: 'minmax(68px,.8fr)' },
-            { field: 'growth', label: 'Growth', width: 'minmax(144px,1.5fr)' }, tags, actions];
+            { field: 'growth', label: '', width: 'minmax(144px,1.5fr)' }, tags, actions];
     return [symbol, price, { field: 'change', label: 'Chg%', width: 'minmax(64px,.7fr)' },
         ...(!regular ? [{ field: 'ext', label: 'Ext', width: 'minmax(68px,.8fr)' }] : []), tags, actions];
 }

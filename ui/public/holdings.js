@@ -1,4 +1,12 @@
 import { $ } from './types.js';
+export function holdingsErrorAdvice(kind) {
+    switch (kind) {
+        case 'request': return { reason: 'Account request failed', action: 'Automatic retries continue. If this persists, check your network and SnapTrade connection, or share the details with Codex.' };
+        case 'accounting': return { reason: 'Trade matching or position check failed', action: 'Check the trade associations and quantities, or share the details with Codex. A trade mismatch needs correction; restarting will not resolve it. Automatic retries continue.' };
+        case 'storage': return { reason: 'Holdings cache could not be saved', action: 'Check available disk space and runtime folder permissions. Automatic retries continue.' };
+        default: return { reason: 'Holdings refresh failed', action: 'Automatic retries continue. If this persists, share the details with Codex.' };
+    }
+}
 const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const percentage = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const netLiq = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
@@ -51,6 +59,15 @@ export class HoldingsList {
             this.collapsed = localStorage.getItem('holdings-collapsed') === 'true';
         }
         catch { /* Optional storage. */ }
+        $('holdings-warning').addEventListener('click', () => {
+            const details = $('holdings-error-details');
+            details.hidden = !details.hidden;
+            $('holdings-warning').setAttribute('aria-expanded', String(!details.hidden));
+        });
+        document.addEventListener('click', event => {
+            if (!$('holdings-error').contains(event.target))
+                this.closeError();
+        });
         $('holdings-toggle').addEventListener('click', () => {
             this.collapsed = !this.collapsed;
             try {
@@ -81,8 +98,13 @@ export class HoldingsList {
             this.render();
         });
         document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !$('holdings-error-details').hidden) {
+                this.closeError();
+                $('holdings-warning').focus();
+                return;
+            }
             if (this.collapsed || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey ||
-                event.target.closest('input,textarea,select,[contenteditable="true"]'))
+                event.target.closest('input,textarea,select,[contenteditable="true"],#holdings-error'))
                 return;
             if (event.key === 'Enter' || event.key === ' ') {
                 const row = event.target.closest('tr[data-holding]');
@@ -133,6 +155,19 @@ export class HoldingsList {
             this.data?.error ? 'Refresh failed' : this.data?.loading ? 'Loading…' : '';
         updated.title = this.data?.error ?? (data ? `Last successful account refresh ${new Date(data.fetched_at).toLocaleString('en-GB')} · Positions as of ${data.positions_as_of}` : '');
         updated.classList.toggle('negative', !!this.data?.error);
+        $('holdings-error').hidden = !this.data?.error || updated.hidden;
+        if ($('holdings-error').hidden)
+            this.closeError();
+        const advice = holdingsErrorAdvice(this.data?.error_kind);
+        for (const [id, text] of [['holdings-error-reason', advice.reason], ['holdings-error-action', advice.action],
+            ['holdings-error-detail', this.data?.error ?? '']]) {
+            if ($(id).textContent !== text)
+                $(id).textContent = text;
+        }
+    }
+    closeError() {
+        $('holdings-error-details').hidden = true;
+        $('holdings-warning').setAttribute('aria-expanded', 'false');
     }
     cell(row, text) {
         const cell = row.insertCell();

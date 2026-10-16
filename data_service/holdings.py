@@ -373,12 +373,18 @@ class Holdings:
     def __init__(self, client, rules: Path, *, interval=30):
         self.client, self.rules, self.interval = client, rules, interval
         self.base, self.error, self.loading = None, None, True
+        self.error_kind = None
         # A previous accepted raw snapshot can supply fallback values at startup.
         if client.raw:
             try:
                 self.base = build(client.raw, read_rules(client.raw, rules))
             except Exception as exc:
-                self.error = redact(str(exc), client.secrets)
+                self._set_error(exc, 'accounting')
+
+    def _set_error(self, exc, kind):
+        message = str(exc).strip() or ('Request timed out' if isinstance(exc, TimeoutError) else type(exc).__name__)
+        self.error = redact(message, self.client.secrets)
+        self.error_kind = kind
 
     @property
     def symbols(self):
@@ -391,20 +397,23 @@ class Holdings:
 
     def state(self, quotes=None, as_of=None):
         return {'data': json.loads(dumps(value_positions(self.base, quotes or {}, as_of))) if self.base else None,
-                'loading': self.loading, 'error': self.error}
+                'loading': self.loading, 'error': self.error, 'error_kind': self.error_kind}
 
     async def refresh(self):
+        kind = 'request'
         try:
             raw = await self.client.refresh()
+            kind = 'accounting'
             base = build(raw, read_rules(raw, self.rules))
+            kind = 'storage'
             self.client.commit(raw)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            self.error = redact(str(exc), self.client.secrets)
+            self._set_error(exc, kind)
             return False
         else:
-            self.base, self.error = base, None
+            self.base, self.error, self.error_kind = base, None, None
             return True
         finally:
             self.loading = False

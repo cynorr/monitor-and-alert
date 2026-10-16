@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-09. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-16. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -39,6 +39,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | `orderly-pullback` | 下降阶梯 steps，不使用下降箭头 |
 | `extended` | 单条加速增长曲线：起点低，前段平缓并向右延长，末段接近竖直上冲 |
 | `broken` | 价格向下跌破 MA 线 |
+| `under50` | 上方波浪水面、下方泳镜，表示价格仍在 SMA50 下方；默认使用 SMA50 红色 |
 | `label` | 中性标签轮廓，作为未绑定专用图案的默认值 |
 
 - 主景线条颜色和背景颜色可调。MA10 默认蓝 **#2962ff**，MA20 默认黄 **#e4b400**，MA50 默认红 **#e53935**，无 MA 关联默认中性 **#64748b**。例如 Surf-10 / Bounce-10 同为蓝线，Surf-20 为黄线；用户保存的颜色优先。颜色不表示人工/自动来源，也不决定分类。
@@ -60,9 +61,10 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
 | Daily / Intraday | `↦` | Go to latest，回到最新可用交易日 |
-| 图表 / 名单错误 | `!` | 提供当前错误详情，不扩展错误判断范围 |
+| 图表 / 名单 / Holdings 错误 | 轮廓圆圈内的 `!`，暖黄色 | 提供当前错误详情，不扩展错误判断范围；Holdings 点击详情见独立 UI 规范 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
+- 错误感叹号复用当前Chart警告的极简圆形轮廓：Web图形16×16px、1px边框，边框#b58722、文字#a47614，圆角50%；Chart与Holdings共用一份CSS绘制声明。交互按各模块要求，状态独立，Chart刷新不得改变Holdings错误入口。
 - 置顶箭头位于原有行操作左侧，按钮之间留 **10px** 空隙；Web 置顶/垃圾桶按钮为 **24×24px**，图形 **16×16px**。未置顶时 hover/键盘 focus 可见，置顶后持续显示蓝色，并提供 Unpin 名称和 pressed 状态。
 - 操作使用完整的英文说明和可访问名称，不能仅靠垃圾桶或 `+` 猜测结果。Tag 定义的 Delete 当前是文字按钮，与名单行的垃圾桶操作不同。
 
@@ -96,7 +98,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 - 面板分隔条和 List 数据列间距均为 **12px**。拖动只调整相邻面板并保留最小宽度；打开页面、切换模式或双击分隔条恢复默认。小窗口保持最小宽度，允许工作区整体溢出。
 - Monitor 的最小宽度也接受独立持仓内容需求，具体测量和固定顶部布局见 [Holdings UI](holdings-ui.md#位置折叠与宽度)。
 - List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Search 和一行 Filter/Tags 位于固定头部的水平分割线上方；与两图保持同一固定高度。Scan 准备状态在分割线下，仅需要时显示。名单列头在 Holdings 下方，文字位于其底部分割线上方；没有额外的 Filters/Holdings 或 section 分割线。
-- 计数使用独立 `span.count-badge`：**10px、黑色、不加粗**，与标题留小间距。适用于列表按钮、section、symbol 总数、Holdings、Filter 与结果数。数字本身不统一加背景；选中 pill 中的数字仍为黑色，所在 pill 使用浅背景保证可读。
+- 计数使用独立 `span.count-badge`：**10px、黑色、不加粗**，与标题留小间距。适用于列表按钮、section、symbol 总数、Holdings 与 Filter。数字本身不统一加背景；选中 pill 中的数字仍为黑色，所在 pill 使用浅背景保证可读。
 
 ### 展示范围与控件
 
@@ -105,6 +107,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 | Scan | Discover / Focus / Excluded 三个入口 | 本地 Massive Daily；日期、Refresh Scan、RFL 排序、批量选择/移动，以及共用 Tag/Filter |
 | Monitor | Focus setup sections、上方独立 Holdings | 实时 Daily/Intraday；共用 Tag/Filter |
 
+- Scan 固定顶部水平线下的第一行：左侧为 Discover / Focus / Excluded，最右侧为日期下拉与 Refresh Scan，全部垂直居中、同一行显示。计数随名单按钮显示，不另设结果数。
 - Discover 与全部 Excluded 仅 Scan 展示本地 Massive Daily；明确加入 Focus 后开始实时监控。
 - 所有常规 List（Scan 与 Monitor）在前端屏蔽当前 Holdings 已有 symbol，含仅保留当天的清仓批次；可见计数、筛选、搜索、导航和批量操作使用同一屏蔽结果。后端名单、归属、Tag、订阅与原有顺序不变。
 - 同 ticker 的 Holdings 仍为独立实时选择。WS 选择携带 `source=holdings` 或 `source=watchlist`；名单刷新、折叠和筛选不得抢走已选持仓的图表。
@@ -115,11 +118,12 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 
 | 模式 | 列 |
 | --- | --- |
-| Scan | Symbol / Price / ADR20 / ADV20 / Growth / Tags / 行操作 |
+| Scan | Symbol / Price / ADR20 / ADV20 / RFL 排序 / Tags / 行操作 |
 | Monitor | Symbol / Last / Chg% / Ext（仅非 regular）/ Tags / 行操作 |
 
 - 同 ticker 只有一行，固定行高 **28px**，主体数据列保持同一水平行；Scan Growth、Tags 与行操作不换行、不增加副标题。
-- **仅 Scan** 的 Growth 依次显示 **1m / 3m / 6m** 三个值，不显示周期 key，以浅色 `|` 分隔。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
+- **仅 Scan** 的 Growth 数据列以排序下拉作为列头，显示当前 **RFL 1M / RFL 3M / RFL 6M / Default order**。控件沿用列名的字体与颜色，无背景或边框，右侧使用黑色向下折号。没有独立排序工具行。
+- 该列始终依次显示 **1m / 3m / 6m** 三个值，不随所选排序改变顺序，不显示周期 key。三个等宽子列右对齐，以浅色竖线分隔，所有数据行的竖线位置一致。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
 - Tags 列显示轮廓 glyph，图案、尺寸与配色统一见 [Logo / Icon](#logo--icon)。保持 **110px** 列宽下限并为编辑按钮留空隙；最多显示三个 glyph，其余用小号 `+N`，悬停列出完整剩余标签。glyph 悬停显示完整名称与人工 `today` 状态，人工补充仅当日有效，不额外使用蓝色 badge。Tags 与 `+N` 均不换行、不增加行高，不增加测宽或 ResizeObserver。
 - Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑只提供 Setup/Label，修改当日人工补充；Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
 - NEW / RETURNED 使用 Symbol 旁的小标记；NEW 使用与 EMA10 一致的蓝色 **#2962ff**，RETURNED 保持灰色。ticker 不显示 `.US`。Scan 的成员勾选与图表选中互相独立。
@@ -151,7 +155,7 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 ### 名单操作与批量移动
 
 - `Add to Focus` 清除排除状态并开始实时监控。Discover/Focus 的行垃圾桶提示 `Move to Hidden for 7 days`，只移到 Hidden；仅 Hidden 提供 `Release`。机器 Broken/Extended/Under-50 没有人工 Release 行操作。
-- 批量 `Move to Discover` 结束 Focus 归属或提前释放 Hidden；选择包含机器排除时禁用此按钮。`Move to Hidden` 从 Discover/Focus/机器 Excluded 明确屏蔽七个自然日；仅勾选 Hidden 时禁用。`Move to Focus` 保留明确人工入选。Select all 勾选当前可见筛选结果，移动时整块插入队首。日期/名单/Filter 改变清空勾选；Space 切换选中 Scan 行的勾选。
+- 批量 `Move to Discover` 结束 Focus 归属或提前释放 Hidden；选择包含机器排除时禁用此按钮。`Move to Hidden` 从 Discover/Focus/机器 Excluded 明确屏蔽七个自然日；仅勾选 Hidden 时禁用。`Move to Focus` 保留明确人工入选。逐行勾选可同时选择多只，移动时整块插入队首。日期/名单/Filter 改变清空勾选；Space 切换选中 Scan 行的勾选。
 - 操作即时写入，保存失败保留原名单并显示简短行内错误。workspace/新日变更自动刷新，不增加 Refresh Workspace 按钮。名单选择消失时改选首个可用成员，空名单清图但保留 Search 和新增入口。
 - 手动/Alert 入选：从 Discover/Excluded 移入 Focus 时，统一按 [List 入选规则](list-design.md#统一移入-focus) 重新匹配并插入对应 section 首位。UI 只提交动作并使用后端结果，不继承来源的 Tag/section。
 

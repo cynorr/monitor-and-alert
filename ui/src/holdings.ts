@@ -4,7 +4,15 @@ type Trade = { id: string; date: string; quantity: string; value: string };
 type Sale = Trade & { holding_days: number; pnl: string; pnl_percent: string };
 type Sequence = { buy_ids: string[]; opened_on: string; holding_days: number; closed_today: boolean; is_new: boolean; held_quantity: string; buy_price: string; market_value: string; total_pnl: string; total_pnl_percent: string; day_pnl: string | null; day_reference_price: string | null; day_reference_source: 'entry' | 'previous_close' | 'mixed'; sold_percent: string; buys: Trade[]; sells: Sale[] };
 type Holding = { ticker: string; price_source: string; price_session: string | null; price_timestamp: string | number; change_percent: string | null; extended_percent: string | null; day_reference_price: string | null; sequences: Sequence[] };
-export type HoldingsState = { data: { fetched_at: string; positions_as_of: string; funds: { stock_market_value: string; account_total: string; cash: string }; summary: { pnl: string; pnl_percent: string | null; day_pnl: string | null }; holdings: Holding[] } | null; loading: boolean; error: string | null };
+export type HoldingsState = { data: { fetched_at: string; positions_as_of: string; funds: { stock_market_value: string; account_total: string; cash: string }; summary: { pnl: string; pnl_percent: string | null; day_pnl: string | null }; holdings: Holding[] } | null; loading: boolean; error: string | null; error_kind?: 'request' | 'accounting' | 'storage' | null };
+export function holdingsErrorAdvice(kind: HoldingsState['error_kind']) {
+    switch (kind) {
+        case 'request': return { reason: 'Account request failed', action: 'Automatic retries continue. If this persists, check your network and SnapTrade connection, or share the details with Codex.' };
+        case 'accounting': return { reason: 'Trade matching or position check failed', action: 'Check the trade associations and quantities, or share the details with Codex. A trade mismatch needs correction; restarting will not resolve it. Automatic retries continue.' };
+        case 'storage': return { reason: 'Holdings cache could not be saved', action: 'Check available disk space and runtime folder permissions. Automatic retries continue.' };
+        default: return { reason: 'Holdings refresh failed', action: 'Automatic retries continue. If this persists, share the details with Codex.' };
+    }
+}
 const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const percentage = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const netLiq = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
@@ -49,6 +57,14 @@ export class HoldingsList {
     constructor(private onSelect: (symbol: string, key: string) => void, private isActive: () => boolean,
         private onWidth: (width: number) => void) {
         try { this.collapsed = localStorage.getItem('holdings-collapsed') === 'true'; } catch { /* Optional storage. */ }
+        $('holdings-warning').addEventListener('click', () => {
+            const details = $('holdings-error-details');
+            details.hidden = !details.hidden;
+            $('holdings-warning').setAttribute('aria-expanded', String(!details.hidden));
+        });
+        document.addEventListener('click', event => {
+            if (!$('holdings-error').contains(event.target as Node)) this.closeError();
+        });
         $('holdings-toggle').addEventListener('click', () => {
             this.collapsed = !this.collapsed;
             try { localStorage.setItem('holdings-collapsed', String(this.collapsed)); } catch { /* Optional storage. */ }
@@ -73,8 +89,11 @@ export class HoldingsList {
             this.render();
         });
         document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !$('holdings-error-details').hidden) {
+                this.closeError(); $('holdings-warning').focus(); return;
+            }
             if (this.collapsed || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey ||
-                (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
+                (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"],#holdings-error')) return;
             if (event.key === 'Enter' || event.key === ' ') {
                 const row = (event.target as HTMLElement).closest<HTMLElement>('tr[data-holding]');
                 if (row && !(event.target as HTMLElement).closest('button')) { event.preventDefault(); this.choose(row.dataset.holding!); }
@@ -119,6 +138,17 @@ export class HoldingsList {
             this.data?.error ? 'Refresh failed' : this.data?.loading ? 'Loading…' : '';
         updated.title = this.data?.error ?? (data ? `Last successful account refresh ${new Date(data.fetched_at).toLocaleString('en-GB')} · Positions as of ${data.positions_as_of}` : '');
         updated.classList.toggle('negative', !!this.data?.error);
+        $('holdings-error').hidden = !this.data?.error || updated.hidden;
+        if ($('holdings-error').hidden) this.closeError();
+        const advice = holdingsErrorAdvice(this.data?.error_kind);
+        for (const [id, text] of [['holdings-error-reason', advice.reason], ['holdings-error-action', advice.action],
+            ['holdings-error-detail', this.data?.error ?? '']]) {
+            if ($(id).textContent !== text) $(id).textContent = text;
+        }
+    }
+    private closeError() {
+        $('holdings-error-details').hidden = true;
+        $('holdings-warning').setAttribute('aria-expanded', 'false');
     }
     private cell(row: HTMLTableRowElement, text: string) {
         const cell = row.insertCell(); cell.textContent = text;

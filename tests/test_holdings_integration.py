@@ -249,15 +249,39 @@ def test_refresh_is_immediate_and_failed_fetch_or_accounting_preserves_snapshot(
         client.fail = True
         assert not await holdings.refresh()
         assert holdings.base is previous and 'secret-key' not in holdings.error
+        assert holdings.state()['error_kind'] == 'request'
         client.fail = False
         client.raw['positions']['results'][0]['units'] = '76'
         assert not await holdings.refresh()
         assert holdings.base is previous
+        assert holdings.state()['error_kind'] == 'accounting'
         client.raw['positions']['results'][0]['units'] = '75'
         assert await holdings.refresh() and holdings.error is None
+        assert holdings.state()['error_kind'] is None
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         assert client.closed
+    asyncio.run(scenario())
+
+
+def test_refresh_error_details_cover_empty_timeout_storage_and_redaction(tmp_path):
+    async def scenario():
+        client = FakeSnapTrade(raw_snapshot())
+        holdings = Holdings(client, rules(tmp_path))
+        previous = holdings.base
+        async def timeout():
+            raise TimeoutError()
+        with patch.object(client, 'refresh', timeout):
+            assert not await holdings.refresh()
+        assert holdings.state()['error_kind'] == 'request'
+        assert holdings.error == 'Request timed out' and holdings.base is previous
+        with patch.object(client, 'commit', side_effect=PermissionError('Cannot save secret-key')):
+            assert not await holdings.refresh()
+        state = holdings.state()
+        assert state['error_kind'] == 'storage'
+        assert state['error'] == 'Cannot save [REDACTED]' and holdings.base is previous
+        assert await holdings.refresh()
+        assert holdings.state()['error'] is None and holdings.state()['error_kind'] is None
     asyncio.run(scenario())
 
 

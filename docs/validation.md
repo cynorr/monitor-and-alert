@@ -2,6 +2,40 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-16：Holdings 轻量错误详情与统一圆圈感叹号
+
+环境：本机macOS、Python3.13、TypeScript及现有正式Monitor服务。仅验证本轮Holdings错误展示与状态契约，真实接口读取限于现有9条持仓、health及原40个Focus/Holdings行情标识，成功核对即结束；不修改账户、名单或人工交易规则，不做真实网络/账户故障注入。
+
+- Holdings在既有刷新边界统一设置request/accounting/storage阶段，保持原脱敏error字段与30秒重试流程；无消息的超时返回明确文字，成功同时清空错误/阶段。4项相关Python用例通过（23项无关用例未执行），覆盖请求/会计/保存失败分类、脱敏、空超时消息、保留旧结果、成功清除及原周期重试。前端8项Holdings用例、`npm run build --prefix ui`及`git diff --check`通过；未执行全项目测试。
+- 以本轮真实快照导入正式Holdings组件/样式的临时离线展示页验证错误样本，不伪造当前服务故障。59秒隐藏错误入口，60秒显示；默认不展开，鼠标/Enter可打开，Esc与外部点击关闭，面板内模拟成功刷新后图标/详情自动隐藏，首次无成功数据的失败直接可见。组件持续秒级刷新时已打开详情仍保留。请求与交易校验建议、可选中复制的原始消息均可见，浏览器无error/warn。
+- Chart与Holdings图标实际CSS均为16×16px、1px暖黄边框、50%圆角、600字重，颜色与边框一致；复用一份绘制声明，以独立状态class避免Chart全局quality刷新覆盖Holdings。截图`runtime/holdings-warning-preview.png`明确标注离线错误展示样本，测试控件不属于正式界面；验证后删除临时页面及完整快照输入。
+- 按原命令重启原正式服务一次以加载后端分类，PID3914；10:41:33（Asia/Shanghai）只读核对：Monitor、Quote CONNECTED、40个行情标识，9条持仓，成功快照10:41:32，loading=false、error=null、error_kind=null。服务保持运行，没有新增端口、轮询、错误历史、通知或自动恢复框架。
+
+未覆盖新的真实失败事件、全部券商错误类型或移动端；后台实际失败不为本次验收制造。UI/数据唯一需求、Logo/Icon和behavior/development契约已同步。没有重验交易盈亏公式、全周期Ready或全量数据下载。
+
+## 2026-10-15：Holdings 停留旧成功时间与 CDNA 手工关联
+
+环境：本机macOS、Python3.13、现有正式Monitor进程PID9504及其localhost:8765接口。仅只读核对health/holdings、现有账户缓存及人工关联文件；没有另起服务、重启进程、额外直连SnapTrade或改动账户。后台任务active、Quote CONNECTED；23:37与23:38两次读取均返回同一CDNA卖出归属歧义，保留的成功时间是2026-10-14 22:11:55（Asia/Shanghai），而非本日刷新时间。
+
+- 当前错误为CDNA卖出订单`9B6556…F26D`未能唯一匹配买入组，整轮获取完成后会计核对失败，不提交最新缓存/显示批次。既有缓存核对该笔为10/14卖出300股@64，对应此前10/13买入300股@65.35；缓存本身仍可按旧成功批次重建。没有把旧缓存解释为失败轮的完整最新原始数据。
+- 用户明确确认旧300股买卖关联、10/14新买400股独立保留后，仅在现有`runtime/holdings/sequences.txt`追加该买入→卖出映射。现有服务正常轮询自动重读；23:39:53读取确认成功时间已前进到23:39:52、error=null，CDNA只剩10/14买入400股、余仓400股、均价66.765、无卖出记录，昨日清仓300股批次不再显示。
+- 两项现有Holdings定向用例通过，覆盖启动立即刷新、网络/会计失败保留完整快照、下一周期继续以及规则恢复后成功更新。仅补充唯一Holdings文档的现有重试语义；没有修改Python/TypeScript实现，未构建前端或运行全局测试。未做浏览器/真实网络故障验证，不推断旧成功时间至本轮之间的每次失败均相同；本轮服务的stdout/stderr指向原终端，历史service.log并非当前进程日志。
+
+## 2026-10-09：Scan 导航压缩、列头排序与 Under-50 图案
+
+环境：本机 macOS、Python 3.13、TypeScript、正式 localhost:8765 与 Codex 浏览器，1280×720 视口、680px List。使用 2026-10-08 真实 Massive 截面与现有名单。按原参数重启正式服务，PID 63357；实时行情和持仓后台继续运行。本轮只验证布局、排序、选择、日期控件及 Tag 外观。
+
+- TypeScript build、12 项既有 Scan UI 用例与13项偏好定向 Python 用例通过；没有新增模拟行情。`git diff --check`通过，删除的全选、结果数及旧控件行不再有代码或规范引用。
+- 导航、日期与 Refresh 的中心均为 y=150.5px；左侧导航、右侧日期/刷新保持同一行。Chart 与 List 顶部水平线均为 y=130px。Scan 的63行增长数据共用同一组子列位置 x=924 / 973.328 / 1022.664px，包含百分比、倍数和缺失值，无行横向溢出。
+- RFL1M、RFL3M、RFL6M、Default order 各自四个 section、63行的显示顺序均与真实排名或原始顺序一致。排序控件在 Monitor 中移出列头，回 Scan 复用同一个控件；模式切换及页面刷新后排序有效，列头没有背景或边框，折号为黑色。
+- Discover / Focus / Excluded 导航显示30 / 42 / 63个可见成员。逐行勾选 TWST 后 Focus/Hidden 移动按钮启用，取消后禁用，没有执行名单移动。历史2026-10-06的行勾选禁用；Refresh返回已准备完成的2026-10-08。
+- 当前 Under-50 外观保存为 `under50`、`#e53935`，波浪位于两个泳镜镜片上方；行内与编辑预览共用同一 SVG，刷新后保留。偏好与本轮预期完全一致，仅这两个外观字段改变，规则与其他偏好保持原值。21份 dated workspace 哈希全部不变。
+- 最终为 Scan / Excluded / RFL1M、无 Tag 筛选；截图折叠 Broken/Extended 以展示 Under-50 行。浏览器无 warn/error，Quote CONNECTED、49个去重行情标识、持仓任务运行、Massive Ready，服务 errors 为空。完成限定核验后保留正式服务运行。
+
+未覆盖其他视口、原生移动端、准备未完成时的下载流程及全部图表/Alert功能；未运行全项目回归。
+
+证据：[布局与图案](/tmp/monitor-scan-ui-2026-10-09/layout-checks.json)、[真实排序核对](/tmp/monitor-scan-ui-2026-10-09/sort-checks.json)、[最终状态](/tmp/monitor-scan-ui-2026-10-09/final-report.json)、[真实页面](/tmp/monitor-scan-ui-2026-10-09/final-scan.png)。
+
 ## 2026-10-09：完成日机器排除重评与人工 Hidden
 
 环境：本机 macOS、Python 3.13、TypeScript、正式 localhost:8765 与 Codex 浏览器。主验证使用 2026-10-08 的 12,592 行真实 Massive 截面、152 个现有名单成员与当前保存规则；正式服务按原参数重启，PID 61244。验证限定名单分类、相关接口和页面，不创建真实 Alert 或交易，不新增定时任务。

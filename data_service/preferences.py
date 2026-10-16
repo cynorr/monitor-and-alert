@@ -9,7 +9,7 @@ CATALOG = json.loads(CATALOG_PATH.read_text())
 FIELDS = {field['key']: field for field in CATALOG}
 INITIAL_PREFERENCES = {'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': []}
 APPEARANCE_KEYS = {'icon', 'color', 'background', 'backgroundColor'}
-TAG_ICONS = {'surf', 'bounce', 'prior-run', 'orderly-pullback', 'extended', 'broken', 'label'}
+TAG_ICONS = {'surf', 'bounce', 'prior-run', 'orderly-pullback', 'extended', 'broken', 'under50', 'label'}
 
 
 def validate_appearance(value):

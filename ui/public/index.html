@@ -38,8 +38,10 @@
     </div>
     <div id="scan-progress" class="scan-progress" role="status" hidden></div>
     <section id="scan-controls" class="scan-controls" hidden aria-label="List filters and Scan controls">
-      <div id="scan-date-row" class="scan-date-row"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button><span id="scan-result-count"></span></div>
-      <div id="scan-lists" class="scan-pills" role="group" aria-label="Scan list"><button data-list="discover">Discover</button><button data-list="focus">Focus</button><button data-list="excluded">Excluded</button></div>
+      <div id="scan-navigation" class="scan-navigation">
+        <div id="scan-lists" class="scan-pills" role="group" aria-label="Scan list"><button data-list="discover">Discover</button><button data-list="focus">Focus</button><button data-list="excluded">Excluded</button></div>
+        <div class="scan-date-controls"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button></div>
+      </div>
       <section id="filter-editor" aria-label="Tag and Filter editor" hidden><span id="tag-unsaved" hidden>Unsaved</span>
         <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><select id="tag-role" aria-label="Tag role"><option value="setup">Setup</option><option value="extended">Extended</option><option value="broken">Broken</option><option value="under50">Under-50</option><option value="label">Label</option></select><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
         <div class="tag-appearance-editor" aria-label="Tag appearance">
@@ -51,7 +53,6 @@
         </div>
         <div id="filter-rules" class="filter-rules"></div>
       </section>
-      <div id="scan-batch" class="scan-batch"><label><input type="checkbox" id="scan-select-all"> Select all results</label><select id="scan-sort" aria-label="Scan sort"><option value="default">Default order</option><option value="rfl1m">RFL 1M</option><option value="rfl3m">RFL 3M</option><option value="rfl6m">RFL 6M</option></select></div>
       <div id="scan-move" class="scan-move"><span>Move to</span><button data-target="discover">Discover</button><button data-target="focus">Focus</button><button data-target="hidden" title="Move to Hidden for 7 days">Hidden</button></div>
       <div id="scan-error" class="list-message" role="alert"></div>
     </section>
@@ -60,7 +61,18 @@
     <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
       <div class="holdings-heading">
         <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count" class="count-badge"></span></button>
-        <div class="holdings-meta"><time id="holdings-updated" role="status" hidden></time><b id="holdings-account" aria-label="Account value">—</b></div>
+        <div class="holdings-meta">
+          <time id="holdings-updated" role="status" hidden></time>
+          <div id="holdings-error" class="holdings-error" hidden>
+            <button id="holdings-warning" class="holdings-warning" aria-label="Holdings refresh error" aria-expanded="false" aria-controls="holdings-error-details" title="Show holdings refresh error">!</button>
+            <div id="holdings-error-details" class="holdings-error-details" role="region" aria-label="Holdings refresh error details" hidden>
+              <strong id="holdings-error-reason"></strong>
+              <p id="holdings-error-action"></p>
+              <pre id="holdings-error-detail" tabindex="0" aria-label="Error details"></pre>
+            </div>
+          </div>
+          <b id="holdings-account" aria-label="Account value">—</b>
+        </div>
       </div>
       <div id="holdings-content">
         <div class="holdings-scroll">

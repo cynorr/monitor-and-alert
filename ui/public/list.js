@@ -416,13 +416,7 @@ export class Watchlist {
             else if (column.field === 'growth') {
                 cell.className = 'growth-cell';
                 cell.title = '1M / 3M / 6M return from low';
-                for (const [index, field] of ['rfl1m', 'rfl3m', 'rfl6m'].entries()) {
-                    if (index) {
-                        const divider = document.createElement('span');
-                        divider.className = 'growth-divider';
-                        divider.textContent = '|';
-                        cell.append(divider);
-                    }
+                for (const field of ['rfl1m', 'rfl3m', 'rfl6m']) {
                     const value = document.createElement('span');
                     value.dataset.growth = field;
                     cell.append(value);
@@ -550,8 +544,10 @@ export class Watchlist {
                 const cell = document.createElement('span');
                 cell.dataset.field = column.field;
                 cell.textContent = column.label;
-                if (column.field === 'growth')
-                    cell.title = '1M / 3M / 6M return from low';
+                if (column.field === 'growth') {
+                    cell.className = 'sort-column';
+                    cell.append(this.scan.sortControl);
+                }
                 return cell;
             }));
         }

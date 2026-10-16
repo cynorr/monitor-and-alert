@@ -105,7 +105,7 @@ Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，�
 - Regular 到达/穿越后灰线与左下角卡片保留到手动关闭或跳转。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
-- Scan：选交易日、Discover/Focus/Excluded、38项Filters、保存的Tags、RFL排序。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。勾选和图表选中独立；批量移动当前可见结果。历史日期名单只读，Refresh跳过已完成日。
+- Scan：Discover/Focus/Excluded与日期、Refresh同排，38项Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。逐行勾选和图表选中独立；可批量移动勾选成员。历史日期名单只读，Refresh跳过已完成日。
 - Focus跨日保留，入选仍需人工确认；Surf/Bounce只负责分组。机器排除按完成日规则归入Broken/Extended/Under-50，没有七天期限；恢复后仅当天候选回Discover。只有手动Move to Hidden保留七个自然日屏蔽；Hidden期限内跳过规则判断，仍计算完整特征，到期按同一规则分类。新入section放队首。当日Pin/Unpin支持多只与拖动，不改section，新完成日清空；新置顶后黑框与图表移到下一个可见成员。
 - 共用Daily日 K：所有图使用统一、可人工调整的默认bar spacing，缩放后各自保留；EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、成交量随十字线切换。可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加SDK活跃日 K。显示与集中人工参数只在 [Chart UI](docs/chart-ui.md) 维护。
 - Monitor：5m/15m/30m/1h/2h、SMA65、交易日联动、实时行情；各周期使用原生官方 closed 与 SDK open candle。
