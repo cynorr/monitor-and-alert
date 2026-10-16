@@ -15,6 +15,7 @@ from data_service.indicators import daily_summary
 from data_service.preferences import INITIAL_PREFERENCES, validate_preferences
 from data_service.scan import build_day, daily_chart, publish_day, read_snapshot, candidates
 from data_service.workbench import Workbench
+from data_service.service import DataService
 from data_service.list_rules import apply_rules
 from data_service.workspace import Workspace, derive_day_view, inherit_workspace
 from scripts.build_scan_mock import build_mock
@@ -113,11 +114,11 @@ class FakeBroker:
         self.calls.append(('bars',symbol,tf))
         return await self.market.candles(symbol,tf,count,background=background)
 
-    async def subscribe(self, ctx, symbols):
+    async def subscribe(self, ctx, symbols, *, quote_only=False):
         self.check(symbols)
-        self.calls.append(('subscribe',tuple(symbols)))
+        self.calls.append(('subscribe_quote' if quote_only else 'subscribe',tuple(symbols)))
 
-    async def unsubscribe(self, ctx, symbols): self.calls.append(('unsubscribe',tuple(symbols)))
+    async def unsubscribe(self, ctx, symbols, *, quote_only=False): self.calls.append(('unsubscribe_quote' if quote_only else 'unsubscribe',tuple(symbols)))
     async def snapshot(self, ctx, symbols):
         self.check(symbols)
         return [SimpleNamespace(symbol=symbol, timestamp=datetime.now(timezone.utc), last_done=10, volume=100) for symbol in symbols]
@@ -136,6 +137,71 @@ def make_app(root, *, mock=True, pipeline=None):
         return broker
     app = Workbench(Workspace(root=root / 'days'), root, root / 'daily.sqlite3', factory, calendar=cal, mock=mock, pipeline=pipeline)
     return app, brokers
+
+
+def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
+    async def scenario():
+        app, brokers = make_app(app_data, mock=False)
+        focus = {t.symbol for t in app.workspace.tickers()}
+        app.holdings = SimpleNamespace(symbols=['HOLD.US'], symbols_for=lambda day: ['HOLD.US', next(iter(focus))],
+                                       state=lambda quotes, as_of: {})
+        core = focus | {'HOLD.US'}
+        broker = app.broker_factory(core)
+        app.monitor = DataService(app.workspace.tickers(), app_data, broker, app.calendar)
+        app.workspace_changed()
+        all_scan = {row['symbol'] for row in app.scan_board()}
+        assert broker.allowed == core | all_scan
+        assert broker.candle_allowed == core
+        windows = dict(app.monitor.sync)
+        await app.switch_mode('monitor')
+        assert broker.allowed == core and not app.monitor.scan_symbols
+        assert app.monitor.sync == windows
+        await app.switch_mode('scan')
+        assert broker.allowed == core | all_scan and app.monitor.sync == windows
+        from data_service.calendar import ET
+        now = datetime(2026, 10, 1, 8, tzinfo=ET)
+        app.monitor.now = lambda: int(now.timestamp())
+        symbol = next(iter(all_scan - core))
+        for session, stamp in [('Pre', now), ('Post', datetime(2026, 9, 30, 18, tzinfo=ET))]:
+            app.monitor.quotes.apply(symbol, SimpleNamespace(timestamp=stamp, last_done=15, volume=100),
+                                     snapshot=True, session_override=session)
+        assert set(app.view(symbol, '5m')['quote']['extended']) == {'Pre'}
+        app.monitor.quotes.values[symbol]['Pre']['timestamp'] -= 86400
+        assert not app.scan_quote(symbol)['extended']
+        await app.action('scan', {'date': '2026-09-29'})
+        assert not app.view(symbol, '5m')['quote']['extended']
+        assert not broker.calls  # No context, subscription or candle request is created by the reads.
+        await app.close()
+    asyncio.run(scenario())
+
+
+def test_search_adds_non_candidate_to_pinned_discover_until_next_day(app_data):
+    async def scenario():
+        app, brokers = make_app(app_data)
+        snapshot = app.snapshot()
+        member = next(row for row in snapshot['rows'] if not row['candidate']
+                      and app.workspace.section(row['symbol'].removesuffix('.US')) is None)
+        ticker = member['symbol'].removesuffix('.US')
+        ranks = {row['symbol']: {k: v for k, v in row.items() if k.endswith('_rank')} for row in snapshot['rows']}
+        assert (await app.list_action({'action': 'lookup', 'ticker': ticker}))['ticker'] == ticker
+        result = await app.list_action({'action': 'add', 'ticker': ticker, 'list_name': 'discover'})
+        row = next(row for row in result['board'] if row['ticker'] == ticker)
+        assert row['status'] == 'discover' and row['pinned'] and not row['candidate']
+        assert 'ema10' in row and all(row.get(k) is not None for k in ('rfl1m', 'rfl3m', 'rfl6m'))
+        await app.prepare_lists()
+        restored = Workspace(root=app_data / 'days')
+        assert ticker in derive_day_view(restored.date, candidates(app.snapshot()), set(), restored.data).discover
+        assert restored.data['pinned'][0] == ticker
+        new_day = inherit_workspace(restored.data, candidates(app.snapshot()), set(), '2026-10-01')
+        assert ticker not in new_day['statuses'] and not new_day['pinned']
+        assert ranks == {row['symbol']: {k: v for k, v in row.items() if k.endswith('_rank')} for row in app.snapshot()['rows']}
+        await app.list_action({'action': 'move', 'source': 'discover', 'target': 'focus', 'tickers': [ticker]})
+        carried = inherit_workspace(app.workspace.data, set(), set(), '2026-10-01')
+        assert carried['statuses'][ticker]['status'] == 'focus'
+        assert 'manual_discover_date' not in carried['statuses'][ticker]
+        assert not brokers
+        await app.close()
+    asyncio.run(scenario())
 
 
 def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):

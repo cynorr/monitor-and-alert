@@ -26,7 +26,7 @@ let waitingJump = null;
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async (selected) => {
     const tf = timeframe;
     if (appMode === 'scan' && scan.activeList !== 'focus')
-        await scan.showFocus();
+        await scan.showList();
     applyList(await (await fetch('/v1/scan')).json());
     if (selected)
         select(selected, tf, selectionSource, holdingKey);
@@ -35,7 +35,7 @@ async function jumpToAlert(event) {
     if (!alerts.value?.eligible_symbols.includes(event.symbol))
         throw new Error('Symbol is no longer in Focus or Holdings');
     applyList(await post('mode', { mode: 'monitor' }));
-    await scan.showFocus();
+    await scan.showList();
     if (socket?.readyState !== WebSocket.OPEN)
         throw new Error('Chart connection unavailable');
     const holding = holdings.forSymbol(event.symbol);
@@ -103,15 +103,15 @@ function state(text, kind = '') {
     }
 }
 function showState(view) {
-    if (appMode === 'scan') {
-        $('daily-state').textContent = view.date ?? '';
-        $('intraday-state').textContent = '';
-        document.querySelectorAll('.quality').forEach(node => { node.hidden = !view.status.errors.length; node.title = view.status.errors.join('\n'); });
-        return;
-    }
     const errors = [...view.status.errors, ...(view.quote.error ? ['Quote: ' + view.quote.error] : [])];
     if (view.quote.connection_health === 'DISCONNECTED' || socket?.readyState !== WebSocket.OPEN)
         errors.push('Connection lost');
+    if (appMode === 'scan') {
+        $('daily-state').textContent = view.date ?? '';
+        $('intraday-state').textContent = '';
+        document.querySelectorAll('.quality').forEach(node => { node.hidden = !errors.length; node.title = errors.join('\n'); });
+        return;
+    }
     const key = view.run_id + '/' + symbol;
     if (key !== readyKey || lastStage !== view.status.stage) {
         readyKey = key;
@@ -137,11 +137,12 @@ function apply(view) {
         return;
     currentView = view;
     daily.render(view.charts['1d']);
+    daily.setSessionPrices(appMode === 'scan' ? view.quote : undefined);
     if (appMode === 'monitor') {
         intraday.render(view.charts[timeframe]);
         dayLink.restore();
     }
-    const extended = extendedQuote(view.quote), quote = extended ?? view.quote.regular;
+    const extended = appMode === 'scan' ? undefined : extendedQuote(view.quote), quote = appMode === 'scan' ? null : extended ?? view.quote.regular;
     document.querySelectorAll('.last-price').forEach(node => node.textContent = money(quote?.last_price));
     document.querySelectorAll('.session').forEach(node => { node.hidden = !extended; node.textContent = extended?.trade_session.toUpperCase() ?? ''; });
     document.querySelectorAll('.clock').forEach(node => node.textContent = nyTime.format(new Date(view.server_time * 1000)) + ' ET');

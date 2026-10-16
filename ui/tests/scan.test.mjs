@@ -6,8 +6,43 @@ import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
 import { scanProgress, selectionRequest } from '../public/types.js';
 import { collapseKey, growthValue, listSections, sectionKey } from '../public/board.js';
 import { matchesTag, ScanControls } from '../public/scan.js';
+import { Watchlist } from '../public/list.js';
 import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
+
+test('Scan global search reuses add into Discover; explicit Focus section targets remain unchanged', async () => {
+    const list = Object.create(Watchlist.prototype);
+    list.input = { value: '', focus() {} };
+    list.endDrag = () => {};
+    let destination;
+    list.changeSearch = (section, target) => { destination = [section, target]; };
+    list.scan = { enabled: true };
+    list.beginSearch();
+    assert.deepEqual(destination, ['unclassified', 'discover']);
+    list.beginSearch('surf', 'focus');
+    assert.deepEqual(destination, ['surf', 'focus']);
+    list.scan.enabled = false;
+    list.beginSearch();
+    assert.deepEqual(destination, ['unclassified', 'focus']);
+
+    const calls = [];
+    list.scan = { enabled: true, available: () => [], showList: async target => calls.push(['show', target]) };
+    list.search = { list: 'discover', section: 'unclassified', candidate: { ticker: 'GLOBAL' } };
+    list.query = () => 'GLOBAL';
+    list.mutate = async payload => { calls.push(payload); return { board: [{ ticker: 'GLOBAL', symbol: 'GLOBAL.US' }] }; };
+    list.endSearch = symbol => calls.push(['select', symbol]);
+    await list.commitSearch();
+    assert.deepEqual(calls, [
+        { action: 'add', ticker: 'GLOBAL', list_name: 'discover', section: 'unclassified' },
+        ['show', 'discover'], ['select', 'GLOBAL.US'],
+    ]);
+    calls.length = 0;
+    list.scan.available = () => [{ ticker: 'GLOBAL', symbol: 'GLOBAL.US', status: 'discover', pinned: false }];
+    await list.commitSearch();
+    assert.deepEqual(calls, [
+        { action: 'pin', ticker: 'GLOBAL', pinned: true }, ['show', 'discover'], ['select', 'GLOBAL.US'],
+    ]);
+});
 
 test('scan progress hides Ready and shows only target-date preparation or errors', () => {
     const stage = { status: 'ready', target: '2026-10-02', updated_at: null, error: null };

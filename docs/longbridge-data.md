@@ -4,11 +4,15 @@
 
 ## 定位与范围
 
-Longbridge 服务 Monitor 的 Daily / Intraday 图表、实时报价、持仓行情与 Alert。SQLite 是可重建的近期 closed 行情缓存。当前窗口可用于相同周期、相同 Regular 时段的盘中成交量比较；不扩展为长期历史归档或下载研究系统。
+Longbridge 服务 Monitor 的 Daily / Intraday 图表、实时报价、持仓行情与 Alert，以及 Scan 的当前时段报价。SQLite 是可重建的近期 closed 行情缓存。当前窗口可用于相同周期、相同 Regular 时段的盘中成交量比较；不扩展为长期历史归档或下载研究系统。
 
-只请求和订阅当前 Focus 与当前 Holdings 的并集，含仅保留当天的已清仓批次；同 ticker 共用底层行情。Discover、Excluded使用本地 Massive Daily。Scan/Monitor 切换只改变展示，正式服务的行情、Alert 与账户刷新持续后台运行，关闭网页也不停止服务。
+完整行情范围为当前 Focus 与当前 Holdings 的并集，含仅保留当天的已清仓批次；只有此范围请求 Trade、六周期 closed/SDK candle，并进入 Alert 白名单。Scan 模式的 Quote 范围额外包含当前有效 workspace 的完整 Discover、Excluded（含 Hidden），不随列表折叠、Filter 或图表选中缩减。全部按 symbol 去重；Scan 额外成员只订阅 Quote 并获取报价快照，不请求 Trade/candle、不写 Longbridge bars 缓存、不加入 Alert。
 
-Scan 使用 Massive，Monitor 使用 Longbridge；两源分别存库，仅共用 Bar、读取、指标和图表。
+所有范围共用一个 AsyncQuoteContext 和一条行情长连接。切入 Scan 批量增加 Quote-only 订阅并获取快照；切出只移除 Scan 独有的 Quote，Focus/Holdings 的订阅、历史任务、SDK candle 和 Alert 保持运行。名单变化也按差集更新；成员进入 Focus 时增加完整行情，移回 Discover/Excluded 时按当前模式保留 Quote-only 或退订。增删复用现有限流、回调与30秒快照/失败重试，模式切换不重连、不重置 Alert 起点。单只不可订阅不能阻止同批其他有效股票或核心 Monitor 行情。
+
+官方同账号最多同时订阅500个标的，接口不超过10次/秒、并发5；见 [官方限制](https://open.longbridge.cn/zh-CN/docs)。应用不建立第二个行情连接或 List 优先级系统。正式服务的 Monitor/Alert 与账户刷新持续后台运行，关闭网页也不停止服务。
+
+Scan 的日 K/指标使用 Massive，Monitor 使用 Longbridge；两源分别存库，仅共用 Bar、读取、指标和图表。Scan 的实时报价仅为价格轴标记，不拼接活跃 K 线或修改 Massive OHLC/指标。最新 Scan 日按服务端当前时间互斥返回一个时段的报价：交易日美东04:00至Regular开盘只返回Pre，Regular期间只返回当前regular价格，Regular收盘至20:00只返回Post；Regular边界复用XNYS日历，包含夏令时与提前收盘。报价时间戳也必须属于当天对应窗口；当前窗口缺价不使用其他时段或前一交易日的缓存补缺。休市日、上述窗口以外及历史Scan日期隐藏实时报价。契约沿用quote.regular与quote.extended.Pre/Post；过滤只作用于Scan响应，不清除Monitor/持仓使用的原始Quote缓存。
 
 ## 官方数据与时段
 
@@ -63,7 +67,7 @@ SDK 初始化位于时间桶中途时，与最终 closed 可有小差异。2026-
 
 重复调用已订阅周期会得到 SDK 内存历史，因此恢复必须先退订 candle，再订阅；同一 context 中完成，不创建第二条行情连接。只清掉内存 active，图表保留上一份完整显示直到新数据就绪。SDK 自动恢复底层短暂断线；应用保留开市 90 秒 Quote watchdog 与 30 秒 Quote snapshot。SDK 没有公开连接恢复回调，短暂内部重连不等于重新初始化 candle，期间丢失的成交可能影响 provisional 值，闭合后仍由官方 closed 替换。
 
-移出 Focus 与 Holdings 的 symbol 停止任务与全部订阅，清掉内存显示，不主动追删磁盘缓存。请求跨交易日或 Regular 开始阶段时不提交，按新阶段重拉。Regular 开始后的官方复权基准假定当日稳定。
+移出 Focus 与 Holdings 的 symbol 停止完整行情任务与订阅，清掉活跃candle；若仍属于当前Scan名单，则保留Quote-only报价，否则全部退订。不主动追删磁盘缓存。请求跨交易日或 Regular 开始阶段时不提交，按新阶段重拉。Regular 开始后的官方复权基准假定当日稳定。
 
 ## 调度、失败与状态
 

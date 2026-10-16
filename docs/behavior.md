@@ -12,7 +12,7 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote 与 SDK 实时 candle，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护。
 
-Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Quote 更新最新价格、持仓估值与 Alert；各周期活跃 candle 独立接收 SDK 推送。页面选股不改变券商订阅范围。关闭网页不停止后端。
+Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Quote 更新最新价格、持仓估值与 Alert；各周期活跃 candle 独立接收 SDK 推送。页面选股不改变券商订阅范围；切换模式按 Longbridge 数据要求增减 Scan 的额外 Quote，Focus/Holdings 的完整行情与 Alert 持续运行。关闭网页不停止后端。
 
 ## Additional Info
 
@@ -44,9 +44,9 @@ Daily与split统一按最新成熟交易日判断，保留ET18点门槛；周末
 
 需求背景与归属设计见 [list-design.md](list-design.md)，显示与交互的唯一规范见 [ui.md 的 List UI 章节](ui.md#list-ui)。
 
-Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 使用本地 Massive Daily，不订阅 Longbridge。Excluded 的恢复在完成日数据准备后判断，盘中明确入选 Focus 才开始实时监控。
+Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 的日 K 和分类使用本地 Massive Daily，Scan 模式额外订阅 Quote，仅显示当前交易时段的价格轴标记（规则见 Longbridge 数据要求），不启动其完整行情或 Alert。Excluded 的恢复仍在完成日数据准备后判断，盘中明确入选 Focus 才开始完整实时监控。Scan 全局搜索确认后进入当日 Discover 置顶，不建立临时预览或跨日保存；新增与继承细则见 [List 设计](list-design.md#三个列表)。
 
-候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、Focus和全部Excluded（含Hidden）均计算完整特征与Growth所用RFL数值，即使继承成员不在候选或前50也继续计算，不为名单另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。已有人工成员不因候选门槛自动删除，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
+候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、当日人工Discover、Focus和全部Excluded（含Hidden）均计算完整特征与Growth所用RFL数值，即使继承成员不在候选或前50也继续计算，不为名单另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。已有人工成员不因候选门槛自动删除，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 
 Tag 保存条件与用途：Setup用于Discover/Focus分组，Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可匹配多个Tag，按Setup定义顺序选主section；未匹配为Unclassified。人工补充仅允许Setup/Label。
 

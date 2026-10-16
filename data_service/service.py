@@ -34,6 +34,7 @@ class DataService:
     def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None):
         self.tickers = tickers
         self.holdings_symbols = []
+        self.scan_symbols = []
         self.symbols = [t.symbol for t in tickers]
         self.runtime, self.broker = runtime, broker
         self.now = clock or time.time
@@ -77,14 +78,23 @@ class DataService:
         self.holdings_symbols = list(symbols)
         self._update_symbols()
 
+    def update_scan_symbols(self, symbols):
+        self.scan_symbols = list(dict.fromkeys(symbols))
+        self._update_quote_scope()
+
+    def _update_quote_scope(self):
+        if self.broker:
+            self.broker.allowed = frozenset(self.symbols) | set(self.scan_symbols)
+            self.broker.candle_allowed = frozenset(self.symbols)
+        if self.quotes:
+            self.quotes.set_symbols(self.symbols, self.scan_symbols)
+
     def _update_symbols(self):
         symbols = list(dict.fromkeys([t.symbol for t in self.tickers] + self.holdings_symbols))
         removed = set(self.symbols) - set(symbols)
         added = set(symbols) - set(self.symbols)
         self.symbols = symbols
         self.store.allowed = frozenset(symbols)
-        if self.broker:
-            self.broker.allowed = frozenset(symbols)
         for key in list(self.sync):
             if key[0] in removed:
                 state = self.sync.pop(key)
@@ -101,8 +111,7 @@ class DataService:
                     cache.pop(key)
         if self.focus[0] not in symbols:
             self.focus = (symbols[0] if symbols else '', self.focus[1])
-        if self.quotes and (added or removed):
-            self.quotes.set_symbols(symbols)
+        self._update_quote_scope()
 
     def list_state(self):
         return {'board': self.board(), 'mode': self.mode,

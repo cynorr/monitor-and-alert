@@ -55,7 +55,7 @@ def focus_classification(row, preferences):
 
 
 def apply_rules(workspace, snapshot, preferences, selected_date=None):
-    """Return a new workspace; only Focus is eligible for Longbridge membership."""
+    """Return a new workspace; only Focus joins full Monitor data and Alert scope."""
     selected_date = selected_date or snapshot['date']
     result = migrate_workspace(workspace, selected_date)
     states = result['statuses']
@@ -66,7 +66,9 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
     manual_ids = {tag['id'] for tag in definitions if tag_role(tag) in ('setup', 'label')}
     negative_definitions = [tag for tag in definitions if tag_role(tag) in NEGATIVE_ROLES and active_tag(tag)]
     setup_sections = {'unclassified'} | {tag['id'] for tag in definitions if tag_role(tag) == 'setup'}
-    scope = candidates | {ticker for ticker, state in states.items() if state.get('status') in ('focus', 'excluded')}
+    manual_discover = {ticker for ticker, state in states.items()
+                       if state.get('status') == 'discover' and state.get('manual_discover_date') == selected_date}
+    scope = candidates | manual_discover | {ticker for ticker, state in states.items() if state.get('status') in ('focus', 'excluded')}
 
     for ticker in sorted(scope):
         state = states.setdefault(ticker, {'status': 'discover', 'section': 'unclassified', 'status_at': selected_date})
@@ -96,7 +98,7 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
         negative = next((role for role in NEGATIVE_ROLES if any(tag_role(tag) == role for tag in matched)), None)
         manual_focus = state.get('status') == 'focus' and state.get('manual_focus_date') == selected_date
 
-        if negative and not manual_focus:
+        if negative and not manual_focus and ticker not in manual_discover:
             state.update(status='excluded', section=negative)
             state.pop('excluded_at', None)
             state.pop('manual_section_date', None)
@@ -113,13 +115,13 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
             state.pop('manual_section_date', None)
 
         # Only actual candidates return to Discover; Focus and negative results may outlive rankings.
-        if state.get('status') == 'discover' and ticker not in candidates:
+        if state.get('status') == 'discover' and ticker not in candidates | manual_discover:
             del states[ticker]
         else:
             state.setdefault('status_at', selected_date)
 
     for ticker, state in list(states.items()):
-        if state.get('status') == 'discover' and ticker not in candidates:
+        if state.get('status') == 'discover' and ticker not in candidates | manual_discover:
             del states[ticker]
 
     # Moved/new members lead their section; unchanged members retain manual order.

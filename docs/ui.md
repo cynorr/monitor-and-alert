@@ -162,10 +162,10 @@ Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使�
 ### Search 与 Add
 
 - List 模块的 Tag 新增与 section 新增只使用一套加号按钮样式：26×26px、21px 字号、圆形 hover 背景；Tag 与 section 加号距面板右边同为8px。
-- Search 与可编辑 Focus setup 组的 `+` 共用唯一行内输入，placeholder 始终为 `Search`，不使用新增弹窗。`/` 随时清空并开始 Focus 搜索；Focus 组内 `+` 指定该 section 为新增目标。Esc 退出并恢复全名单。
+- Search 与可编辑 Focus setup 组的 `+` 共用唯一行内输入，placeholder 始终为 `Search`，不使用新增弹窗。`/` 随时清空并开始搜索；Scan全局新股加入当日Discover置顶，Monitor仍加入Focus；Focus 组内 `+` 指定该 section 为新增目标。Esc 退出并恢复全名单。
 - 即时筛选本地 ticker，仅显示匹配组，无空组或 No matches；没有本地结果时隐藏报价列头。搜索临时展示折叠组，选中结果只展开当前模式的对应组。
 - 没有精确本地 ticker 时，停输一秒发起精确查询：Scan 读本地 Daily，Monitor 经后端官方 static_info。查询不保存、不订阅；输入变化或退出后丢弃旧响应。
-- 有效新候选位于本地匹配前，显示蓝色 ticker、公司名和 Add。Enter 优先选择精确已有 ticker；已展示的新候选优先于局部匹配，否则选择首个本地匹配或发起/等待查询。确认新候选后插入目标队首、选图并退出；已有 ticker 只选择、不移动。
+- 有效新候选位于本地匹配前，显示蓝色 ticker、公司名和 Add。Enter 优先选择精确已有 ticker；已展示的新候选优先于局部匹配，否则选择首个本地匹配或发起/等待查询。确认新候选后沿用add保存、选图并退出；Scan全局Search新股进入Discover置顶并切到Discover、清除Tag显示筛选，section的+仍按显式目标加入。已有Discover可置顶并选中，已有Focus/Excluded只选择、不移动。
 - 未找到 ticker 保持空结果，查询/保存失败保留行内错误。只支持美股正股，不新增模糊查询和其他市场入口。
 - 上述指定 section 新增针对全新 symbol。已有 Discover/Excluded symbol 明确加入 Focus 时，分类以 [统一入选](list-design.md#统一移入-focus) 为准，不由 Search/section `+` 保留来源结果或强制目标组。
 
@@ -175,9 +175,10 @@ Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式
 
 ### Scan 日期与准备状态
 
-- Scan 使用截至所选日的完成 Daily，Focus 也用同一来源，无活跃 candle 或 Intraday。图表显示所选日期；正常时隐藏独立准备状态，不重复显示 Ready 日期或完成时间。
+- Scan 使用截至所选日的完成 Daily，Focus 也用同一来源，无活跃 candle 或 Intraday，最新日仅叠加Longbridge当前时段的一个价格轴标签（Pre、Regular或Post），历史日隐藏。图表显示所选日期；正常时隐藏独立准备状态，不重复显示 Ready 日期或完成时间。
 - 日期下拉仅列已生成日。Refresh Scan 补齐并打开最新可用日，与正在查看的历史日期无关；已完成的步骤跳过，全部完成仍切回最新日。自动完成保留历史选择和展示模式，新日按 List 生命周期继承。配置变更/指定日重算仅由CLI处理。
 - 未完成、处理中或失败时才显示目标日期与当前阶段，例如 Downloading daily / Updating splits / Building daily bars / Building features，失败详情放悬停；旧日期和结果继续可查看。准备中禁用重复 Refresh，但允许切换模式。GET、选图、Filter 和切页不触发下载。
+- 实时报价失败或连接中断复用图表现有质量图标与悬停原因，不改变 Scan 完成状态、不阻止本地日 K 展示；有效价格轴标签的外观只在 [Chart UI](chart-ui.md#colors-margins-and-reference-lines) 维护。
 
 ## Data and simulator boundaries
 

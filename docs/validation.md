@@ -2,6 +2,29 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-16：Scan 报价按当前交易时段互斥显示
+
+环境：本机macOS、Python3.13.1、TypeScript5.9.3，以及现有localhost:8765的Monitor服务。本轮仅修复Scan报价显示，不修改订阅、Alert、名单或Massive数据。
+
+- 原实现只按报价日期过滤，Regular时也会返回当天Pre与上一交易日Post。现在由服务时钟与XNYS日历选择唯一报价窗口，并验证报价时间戳属于该窗口；缺失/旧报价、休市和历史Scan不返回实时标记，保留原Quote缓存。
+- 16项定向Python用例通过、35项未运行，覆盖04:00、Regular开收盘、20:00、提前收盘、夏令时、周末/休市、旧值/缺值、历史日隐藏及已有Scan范围切换。`npm run build --prefix ui`通过；1项图表定向用例通过，验证单个标签的Pre/Regular/Post价格与颜色切换、旧标签清除、原收盘价标签显隐、自动缩放和Massive candle不变。
+- 美东10:46:58只读现有服务一只Focus股票CAI.US的缓存报价：Pre时间戳为当日09:30:00，Post为上一交易日19:39:52。把真实响应交给本轮`scan_quote`过滤后，仅保留Regular价格31.01，extended为空。仅验证该样本后结束，不建立新券商连接、不读取凭证、不触发下载或账户刷新。
+- 同步Longbridge、Chart UI、UI总入口、behavior/development与简要入口说明；`git diff --check`通过。
+
+未覆盖：真实盘前/盘后推送与浏览器实际绘制；没有执行全链路或全量测试。正式服务未重启，本轮真实样本验证的是新函数对现有缓存响应的处理，不能冒充已运行服务加载了修复；运行中服务需重启后端并刷新页面生效。
+
+## 2026-10-16：Scan Pre/Post 与搜索加入 Discover
+
+环境：本机 macOS，Python 3.13.1、TypeScript 5.9.3。真实输入为2026-10-15的Massive SQLite与已生成截面/名单（全市场12,651只、自动候选82只）。本轮没有启动/重启正式服务，不读取券商凭证、不调用真实行情/账户接口或播放声音。
+
+- 27项定向Python用例通过，61项未运行。覆盖完整行情/Quote白名单与等待请求额度后的重检、模式切换和Focus升降级复用同一context、不扩大六周期任务、Holdings去重、25只额外Quote按两批获取、单只不可用隔离、Pre/Post日期过滤与历史日隐藏，以及原有Quote重连/名单规则相关场景。
+- `npm run build --prefix ui`通过；仅运行2项UI定向用例：Pre/Post轴标签颜色、隐藏横线、分别更新/清除与公开自动缩放API；Scan Search沿用add并切到Discover置顶、已有Discover置顶选择，显式Focus section和Monitor搜索目标保留。未运行浏览器或全链路测试。
+- 真实日库只读验证在临时runtime复制最近两份名单/截面和偏好：AAPL原非候选，加入当日Discover置顶并补齐均线/RFL约0.229s；仍非candidate，不扩大完整行情范围，新日继承移除该成员及Pin。日图有真实历史、无active candle；正式SQLite、名单、偏好与split的大小/mtime保持不变。
+- 该临时环境的订阅验证使用明确的Broker替身：145个Quote标的中只有29个完整行情标的及174个candle订阅；Scan→Monitor→Scan共用一个替身context，保留全部原SyncState。这个结果验证调度范围，不冒充真实SDK连接/行情实测。临时业务库和目录已清理。
+- 同步Longbridge/Massive/List/UI及行为、职责和AGENTS入口；204个本地Markdown链接与`git diff --check`检查通过。既有正式split修改与.DS_Store未处理。
+
+未覆盖：真实Longbridge订阅与盘前/盘后推送、浏览器价格轴实际绘制和人工搜索交互、Alert实时穿越及账户链路。本轮只读获取现有服务状态未成功，没有为验证另建真实行情连接；以上未覆盖项不能视为已验收。
+
 ## 2026-10-16：Holdings 轻量错误详情与统一圆圈感叹号
 
 环境：本机macOS、Python3.13、TypeScript及现有正式Monitor服务。仅验证本轮Holdings错误展示与状态契约，真实接口读取限于现有9条持仓、health及原40个Focus/Holdings行情标识，成功核对即结束；不修改账户、名单或人工交易规则，不做真实网络/账户故障注入。

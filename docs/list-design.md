@@ -18,6 +18,8 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 
 同一 symbol 在三个列表中只有一个归属。Holdings 独立，不改变名单归属；同 ticker 底层行情去重。常规名单前端屏蔽 Holdings 已有 ticker，后端成员与规则结果保留。
 
+Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为当日人工 Discover，并加入已有 Pinned 区首位、选中日 K。人工 Discover 当天刷新、重新分类和重启后仍保留，Setup/负面 Tag 如实计算，但当天不因候选门槛或负面规则被移走；不伪造 candidate 或市场排名。新完成日继承时删除人工 Discover 与全部 Pin，无跨日保留要求；需要长期关注时使用现有移入 Focus 操作。已有 Discover 搜索结果可置顶并选中，已有 Focus/Excluded 只选中、不改归属；Focus section 的显式新增保留原用途。
+
 ## 每日规则
 
 新完成交易日 Daily 和 feature 准备成功后，按 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 为候选及全部继承的 Focus、Excluded（含 Hidden）计算完整 feature 和 Growth 数值。继承成员即使掉出候选或 RFL 前 50 也继续计算，不另行排名。统一计算最终归属后一次保存，不先释放再逐只移回，不增加定时器或实时 Quote 分类。
@@ -59,7 +61,7 @@ Filter 仅改变显示，不移动名单、不改变实时订阅。自动分类�
 
 ## Scan 与 Monitor
 
-Scan 展示三个完整列表，均使用本地 Massive Daily。Monitor 展示 Focus 和独立 Holdings。Discover 与全部 Excluded 不占 Longbridge symbol 额度；明确加入 Focus 后才订阅实时行情。
+Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，盘前/盘后报价按 [Longbridge 范围](longbridge-data.md#定位与范围) 共用连接。Monitor 展示 Focus 和独立 Holdings；只有 Focus/Holdings 使用完整 Monitor 行情和 Alert，Scan 的额外 Quote 不扩大这两个范围。
 
 因此 Excluded 的盘中恢复不被实时发现；每日完成日扫描发现恢复。仍希望当天实时关注的股票，应明确留在 Focus。切换模式不停止后台 Focus 行情或 Holdings 刷新。
 
@@ -87,6 +89,6 @@ Scan 展示三个完整列表，均使用本地 Massive Daily。Monitor 展示 F
 
 ## 实现边界
 
-继续使用 workspace.json、现有截面和 preferences.json。旧 Focus / Wait 合并为 Focus；旧 Hidden 转为 Excluded / Hidden 并保留剩余期限。共享后台规则计算结果，不新增服务、通用规则框架、每日提醒或额外实时订阅。
+继续使用 workspace.json、现有截面和 preferences.json。旧 Focus / Wait 合并为 Focus；旧 Hidden 转为 Excluded / Hidden 并保留剩余期限。共享后台规则计算结果，不新增服务、通用规则框架或每日提醒；Quote 范围统一见 Longbridge 数据要求。
 
 更新规则时重评已有本地截面；GET 和切页不触发下载。新 Daily / feature 成功后后台发布分类；失败保留完整旧结果并显示其日期。

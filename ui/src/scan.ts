@@ -153,10 +153,11 @@ export class ScanControls {
     available(rows: Ticker[]) { return rows.filter(row => !this.isHolding(row.symbol)); }
 
     get activeList() { return this.enabled ? this.preferences?.activeList ?? 'discover' : 'focus'; }
-    async showFocus() {
+    async showList(list = 'focus') {
         if (!this.preferences) return;
-        this.preferences.activeList = 'focus';
+        this.preferences.activeList = list;
         this.preferences.activeTag = null;
+        this.selected.clear();
         this.resetDraft(); this.render();
         await this.persist(this.preferences);
     }

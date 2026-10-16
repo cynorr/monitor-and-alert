@@ -40,6 +40,7 @@ class Broker:
     def __init__(self, credentials: Path, allowed: set[str], runtime: Path,
                  region: str = 'cn', timeout: float = 15):
         self.allowed = frozenset(allowed)
+        self.candle_allowed = self.allowed
         self.secrets = read_credentials(credentials)
         domain = 'cn' if region == 'cn' else 'com'
         os.environ['LONGBRIDGE_REGION'] = 'cn' if region == 'cn' else 'hk'
@@ -52,9 +53,11 @@ class Broker:
         self.inflight = asyncio.Semaphore(5)
         self.background = asyncio.Semaphore(3)
 
-    def check(self, symbols: list[str]) -> None:
-        if not set(symbols) <= self.allowed:
-            raise ValueError('API request outside current Focus and Holdings universe')
+    def check(self, symbols: list[str], *, full=False) -> None:
+        allowed = self.candle_allowed if full else self.allowed
+        if not set(symbols) <= allowed:
+            scope = 'Focus and Holdings' if full else 'quote subscription'
+            raise ValueError(f'API request outside current {scope} universe')
 
     def context(self):
         if self._context is None:
@@ -65,17 +68,17 @@ class Broker:
         # All requests and Quote callbacks must be stopped before dropping the SDK context.
         self._context = None
 
-    async def call(self, method, *args, background=False, symbols=None):
+    async def call(self, method, *args, background=False, symbols=None, full=False):
         if background:
             async with self.background:
-                return await self._call(method, args, True, symbols)
-        return await self._call(method, args, False, symbols)
+                return await self._call(method, args, True, symbols, full)
+        return await self._call(method, args, False, symbols, full)
 
-    async def _call(self, method, args, background, symbols=None):
+    async def _call(self, method, args, background, symbols=None, full=False):
         async with self.inflight:
             await self.limiter.wait(background)
             if symbols is not None:
-                self.check(symbols)
+                self.check(symbols, full=full)
             try:
                 return await asyncio.wait_for(method(*args), timeout=self.timeout)
             except TimeoutError:
@@ -84,20 +87,22 @@ class Broker:
                 raise RuntimeError(redact(str(exc), self.secrets)) from None
 
     async def candles(self, symbol: str, timeframe: str, count: int = 1000, *, background=False):
-        self.check([symbol])
+        self.check([symbol], full=True)
         if not 1 <= count <= 1000:
             raise ValueError('Count must be 1..1000')
         ctx = self.context()
         return await self.call(ctx.candlesticks, symbol, SDK_PERIODS[timeframe], count,
-                               AdjustType.ForwardAdjust, TradeSessions.Intraday, background=background, symbols=[symbol])
+                               AdjustType.ForwardAdjust, TradeSessions.Intraday, background=background, symbols=[symbol], full=True)
 
-    async def subscribe(self, ctx, symbols: list[str]):
-        self.check(symbols)
-        await self.call(ctx.subscribe, symbols, [SubType.Quote, SubType.Trade], symbols=symbols)
+    async def subscribe(self, ctx, symbols: list[str], *, quote_only=False):
+        self.check(symbols, full=not quote_only)
+        types = [SubType.Quote] if quote_only else [SubType.Quote, SubType.Trade]
+        await self.call(ctx.subscribe, symbols, types, symbols=symbols, full=not quote_only)
 
     async def subscribe_candles(self, ctx, symbol, timeframe):
+        self.check([symbol], full=True)
         return await self.call(ctx.subscribe_candlesticks, symbol, SDK_PERIODS[timeframe],
-                               TradeSessions.Intraday, symbols=[symbol])
+                               TradeSessions.Intraday, symbols=[symbol], full=True)
 
     async def unsubscribe_candles(self, ctx, symbol, timeframe):
         await self.call(ctx.unsubscribe_candlesticks, symbol, SDK_PERIODS[timeframe])
@@ -106,9 +111,9 @@ class Broker:
         self.check(symbols)
         return await self.call(ctx.quote, symbols, symbols=symbols)
 
-    async def unsubscribe(self, ctx, symbols: list[str]):
+    async def unsubscribe(self, ctx, symbols: list[str], *, quote_only=False):
         # Removed symbols must still be unsubscribed after the whitelist changes.
-        await self.call(ctx.unsubscribe, symbols, [SubType.Quote, SubType.Trade])
+        await self.call(ctx.unsubscribe, symbols, [SubType.Quote] if quote_only else [SubType.Quote, SubType.Trade])
 
     async def validate_ticker(self, ticker: str):
         from .workspace import normalize_ticker

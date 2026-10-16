@@ -7,7 +7,7 @@
 | 文件 | 唯一职责 |
 | --- | --- |
 | data_service/__main__.py | CLI、单实例锁、生命周期、有限运行报告 |
-| workbench.py | 同一 Workspace、Scan/Monitor展示、持续后台行情/账户及本地Scan API |
+| workbench.py | 同一 Workspace、Scan/Monitor展示、模式对应的Quote范围、持续后台行情/账户及本地Scan API |
 | paths.py / network.py | 唯一runtime布局、显式共用HTTP代理/session与Massive凭证读取 |
 | massive/daily.py / splits.py / build.py | 原始Daily补文件、两年split覆盖、新日增量追加；输入修订或失败后从raw全量重建派生SQLite |
 | symbol_directory.py / scripts/pull_symbol_directory.py | 独立免费Nasdaq目录获取/校验/原子发布；仅保存.US官方ETF标记，用于扫描资格 |
@@ -92,17 +92,17 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 ## 模式与上游数据
 
-同一个服务、同一个Workspace、一个全局展示模式。正式serve在HTTP可响应后启动一次Broker/DataService与Holdings；切Scan不停止它们，服务关闭才cancel/await并释放context/store/session。Mock Scan与有界--symbols禁用Massive与真实账户；Mock明确切Monitor才构造Longbridge，回到Mock Scan时释放。后台准备与展示切换分离，仅禁止重复生成，不建立第二个服务或通用source接口。
+同一个服务、同一个Workspace、一个全局展示模式。正式serve在HTTP可响应后启动一次Broker/DataService与Holdings；切Scan不停止它们，服务关闭才cancel/await并释放context/store/session；模式变化只更新额外Quote-only范围。Mock Scan与有界--symbols禁用Massive与真实账户；Mock明确切Monitor才构造Longbridge，回到Mock Scan时释放。后台准备与展示切换分离，仅禁止重复生成，不建立第二个服务或通用source接口。
 
 Massive唯一要求见 [massive-data.md](massive-data.md)，共用bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。RuntimePaths统一所有正式路径：symbol-directory.json、massive/daily原始文件、massive/splits.json、massive/daily.sqlite3、longbridge/bars.sqlite3、holdings、additional-info/info.sqlite3与days；继续接受--runtime。正式Workbench和reconcile/verify注入Longbridge新路径；DataService独立/模拟器默认临时bars路径保持。两库共用BAR_SCHEMA、Bar、read_bars与指标，Daily ts为ET零点转Unix秒；不混库或拼接历史。显式--daily-db是只读外部入口，不运行内置Massive，筛选仍消费指定runtime的本地目录。
 
-build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录，按 [Massive 数据要求](massive-data.md) 完成候选筛选与全市场排名。随后对候选、Focus及全部Excluded（含Hidden）读取最多1000根建立完整特征，包含Growth使用的三种RFL数值；完整特征补算不改变资格、candidate或已有市场名次，不为继承名单另行排名。其他非候选仅保留轻量指标和资格标记。截面不再嵌入公司名称；旧截面遗留字段不用于UI。daily_metrics复用共用纯算子，不重复维护公式。workspace_scope读取同日或最近前日的全部Focus/Excluded；enrich_snapshot为本地成员补齐旧截面缺少的完整特征及RFL数值，记录feature_scope，不重跑全市场排名或下载。详细计算范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。
+build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录，按 [Massive 数据要求](massive-data.md) 完成候选筛选与全市场排名。随后对候选、Focus及全部Excluded（含Hidden）读取最多1000根建立完整特征，包含Growth使用的三种RFL数值；完整特征补算不改变资格、candidate或已有市场名次，不为继承名单另行排名。其他非候选仅保留轻量指标和资格标记。截面不再嵌入公司名称；旧截面遗留字段不用于UI。daily_metrics复用共用纯算子，不重复维护公式。workspace_scope读取同日或最近前日的全部Focus/Excluded，并纳入同日manual_discover_date成员；enrich_snapshot为本地成员补齐旧截面缺少的完整特征及RFL数值，记录feature_scope，不重跑全市场排名或下载。详细计算范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。
 
 每步只保留单只历史与全市场标量，避免全市场历史fetchall；读到的bar均验证闭合/结构。checked_history复用Bar.validate，OHLC范围矛盾保留原值；后续阶段仅为上一窗口起点之前的矛盾追加日志，避免一次生成内重叠窗口重复记录。阶段耗时和证券/候选数量写普通日志，不新增指标持久化或性能框架。真实样本线程对照：单线程1000只约0.46秒、四线程约1.12秒；不添加更慢的线程池。全日生成继续在现有asyncio.to_thread中执行，不阻塞HTTP/WS事件循环。
 
 latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)回退推断；缺少完成日则失败并保留原状态。CLI scan未传--date、页面Refresh未传date时用该完成日，build_day继续拒绝未收盘日或无当日bar。成功后同步publish_day、reload workspace并明确选中新生成日期，首次才创建workspace。相同日期重算不重新继承；生成失败释放busy并保留原日期/名单。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
 
-只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有实时active、Intraday或Ready实时状态；Daily复用同一个Panel。
+只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有实时active、Intraday或Ready实时状态；Daily复用同一个Panel。Workbench.scan_quote只读同一QuoteService缓存，按服务时钟、XNYS交易日边界及报价窗口返回当前时段唯一有效值，不改原缓存；历史日期隐藏，行情K线revision不变也随WS更新报价。Panel复用一个价格轴标签，有实时值时隐藏原closed价标签；时段规则与外观分别见Longbridge数据要求和Chart UI。
 
 indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。指标直接消费已选来源的价格；不同供应商的结果允许不同。
 
@@ -142,6 +142,10 @@ Workbench.start_background先异步补本地成员feature并分类，再启动�
 
 Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用DataService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。QuoteService 用内存事件唤醒现有行情循环，按当前成员增删 Quote / Trade 与六周期 candle 订阅；移除时先清 candle，再退订底层行情；失败沿用重连/30 秒重试。Broker 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
+Workbench.refresh_scan_quotes在模式/名单/新截面变化时，将当前Scan三名单交给DataService.update_scan_symbols；仅正式Scan启用。DataService.symbols、store.allowed、Broker.candle_allowed和SyncState仍只包含Focus/Holdings；Broker.allowed是完整Quote并集。QuoteService.symbols为完整行情集合，extra_symbols排除其中重复成员；subscribed与quote_subscribed分别管理完整订阅及Quote-only。set_symbols只唤醒既有循环，按差集批量订阅/快照，不重置context或generation。移出Scan只退订额外Quote；入选Focus才增加Trade/candle。单只不可用时按既有单只方式隔离，Quote-only请求超时只记录错误并在既有周期重试，不中断核心行情。
+
+Workspace.add_ticker的discover分支原子保存当日manual_discover_date及Pin，重复已有归属不迁移。derive_day_view/apply_rules把同日人工Discover纳入成员范围并保留人工归属、如实计算Tag；inherit_workspace删除Discover与全部Pin，只有明确加入Focus才按原生命周期跨日。Scan新增补特征复用enrich_snapshot，保持candidate和rank；不增加预览缓存或独立保存文件。
+
 Holdings另由Workbench持有单个controller与轮询task，正式服务两种展示均持续启用；服务退出时先cancel并await持仓任务及其aiohttp session，再退出Monitor。SnapTrade凭证工厂在正式后台启动时使用，mock/only禁用工厂。凭证文件与规则/账户缓存均git忽略，凭证权限600；CLI缺少凭证文件时不启用持仓。后台启动的第一个refresh位于timer sleep之前；展示切换不重建刷新任务；失败不调用成员更新、不提交raw缓存，下一周期再执行，没有额外即时重试。
 
 DataService.tickers仍只包含workspace成员，board只输出Focus；holdings_symbols独立接收已接受余仓与当日清仓复盘批次。唯一_update_symbols按两来源并集更新store/broker.allowed、Quote范围和SyncState，同ticker保持既有任务。它不调用static_info、不检查workspace归属、不写workspace。Holdings只在账户成功刷新时重建买卖关联；约1Hz list_state读取用已有Decimal批次标量与Quote重新估值，不重复匹配流水。前端selectionSource与buy_ids批次key分离于symbol，Watchlist更新不得覆盖持仓选择，HTTP/WS图表继续用原request_id/mode/socket保护。
@@ -180,13 +184,13 @@ list_state增加独立holdings字段：未启用或Scan为null；启用为{data,
 
 workspace.json 的根字段 `pinned:[ticker,...]` 为当日有序软状态；按 ticker 当前归属投影到各 List，保留原 statuses/section/orders。inherit_workspace 在新日清空；apply_rules 去掉消失或跨 List 的成员。pin_ticker/move_pin 使用原同步保存与错误回滚，置顶动作不重跑分类或获取数据。Workbench board 返回 pinned:boolean、pin_index:number|null；独立 DataService 仅在自身附带 Workspace 时提供置顶字段，不覆盖 Workbench 持有的名单状态；list_state 增加 holding_symbols（两模式均提供、含当日清仓）与 current_regular_session（calendar.is_open，不依赖个股Quote）。两字段只提供显示信息，不改变后端名单。
 
-List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,section}`、`{action:"hide",ticker}`、`{action:"move",ticker,list_name,section,index}`（section为潜力Tag ID或unclassified），以及`{action:"move",tickers,source,target}`（source为三名单，target为discover/focus/hidden；机器Excluded不能手动移到Discover，允许移到Hidden或Focus）、`{action:"tag",ticker,tags:[Setup/Label ID]}`、`{action:"keep",ticker}`、`{action:"pin",ticker,pinned:boolean}`、`{action:"pin_move",ticker,index}`。pin_move的index为移除主动ticker后、同List完整置顶区的零基位置（含当前筛选不可见成员）。index 为移除主动ticker后目标section的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
+List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,list_name,section}`、`{action:"hide",ticker}`、`{action:"move",ticker,list_name,section,index}`（section为潜力Tag ID或unclassified），以及`{action:"move",tickers,source,target}`（source为三名单，target为discover/focus/hidden；机器Excluded不能手动移到Discover，允许移到Hidden或Focus）、`{action:"tag",ticker,tags:[Setup/Label ID]}`、`{action:"keep",ticker}`、`{action:"pin",ticker,pinned:boolean}`、`{action:"pin_move",ticker,index}`。pin_move的index为移除主动ticker后、同List完整置顶区的零基位置（含当前筛选不可见成员）。index 为移除主动ticker后目标section的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
 
 Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source:"discover",target:"focus"}`。列表状态增加app_mode、date、dates、preferences和mock；历史Scan日期或--symbols不可写。POST /v1/mode切换模式，POST /v1/scan选择/生成日期，POST /v1/preferences同步保存完整偏好；所有写入复用同源检查，body上限64KiB。生成保留同日人工覆盖，同时更新规则标签/分类。
 
 新日继承Focus与Excluded，Hidden期限跨候选空档保留。publish_day读取同日人工状态或继承上一日，读取preferences，再apply_rules；同日重算不清人工覆盖。正式默认days为runtime/days。旧人工数据保留，当前读取采用V3。
 
-前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口，唯一差别是目标Section；Scan查询本地只读SQLite，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
+前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口；Scan全局Search目标为Discover置顶，显式Focus section的+保留目标。Scan查询本地只读SQLite并截断到所选日，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 
 ## 必要验证
 

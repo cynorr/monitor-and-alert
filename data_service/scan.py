@@ -63,7 +63,7 @@ def previous_candidates(days, value):
 
 
 def workspace_scope(days, value):
-    """Include all Focus and Excluded members from this day or its predecessor."""
+    """Include retained members and same-day manually added Discover symbols."""
     days = Path(days)
     path = days / value / 'workspace.json'
     if not path.exists():
@@ -72,7 +72,8 @@ def workspace_scope(days, value):
         return set()
     data = migrate_workspace(json.loads(path.read_text()), value)
     return {ticker for ticker, state in data['statuses'].items()
-            if state['status'] in ('focus', 'excluded')}
+            if state['status'] in ('focus', 'excluded') or
+            (state['status'] == 'discover' and state.get('manual_discover_date') == value)}
 
 
 def _symbols(tickers):

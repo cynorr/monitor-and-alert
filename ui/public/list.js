@@ -211,13 +211,13 @@ export class Watchlist {
         this.lookupController?.abort();
         this.lookupController = undefined;
     }
-    beginSearch(section = 'unclassified', list = 'focus') {
+    beginSearch(section = 'unclassified', list = this.scan?.enabled ? 'discover' : 'focus') {
         this.endDrag();
         this.input.value = '';
         this.changeSearch(section, list);
         this.input.focus();
     }
-    changeSearch(section = this.search?.section ?? 'unclassified', list = this.search?.list ?? 'focus') {
+    changeSearch(section = this.search?.section ?? 'unclassified', list = this.search?.list ?? (this.scan?.enabled ? 'discover' : 'focus')) {
         this.cancelLookup();
         const search = { list, section, message: '' };
         this.search = search;
@@ -277,6 +277,11 @@ export class Watchlist {
         // Enter selects the exact local ticker, or the first currently displayed local match.
         const local = this.scan?.available(this.tickers).find(t => t.ticker === term) ?? (!search.candidate ? this.matches()[0] : undefined);
         if (local) {
+            if (this.scan?.enabled && search.list === 'discover' && local.status === 'discover') {
+                if (!local.pinned)
+                    await this.mutate({ action: 'pin', ticker: local.ticker, pinned: true });
+                await this.scan.showList('discover');
+            }
             this.endSearch(local.symbol);
             return;
         }
@@ -285,6 +290,8 @@ export class Watchlist {
             return;
         const result = await this.mutate({ action: 'add', ticker: candidate.ticker, list_name: search.list, section: search.section });
         if (result && this.search === search) {
+            if (this.scan?.enabled && search.list === 'discover')
+                await this.scan.showList('discover');
             const added = result.board.find(t => t.ticker === candidate.ticker);
             if (added)
                 this.endSearch(added.symbol);

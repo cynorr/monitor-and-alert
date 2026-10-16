@@ -33,6 +33,8 @@ class QuoteService:
         self.ctx = None
         self.subscription_errors: dict[str, str] = {}
         self.subscribed = set()
+        self.extra_symbols = []
+        self.quote_subscribed = set()
         self.candle_subscribed = set()
         self.candle_errors = {}
         self.restart_requested = False
@@ -42,14 +44,59 @@ class QuoteService:
         self.restart_requested = True
         self.changed.set()
 
-    def set_symbols(self, symbols):
-        removed = set(self.symbols) - set(symbols)
+    @property
+    def all_symbols(self):
+        return list(dict.fromkeys(self.symbols + self.extra_symbols))
+
+    def set_symbols(self, symbols, extra_symbols=()):
+        symbols = list(symbols)
+        extra_symbols = sorted(set(extra_symbols) - set(symbols))
+        if symbols == self.symbols and extra_symbols == self.extra_symbols:
+            return
+        removed = set(self.all_symbols) - set(symbols) - set(extra_symbols)
         self.symbols = list(symbols)
+        self.extra_symbols = extra_symbols
         for symbol in removed:
             for mapping in (self.values, self.errors, self.subscription_errors):
                 mapping.pop(symbol, None)
-        self.candle_errors = {key: value for key, value in self.candle_errors.items() if key[0] not in removed}
+        self.candle_errors = {key: value for key, value in self.candle_errors.items() if key[0] in self.symbols}
         self.changed.set()
+
+    async def update_extra_quotes(self):
+        removed = self.quote_subscribed - set(self.extra_symbols)
+        if removed:
+            await self.broker.unsubscribe(self.ctx, sorted(removed), quote_only=True)
+            self.quote_subscribed.difference_update(removed)
+        added = [s for s in self.extra_symbols if s not in self.quote_subscribed]
+        for start in range(0, len(added), 20):
+            chunk = [s for s in added[start:start + 20] if s in self.extra_symbols]
+            if not chunk:
+                continue
+            try:
+                await self.broker.subscribe(self.ctx, chunk, quote_only=True)
+                self.quote_subscribed.update(chunk)
+            except TimeoutError as exc:
+                for symbol in chunk:
+                    self.subscription_errors[symbol] = str(exc)
+                continue
+            except Exception:
+                for symbol in chunk:
+                    if symbol in self.extra_symbols:
+                        try:
+                            await self.broker.subscribe(self.ctx, [symbol], quote_only=True)
+                            self.quote_subscribed.add(symbol)
+                        except Exception as single:
+                            self.subscription_errors[symbol] = str(single)
+            subscribed = [s for s in chunk if s in self.quote_subscribed]
+            if subscribed:
+                self.connected_at = time.monotonic()
+                for symbol in subscribed:
+                    self.subscription_errors.pop(symbol, None)
+                try:
+                    await self._snapshot(self.ctx, subscribed)
+                except Exception as exc:
+                    for symbol in subscribed:
+                        self.errors[symbol] = str(exc)
 
     async def update_candles(self):
         if self.on_candle is None:
@@ -80,6 +127,8 @@ class QuoteService:
         if removed:
             await self.broker.unsubscribe(self.ctx, sorted(removed))
             self.subscribed.difference_update(removed)
+        # Drop Quote-only subscriptions before promoting a symbol to full Monitor data.
+        await self.update_extra_quotes()
         added = [s for s in self.symbols if s not in self.subscribed]
         for symbol in added:
             if symbol not in self.symbols:
@@ -107,7 +156,7 @@ class QuoteService:
                 self.candle_subscribed.discard((symbol, tf))
 
     def apply(self, symbol, event, snapshot=False, session_override=None):
-        if symbol not in self.symbols:
+        if symbol not in self.all_symbols:
             return
         try:
             ts = sdk_timestamp(event.timestamp)
@@ -210,6 +259,7 @@ class QuoteService:
                     pass
             ctx.set_on_candlestick(candle_callback)
         if not self.symbols:
+            await self.update_extra_quotes()
             self.connection_health = 'CONNECTED'
             return
         subscribed = []
@@ -251,6 +301,7 @@ class QuoteService:
         if notify_reconnect and self.has_connected and self.on_reconnect:
             self.on_reconnect()
         self.has_connected = True
+        await self.update_extra_quotes()
         await self.update_candles()
         log.info('Quote connected symbols=%d', len(subscribed))
 
@@ -266,11 +317,14 @@ class QuoteService:
                     await self.broker.unsubscribe_candles(ctx, symbol, tf)
                 if self.subscribed:
                     await self.broker.unsubscribe(ctx, sorted(self.subscribed))
+                if self.quote_subscribed:
+                    await self.broker.unsubscribe(ctx, sorted(self.quote_subscribed), quote_only=True)
             except Exception as exc:
                 log.warning('Quote cleanup failed; dropping SDK context: %s', exc)
                 self.broker.close()
         self.candle_subscribed.clear()
         self.subscribed.clear()
+        self.quote_subscribed.clear()
 
     async def run(self):
         backoff = 2
@@ -295,15 +349,16 @@ class QuoteService:
                                 break
                             await self.update_subscriptions()
                         now = int(time.time())
-                        if self.symbols and self.calendar.is_open(now):
+                        if self.all_symbols and self.calendar.is_open(now):
                             if time.monotonic() - max(self.last_push_monotonic, self.connected_at) > self.stale_seconds:
                                 raise TimeoutError('No universe quote push; reconnecting stale connection')
                         self.connection_health = 'CONNECTED'
                         # Periodic snapshots also restore state after SDK-internal reconnects.
                         if time.monotonic() - last_snapshot >= 30:
                             await self.update_subscriptions()
-                            for start in range(0, len(self.symbols), 20):
-                                chunk = self.symbols[start:start + 20]
+                            symbols = self.all_symbols
+                            for start in range(0, len(symbols), 20):
+                                chunk = symbols[start:start + 20]
                                 try:
                                     await self._snapshot(self.ctx, chunk)
                                 except TimeoutError:

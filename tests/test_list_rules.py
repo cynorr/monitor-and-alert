@@ -31,6 +31,21 @@ def excluded(ticker, section, at='2026-10-01'):
     return data
 
 
+def test_manual_discover_survives_same_day_rules_but_is_not_carried():
+    data = empty_workspace()
+    data['statuses']['MANUAL'] = {'status': 'discover', 'section': 'unclassified', 'manual_discover_date': '2026-10-01'}
+    data['orders']['discover'] = ['MANUAL']
+    data['pinned'] = ['MANUAL']
+    scan = snapshot(MANUAL={'candidate': False, 'extended_k': 3})
+    result = apply_rules(data, scan, validate_preferences(preferences()))
+    assert result['statuses']['MANUAL']['status'] == 'discover'
+    assert 'ext' in result['statuses']['MANUAL']['tags']
+    assert result['pinned'] == ['MANUAL']
+    assert derive_day_view(scan['date'], set(), set(), result).discover == ('MANUAL',)
+    following = inherit_workspace(result, set(), set(), '2026-10-02')
+    assert not following['statuses'] and not following['pinned']
+
+
 def test_matching_finite_missing_and_inclusive_bounds():
     rule = {'x': {'min': 1, 'max': 2}, 'category': {'values': ['good', 'fine']}}
     assert matches_filters({'x': 1, 'category': 'fine'}, rule)

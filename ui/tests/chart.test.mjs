@@ -23,8 +23,8 @@ function chart() {
         scrollToRealTime() {}, getVisibleLogicalRange: () => null,
     };
     return {
-        addSeries(kind) {
-            const item = { kind, rows: [], priceLines: [], applyOptions() {}, coordinateToPrice: y => y / 10,
+        addSeries(kind, options) {
+            const item = { kind, options, rows: [], priceLines: [], applyOptions(next) { Object.assign(this.options, next); }, coordinateToPrice: y => y / 10,
                 createPriceLine(options) {
                     const line = { options: { ...options }, applyOptions(next) { Object.assign(this.options, next); } };
                     this.priceLines.push(line); return line;
@@ -71,6 +71,46 @@ const first = at('2026-10-01T13:30:00Z'), latest = at('2026-10-02T13:30:00Z');
 const row = (time, volume) => ({ time, open: 10, high: 12, low: 9, close: 11, volume });
 const snapshot = (bars, active = null) => ({ revision: 1, bars, active, indicators: {}, indicator_preview: {} });
 const label = panel => node(panel.id + '-volume').textContent;
+
+test('Scan price axis switches Pre/Regular/Post without retaining other session labels', () => {
+    const panel = new Panel('sessions', true);
+    panel.render(snapshot([row(first, 100)]));
+    const bars = panel.candles.data();
+    const pre = { regular: null, extended: { Pre: { last_price: 16.5 } } };
+    panel.setSessionPrices(pre);
+    const [marker] = panel.candles.priceLines;
+    assert.equal(panel.candles.priceLines.length, 1);
+    assert.equal(marker.options.axisLabelColor, '#e4b400');
+    assert.equal(marker.options.axisLabelTextColor, '#171b20');
+    assert.ok(marker.options.axisLabelVisible);
+    assert.equal(marker.options.lineVisible, false);
+    assert.equal(panel.candles.options.lastValueVisible, false);
+    assert.deepEqual(panel.candles.options.autoscaleInfoProvider(() => ({ priceRange: { minValue: 10, maxValue: 12 } })),
+        { priceRange: { minValue: 10, maxValue: 16.5 } });
+    pre.extended.Pre.last_price = 17;
+    panel.setSessionPrices(pre);
+    assert.equal(marker.options.price, 17);
+    panel.setSessionPrices({ regular: { last_price: 13, prev_close: 12 }, extended: {} });
+    assert.deepEqual(panel.candles.priceLines, [marker]);
+    assert.equal(marker.options.price, 13);
+    assert.equal(marker.options.axisLabelColor, '#26a69a');
+    assert.equal(marker.options.axisLabelTextColor, '#ffffff');
+    panel.setSessionPrices({ regular: { last_price: 11, prev_close: 12 }, extended: {} });
+    assert.equal(marker.options.axisLabelColor, '#ef5350');
+    panel.setSessionPrices({ regular: null, extended: {} });
+    assert.equal(panel.candles.priceLines.length, 0);
+    assert.equal(panel.candles.options.lastValueVisible, true);
+    panel.setSessionPrices({ regular: null, extended: { Post: { last_price: 8.75 } } });
+    const [post] = panel.candles.priceLines;
+    assert.equal(post.options.axisLabelColor, '#2962ff');
+    assert.equal(post.options.axisLabelTextColor, '#ffffff');
+    assert.deepEqual(panel.candles.options.autoscaleInfoProvider(() => ({ priceRange: { minValue: 10, maxValue: 12 } })),
+        { priceRange: { minValue: 8.75, maxValue: 12 } });
+    assert.deepEqual(panel.candles.data(), bars);
+    panel.reset('another-symbol');
+    assert.equal(panel.candles.priceLines.length, 0);
+    assert.equal(panel.candles.options.lastValueVisible, true);
+});
 
 test('hovered closed volume survives quote updates and refreshes from the same candle', () => {
     const panel = new Panel('hover', true);

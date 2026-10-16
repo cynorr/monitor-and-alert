@@ -14,7 +14,7 @@ from copy import deepcopy
 from .calendar import TradingCalendar, ET
 from .paths import RuntimePaths
 from .preferences import INITIAL_PREFERENCES, validate_preferences
-from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot
+from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot, day_start
 from .service import DataService
 from .workspace import derive_day_view, normalize_ticker
 from .store import atomic_json
@@ -54,7 +54,14 @@ class Workbench:
         self.sound_task = None
         self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, sound=self.sound) if only is None else None
         self.refresh_alert_scope()
+        self.refresh_scan_quotes()
         workspace.on_change = self.workspace_changed
+
+    def refresh_scan_quotes(self):
+        if self.monitor:
+            symbols = [row['symbol'] for row in self.scan_board(self.workspace.date)] if (
+                self.mode == 'scan' and not self.mock and self.only is None) else []
+            self.monitor.update_scan_symbols(symbols)
 
     def refresh_alert_scope(self):
         day = datetime.fromtimestamp(time.time(), ET).date().isoformat()
@@ -112,6 +119,7 @@ class Workbench:
                 tickers = [ticker for ticker in tickers if ticker.symbol in wanted]
             self.monitor.update_tickers(tickers)
         self.refresh_alert_scope()
+        self.refresh_scan_quotes()
 
     async def switch_mode(self, mode):
         if mode not in ('scan', 'monitor'):
@@ -128,6 +136,7 @@ class Workbench:
                 # Mock Scan stays offline; only an explicit Monitor switch may connect.
                 await self.stop_monitor()
             self.mode = mode
+            self.refresh_scan_quotes()
             self.run_id = uuid.uuid4().hex
             self.focus = (self.symbols[0] if self.symbols else '', self.focus[1])
             return self.list_state()
@@ -175,6 +184,7 @@ class Workbench:
         self.previous_cache.clear()
         if self.has_snapshot(self.workspace.date):
             self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences)
+        self.refresh_scan_quotes()
         self.run_id = uuid.uuid4().hex
 
     async def stop_monitor(self):
@@ -333,7 +343,34 @@ class Workbench:
         return {'symbol': symbol, 'timeframe': tf, 'app_mode': self.mode, 'mode': self.mode, 'mock': self.scan_mock,
                 'date': value, 'run_id': self.run_id, 'server_time': int(time.time()),
                 'charts': {'1d': chart}, 'summary': summary, 'status': {'stage': 'full','errors': []},
-                'quote': {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}}
+                'quote': self.scan_quote(symbol)}
+
+    def scan_quote(self, symbol):
+        result = {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}
+        if (self.selected_date != self.workspace.date or self.mock or not self.monitor or
+                symbol not in self.monitor.quotes.all_symbols):
+            return result
+        now = int(self.monitor.now())
+        result = self.monitor.quotes.output(symbol, now)
+        regular, extended = result['regular'], result['extended']
+        result['regular'], result['extended'] = None, {}
+        local = datetime.fromtimestamp(now, ET)
+        session = self.calendar.session(local.date())
+        if not session:
+            return result
+        opened, closed = session
+        pre = int(local.replace(hour=4, minute=0, second=0, microsecond=0).timestamp())
+        post = int(local.replace(hour=20, minute=0, second=0, microsecond=0).timestamp())
+        for name, start, end in (('Pre', pre, opened), ('Intraday', opened, closed), ('Post', closed, post)):
+            if start <= now < end:
+                value = regular if name == 'Intraday' else extended.get(name)
+                if value and start <= value['timestamp'] < end:
+                    if name == 'Intraday':
+                        result['regular'] = value
+                    else:
+                        result['extended'][name] = value
+                break
+        return result
 
     def additional_info(self, symbol):
         return self.additional.info(symbol)
@@ -355,13 +392,15 @@ class Workbench:
                 info = await self.monitor.broker.validate_ticker(ticker)
             else:
                 with closing(connect_daily(self.daily_path)) as db:
-                    exists = db.execute("SELECT 1 FROM bars WHERE symbol=? AND timeframe='1d' LIMIT 1", (ticker + '.US',)).fetchone()
+                    exists = db.execute("SELECT 1 FROM bars WHERE symbol=? AND timeframe='1d' AND ts<=? LIMIT 1",
+                                        (ticker + '.US', day_start(self.calendar, self.selected_date))).fetchone()
                 if not exists:
                     raise ValueError('US ticker not found')
-                info = {'name': 'Daily database'}
+                info = {'name': ''}
             if action == 'lookup':
                 return {'ticker': ticker, 'name': info['name']}
-            if payload.get('list_name', 'focus') != 'focus':
+            target = payload.get('list_name', 'discover' if self.mode == 'scan' else 'focus')
+            if target not in (('discover', 'focus') if self.mode == 'scan' else ('focus',)):
                 raise ValueError('Add new tickers to Focus')
             section = payload.get('section', 'unclassified')
             section = 'unclassified' if section in ('focus', 'wait') else section
@@ -369,8 +408,8 @@ class Workbench:
             if section not in sections:
                 raise ValueError('Unknown setup section')
             existing = self.workspace.section(ticker)
-            self.workspace.add_ticker(ticker, 'focus', classification=self.focus_classifications([ticker])[ticker])
-            if section != 'unclassified' and existing not in ('discover', 'excluded'):
+            self.workspace.add_ticker(ticker, target, classification=self.focus_classifications([ticker])[ticker])
+            if target == 'focus' and section != 'unclassified' and existing not in ('discover', 'excluded'):
                 self.workspace.move_ticker(ticker, section, 0)
         elif action == 'hide':
             self.workspace.hide_ticker(normalize_ticker(payload['ticker']))

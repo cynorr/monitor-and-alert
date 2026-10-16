@@ -37,6 +37,7 @@ export class Panel {
     hoveredTime;
     precision = 2;
     linkedPrice;
+    sessionPrice;
     onHover = () => { };
     onSelect = () => { };
     constructor(id, daily) {
@@ -51,7 +52,15 @@ export class Panel {
             localization: { locale: 'en-US', timeFormatter: (t) => daily ? dayKey(Number(t)) : `${dayKey(Number(t))} ${timeFormat.format(dateOf(t))}` },
             crosshair: { mode: L.CrosshairMode.Normal, vertLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
         });
-        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false });
+        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false,
+            autoscaleInfoProvider: (original) => {
+                const info = original();
+                if (!info?.priceRange)
+                    return info;
+                if (!this.sessionPrice)
+                    return info;
+                return { ...info, priceRange: { minValue: Math.min(info.priceRange.minValue, this.sessionPrice.price), maxValue: Math.max(info.priceRange.maxValue, this.sessionPrice.price) } };
+            } });
         const colors = { ema10: '#2962ff', ema20: '#e4b400', [daily ? 'sma50' : 'sma65']: '#e53935' };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
@@ -106,6 +115,7 @@ export class Panel {
         this.days.clear();
         this.indicators = {};
         this.active = null;
+        this.setSessionPrices();
         this.fitted = false;
         this.hoveredTime = undefined;
         this.clearLinkedPrice();
@@ -121,6 +131,27 @@ export class Panel {
         }
     }
     candle(row) { return { time: row.time, open: row.open, high: row.high, low: row.low, close: row.close }; }
+    setSessionPrices(quote) {
+        const regular = quote?.regular, pre = quote?.extended.Pre;
+        const value = regular ?? pre ?? quote?.extended.Post;
+        const current = this.sessionPrice;
+        this.candles.applyOptions({ lastValueVisible: !value });
+        if (!value) {
+            if (current)
+                this.candles.removePriceLine(current.line);
+            this.sessionPrice = undefined;
+            return;
+        }
+        const price = value.last_price;
+        const color = regular ? (price >= (regular.prev_close ?? price) ? '#26a69a' : '#ef5350') : pre ? '#e4b400' : '#2962ff';
+        const options = { price, color, lineVisible: false, axisLabelVisible: true, axisLabelColor: color, axisLabelTextColor: pre ? '#171b20' : '#ffffff', title: '' };
+        if (current) {
+            current.price = price;
+            current.line.applyOptions(options);
+        }
+        else
+            this.sessionPrice = { line: this.candles.createPriceLine(options), price };
+    }
     histogram(row) { return row.volume == null ? { time: row.time } : { time: row.time, value: row.volume, color: row.close >= row.open ? '#26a69a99' : '#ef535099' }; }
     render(data) {
         const next = data.active;
