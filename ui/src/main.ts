@@ -1,3 +1,4 @@
+import { attentionState } from './attention.js';
 import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest, type View } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist, type ListState } from './list.js';
@@ -5,7 +6,7 @@ import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
-import { AlertController, type AlertEvent, type AlertState } from './alerts.js';
+import { AlertController, type AlertState } from './alerts.js';
 import { AdditionalInfoDisplay, acceptsAdditional, type AdditionalMessage } from './additional-info.js';
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
@@ -16,34 +17,21 @@ let socket: WebSocket | null = null;
 let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, currentView: View | null = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource: 'watchlist' | 'holdings' = 'watchlist', holdingKey = '';
-const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), applyList);
-const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
+const watchlist = new Watchlist((next, viewed) => select(next, timeframe, 'watchlist', '', viewed), applyList);
+const holdings = new HoldingsList((next, key, viewed) => select(next, timeframe, 'holdings', key, viewed), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
-let waitingJump: { symbol: string; resolve: () => void } | null = null;
+let readOnView = '';
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async selected => {
     const tf = timeframe;
     if (appMode === 'scan' && scan.activeList !== 'focus') await scan.showList();
     applyList(await (await fetch('/v1/scan')).json() as ListState);
     if (selected) select(selected, tf, selectionSource, holdingKey);
-}, jumpToAlert);
-
-async function jumpToAlert(event: AlertEvent) {
-    if (!alerts.value?.eligible_symbols.includes(event.symbol)) throw new Error('Symbol is no longer in Focus or Holdings');
-    applyList(await post<ListState>('mode', { mode: 'monitor' }));
-    await scan.showList();
-    if (socket?.readyState !== WebSocket.OPEN) throw new Error('Chart connection unavailable');
-    const holding = holdings.forSymbol(event.symbol);
-    if (!watchlist.tickers.some(row => row.symbol === event.symbol && row.status === 'focus') && !holding)
-        throw new Error('Symbol is no longer available');
-    if (!holding) watchlist.showSymbol(event.symbol);
-    select(event.symbol, timeframe, holding ? 'holdings' : 'watchlist', holding?.key ?? '');
-    await new Promise<void>((resolve, reject) => {
-        const timeout = window.setTimeout(() => { waitingJump = null; reject(new Error('Could not open chart')); }, 8000);
-        waitingJump = { symbol: event.symbol, resolve: () => { clearTimeout(timeout); waitingJump = null; resolve(); } };
-    });
-}
+}, value => {
+    watchlist.attention = holdings.attention = attentionState(value);
+    watchlist.render(); holdings.render();
+});
 
 function applyList(data: ListState) {
     const nextMode = data.app_mode ?? 'monitor';
@@ -67,7 +55,7 @@ function applyList(data: ListState) {
     }
     scan.update(data);
     if (changed) { symbol = ''; watchlist.selected = ''; selectionSource = 'watchlist'; holdingKey = ''; holdings.selected = ''; ++epoch; }
-    holdings.update(data.holdings ?? null, data.current_regular_session === true);
+    holdings.update(data.holdings ?? null, data.current_regular_session === true, data.intraday);
     watchlist.update(data, selectionSource === 'watchlist');
     if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
         const first = holdings.first();
@@ -123,9 +111,12 @@ function apply(view: View) {
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
     alerts.redraw();
-    if (waitingJump?.symbol === view.symbol && view.charts['1d'] && daily.rows.length) waitingJump.resolve();
+    if (readOnView === view.symbol && daily.rows.length) {
+        readOnView = ''; void alerts.read(view.symbol);
+    }
 }
-function select(next: string, tf: string, source: 'watchlist' | 'holdings' = selectionSource, key = holdingKey) {
+function select(next: string, tf: string, source: 'watchlist' | 'holdings' = selectionSource, key = holdingKey, viewed = false) {
+    readOnView = viewed ? next : '';
     if (next !== symbol)
         dayLink.clear();
     symbol = next;

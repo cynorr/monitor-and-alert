@@ -1,8 +1,8 @@
 {
   "status": "OK",
   "start_date": "2024-07-12",
-  "end_date": "2026-10-15",
-  "resultsCount": 3490,
+  "end_date": "2026-10-16",
+  "resultsCount": 3493,
   "results": [
     {
       "id": "E69d6ca86b3758d1626b2a0fd5b12cefe0ac75be322fe36b805b5597178356118",
@@ -8435,7 +8435,7 @@
       "split_to": 1.0,
       "ticker": "JAGX",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 5965.909091
+      "historical_adjustment_factor": 11931.818182
     },
     {
       "id": "E9b665a486b9423e9466ea75b0e565cc4ffa19e3dd210ac6a2608f3f5dcd84c7c",
@@ -9272,7 +9272,7 @@
       "split_to": 1.0,
       "ticker": "TPST",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 6.5
+      "historical_adjustment_factor": 13.0
     },
     {
       "id": "Ea794fadecf05f02f843e370eda3f5820a04671c995724ac47a8dee9766824481",
@@ -16403,7 +16403,7 @@
       "historical_adjustment_factor": 238.095238
     },
     {
-      "id": "E308f13316ea4bc6a0e142cd9d19dd4a9927c5885576f92242eb719c21feb6b1b",
+      "id": "Eddddd6dec896dca093b95f4526cc5afeb762587883b6863d92914a0c1d8c8008",
       "execution_date": "2025-10-27",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -18824,7 +18824,7 @@
       "historical_adjustment_factor": 160.0
     },
     {
-      "id": "E4287f60ce435eb25d8c0452cdbc448c5485d65a0b11b13aeb255b46173178eaa",
+      "id": "E1961d40baa5fe68e38dbb1b476fc877e6d24466738448f10316c260a4898b1ed",
       "execution_date": "2025-12-23",
       "split_from": 1.0,
       "split_to": 3.0,
@@ -19940,15 +19940,6 @@
       "historical_adjustment_factor": 100.0
     },
     {
-      "id": "E7ff0012af889afc4817335262e0d81adbb2807c5ba7a13d2b887b61687f9615f",
-      "execution_date": "2026-01-30",
-      "split_from": 1.0,
-      "split_to": 2.0,
-      "ticker": "TPST",
-      "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.5
-    },
-    {
       "id": "Ef546e45b6058ac40f0e77f058bc8d89a055a066b370d858a4d5ded332f36d4a7",
       "execution_date": "2026-02-02",
       "split_from": 20.0,
@@ -20975,7 +20966,7 @@
       "historical_adjustment_factor": 4.0
     },
     {
-      "id": "E7a68da63bb96a90e8384dc894e7979f4c868890cf9c5dbff7c5f141d348ec8d2",
+      "id": "E289270da555cd577281957d24cf561229941459c2b351237e5535f06fe49db4f",
       "execution_date": "2026-02-27",
       "split_from": 1.0,
       "split_to": 1.5,
@@ -21062,7 +21053,7 @@
       "split_to": 1.1,
       "ticker": "JAGX",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 238.636364
+      "historical_adjustment_factor": 477.272727
     },
     {
       "id": "E797b283d1195f6100a5d6d8d5d108213c66213b3bf84988f10be3a691f03fe44",
@@ -23855,7 +23846,7 @@
       "historical_adjustment_factor": 25.0
     },
     {
-      "id": "Ef42e81b29689efc7e0db8f11354194b26fa825d40d3a87fcd00ee0b24384a7cf",
+      "id": "E4727fb74a1d41d26ca96d167dcf5dd266792fe2b24a38cd60dd8147f1931e312",
       "execution_date": "2026-04-30",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -23879,7 +23870,7 @@
       "split_to": 1.0,
       "ticker": "JAGX",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 262.5
+      "historical_adjustment_factor": 525.0
     },
     {
       "id": "Ef856205ffaee82453f46c26ee2fc4bb06f28cf91ffa847b57d9eb9a0b2915c8e",
@@ -24278,7 +24269,7 @@
       "historical_adjustment_factor": 15.0
     },
     {
-      "id": "E89ff98c46b815933b75a011c2ff1b494412cae95a1141669534da4fb9cf2a909",
+      "id": "E0070baa8b8586e6dfa7ec3aa4cce3d07f506b65da2113d5e3600b1d12fcefbc1",
       "execution_date": "2026-05-08",
       "split_from": 1.0,
       "split_to": 1.047337278106509,
@@ -30134,7 +30125,7 @@
       "split_to": 1.0,
       "ticker": "JAGX",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 7.5
+      "historical_adjustment_factor": 15.0
     },
     {
       "id": "E7812acf752e92d14c9ead446d1212d673d3616e30b358f7bbe67c77cdbd29ffc",
@@ -31413,6 +31404,42 @@
       "ticker": "BTOC",
       "adjustment_type": "reverse_split",
       "historical_adjustment_factor": 16.0
+    },
+    {
+      "id": "E654004f4417352cb6e247103a38d3bbd709a13f6d5700fd17eea2cfd6b6d2d4c",
+      "execution_date": "2026-10-16",
+      "split_from": 5.0,
+      "split_to": 1.0,
+      "ticker": "AMSLF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 5.0
+    },
+    {
+      "id": "E21c2d43b8bc3c4f3a78f0cdee4a7738b01e2628a662c0a9baa667fb15df82c88",
+      "execution_date": "2026-10-16",
+      "split_from": 100.0,
+      "split_to": 157.28241,
+      "ticker": "DTTLF",
+      "adjustment_type": "stock_dividend",
+      "historical_adjustment_factor": 0.635799
+    },
+    {
+      "id": "E11c437add5eddf239295b47a1a50eca9200a5cb5d13286ff8ce1087507edf113",
+      "execution_date": "2026-10-16",
+      "split_from": 4.0,
+      "split_to": 1.0,
+      "ticker": "GGLXF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 4.0
+    },
+    {
+      "id": "E44ae706a879003841233d9eabd1b5c599408d3ea13c1d788701f2117cb13c1a3",
+      "execution_date": "2026-10-16",
+      "split_from": 10.0,
+      "split_to": 1.0,
+      "ticker": "KNDI",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 10.0
     }
   ]
 }

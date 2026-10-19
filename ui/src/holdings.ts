@@ -1,4 +1,6 @@
+import { attentionState, attentionAppearance } from './attention.js';
 import { $ } from './types.js';
+import { compareRank, stateAppearance, adrText, adrTitle, volumeBadge, type IntradayState, type SymbolState } from './intraday-state.js';
 
 type Trade = { id: string; date: string; quantity: string; value: string };
 type Sale = Trade & { holding_days: number; pnl: string; pnl_percent: string };
@@ -22,15 +24,17 @@ const signed = (value: string, percent = false, extended = false) => `${Number(v
 const pnlClass = (value: string) => Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
 const symbolFor = (ticker: string) => ticker.endsWith('.US') ? ticker : ticker + '.US';
 export type HoldingSort = 'symbol' | 'market_value' | 'holding_days' | 'total_pnl_percent' | 'total_pnl' | 'sold_percent' | 'change_percent' | 'extended_percent' | 'day_pnl';
-export function sortedHoldingRows(holdings: Holding[], sort: HoldingSort | null) {
+export function sortedHoldingRows(holdings: Holding[], sort: HoldingSort | null, states: Record<string, SymbolState> = {}) {
     const all = holdings.flatMap(holding => holding.sequences.map(sequence => ({ holding, sequence })));
     const rows = all.filter(row => !row.sequence.closed_today), closed = all.filter(row => row.sequence.closed_today);
-    if (!sort) return [...rows, ...closed];
     const value = ({ holding, sequence }: typeof rows[number]) => {
+        if (!sort) return null;
         if (sort === 'symbol') return holding.ticker;
         return sort === 'change_percent' || sort === 'extended_percent' ? holding[sort] : sequence[sort];
     };
     rows.sort((a, b) => {
+        const rank = compareRank(states[symbolFor(a.holding.ticker)], states[symbolFor(b.holding.ticker)]);
+        if (rank || !sort) return rank;
         const left = value(a), right = value(b);
         if (sort === 'symbol') return String(right).localeCompare(String(left), 'en');
         const x = left == null ? null : Number(left), y = right == null ? null : Number(right);
@@ -53,8 +57,11 @@ export class HoldingsList {
     private minimumWidth = 0;
     private collapsed = false;
     private regularSession = false;
+    private intraday: IntradayState = { enabled: false, symbols: {} };
+    attention = attentionState();
+    private ordered() { return sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort, this.intraday.enabled && this.regularSession ? this.intraday.symbols : {}); }
 
-    constructor(private onSelect: (symbol: string, key: string) => void, private isActive: () => boolean,
+    constructor(private onSelect: (symbol: string, key: string, viewed?: boolean) => void, private isActive: () => boolean,
         private onWidth: (width: number) => void) {
         try { this.collapsed = localStorage.getItem('holdings-collapsed') === 'true'; } catch { /* Optional storage. */ }
         $('holdings-warning').addEventListener('click', () => {
@@ -79,7 +86,7 @@ export class HoldingsList {
                 this.render(); return;
             }
             const row = target.closest<HTMLElement>('[data-holding]');
-            if (row) this.choose(row.dataset.holding!);
+            if (row) this.choose(row.dataset.holding!, true);
         });
         $('holdings-table').querySelector('thead')!.addEventListener('click', event => {
             const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-holdings-sort]');
@@ -108,26 +115,27 @@ export class HoldingsList {
         });
     }
 
-    private choose(key: string) {
+    private choose(key: string, viewed = false) {
         for (const holding of this.data?.data?.holdings ?? []) {
             if (holding.sequences.some(sequence => sequence.buy_ids.join(':') === key)) {
-                this.onSelect(symbolFor(holding.ticker), key); return;
+                this.onSelect(symbolFor(holding.ticker), key, viewed); return;
             }
         }
     }
 
     has(key: string) { return this.data?.data?.holdings.some(h => h.sequences.some(s => s.buy_ids.join(':') === key)) ?? false; }
     first() {
-        const first = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort)[0];
+        const first = this.ordered()[0];
         return first ? { symbol: symbolFor(first.holding.ticker), key: first.sequence.buy_ids.join(':') } : null;
     }
     forSymbol(symbol: string) {
-        const row = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort).find(row => symbolFor(row.holding.ticker) === symbol);
+        const row = this.ordered().find(row => symbolFor(row.holding.ticker) === symbol);
         return row ? { symbol, key: row.sequence.buy_ids.join(':') } : null;
     }
 
-    update(state: HoldingsState | null, regularSession?: boolean) {
+    update(state: HoldingsState | null, regularSession?: boolean, intraday?: IntradayState) {
         this.data = state;
+        this.intraday = intraday ?? { enabled: false, symbols: {} };
         if (regularSession !== undefined) this.regularSession = regularSession;
         this.render();
     }
@@ -166,6 +174,11 @@ export class HoldingsList {
         $('holdings-arrow').textContent = this.collapsed ? '▸' : '▾';
         const data = this.data?.data;
         const table = $('holdings-table');
+        const showState = this.intraday.enabled && this.regularSession;
+        if (table.classList.contains('holdings-state') !== showState) {
+            table.classList.toggle('holdings-state', showState);
+            this.minimumWidth = 0; this.widthSignature = '';
+        }
         if (table.classList.contains('holdings-regular') !== this.regularSession) {
             table.classList.toggle('holdings-regular', this.regularSession);
             this.minimumWidth = 0; this.widthSignature = '';
@@ -204,7 +217,7 @@ export class HoldingsList {
                         const flag = document.createElement('span'); flag.className = 'symbol-flag new';
                         flag.textContent = 'NEW'; label.append(flag);
                     }
-                    for (let column = 1; column < 9; column++) this.cell(row, '');
+                    for (let column = 1; column < 12; column++) this.cell(row, '');
                     body.append(row); this.rows.set(key, row);
                     const group = [row]; this.groups.set(key, group);
                     if (this.expanded.has(key) && Number(sequence.sold_percent) > 0) {
@@ -219,6 +232,7 @@ export class HoldingsList {
                             this.cell(detail, quantity.format(Number(trade.quantity)));
                             this.cell(detail, money.format(Number(trade.value) / Number(trade.quantity)));
                             this.cell(detail, ''); this.cell(detail, '');
+                            for (let column = 0; column < 3; column++) this.cell(detail, '');
                             body.append(detail); group.push(detail);
                         }
                     }
@@ -228,6 +242,11 @@ export class HoldingsList {
         }
         for (const holding of data?.holdings ?? []) for (const sequence of holding.sequences) {
             const key = sequence.buy_ids.join(':'), row = this.rows.get(key)!;
+            const state = showState && !sequence.closed_today ? this.intraday.symbols[symbolFor(holding.ticker)] : undefined;
+            stateAppearance(row, state);
+            attentionAppearance(row, symbolFor(holding.ticker), this.attention);
+            row.cells[9].textContent = adrText(state); row.cells[9].title = adrTitle(state);
+            volumeBadge(row.cells[10], state?.cum_vol); volumeBadge(row.cells[11], state?.local_vol);
             row.classList.toggle('active', key === this.selected);
             row.setAttribute('aria-selected', String(key === this.selected));
             this.value(row.cells[1], netLiq.format(Number(sequence.market_value)));
@@ -257,7 +276,7 @@ export class HoldingsList {
         $('holdings-total-percent').className = data?.summary.pnl_percent != null ? pnlClass(data.summary.pnl_percent) : '';
         $('holdings-total-day').textContent = data?.summary.day_pnl != null ? signed(data.summary.day_pnl) : '—';
         $('holdings-total-day').className = data?.summary.day_pnl != null ? pnlClass(data.summary.day_pnl) : '';
-        const ordered = sortedHoldingRows(data?.holdings ?? [], this.sort);
+        const ordered = this.ordered();
         const order = JSON.stringify(ordered.map(({ sequence }) => sequence.buy_ids.join(':')));
         if (order !== this.order) {
             this.order = order;

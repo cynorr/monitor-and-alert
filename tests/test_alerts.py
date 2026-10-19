@@ -34,12 +34,13 @@ def test_reaches_or_crosses_once_and_persists(engine, start, end, direction):
     second = value.create('NVDA.US', 10)
     assert alert['id'] != second['id']
     tick(value, start)
-    assert not value.state()['events']
+    assert not value.state()['unread']
     clock[0] += 1; tick(value, end)
-    events = value.state()['events']
-    assert len(events) == 2 and all(e['direction'] == direction for e in events)
+    events = value.state()['unread']
+    assert events == ['NVDA.US']
+    assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == direction
     tick(value, start); tick(value, end)
-    assert len(value.state()['events']) == 2
+    assert value.state()['unread'] == ['NVDA.US']
     assert value.db.execute("SELECT count(*) FROM alerts WHERE state='triggered'").fetchone()[0] == 2
 
 
@@ -49,48 +50,52 @@ def test_raw_price_precision_equality_and_snapshot_order(engine):
     assert alert['price_cents'] == 1001
     tick(value, 10.009)
     tick(value, 10.011, source='snapshot')  # Same-second older snapshot cannot replace push.
-    assert not value.state()['events']
+    assert not value.state()['unread']
     tick(value, 10.011)  # Same-second push is meaningful and raw precision crosses 10.01.
-    assert value.state()['events'][0]['direction'] == 'up'
-    value.acknowledge(value.state()['events'][0]['id'])
+    assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'up'
+    value.read('NVDA.US')
     value.reset(); tick(value, 10.01)
     equal = value.create('NVDA.US', 10.01)
     tick(value, 10.01); tick(value, 10.02)
     assert value.alerts[equal['id']]['state'] == 'active'
     tick(value, 10.01)
-    assert value.state()['events'][0]['direction'] == 'down'
+    assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'down'
 
 
-def test_rearm_old_card_cannot_delete_new_active_or_new_trigger(engine):
+def test_read_only_clears_border_and_never_deletes_gray_or_rearmed_line(engine):
     value, clock = engine
     alert = value.create('NVDA.US', 10)
     tick(value, 9); tick(value, 10)
-    old = value.state()['events'][0]
+    value.read('NVDA.US')
+    assert not value.state()['unread']
+    assert value.alerts[alert['id']]['state'] == 'triggered'
+    clock[0] += 11; value.maintain({'NVDA.US'}, True)
+    assert value.alerts[alert['id']]['state'] == 'triggered'
     value.rearm(alert['id'], 10, 1)
     with pytest.raises(ValueError, match='changed'):
         value.rearm(alert['id'], 10, 1)
+    value.read('NVDA.US')
+    assert value.alerts[alert['id']]['state'] == 'active'
     tick(value, 11); tick(value, 10)
-    value.acknowledge(old['id'])
-    assert value.alerts[alert['id']]['generation'] == 2
+    assert value.state()['unread'] == ['NVDA.US']
+    value.read('NVDA.US')
     assert value.alerts[alert['id']]['state'] == 'triggered'
-    value.acknowledge(value.state()['events'][0]['id'])
-    assert alert['id'] not in value.alerts
 
 
 def test_extended_after_hours_new_day_restart_and_sleep_never_catch_up(engine, tmp_path, cal):
     value, clock = engine
     alert = value.create('NVDA.US', 10)
     tick(value, 9); tick(value, 12, session='Post')
-    assert not value.state()['events']
+    assert not value.state()['unread']
     clock[0] = at('2026-10-05T17:00:00')
     tick(value, 12, timestamp=at('2026-10-05T15:50:00'))
     clock[0] = at('2026-10-06T09:31:00'); value.maintain({'NVDA.US'}, True)
     tick(value, 12)
-    assert not value.state()['events']
+    assert not value.state()['unread']
     value.reset(); tick(value, 8)
-    assert not value.state()['events']
+    assert not value.state()['unread']
     clock[0] += 35; tick(value, 12)  # Main loop stopped during sleep.
-    assert not value.state()['events']
+    assert not value.state()['unread']
     path = tmp_path / 'restart.sqlite3'
     restarted = AlertEngine(path, cal, clock=lambda: clock[0])
     restarted.maintain({'NVDA.US'}, True)
@@ -99,24 +104,24 @@ def test_extended_after_hours_new_day_restart_and_sleep_never_catch_up(engine, t
     restarted = AlertEngine(path, cal, clock=lambda: clock[0])
     try:
         restarted.maintain({'NVDA.US'}, True); tick(restarted, 12)
-        assert restarted.alerts[item['id']]['state'] == 'active' and not restarted.state()['events']
+        assert restarted.alerts[item['id']]['state'] == 'active' and not restarted.state()['unread']
     finally:
         restarted.close()
 
 
-def test_scope_expiry_and_cards_survive_line_removal(engine):
+def test_scope_removal_cleans_unread_and_expiry_removes_lines(engine):
     value, clock = engine
     alert = value.create('NVDA.US', 10)
     tick(value, 9); tick(value, 10)
     value.maintain(set(), False)  # Unknown initial Holdings isn't an empty accepted scope.
     assert alert['id'] in value.alerts
     value.maintain(set(), True)
-    assert not value.alerts and len(value.state()['events']) == 1
+    assert not value.alerts and not value.state()['unread']
     value.maintain({'NVDA.US'}, True)
     assert not value.alerts
     other = value.create('NVDA.US', 10)
     clock[0] = other['expires_at']; value.maintain({'NVDA.US'}, True)
-    assert not value.alerts and len(value.state()['events']) == 1
+    assert not value.alerts and not value.state()['unread']
 
 
 @pytest.mark.parametrize('price', [0,-1,0.004,float('nan'),float('inf'),True,None])
@@ -199,6 +204,15 @@ def test_alert_http_origin_and_independent_empty_selection_stream(app_data):
                     state = await stream.receive_json(timeout=2)
                     if state['type'] == 'alerts': break
                 assert len(state['alerts']) == 1
+                alert = state['alerts'][0]
+                app.alerts.notify(target, 'up', alert=alert)
+                while True:
+                    state = await stream.receive_json(timeout=2)
+                    if state['type'] == 'alerts' and state['unread']: break
+                assert state['unread'] == [target] and state['alerts'][0]['state'] == 'triggered'
+                response = await client.post(url + '/v1/alerts', json={'action':'read','symbol':target})
+                read = await response.json()
+                assert not read['unread'] and read['alerts'][0]['state'] == 'triggered'
                 response = await client.post(url + '/v1/alerts', json={'action':'delete','id':state['alerts'][0]['id']})
                 assert response.status == 200 and not (await response.json())['alerts']
         finally:
@@ -216,6 +230,8 @@ def test_reconnect_snapshot_establishes_baseline_before_next_live_cross(engine, 
     class Broker:
         def context(self): return self
         def set_on_quote(self, callback): pass
+        def set_on_candlestick(self, callback): pass
+        async def subscribe_candles(self, ctx, symbol, timeframe): return []
         async def subscribe(self, ctx, symbols): pass
         async def snapshot(self, ctx, symbols):
             return [SimpleNamespace(symbol='NVDA.US', timestamp=datetime.fromtimestamp(clock[0]), last_done=12, volume=100)]
@@ -224,10 +240,10 @@ def test_reconnect_snapshot_establishes_baseline_before_next_live_cross(engine, 
         with patch('data_service.quotes.time.time', return_value=clock[0]):
             service.quotes.has_connected = True
             await service.quotes.connect()
-            assert not value.state()['events']
+            assert not value.state()['unread']
             service.quotes.apply('NVDA.US', SimpleNamespace(timestamp=datetime.fromtimestamp(clock[0]), last_done=10,
                                                            volume=101, trade_session='Intraday'))
-            assert value.state()['events'][0]['direction'] == 'down'
+            assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'down'
     try:
         asyncio.run(scenario())
     finally:
@@ -250,9 +266,14 @@ def test_focus_saved_alert_write_rejected_returns_explicit_partial_result(app_da
     asyncio.run(scenario())
 
 
-def test_sound_only_follows_committed_new_events_and_restart_keeps_cards(tmp_path, cal):
-    from data_service.alerts.sound import AlertSound
-    sound = AlertSound()
+class RecordingSound:
+    def __init__(self): self.calls = []
+    def play(self, symbol, direction): self.calls.append((symbol, direction))
+    def state(self): return {'enabled': True, 'error': None, 'playing': []}
+
+
+def test_shared_notify_keeps_only_latest_unread_and_restore_never_replays(tmp_path, cal):
+    sound = RecordingSound()
     clock = lambda: at('2026-10-05T09:31:00')
     path = tmp_path / 'alerts.sqlite3'
     value = AlertEngine(path, cal, clock=clock, sound=sound)
@@ -260,37 +281,31 @@ def test_sound_only_follows_committed_new_events_and_restart_keeps_cards(tmp_pat
     alert = value.create('NVDA.US', 10)
     tick(value, 9); tick(value, 10)
     tick(value, 9); tick(value, 11)
-    assert sound.queue.qsize() == 1
-    assert sound.queue.get_nowait() == 'up'
-    sound.queue.task_done()
-    value.rearm(alert['id'], 10, 1)
-    tick(value, 10)
-    assert sound.queue.get_nowait() == 'down'
-    sound.queue.task_done()
-    events = value.state()['events']
-    assert len(events) == 2
+    assert sound.calls == [('NVDA.US', 'up')]
+    value.notify('NVDA.US', 'urgent')
+    assert value.state()['unread'] == ['NVDA.US']
+    assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'urgent'
     value.close()
     restored = AlertEngine(path, cal, clock=clock, sound=sound)
     try:
-        assert restored.state()['events'] == events
-        assert restored.state()['sound'] == {'enabled': True, 'error': None}
-        assert 'notification' not in restored.state()
-        assert sound.queue.empty()
-        restored.acknowledge(events[0]['id'])
-        assert len(restored.state()['events']) == 1 and sound.queue.empty()
+        assert restored.state()['unread'] == ['NVDA.US']
+        assert len(sound.calls) == 2
+        restored.read('NVDA.US')
+        assert restored.alerts[alert['id']]['state'] == 'triggered'
+        assert len(sound.calls) == 2 and 'events' not in restored.state()
     finally:
         restored.close()
 
 
 def test_failed_trigger_save_does_not_play_sound(engine):
-    from data_service.alerts.sound import AlertSound
     value, _ = engine
-    value.sound = sound = AlertSound()
+    value.sound = sound = RecordingSound()
     value.create('NVDA.US', 10)
     tick(value, 9)
     value.db.execute('PRAGMA query_only=ON')
     tick(value, 10)
-    assert not value.state()['events'] and sound.queue.empty()
+    assert not value.state()['unread'] and not sound.calls
+    assert value.alerts[next(iter(value.alerts))]['state'] == 'active'
     assert value.state()['error'] == 'Could not save alert trigger'
 
 
@@ -301,11 +316,27 @@ def test_workbench_sound_lifecycle_and_mock_defaults(app_data):
         assert app.sound is None and app.alert_state()['sound']['enabled'] is False
         app.sound = app.alerts.sound = AlertSound()
         await app.start_background()
-        task = app.sound_task
-        assert task is not None
         await app.close()
-        assert task.cancelled() and app.sound_task is None
+        assert not app.sound.tasks
         formal, _ = make_app(app_data, mock=False)
         assert isinstance(formal.sound, AlertSound) and formal.alerts.sound is formal.sound
         await formal.close()
     asyncio.run(scenario())
+
+
+def test_old_card_table_migrates_latest_per_symbol_without_replaying(tmp_path, cal):
+    import sqlite3
+    path = tmp_path / 'old.sqlite3'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE events (symbol TEXT,direction TEXT,fired_at REAL,handled_at REAL)')
+        db.executemany('INSERT INTO events VALUES (?,?,?,?)', [
+            ('NVDA.US','up',1,None), ('NVDA.US','down',2,None), ('MU.US','up',3,4)])
+    sound = RecordingSound()
+    value = AlertEngine(path, cal, sound=sound)
+    try:
+        assert value.state()['unread'] == ['NVDA.US']
+        assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'down'
+        assert not value.db.execute("SELECT 1 FROM sqlite_master WHERE name='events'").fetchone()
+        assert not sound.calls
+    finally:
+        value.close()

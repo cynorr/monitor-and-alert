@@ -1,4 +1,6 @@
+import { attentionState, attentionAppearance } from './attention.js';
 import { $ } from './types.js';
+import { compareRank, stateAppearance, adrText, adrTitle, volumeBadge } from './intraday-state.js';
 export function holdingsErrorAdvice(kind) {
     switch (kind) {
         case 'request': return { reason: 'Account request failed', action: 'Automatic retries continue. If this persists, check your network and SnapTrade connection, or share the details with Codex.' };
@@ -15,17 +17,20 @@ const soldPercent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 const signed = (value, percent = false, extended = false) => `${Number(value) > 0 ? '+' : ''}${(percent ? extended ? money : percentage : netLiq).format(Number(value))}${percent ? '%' : ''}`;
 const pnlClass = (value) => Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
 const symbolFor = (ticker) => ticker.endsWith('.US') ? ticker : ticker + '.US';
-export function sortedHoldingRows(holdings, sort) {
+export function sortedHoldingRows(holdings, sort, states = {}) {
     const all = holdings.flatMap(holding => holding.sequences.map(sequence => ({ holding, sequence })));
     const rows = all.filter(row => !row.sequence.closed_today), closed = all.filter(row => row.sequence.closed_today);
-    if (!sort)
-        return [...rows, ...closed];
     const value = ({ holding, sequence }) => {
+        if (!sort)
+            return null;
         if (sort === 'symbol')
             return holding.ticker;
         return sort === 'change_percent' || sort === 'extended_percent' ? holding[sort] : sequence[sort];
     };
     rows.sort((a, b) => {
+        const rank = compareRank(states[symbolFor(a.holding.ticker)], states[symbolFor(b.holding.ticker)]);
+        if (rank || !sort)
+            return rank;
         const left = value(a), right = value(b);
         if (sort === 'symbol')
             return String(right).localeCompare(String(left), 'en');
@@ -51,6 +56,9 @@ export class HoldingsList {
     minimumWidth = 0;
     collapsed = false;
     regularSession = false;
+    intraday = { enabled: false, symbols: {} };
+    attention = attentionState();
+    ordered() { return sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort, this.intraday.enabled && this.regularSession ? this.intraday.symbols : {}); }
     constructor(onSelect, isActive, onWidth) {
         this.onSelect = onSelect;
         this.isActive = isActive;
@@ -87,7 +95,7 @@ export class HoldingsList {
             }
             const row = target.closest('[data-holding]');
             if (row)
-                this.choose(row.dataset.holding);
+                this.choose(row.dataset.holding, true);
         });
         $('holdings-table').querySelector('thead').addEventListener('click', event => {
             const button = event.target.closest('[data-holdings-sort]');
@@ -125,25 +133,26 @@ export class HoldingsList {
             }
         });
     }
-    choose(key) {
+    choose(key, viewed = false) {
         for (const holding of this.data?.data?.holdings ?? []) {
             if (holding.sequences.some(sequence => sequence.buy_ids.join(':') === key)) {
-                this.onSelect(symbolFor(holding.ticker), key);
+                this.onSelect(symbolFor(holding.ticker), key, viewed);
                 return;
             }
         }
     }
     has(key) { return this.data?.data?.holdings.some(h => h.sequences.some(s => s.buy_ids.join(':') === key)) ?? false; }
     first() {
-        const first = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort)[0];
+        const first = this.ordered()[0];
         return first ? { symbol: symbolFor(first.holding.ticker), key: first.sequence.buy_ids.join(':') } : null;
     }
     forSymbol(symbol) {
-        const row = sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort).find(row => symbolFor(row.holding.ticker) === symbol);
+        const row = this.ordered().find(row => symbolFor(row.holding.ticker) === symbol);
         return row ? { symbol, key: row.sequence.buy_ids.join(':') } : null;
     }
-    update(state, regularSession) {
+    update(state, regularSession, intraday) {
         this.data = state;
+        this.intraday = intraday ?? { enabled: false, symbols: {} };
         if (regularSession !== undefined)
             this.regularSession = regularSession;
         this.render();
@@ -185,6 +194,12 @@ export class HoldingsList {
         $('holdings-arrow').textContent = this.collapsed ? '▸' : '▾';
         const data = this.data?.data;
         const table = $('holdings-table');
+        const showState = this.intraday.enabled && this.regularSession;
+        if (table.classList.contains('holdings-state') !== showState) {
+            table.classList.toggle('holdings-state', showState);
+            this.minimumWidth = 0;
+            this.widthSignature = '';
+        }
         if (table.classList.contains('holdings-regular') !== this.regularSession) {
             table.classList.toggle('holdings-regular', this.regularSession);
             this.minimumWidth = 0;
@@ -236,7 +251,7 @@ export class HoldingsList {
                         flag.textContent = 'NEW';
                         label.append(flag);
                     }
-                    for (let column = 1; column < 9; column++)
+                    for (let column = 1; column < 12; column++)
                         this.cell(row, '');
                     body.append(row);
                     this.rows.set(key, row);
@@ -258,6 +273,8 @@ export class HoldingsList {
                             this.cell(detail, money.format(Number(trade.value) / Number(trade.quantity)));
                             this.cell(detail, '');
                             this.cell(detail, '');
+                            for (let column = 0; column < 3; column++)
+                                this.cell(detail, '');
                             body.append(detail);
                             group.push(detail);
                         }
@@ -269,6 +286,13 @@ export class HoldingsList {
         for (const holding of data?.holdings ?? [])
             for (const sequence of holding.sequences) {
                 const key = sequence.buy_ids.join(':'), row = this.rows.get(key);
+                const state = showState && !sequence.closed_today ? this.intraday.symbols[symbolFor(holding.ticker)] : undefined;
+                stateAppearance(row, state);
+                attentionAppearance(row, symbolFor(holding.ticker), this.attention);
+                row.cells[9].textContent = adrText(state);
+                row.cells[9].title = adrTitle(state);
+                volumeBadge(row.cells[10], state?.cum_vol);
+                volumeBadge(row.cells[11], state?.local_vol);
                 row.classList.toggle('active', key === this.selected);
                 row.setAttribute('aria-selected', String(key === this.selected));
                 this.value(row.cells[1], netLiq.format(Number(sequence.market_value)));
@@ -300,7 +324,7 @@ export class HoldingsList {
         $('holdings-total-percent').className = data?.summary.pnl_percent != null ? pnlClass(data.summary.pnl_percent) : '';
         $('holdings-total-day').textContent = data?.summary.day_pnl != null ? signed(data.summary.day_pnl) : '—';
         $('holdings-total-day').className = data?.summary.day_pnl != null ? pnlClass(data.summary.day_pnl) : '';
-        const ordered = sortedHoldingRows(data?.holdings ?? [], this.sort);
+        const ordered = this.ordered();
         const order = JSON.stringify(ordered.map(({ sequence }) => sequence.buy_ids.join(':')));
         if (order !== this.order) {
             this.order = order;

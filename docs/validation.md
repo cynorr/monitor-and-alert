@@ -2,6 +2,57 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-20：报警边框仅作用于 symbol row
+
+环境：本机macOS、TypeScript/Node；仅调整前端边框作用范围，未修改后台或重启服务。
+
+- 删除名单section与Holdings标题的报警聚合调用及section成员缓存；源码和生成JS的边框调用均只剩名单row、持仓row两处，辅助函数简化为单symbol入参。
+- `npm run build --prefix ui`通过；`node --test --test-name-pattern='symbol unread' ui/tests/intraday-state.test.mjs`定向1项通过，覆盖多symbol同时闪烁、点击已读清除、播放结束后静态驻留。`git diff --check`通过。
+- 同步Alert、UI、Holdings及维护入口。未运行全量测试、浏览器视觉验收或真实报警播放；页面刷新后加载新前端。
+
+## 2026-10-20：In Play 与统一未读边框
+
+环境：本机macOS、Python3.13、TypeScript；北京时间00:46起为美东10月19日Regular。本轮仅覆盖自动聚集、价格列外观、统一报警/已读与独立声音，不跑全项目回归。
+
+- 后端定向 `tests/test_alerts.py tests/test_alert_sound.py tests/test_intraday_state.py` 41项通过。包括原手动穿越/精度/恢复、read不改灰线及重新设置、同symbol最新未读覆盖、恢复不播放、旧events迁移移除、HTTP同源与WS未读推送、自动规则接入同一notify、并行四遍/失败/退出清理。首次HTTP用例因沙箱禁止临时端口失败；允许本机绑定后全组通过，未改测试行为绕过限制。
+- 前端定向 `ui/tests/intraday-state.test.mjs ui/tests/holdings.test.mjs ui/tests/scan.test.mjs` 26项通过；`npm run build --prefix ui`通过。覆盖离散稳定排序/Pin、持仓批次尾部及统一边框：多symbol同时ringing、read后剩余播放不恢复该次边框、结束后保持静态未读。没有新增全项目或样式数值测试。
+- 当前真实Alert SQLite只读备份到临时目录迁移，5条价格线逐字段一致，旧卡片表移除，未处理记录按symbol合并。本轮正式服务从原Monitor命令平稳重启，PID15882；`/health`为running/CONNECTED。正式库仅alerts/unread两表，5条价格线与重启前完全一致；现场有27个盘中状态、4个未读symbol，仍有原行情初始化待处理项，不据此声称全名单Ready。证据`/tmp/alert-refactor-live-report.json`，日志`runtime/alert-refactor-live.log`。
+- Chrome正式页面只读确认：Grouped/Dynamic及卡片DOM不存在，In Play在Pinned下自动生成，真实成员NOWL/OABI/IOVA等跨原分组聚集；NAUT已由用户置顶，保持Pinned且只出现一次，HTFL位于独立Holdings。Monitor价格底色实际覆盖grid第1至4列，Tags仍为正常深色。Safari Charts已刷新加载核心界面并恢复原CMCT选择。没有为验证修改正式Pin/Tags/名单或创建正式价格线。
+- 临时UI服务localhost:8767使用本轮正式服务的真实名单/行情/图表快照，提醒库隔离、播放状态替身静音，不读凭证/新建券商连接。临时NAUT手动线与HTFL自动提醒同时显示ringing；当前已经选中NAUT不会自动read。刷新后两者静态虚线恢复；点击NAUT成功选图后仅其边框消失，HTFL保留，灰线实际超过10秒仍存在。重新设置后Active且其他symbol未读不变。把临时排序等级置空后In Play整个消失，22个symbol均只显示一次，原分组恢复；浏览器无JavaScript error。截图`/tmp/alert-in-play-unread.png`为该真实行情快照/隔离提醒验收页；临时页、服务及数据库已清理。
+- 实际声音另用独立AlertSound同时播放TEST_UP/TEST_DOWN，各原声四遍，无插入间隔；两者playing状态重叠，afplay均成功退出，最终无遗留播放任务或错误。证据`/tmp/alert-parallel-sound.json`。本轮没有新增人工听辨确认，不把命令成功表述为用户已听到。
+- 需求、职责、UI图形及各AGENTS入口同步；Markdown相对链接/锚点和`git diff --check`通过。未覆盖整个Regular日持续运行、真实市场同时触发多symbol的音画同步、macOS27或物理休眠；未对未修改的图表拖动手势重做全量验收。
+
+## 2026-10-19：MRNA 当日日内成交手工归零
+
+环境：本机macOS、Python3.13、原正式Monitor进程PID1587及localhost:8765。用户确认MRNA当天多次买卖均已完成、当前持仓为0，授权合并关联。只修改`runtime/holdings/sequences.txt`与现有`merge_buys.txt`，未重启或另起服务，未修改账户、Python/TypeScript实现及其他股票关联。
+
+- 初始现有服务报MRNA卖出订单`0459A5…6C56`归属歧义，成功快照停在本日21:58:53。依据该已接受快照先关联首轮买入200股与卖出200股后，现有轮询越过第一笔错误并报告后续卖出歧义。失败轮原始数据不提交缓存，因此仅额外读取一次SnapTrade executed orders（沿用现有端点/参数），只核对当日MRNA；没有调用付费连接refresh或另行获取持仓/行情。
+- 真实订单共5笔BUY与5笔SELL，双方累计均700股、净数量0。按用户授权，沿用现有人工合并买入机制将5笔BUY归到一个批次，sequences明确关联全部5笔SELL；真实成交标量经原sequences/performance函数核对，余仓0、已实现盈亏-427.99。未伪造成交或改变原始缓存。
+- 23:52:33（Asia/Shanghai）只读确认原服务已自动重读规则：最后成功时间23:52:26、error=null、error_kind=null；MRNA为5买/5卖、买卖各700股、余仓0。现有规则保留一条灰色当日清仓复盘记录，次日自动移除，不为此次操作新增临时隐藏ticker机制。成功后结束接口验证并删除临时MRNA订单摘录。
+
+本轮只验证人工关联、真实数量对账及服务恢复；未运行全项目测试、前端构建或浏览器交互，也未验证后续新成交。其他模块现有未提交改动保持原样。
+
+## 2026-10-17：Holdings 中性状态 ADR 方向
+
+环境：本机 macOS、当前正式 Monitor 服务 localhost:8765；北京时间02:31–02:34（美东10月16日Regular）。本轮只修复前端ADR格式化，未重启后台、修改阈值、名单或账户，不使用mock，不跑全量测试。
+
+- 直接读取现有接口中的LIFE.US、MU.US、PBF.US及其Daily缓存。三者role均为holding、state为neutral；首次读取Up/Down分别为0.05994/0.54667、0.06982/0.42837、0.30510/0.59742。用真实last/high/low/ADR20独立复算，两项结果均匹配。原因是Down尚低于预警阈值时，旧格式化只检查state前缀，所有neutral都显示Up。
+- 新格式化在holding neutral时显示较大的ADR方向，有预警等级时仍显示主状态方向；只影响数值和箭头。`npm run build --prefix ui`通过。构建后函数直接消费当前真实状态，三只均输出Down，另核对当前五个余仓symbol的格式化一致性；证据`/tmp/adr-direction-live-check.json`。
+- Chrome正式页面实际显示LIFE、MU、PBF均为↓，tooltip保留Up/Down两项，中性底色保持；TEAM/CDNA已有回撤等级仍显示↓。截图时三者分别约0.48×、0.41×、0.64×，与之前读取的差别来自实时行情更新。截图`/tmp/adr-direction-live-ui.png`；浏览器无JavaScript error，验证页已关闭。原有用户页面需刷新加载新JS。
+- 独立需求、behavior与development同步；`git diff --check`通过。本轮未重新验证声音、排序、账户获取或全交易日规则穿越；这些逻辑没有修改。
+
+## 2026-10-17：Intraday State 盘中状态
+
+环境：本机 macOS、Python 3.13、项目虚拟环境、TypeScript；浏览器验证使用 Chrome 的临时模拟页。唯一需求见 [intraday-state.md](intraday-state.md)。本轮只覆盖新增状态、量比、Dynamic 展示及共用声音的改动，未跑全项目回归。
+
+- 后端定向 `tests/test_intraday_state.py tests/test_alert_sound.py tests/test_alerts.py`：41 项通过。覆盖候选 open 门槛、上下行阈值与再次穿越、持仓回撤优先且降级静默、EMA 重穿、冻结 ADR、首次/恢复静默、范围清理、5m 延后降级与量能边界更新、连续大窗口覆盖、历史尾部插值、缺失/半日/DST、配置校验、真实回调接入及手动 Alert 兼容。HTTP 用例仅使用临时库。
+- 前端定向 `ui/tests/intraday-state.test.mjs ui/tests/holdings.test.mjs ui/tests/scan.test.mjs`：25 项通过；`npm run build --prefix ui` 通过。验证离散等级与人工 Pin 稳定顺序、不修改输入名单、持仓批次与清仓尾部、格式化及新增列。Markdown 相对目标检查及 `git diff --check` 通过。
+- 隔离 UI：既有 FakeBroker、临时 workspace/SQLite、真实状态引擎与模拟有效 Quote/SDK candle，localhost:8767，不读凭证。确认候选蓝色、持仓黄/红色、ADR 与两个圆角量比格，Dynamic 跨组排列、Pin 优先、无重复成员及空 section 隐藏；Grouped 恢复原 Surf/Bounce。NVDA 保持选中，状态从浅蓝升级亮蓝后图表与操作焦点保留；同档相对顺序稳定。截图 `/tmp/intraday-state-ui.png` 为模拟数据，量比缺失用 `—`；最终临时页、服务与数据库已清理。浏览器无 JavaScript error。
+- 声音直接使用新后台播放器依次播放上行、下行、紧急，每组原声四遍；afplay 均成功，用户确认“都听到，紧急声音能区分”。优先级用定向用例验证，不额外合成或施加时长上限。
+- 本轮只读真实 Longbridge 缓存 ABCL.US、EFOR.US：冻结 ADR20 分别 6.3545%、4.9475%，26 分钟历史累计基准各有五个样本，分别 331721.76、12663.56。没有额外供应商查询或写正式数据；证据 `/tmp/intraday-real-cache-check.json`。
+- 正式后台按原 Monitor 展示模式重启，PID 20306；`/health` 为 running / CONNECTED，`/v1/intraday-state` 已启用。现场读取 CAI.US 的真实 Regular 状态、CumVol 与 15m LocalVol，两者都有五个历史样本。重启前后原有七条手动 Alert 内容相同，未处理事件均为零；没有向正式进程注入模拟行情。结束前状态已覆盖30个symbol，待处理窗口从118降至6；服务启动仍按原流程初始化行情窗口，本轮不将这些样本表述为全名单Ready。证据 `/tmp/intraday-live-check.json`，日志 `runtime/intraday-state-live.log`。
+- 未覆盖：整个 Regular 交易日运行、真实盘中所有规则穿越、物理断网/休眠、全部名单行情初始化、macOS 27、触屏。离线用例和本轮短时现场读取不替代这些证据。
+
 ## 2026-10-16：Scan 报价按当前交易时段互斥显示
 
 环境：本机macOS、Python3.13.1、TypeScript5.9.3，以及现有localhost:8765的Monitor服务。本轮仅修复Scan报价显示，不修改订阅、Alert、名单或Massive数据。
