@@ -87,9 +87,10 @@
               <th scope="col" aria-sort="none" title="Regular price change from previous daily close"><button data-holdings-sort="change_percent">Chg%</button></th>
               <th scope="col" aria-sort="none" title="Latest extended price change from regular close"><button data-holdings-sort="extended_percent">Ext</button></th>
               <th scope="col" aria-sort="none" title="Remaining shares: today's buys use entry cost, older shares use previous regular close; closed rows show realized daily profit"><button data-holdings-sort="day_pnl">P/L Day</button></th>
+              <th scope="col">ADR</th><th scope="col">CumVol</th><th scope="col">LocalVol</th>
             </tr></thead>
             <tbody id="holdings-rows"></tbody>
-            <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td></tr></tfoot>
+            <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td><td></td><td></td><td></td></tr></tfoot>
           </table>
         </div>
         <div id="holdings-empty" class="empty-list">Loading…</div>
@@ -101,8 +102,5 @@
     </div>
   </aside>
 </main>
-<aside id="alert-stack" class="alert-stack" aria-label="Price alerts">
-  <div id="alert-error" class="alert-error" role="alert" hidden><span id="alert-error-message"></span><button id="alert-error-close" aria-label="Dismiss error">×</button></div>
-  <div id="alert-cards" class="alert-cards" aria-live="polite" aria-relevant="additions"></div>
-</aside>
+<div id="alert-error" class="alert-error" role="alert" hidden><span id="alert-error-message"></span><button id="alert-error-close" aria-label="Dismiss error">×</button></div>
 </body></html>

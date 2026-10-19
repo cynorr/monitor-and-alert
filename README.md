@@ -6,6 +6,8 @@
 
 Alert 与统一移入 Focus 已实现；完整需求分别见 [Alert](docs/alert.md) 与 [List 入选规则](docs/list-design.md#统一移入-focus)，模块维护入口为 [data_service/alerts/AGENTS.md](data_service/alerts/AGENTS.md)。
 
+Intraday State（盘中状态）提供 Focus/余仓的 Regular 状态、量比、自动声音和 In Play自动聚集；独立需求见 [intraday-state.md](docs/intraday-state.md)，模块入口见 [AGENTS.md](data_service/intraday_state/AGENTS.md)。参数在 [config/intraday-state.json](config/intraday-state.json)，修改后重启后台。
+
 ## 启动
 
 首次安装需 Python 3.11+：
@@ -99,10 +101,10 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 
 ## 使用
 
-Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，无需安装独立应用或授权系统通知。继续使用上面的 `data_service serve` 命令启动；后台保持运行即可，Safari/Chrome 关闭或在后台不影响检测和声音。未处理卡片持久化，刷新或重启后仍恢复，恢复时不重播声音。声音与运行要求见 [Alert 后台声音](docs/alert.md#后台声音与运行)。
+Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，无需安装独立应用或授权系统通知。继续使用上面的 `data_service serve` 命令启动；后台保持运行即可，Safari/Chrome 关闭或在后台不影响检测和声音。symbol未读边框持久化，刷新或重启后恢复，恢复时不重播声音。声音与运行要求见 [Alert 后台声音](docs/alert.md#后台声音与运行)。
 
 - 图表按住 **Command + Option** 左键创建，价格取鼠标水平线；点击横线选中后 **Backspace** 删除，上下拖动改价并重新激活。
-- Regular 到达/穿越后灰线与左下角卡片保留到手动关闭或跳转。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
+- Regular到达/穿越后价格线立即变灰，拖动重新激活；row虚线在主动点击查看后标记已读，两者独立。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
 - Scan：Discover/Focus/Excluded与日期、Refresh同排，38项Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。逐行勾选和图表选中独立；可批量移动勾选成员。历史日期名单只读，Refresh跳过已完成日。

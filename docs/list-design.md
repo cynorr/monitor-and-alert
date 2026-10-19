@@ -92,3 +92,7 @@ Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，盘前/�
 继续使用 workspace.json、现有截面和 preferences.json。旧 Focus / Wait 合并为 Focus；旧 Hidden 转为 Excluded / Hidden 并保留剩余期限。共享后台规则计算结果，不新增服务、通用规则框架或每日提醒；Quote 范围统一见 Longbridge 数据要求。
 
 更新规则时重评已有本地截面；GET 和切页不触发下载。新 Daily / feature 成功后后台发布分类；失败保留完整旧结果并显示其日期。
+
+## 盘中 In Play 展示
+
+[Intraday State](intraday-state.md#展示与-in-play)提供当前Focus的In Play section，位于Pinned之后；原分组和Tags继续保留，价格和量能仅改变展示状态/顺序，不改真实三名单、每日Tag、主section、人工顺序或Pin。筛选/折叠不缩减后台监控，空section整个隐藏。完整聚集、稳定排序和编辑边界只在独立需求维护。

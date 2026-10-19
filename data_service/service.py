@@ -13,6 +13,7 @@ from .downloader import BarDownloader, parse_candle, append_ohlc_log, ohlc_compa
 from .quotes import QuoteService
 from .store import BarStore
 from .validator import DataValidator
+from .intraday_state import IntradayState
 
 
 @dataclass
@@ -31,7 +32,7 @@ class SyncState:
 
 
 class DataService:
-    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None):
+    def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None, intraday=False):
         self.tickers = tickers
         self.holdings_symbols = []
         self.scan_symbols = []
@@ -44,6 +45,7 @@ class DataService:
         self.validator = DataValidator(self.store, self.calendar)
         self.charts = ChartCache(self.store, self.calendar, ready=self.window_ready)
         self.alerts = alerts
+        self.intraday = IntradayState(self.charts, notify=alerts.notify if alerts else None, clock=self.now) if intraday else None
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
         self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
                                    on_reconnect=self.refresh_windows, on_reset=self.reset_realtime,
@@ -170,6 +172,8 @@ class DataService:
         self.charts.active.clear()
         if self.alerts:
             self.alerts.reset()
+        if self.intraday:
+            self.intraday.reset()
 
     def recover(self):
         self.reset_realtime()
@@ -193,6 +197,8 @@ class DataService:
     def apply_quote(self, symbol, quote):
         if self.alerts:
             self.alerts.quote(symbol, quote)
+        if self.intraday:
+            self.intraday.quote(symbol, quote)
 
     def apply_candle(self, symbol, tf, item, *, initial=False):
         self.store.check(symbol)
@@ -205,6 +211,8 @@ class DataService:
         # Only the history pull writes closed bars, including SDK-confirmed candles.
         if bar.ts == self.calendar.active_start(tf, now):
             self.charts.apply_candle(symbol, tf, bar_row(bar), initial=initial)
+            if self.intraday and tf == '1d':
+                self.intraday.update(symbol, now)
             return True
         return False
 
@@ -279,6 +287,8 @@ class DataService:
                 previous_time = now
                 if not initial_only:
                     self._schedule(int(now))
+                if self.intraday:
+                    self.intraday.tick(now)
                 running = sum(s.task is not None for s in self.sync.values())
                 background = sum(s.task is not None and s.background for s in self.sync.values())
                 for key in sorted(self.sync, key=self.priority):

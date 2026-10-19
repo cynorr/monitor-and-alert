@@ -264,20 +264,46 @@ button:disabled { cursor: default; opacity: .45; }
 .tag-appearance-editor input[type="color"] { width: 28px; height: 24px; padding: 2px; border: 0; border-radius: 5px; background: var(--surface-muted); }
 #tag-preview { display: inline-flex; align-items: center; padding: 4px; }
 
-.alert-stack { position:fixed; left:14px; bottom:14px; z-index:30; width:min(320px, calc(100vw - 28px)); display:flex; flex-direction:column; gap:8px; pointer-events:none; }
-.alert-cards { display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow:auto; pointer-events:auto; }
-.alert-card { display:flex; align-items:stretch; background:#fff; color:#000; border:1px solid #dce0e5; border-radius:8px; box-shadow:0 3px 14px #0002; flex-shrink:0; }
-.alert-open { display:flex; align-items:center; gap:10px; flex:1; min-width:0; padding:12px; border:0; background:none; text-align:left; cursor:pointer; color:#000; }
-.alert-open span { display:flex; flex-direction:column; gap:4px; }
-.alert-open strong { font-size:14px; }
-.alert-open time { font-size:11px; color:#727b88; white-space:nowrap; }
-.alert-close { border:0; background:none; color:#727b88; padding:0 12px; font-size:20px; cursor:pointer; }
-.alert-open:hover,.alert-close:hover { background:#f6f7f9; }
-.alert-open:disabled { cursor:default; }
-.crossing-icon { width:24px; height:24px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-.crossing-icon.up { color:#2962ff; }
-.crossing-icon.down { color:#000000; }
-.alert-error { pointer-events:auto; background:#fff; border:1px solid #dce0e5; border-radius:6px; padding:8px 10px; font-size:11px; color:#727b88; box-shadow:0 2px 8px #0001; }
+.alert-error { position:fixed; left:14px; bottom:14px; z-index:30; pointer-events:auto; background:#fff; border:1px solid #dce0e5; border-radius:6px; padding:8px 10px; font-size:11px; color:#727b88; box-shadow:0 2px 8px #0001; }
 .alert-error { display:flex; gap:8px; align-items:center; color:#b42318; }
 .alert-error button { border:0; background:none; color:inherit; cursor:pointer; }
 .alert-error[hidden] { display:none; }
+
+/* Price state stays in its own columns; attention is independent of price. */
+[data-intraday="up-notice"] { --price-background:#e8f1ff; }
+[data-intraday="up-urgent"] { --price-background:#2962ff; --price-foreground:#fff; }
+[data-intraday="down-notice"] { --price-background:#fff3c4; }
+[data-intraday="down-urgent"] { --price-background:#b42318; --price-foreground:#fff; }
+.symbol-row:not(.price-block)[data-intraday]:not([data-intraday="neutral"]),
+.holdings-table tbody tr[data-intraday]:not([data-intraday="neutral"]) {
+    background:var(--price-background); color:var(--price-foreground, inherit);
+}
+.symbol-row.price-block { isolation:isolate; }
+.symbol-row.price-block::before { content:""; grid-column:1 / 5; grid-row:1; align-self:stretch; background:var(--price-background, transparent); border-radius:5px; pointer-events:none; z-index:-1; }
+.symbol-row.price-block > * { grid-row:1; }
+.symbol-row.price-block > :nth-child(1) { grid-column:1; }
+.symbol-row.price-block > :nth-child(2) { grid-column:2; }
+.symbol-row.price-block > :nth-child(3) { grid-column:3; }
+.symbol-row.price-block > :nth-child(4) { grid-column:4; }
+.symbol-row.price-block > :nth-child(-n+4) { color:var(--price-foreground, inherit); }
+.symbol-row[data-intraday="up-urgent"] .ticker,
+.symbol-row[data-intraday="up-urgent"] .symbol-flag,
+.holdings-table tr[data-intraday="up-urgent"] .ticker,
+.holdings-table tr[data-intraday="down-urgent"] .ticker,
+.holdings-table tr[data-intraday="up-urgent"] .positive,
+.holdings-table tr[data-intraday="up-urgent"] .negative,
+.holdings-table tr[data-intraday="down-urgent"] .positive,
+.holdings-table tr[data-intraday="down-urgent"] .negative,
+.holdings-table tr[data-intraday="up-urgent"] .holdings-trades,
+.holdings-table tr[data-intraday="down-urgent"] .holdings-trades { color:inherit; }
+.attention { --attention-color:#333; outline:1px dashed var(--attention-color); outline-offset:-3px; }
+.holdings-table tr.attention[data-intraday="up-urgent"],
+.holdings-table tr.attention[data-intraday="down-urgent"] { --attention-color:#fff; }
+.attention.ringing { animation:alert-attention .35s steps(2, jump-none) infinite; }
+@keyframes alert-attention { from { outline-color:var(--attention-color); } to { outline-color:transparent; } }
+.symbol-row.active.attention { outline-style:dashed; outline-offset:-3px; box-shadow:inset 0 0 0 1px #000; }
+.volume-badge { display:inline-block; min-width:40px; padding:2px 6px; border-radius:999px; font-size:11px; line-height:16px; text-align:center; color:#374151; background:#f4f5f7; font-variant-numeric:tabular-nums; }
+.volume-badge[data-level="1"] { background:#e5e7eb; }
+.volume-badge[data-level="2"] { background:#cbd2db; }
+.volume-badge[data-level="3"] { background:#374151; color:#fff; }
+.holdings-table:not(.holdings-state) tr > :nth-child(n+10) { display:none; }

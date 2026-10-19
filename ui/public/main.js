@@ -1,3 +1,4 @@
+import { attentionState } from './attention.js';
 import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
@@ -16,13 +17,13 @@ let socket = null;
 let reconnectTimer, lastMessage = 0, reconnectDelay = 1000, currentView = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource = 'watchlist', holdingKey = '';
-const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), applyList);
-const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
+const watchlist = new Watchlist((next, viewed) => select(next, timeframe, 'watchlist', '', viewed), applyList);
+const holdings = new HoldingsList((next, key, viewed) => select(next, timeframe, 'holdings', key, viewed), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode = 'monitor', scanDate = '', modePending = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
-let waitingJump = null;
+let readOnView = '';
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async (selected) => {
     const tf = timeframe;
     if (appMode === 'scan' && scan.activeList !== 'focus')
@@ -30,25 +31,11 @@ const alerts = new AlertController([daily, intraday], () => symbol, () => appMod
     applyList(await (await fetch('/v1/scan')).json());
     if (selected)
         select(selected, tf, selectionSource, holdingKey);
-}, jumpToAlert);
-async function jumpToAlert(event) {
-    if (!alerts.value?.eligible_symbols.includes(event.symbol))
-        throw new Error('Symbol is no longer in Focus or Holdings');
-    applyList(await post('mode', { mode: 'monitor' }));
-    await scan.showList();
-    if (socket?.readyState !== WebSocket.OPEN)
-        throw new Error('Chart connection unavailable');
-    const holding = holdings.forSymbol(event.symbol);
-    if (!watchlist.tickers.some(row => row.symbol === event.symbol && row.status === 'focus') && !holding)
-        throw new Error('Symbol is no longer available');
-    if (!holding)
-        watchlist.showSymbol(event.symbol);
-    select(event.symbol, timeframe, holding ? 'holdings' : 'watchlist', holding?.key ?? '');
-    await new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => { waitingJump = null; reject(new Error('Could not open chart')); }, 8000);
-        waitingJump = { symbol: event.symbol, resolve: () => { clearTimeout(timeout); waitingJump = null; resolve(); } };
-    });
-}
+}, value => {
+    watchlist.attention = holdings.attention = attentionState(value);
+    watchlist.render();
+    holdings.render();
+});
 function applyList(data) {
     const nextMode = data.app_mode ?? 'monitor';
     const changed = nextMode !== appMode || (nextMode === 'scan' && data.date !== scanDate);
@@ -79,7 +66,7 @@ function applyList(data) {
         holdings.selected = '';
         ++epoch;
     }
-    holdings.update(data.holdings ?? null, data.current_regular_session === true);
+    holdings.update(data.holdings ?? null, data.current_regular_session === true, data.intraday);
     watchlist.update(data, selectionSource === 'watchlist');
     if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
         const first = holdings.first();
@@ -153,10 +140,13 @@ function apply(view) {
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
     alerts.redraw();
-    if (waitingJump?.symbol === view.symbol && view.charts['1d'] && daily.rows.length)
-        waitingJump.resolve();
+    if (readOnView === view.symbol && daily.rows.length) {
+        readOnView = '';
+        void alerts.read(view.symbol);
+    }
 }
-function select(next, tf, source = selectionSource, key = holdingKey) {
+function select(next, tf, source = selectionSource, key = holdingKey, viewed = false) {
+    readOnView = viewed ? next : '';
     if (next !== symbol)
         dayLink.clear();
     symbol = next;

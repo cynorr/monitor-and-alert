@@ -40,6 +40,7 @@
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
 | data_service/additional_info/ / scripts/pull_additional_info.py | 独立Nasdaq公司资料/财报获取、Python清理、业务SQLite/内存缓存和后台调度；先读模块AGENTS.md |
 | ui/src/additional-info.ts | 附加信息选择身份校验、分类显示精简、可空字段格式化和纽约自然日倒计时；不操作图表bars |
+| data_service/intraday_state/ | 独立盘中状态、规则穿越、分钟量区间/插值与离散排序等级；先读本目录AGENTS.md |
 | data_service/alerts/ | 独立 Alert Engine、业务 SQLite、后台声音；先读本目录 AGENTS.md |
 
 依赖方向：UI → Data API → Workbench → Scan或DataService → store/indicators/quotes。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；candle preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
@@ -60,35 +61,15 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 ## Alert 实现
 
-更新：2026-10-07；完整功能要求见 [alert.md](alert.md)，模块 AI 入口见 [data_service/alerts/AGENTS.md](../data_service/alerts/AGENTS.md)。本节只维护职责、调用和保存契约，不重复生命周期或 UI 数值。
+需求只在 [alert.md](alert.md)，模块入口见 [alerts/AGENTS.md](../data_service/alerts/AGENTS.md)。Workbench持有AlertEngine与AlertSound，DataService只把校验后的Regular Quote交给手动检测，把Intraday State转换交给同一notify入口；不创建第二个行情context。
 
-- Workbench 持有唯一 Alert Engine，并在正式后台启动/关闭时创建和释放。UI → 同源 Data API → Workbench → Alert Engine → SQLite/后台声音；Alert 不依赖 Scan 算子或图表渲染，不建立第二个进程服务、端口或消息协议。
-- `quotes.py` 继续承担 Quote 的唯一标准化与校验入口，在现有 callback 处派发有效 Regular 最新价。Engine 只接标准化值、报价时间与接收顺序；借用现有 calendar/恢复信号判断交易窗口和重新建立起点，不直接访问 SDK。`pipeline.py` 仍只管理 Massive 准备，与 Alert 检测无关。
-- 当前 scope 由最新 workspace Focus 和按当前纽约日期有效的已接受 Holdings 提供，不能使用 Scan 的展示字段作为白名单。复用 Holdings 现有日期/批次语义，不建第二份账户归属缓存。
-- `alerts/engine.py` 直接管理状态、检测、操作和业务 SQLite，`alerts/sound.py` 管本地声音；函数直接互调，不引入通用 repository、adapter、rules 或恢复框架。UI Alert 交互在 `ui/src/alerts.ts` 内维护：公开 series primitive 的 paneViews 绘制虚线，priceAxisPaneViews 绘制进入价格轴的右箭头，不提供 priceAxisViews 数字标签；应用层 DOM 胶囊使用公开 pane HTMLElement/尺寸/坐标与 primitive.updateAllViews 定位。胶囊与横线共用拖动/删除动作，两图共用 controller 中的改价预览，松手提交一次；不依赖 vendor 内部 DOM。
-- RuntimePaths.alerts_db 为独立 Alert 数据库路径。Alert 与 events 两张业务表保存用户设置及处理状态；前者有独立 ID；Engine 按 symbol 建立内存索引，后者有事件 ID 及 Alert/generation 关联。模式、周期、来源、Scan 日期不参与持久化身份；UI 上下文仍使用原有 request_id/source/socket 检查。
-- SQLite 使用 WAL/FULL，所有修改在同一后台 asyncio loop 内串行提交；触发状态和事件一并提交，之后才播放声音/发送 WS。每份行情仅检查该 symbol 的内存 Active 集合，有实际修改才写库；不保存行情回放日志。事件保留到处理，不以 UI 暂时不可见推断已处理。
-- Workbench 的 Alert 创建动作先验证输入，再复用统一 Focus 入选动作，最后调用 Engine.create；入选清理/分类/顺序细则只在 [List 入选规则](list-design.md#统一移入-focus) 维护。`workspace.py` 管一次同步保存，`list_rules.py` 管现有匹配；手动入选和 Alert 入选不得分别实现。
-- `_focus`/`add_ticker`/`move_members` 已清理来源人工 Tag/section，接收共用匹配结果并一次保存；不能仅在 Alert 入口清理，不能依赖稍后的 `prepare_lists` 去消除中间状态。现有 Focus 内的人工调整与全新 symbol 指定 section 新增按原契约保留。
-- workspace JSON 与 Alert SQLite 沿用各自的直接保存方式，不新增跨存储事务协调。入选失败中止；入选已保存但 Alert 保存失败，保留已成功的 Focus 入选并返回明确部分结果，不伪造成功横线。GET/图表选择仍只读，真实行情范围仅随已提交的名单变化。
-- 正式 Python 启动入口直接启用 AlertSound；Workbench.start_background/close 管理同一 asyncio loop 内的播放任务。每个新事件入内存队列，按顺序用 macOS 自带 `/usr/bin/afplay` 播放 `alerts/sounds/up.wav` 或 `down.wav`，循环规则遵循 [Alert 后台声音](alert.md#后台声音与运行)。资源保存单次原声，每次播放完成立即启动下一次，不主动等待。这是短时播放子进程，不是独立后台服务；通过异步 subprocess 等待，失败报告后继续处理下一事件。退出时终止在播子进程，丢弃内存队列，不重播历史事件。
-- WAV 随 Python package-data 安装，不依赖应用包、签名、通知授权、PyObjC 或 py2app。Mock/模拟器默认不创建播放器，明确声音验收时才注入；平台声音状态只包含 enabled/error。UI 只显示实际声音错误，删除通知设置入口及原生通知跳转逻辑。
-
-当前函数/传输接口：
-
-| 入口 | 职责 |
-| --- | --- |
-| `Workbench.action("alerts", payload)` | 校验、必要时入 Focus、提交操作并返回 Alert 快照；名单经独立 list 同步 |
-| `AlertEngine.create(symbol, price)` | 在已允许范围内建立持久化 Alert，供统一入口及后续程序调用 |
-| `AlertEngine.rearm(alert_id, price, expected_generation)` | 提交改价/重新设置，保护已被另一操作重新设置的版本 |
-| `AlertEngine.delete(alert_id)` | 删除用户选中的 Alert |
-| `AlertEngine.acknowledge(event_id)` | 处理事件，只在 generation 对应当前 Triggered 时删除 Alert |
-| `POST /v1/alerts` | 同源 JSON mutation，动作 create/rearm/delete/acknowledge，复用 Origin 与错误处理 |
-| `GET /v1/alerts` | 只读当前 Alert、未处理事件及 sound.enabled/error，不安排行情请求或播放 |
-| `WS /v1/stream` 的独立 `type=alerts` | 初次/重连及实际业务变化发完整 Alert/待处理快照，不依赖选中 symbol |
-| `/health` 的 alerts 状态 | enabled/count/error；声音状态与播放错误在 GET /v1/alerts 与 WS 快照中 |
-
-仅留后续程序调用入口，不接入 Atomic feature 或新增自动设置测试。Mock/模拟器只能使用自己的临时名单/库，不能读取真实凭证或自动改为真实 API；声音验收必须明确启用实际播放。
+- runtime/alerts/alerts.sqlite3保存alerts和unread。前者按alert_id保存阈值/generation/state/期限，后者以symbol为主键只保留最新direction/fired_at。旧events表启动时把未处理记录合并为最新symbol未读后删除，一次迁移不播放声音。
+- create/rearm/delete仍管理手动线；read(symbol)只删除当前symbol的unread，不改变任何线条或generation。触发后灰线保留，无点击后倒计时；只有拖动重新激活、主动删除、到期或出范围改变线生命周期。
+- notify(symbol,direction,alert=...)是唯一报警入口：手动触发时将Triggered和未读写在同一事务，自动规则只覆盖未读；提交成功后才独立播放四遍。读取状态和恢复未读不播放，失败沿用明确错误。
+- sound.py每次play(symbol,direction)建立独立asyncio任务，依次运行四次原始afplay。任务字典提供当前playing symbols；没有声音队列、优先级、抢占或同symbol替换。退出取消全部任务并终止播放器，FFmpeg仅离线整理资源。
+- GET /v1/alerts及WS alerts包含revision/alerts/unread/eligible_symbols/scope_known/sound/error；sound含enabled/error/playing。POST /v1/alerts接受create/rearm/delete/read，read仅携带symbol。卡片事件ID、acknowledge与跳转接口全部移除。
+- 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
+- ui/src/attention.ts按单个symbol设置row未读与播放边框，不聚合到section或Holdings标题；alerts.ts只管理图表线、mutation和错误；main.ts在主动鼠标点击后收到匹配的图表响应才read。自动选择、键盘/周期切换及刷新不标记已读。价格线与row未读完全独立。
 
 ## 模式与上游数据
 
@@ -197,3 +178,15 @@ Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source
 遵循 [development-principles.md](development-principles.md)，仅验证本轮修改。优先直接使用真实本地数据和正常运行的服务；确需停/重启时可直接执行。真实接口检查写清当前范围及结束条件，不使用历史记录代替本轮证据。
 
 只选有关的用例，例：`.venv/bin/python -m pytest -q tests/test_massive_incremental_build.py`。TypeScript改变后运行`npm run build --prefix ui`。不默认执行整个项目回归或全流程检查，不为罕见边界建立故障注入/并发/回放框架。已有模拟器保持隔离，不自动读凭证或回退真实API。
+
+## Intraday State 实现
+
+唯一需求见 [intraday-state.md](intraday-state.md)，模块维护见 [AGENTS.md](../data_service/intraday_state/AGENTS.md)。DataService在正式Workbench完整会话创建IntradayState，Quote回调与Daily candle更新负责价格/均线变化，现有scheduler每秒更新量比和边界rank；不创建新任务服务，不依赖HTTP或图表选择。Mock默认没有声音，--symbols子集不创建状态模块。
+
+Workbench.refresh_alert_scope同时传入Focus候选与当前余仓角色，排除仅当天清仓的ticker；不改变原手动Alert与行情白名单。状态/穿越/冻结ADR与排序等级由engine.py维护；原始行情和SQLite仍由既有模块管理。恢复清掉比较起点，首份完整状态静默，派生状态不另存业务库，不逐份Quote落盘。
+
+volume.py把旧ChartCache.closed_volume的连续区间覆盖核心恢复为共用计算，只读现有多周期closed及SDK open。按store revision缓存分钟volume索引；每个历史日期独立覆盖后再平均。配置直接读取config/intraday-state.json，启动校验阈值顺序，不增加配置监听或规则编辑器。
+
+GET /v1/intraday-state只读返回enabled和symbols；现有list快照增加同名intraday字段，Scan历史关闭该字段。symbol状态含role/state、ADR20、上下行倍数/等级、above_open、price/timestamp、cum_vol/local_vol和rank。量比含ratio/actual/average/samples/level，LocalVol另含window；缺值为null。rank是价格/CumVol/LocalVol三个离散整数，前端不重新计算业务阈值。
+
+ui/src/intraday-state.ts集中格式化、Badge和rank比较；ADR数值方向独立于预警阈值，持仓neutral时选择较大的一项。list.ts直接使用In Play section，复用标题/折叠/空组隐藏，删除Grouped/Dynamic状态与偏好。holdings.ts保持独立风险排序和清仓尾部；重排复用节点、恢复焦点和滚动位置。全部报警及未读通过AlertEngine.notify/read共用上述Alert契约，Intraday State不自行播放声音或存另一份通知。

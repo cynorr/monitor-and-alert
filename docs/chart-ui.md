@@ -64,6 +64,8 @@ The default volume divider is moderately higher than before; it remains adjustab
 - The tooltip identifies current Daily cumulative volume, current Intraday candle volume or historical candle volume, and includes the historical mean, actual sample count and `100% = average`. Missing volume remains unavailable.
 - Calculate in Python with the shared trading calendar and existing history cache; send `volume_comparison: {average, samples, percent}` alongside each displayed row. The frontend formats and selects the corresponding result. Each source uses its own historical data; no new requests, subscriptions, persistence or cross-source comparisons are introduced.
 
+图表上述5D Avg继续使用原有完整窗口比较；独立 [Intraday State](intraday-state.md) 的列表CumVol/LocalVol使用同进度插值，不改变图表成交量口径或vendor。
+
 ## Mouse, zoom and periods
 
 - Use native pan, zoom, price scaling, pane resizing and scrollToRealTime. Realtime updates preserve a historical viewport.

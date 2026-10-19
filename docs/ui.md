@@ -15,7 +15,11 @@ Chart layout, colors, margins, headers, [volume and five-day comparison](chart-u
 
 ## Alert UI
 
-Scan/Monitor 图表设置、横线操作、待处理 stack 与后台声音的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开 series primitive、图表鼠标手势与持久事件 stack。
+Scan/Monitor 图表设置、横线操作、统一未读边框与后台声音的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开series primitive、图表手势与symbol持久未读状态。
+
+## Intraday State UI
+
+独立需求、ADR字段、CumVol/LocalVol Badge和In Play自动聚集只在 [intraday-state.md](intraday-state.md#展示与-in-play) 维护。复用现有section，无展示模式选择；空section整个隐藏，全表空时只显示一份空状态。Holdings列与批次见 [holdings-ui.md](holdings-ui.md)。
 
 ## Logo / Icon
 
@@ -74,12 +78,10 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | --- | --- | --- |
 | Chart Alert | 黑色 **#000000** 细水平线段虚线，右端小箭头进入价格轴：三角形左侧竖边与价格刻度标签左边缘对齐，向右延伸 **6px**；Triggered 时线条/右箭头灰色 **#9ca3af**；虚线统一见 [Chart UI](chart-ui.md#colors-margins-and-reference-lines) | Active / 已触发，生命周期以 alert.md 为准 |
 | Alert 悬停控件 | 白底价格胶囊中心位于绘图区宽度约 **2/3** 处，**1px** 细边框、**11px / 400** 两位小数文字，圆角端部；Active 黑色、Triggered 灰色。鼠标为上下调整光标，不另画上下箭头；胶囊右端为黑色线性垃圾桶，不在价格轴绘制 Alert 数字标签 | 预览价格、拖动改价、删除该条 Alert |
-| `alert-cross-up` | 箭头从下方向上穿过一条水平线，亮蓝 **#2962ff** | 价格上穿或向上到达阈值 |
-| `alert-cross-down` | 箭头从上方向下穿过一条水平线，黑色 **#000000** | 价格下穿或向下到达阈值 |
-| Alert 卡片关闭 | `×` | 手动处理该事件 |
-| Alert 卡片跳转 | `↗` | 打开对应 Monitor 图表并处理事件 |
 
-Chart 标记与方向图形使用简单的应用层绘制/SVG，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶按名单生命周期将 symbol 移入 Hidden。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
+Chart标记使用简单的应用层绘制，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶按名单生命周期将 symbol 移入 Hidden。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
+
+symbol未读提示仅作用于symbol row，section及Holdings标题不显示该边框或闪烁。使用独立的1px虚线边框、内缩3px，普通背景为#333；持仓蓝/红整行深色时边框为白色。正在播放时按0.35s周期切换边框可见性，播放结束保持静态虚线；多个symbol可同时闪烁。选中行继续保留独立细实线轮廓。边框不改变布局、Tags颜色或价格线状态，业务语义见 [统一未读边框](alert.md#统一未读边框)。
 
 ### 品牌与平台实现
 
@@ -190,3 +192,9 @@ Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式
 ## Checks
 
 Run `npm run build --prefix ui` after TypeScript edits and only the related offline checks. Validate affected layout, List interactions or chart gestures; do not broaden to a live/full workflow without authorization. Record coverage and limitations in [validation.md](validation.md).
+
+### Intraday State 图形与颜色
+
+状态颜色在Focus与当前余仓共用，Monitor candidate仅铺Symbol/Last/Chg%/ADR四列，连续跨过列间距；Tags、Volume与操作按钮保留本色。Holdings仍铺整行，Scan沿用原价格状态外观。具体业务阈值只在独立需求维护。上行关注为浅蓝#e8f1ff、上行增强为蓝#2962ff配白字；回撤预警为浅黄#fff3c4、回撤紧急为深红#b42318配白字。强背景对应的价格单元格及其ticker/涨跌数字继承白色；Monitor非价格列不继承白色。选择边框仍可辨认，鼠标悬停不覆盖状态色。ADR字段以↑/↓加倍数表达方向，不能仅靠颜色辨认。
+
+量能采用圆角胶囊，普通#f4f5f7、一级#e5e7eb、二级#cbd2db、三级#374151；普通至二级文字#374151，三级白字。深浅只表达成交活跃等级，避免和价格方向颜色混淆。字段tooltip保留实际值、参考均值、样本数量和窗口。

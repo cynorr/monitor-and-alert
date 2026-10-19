@@ -1,0 +1,7 @@
+{
+  "up_notice": 0.6,
+  "up_urgent": 1.0,
+  "down_notice": 0.7,
+  "down_urgent": 1.0,
+  "volume_levels": [1.1, 2.0, 3.0]
+}

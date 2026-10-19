@@ -51,7 +51,6 @@ class Workbench:
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(INITIAL_PREFERENCES))
         self.list_context = self._list_context()
         self.sound = sound if sound is not None else AlertSound() if not mock and only is None else None
-        self.sound_task = None
         self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, sound=self.sound) if only is None else None
         self.refresh_alert_scope()
         self.refresh_scan_quotes()
@@ -68,14 +67,19 @@ class Workbench:
         symbols = self.holdings.symbols_for(day) if self.holdings else []
         if self.monitor:
             self.monitor.update_holdings(symbols)
+            if self.monitor.intraday:
+                open_symbols = {symbol_key(h['ticker']) for h in self.holdings.base['holdings']
+                                if any(not s['closed_today'] for s in h['sequences'])} if self.holdings and self.holdings.base else set()
+                # Retained closed-today holdings stay in market scope, but do not alarm.
+                self.monitor.intraday.scope({t.symbol for t in self.workspace.tickers()} - set(symbols), open_symbols)
         if self.alerts:
             allowed = {t.symbol for t in self.workspace.tickers()} | set(symbols)
             known = self.holdings_factory is None or (self.holdings is not None and self.holdings.base is not None)
             self.alerts.maintain(allowed, known)
 
     def alert_state(self):
-        return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'events': [], 'eligible_symbols': [],
-                'scope_known': True, 'sound': {'enabled': False, 'error': None}, 'error': None}
+        return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'unread': [], 'eligible_symbols': [],
+                'scope_known': True, 'sound': {'enabled': False, 'error': None, 'playing': []}, 'error': None}
 
     def focus_classifications(self, tickers):
         rows = {row['symbol'].removesuffix('.US'): row for row in self.snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
@@ -151,7 +155,8 @@ class Workbench:
             wanted = {s if s.endswith('.US') else s + '.US' for s in self.only}
             tickers = [t for t in tickers if t.symbol in wanted]
         broker = self.broker_factory({ticker.symbol for ticker in tickers})
-        self.monitor = DataService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path, alerts=self.alerts)
+        self.monitor = DataService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path,
+                                   alerts=self.alerts, intraday=self.only is None)
         self.workspace_changed()
         self.monitor_task = asyncio.create_task(self.monitor.run())
         if self.holdings_factory:
@@ -161,8 +166,6 @@ class Workbench:
             self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
 
     async def start_background(self):
-        if self.sound and self.sound_task is None:
-            self.sound_task = asyncio.create_task(self.sound.run())
         if self.only is None:
             try:
                 await self.prepare_lists()
@@ -216,10 +219,6 @@ class Workbench:
         return self.holdings.state(quotes, as_of=datetime.fromtimestamp(now, ET).date().isoformat())
 
     async def close(self):
-        if self.sound_task:
-            self.sound_task.cancel()
-            await asyncio.gather(self.sound_task, return_exceptions=True)
-            self.sound_task = None
         if self.additional_task:
             self.additional_task.cancel()
             await asyncio.gather(self.additional_task, return_exceptions=True)
@@ -231,13 +230,15 @@ class Workbench:
         if self.pipeline:
             await self.pipeline.close()
         await self.stop_monitor()
+        if self.sound:
+            await self.sound.close()
         if self.alerts:
             self.alerts.close()
 
     async def run(self):
         while True:
             self.refresh_alert_scope()
-            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task), ('Alert sound', self.sound_task)):
+            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task)):
                 if task and task.done():
                     task.result()
                     raise RuntimeError(f'{name} task stopped unexpectedly')
@@ -318,8 +319,14 @@ class Workbench:
                 'dates': sorted((p.parent.name for p in self.workspace.root.glob('*/scan.json')), reverse=True),
                 'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False,
                 'holdings': self.holdings_state(), 'massive': massive,
+                'intraday': self.intraday_state(),
                 'holding_symbols': holding_symbols, 'current_regular_session': self.calendar.is_open(now),
                 'scan_running': self.generating or bool(massive and massive['running'])}
+
+    def intraday_state(self):
+        if self.monitor and self.monitor.intraday and (self.mode == 'monitor' or self.selected_date == self.workspace.date):
+            return self.monitor.intraday.state()
+        return {'enabled': False, 'symbols': {}}
 
     def select(self, symbol, timeframe, source='watchlist'):
         if self.mode == 'monitor':
@@ -468,8 +475,8 @@ class Workbench:
                 self.alerts.rearm(payload['id'], payload['price'], payload['generation'])
             elif action == 'delete':
                 self.alerts.delete(payload['id'])
-            elif action == 'acknowledge':
-                self.alerts.acknowledge(payload['event_id'])
+            elif action == 'read':
+                self.alerts.read(payload['symbol'])
             else:
                 raise ValueError('Unknown alert action')
             return self.alert_state()
@@ -519,6 +526,8 @@ class Workbench:
         raise ValueError('Unknown action')
 
     async def api(self, path, query):
+        if path == '/v1/intraday-state':
+            return self.intraday_state()
         if path == '/v1/additional-info':
             return self.additional_info(query['symbol'][0]) if 'symbol' in query else self.additional.state()
         if path == '/v1/alerts':
