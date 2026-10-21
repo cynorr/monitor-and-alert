@@ -51,7 +51,7 @@ Nasdaq Trader 目录更新独立于 Massive，仅保存官方 ETF 标记用于�
 
 数据统一放在 `runtime/massive/`、`runtime/longbridge/`、`runtime/holdings/`、`runtime/additional-info/`，人工名单与偏好保持现有路径。Massive 原始 `daily/*.json` 累积保留且不加入 Git；`splits.json` 是唯一允许入 Git 的运行数据。split 每次完整获取两年窗口，替换窗口内记录并保留更早历史，校验成功后原子覆盖。Massive 采用拆股复权，成交量 HALF_UP 四舍五入为整数；Longbridge 负责Monitor完整行情与Scan当前时段报价，其数据口径与可重建缓存规则统一见 [Longbridge 数据要求](docs/longbridge-data.md)。两者共用指标与图表，数据互不干涉。
 
-Scan 正常时仅显示日期下拉，不重复显示 Ready 日期和完成时间；处理中、失败或目标日未完成时显示阶段及目标日期。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 补齐并打开最新可用日，已完成则直接打开。新日第一次生成继承 Focus 和 Excluded。首份截面准备中可以先打开页面。
+Scan 正常时仅显示日期下拉，不重复显示 Ready 日期和完成时间；处理中、失败或目标日未完成时显示阶段及目标日期。自动准备完成不切换页面、不抢走历史日期；手动 Refresh 补齐并打开最新可用日，已完成则直接打开。新日第一次生成只继承 Focus 和有效 Hidden，自动 Excluded 从当天候选重建。首份截面准备中可以先打开页面。
 
 默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
 
@@ -107,8 +107,8 @@ Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，�
 - Regular到达/穿越后价格线立即变灰，拖动重新激活；row虚线在主动点击查看后标记已读，两者独立。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
-- Scan：Discover/Focus/Excluded与日期、Refresh同排，38项Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选与全部Focus/Excluded（含Hidden）均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。逐行勾选和图表选中独立；可批量移动勾选成员。历史日期名单只读，Refresh跳过已完成日。
-- Focus跨日保留，入选仍需人工确认；Surf/Bounce只负责分组。机器排除按完成日规则归入Broken/Extended/Under-50，没有七天期限；恢复后仅当天候选回Discover。只有手动Move to Hidden保留七个自然日屏蔽；Hidden期限内跳过规则判断，仍计算完整特征，到期按同一规则分类。新入section放队首。当日Pin/Unpin支持多只与拖动，不改section，新完成日清空；新置顶后黑框与图表移到下一个可见成员。
+- Scan：Discover/Focus/Excluded与日期、Refresh同排，38项Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选、当日人工Discover、Focus与有效Hidden均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。逐行勾选和图表选中独立；可批量移动勾选成员。历史日期名单只读，Refresh跳过已完成日。
+- Focus跨日保留，入选仍需人工确认；Surf/Bounce只负责分组。机器Excluded仅显示当天候选的Broken/Extended/Under-50结果，不保存机器成员身份。Focus仍接受每日自动淘汰，非候选淘汰后退出当前名单。手动Hidden保留七个自然日；到期仅当天候选重新分类。新入section放队首。当日Pin/Unpin支持多只与拖动，不改section，新完成日清空；新置顶后黑框与图表移到下一个可见成员。
 - 共用Daily日 K：所有图使用统一、可人工调整的默认bar spacing，缩放后各自保留；EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、成交量随十字线切换。可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加SDK活跃日 K。显示与集中人工参数只在 [Chart UI](docs/chart-ui.md) 维护。
 - Monitor：5m/15m/30m/1h/2h、SMA65、交易日联动、实时行情；各周期使用原生官方 closed 与 SDK open candle。
 - Search 和 section 的 + 共用内联输入；Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info，确认后才保存。Scan全局搜索新股加入当日Discover置顶，重启/刷新保留，新交易日不继承；需要跨日关注时使用现有移入Focus操作。快捷键和新增位置见 [List UI](docs/ui.md#list-ui)。

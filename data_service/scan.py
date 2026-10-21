@@ -19,7 +19,7 @@ from .features.screening import apply_filter, add_rank, mark_candidate
 from .features.snapshot import feature_row, feature_frame
 from .indicators import series, daily_summary, adr_adv, return_from_low, volume_context, volume_comparison
 from .store import atomic_json, read_bars
-from .workspace import inherit_workspace, migrate_workspace
+from .workspace import inherit_workspace, migrate_workspace, is_hidden, persistent_workspace
 from .preferences import INITIAL_PREFERENCES, validate_preferences
 from .list_rules import apply_rules
 from .massive.settings import load_config, directory_for_database
@@ -72,8 +72,8 @@ def workspace_scope(days, value):
         return set()
     data = migrate_workspace(json.loads(path.read_text()), value)
     return {ticker for ticker, state in data['statuses'].items()
-            if state['status'] in ('focus', 'excluded') or
-            (state['status'] == 'discover' and state.get('manual_discover_date') == value)}
+            if state.get('status') == 'focus' or is_hidden(state, value) or
+            (state.get('status') == 'discover' and state.get('manual_discover_date') == value)}
 
 
 def _symbols(tickers):
@@ -155,7 +155,7 @@ def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tra
         feature_symbols = sorted((set(selected) | _symbols(tracked_tickers)) & set(symbols))
         screened = time.perf_counter()
         feature_rows = []
-        # Candidates and all retained Focus/Excluded members need complete features.
+        # Candidates plus retained Focus/Hidden and same-day manual Discover.
         for symbol in feature_symbols:
             history = checked_history(db, symbol, cutoff, calendar, now, 1000,
                                       log_path, log_before=window_starts[symbol])
@@ -202,12 +202,11 @@ def publish_day(days, snapshot):
         data = json.loads(workspace.read_text())
     else:
         previous = max((p for p in days.glob('*/workspace.json') if p.parent.name < snapshot['date']), default=None)
-        data = inherit_workspace(json.loads(previous.read_text()) if previous else None,
-                                 previous_candidates(days, snapshot['date']), candidates(snapshot), snapshot['date'])
+        data = inherit_workspace(json.loads(previous.read_text()) if previous else None, snapshot['date'])
     preferences_path = days.parent / 'preferences.json'
     preferences = validate_preferences(json.loads(preferences_path.read_text()) if preferences_path.exists() else deepcopy(INITIAL_PREFERENCES))
     data = apply_rules(data, snapshot, preferences)
-    atomic_json(workspace, data)
+    atomic_json(workspace, persistent_workspace(data))
     atomic_json(folder / 'scan.json', snapshot)
 
 

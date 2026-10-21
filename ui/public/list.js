@@ -425,11 +425,10 @@ export class Watchlist {
                 mark.hidden = true;
                 name.append(mark);
                 cell.append(name);
-                const label = ticker.is_new ? 'NEW' : ticker.is_returned ? 'RETURNED' : '';
-                if (label) {
+                if (ticker.is_new) {
                     const flag = document.createElement('span');
-                    flag.className = 'symbol-flag' + (ticker.is_new ? ' new' : '');
-                    flag.textContent = label;
+                    flag.className = 'symbol-flag new';
+                    flag.textContent = 'NEW';
                     cell.append(flag);
                 }
             }
@@ -566,7 +565,7 @@ export class Watchlist {
         value('ext', percent(ext, ''), extended ? `${extended.trade_session}: change from regular close` : '', ext);
     }
     rowKey(ticker) {
-        return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.manual_tags, ticker.is_new, ticker.is_returned]);
+        return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.manual_tags, ticker.is_new]);
     }
     render() {
         const original = this.search ? this.matches() : this.visible();

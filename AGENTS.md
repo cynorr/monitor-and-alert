@@ -4,7 +4,7 @@
 
 - 单进程 Python + SQLite + 本机 WebSocket + TypeScript；不新增服务、消息中间件或通用适配框架。
 - 每次启动重读 workspace；完整 Longbridge 行情仅覆盖 Focus 与 SnapTrade 当前 Holdings（含仅保留当天的已清仓批次）；Scan 模式额外订阅完整 Discover/Excluded 的 Quote，日 K 仍用 Massive。订阅范围只在 Longbridge 数据要求维护。Holdings 归属独立，同 ticker 底层行情去重；不以其他历史成交或报告中的 ticker 作为白名单。
-- Massive 完整特征覆盖候选、当日人工 Discover、Focus 和全部 Excluded（含 Hidden）；继承名单不另行排名，Hidden 屏蔽期仅跳过名单规则判断。详细范围只在 [Massive 数据要求](docs/massive-data.md#名单完整特征范围) 维护。
+- Massive 完整特征覆盖候选、当日人工 Discover、Focus 和有效 Hidden；跨日只继承 Focus/Hidden，机器 Excluded 由当天候选生成、不保存成员身份。保留 Focus 每日自动淘汰，非候选淘汰后退出名单；继承成员不另行排名。详细范围只在 [Massive 数据要求](docs/massive-data.md#名单完整特征范围) 维护。
 - 唯一正式 SDK 入口是 broker.py。Quote / Trade 与六周期 SDK candle 共用一个行情 context；UI 不调用券商。
 - Longbridge 服务 Monitor 核心行情、Alert 与 Scan 当前时段报价，按 [Longbridge 数据要求](docs/longbridge-data.md) 维护可重建缓存。Massive 单独存库；两源共用 Bar、指标和显示，不拼接、交叉验证或互相补缺。
 - OHLC 正数有限值与基本结构必须验证；仅上下界矛盾保留官方原值，追加 invalid_ohlc.jsonl，不修正、不告警、不重试。

@@ -57,22 +57,6 @@ def test_source_contract_date_cutoff_and_shared_metrics(app_data):
         build_day(path, '2026-09-29', cal, now)
 
 
-def test_hidden_calendar_boundary_inheritance_and_carried():
-    data = {'carried':['CARRY'], 'statuses': {'A': {'status':'hidden','status_at':'2026-09-23'},
-            'CARRY': {'status':'focus','status_at':'2026-09-23'}},
-            'orders': {'focus':['CARRY'], 'wait':[], 'hidden':['A']}}
-    hidden = derive_day_view('2026-09-29', {'A','NEW'}, {'A'}, data)
-    assert hidden.excluded == ('A',) and hidden.new == {'NEW'}
-    inherited = inherit_workspace(data, {'A'}, {'A'}, '2026-09-30')
-    assert 'A' in inherited['statuses']
-    classified = apply_rules(inherited, {'date': '2026-09-30', 'rows': [{'symbol': 'A.US', 'candidate': True}]}, {'tags': []})
-    returned = derive_day_view('2026-09-30', {'A'}, {'A'}, classified)
-    assert returned.returned == {'A'} and 'A' in returned.discover and not returned.excluded
-    inherited = inherit_workspace(data, {'A'}, {'A'}, '2026-10-01')
-    assert set(inherited['statuses']) == {'CARRY', 'A'} and inherited['carried'] == ['CARRY']
-    assert 'A' in inherit_workspace(data, set(), {'A'}, '2026-09-29')['statuses']
-
-
 def test_batch_move_once_and_same_day_generation_keeps_manual_state(app_data):
     ws = Workspace(root=app_data / 'days')
     snapshot = read_snapshot(ws.root, ws.date)
@@ -81,17 +65,17 @@ def test_batch_move_once_and_same_day_generation_keeps_manual_state(app_data):
     moving = list(view.discover[:2])
     events = []
     ws.on_change = lambda: events.append(True)
-    ws.move_members(moving, 'discover', 'focus', members, set())
+    ws.move_members(moving, 'discover', 'focus', members)
     assert ws.data['orders']['focus'][:2] == moving and len(events) == 1
     before = ws.path.read_bytes()
     with pytest.raises(ValueError, match='destination'):
-        ws.move_members(moving, 'discover', 'wait', members, set())
+        ws.move_members(moving, 'discover', 'wait', members)
     assert ws.path.read_bytes() == before
     publish_day(ws.root, snapshot)
     assert ws.path.read_bytes() == before
-    ws.move_members(['PAYS'], 'focus', 'hidden', members, set())
+    ws.move_members(['PAYS'], 'focus', 'hidden', members)
     assert 'PAYS' in derive_day_view(ws.date, members, set(), ws.data).excluded
-    ws.move_members(['PAYS'], 'excluded', 'discover', members, set())
+    ws.move_members(['PAYS'], 'excluded', 'discover', members)
     assert 'PAYS' not in ws.data['statuses'] and 'PAYS' not in ws.data['orders']['discover']
 
 
@@ -192,11 +176,11 @@ def test_search_adds_non_candidate_to_pinned_discover_until_next_day(app_data):
         restored = Workspace(root=app_data / 'days')
         assert ticker in derive_day_view(restored.date, candidates(app.snapshot()), set(), restored.data).discover
         assert restored.data['pinned'][0] == ticker
-        new_day = inherit_workspace(restored.data, candidates(app.snapshot()), set(), '2026-10-01')
+        new_day = inherit_workspace(restored.data, '2026-10-01')
         assert ticker not in new_day['statuses'] and not new_day['pinned']
         assert ranks == {row['symbol']: {k: v for k, v in row.items() if k.endswith('_rank')} for row in app.snapshot()['rows']}
         await app.list_action({'action': 'move', 'source': 'discover', 'target': 'focus', 'tickers': [ticker]})
-        carried = inherit_workspace(app.workspace.data, set(), set(), '2026-10-01')
+        carried = inherit_workspace(app.workspace.data, '2026-10-01')
         assert carried['statuses'][ticker]['status'] == 'focus'
         assert 'manual_discover_date' not in carried['statuses'][ticker]
         assert not brokers

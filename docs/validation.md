@@ -2,6 +2,18 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-21：自动排除改为当天派生结果
+
+环境：本机macOS、Python3.13.1、TypeScript5.9.3；使用现有真实Daily SQLite、28份dated workspace、真实Scan截面及preferences。未建立Mock或另建行情连接，测试中的名单编辑只发生在真实数据的临时副本。
+
+- 跨日只继承Focus及有效Hidden，保留Focus每日负面淘汰；淘汰的非候选退出名单。自动Excluded成员身份、section和机器Tag不再写入workspace，读取时从当天截面/规则重建。原Pin与人工Tag仍按当天保存，文件watcher比较同一持久投影；NEW保留，旧恢复标记及其字段/显示链路清除。
+- 8项真实数据定向用例通过，覆盖候选范围、跨日继承、真实Focus淘汰、AVAH七个自然日Hidden到期、规则修改、机器成员Pin/人工Tag、Hidden/Release/Focus操作、保存/重读、发布与feature scope，以及搜索Discover仅当日保留。`npm run build --prefix ui`通过；未运行Mock、全项目或全链路测试。
+- 停止旧进程后直接清理28份workspace，共799个旧机器身份、87个废弃字段，无备份或兼容恢复分支。仅从本地SQLite重算2026-10-19：12,638只证券、88个candidate，筛选4.731秒、完整特征2.060秒、总计6.791秒，完整feature scope为94只。当前Focus和Hidden的保存状态与清理前一致；落盘所有Excluded成员均为Hidden。
+- 正式服务恢复为原先正在使用的Scan模式，PID23703。只读`/v1/scan`和health确认：2026-10-19的页面Excluded由96降至42，其中Under-50为23、Extended为10、Broken为7、Hidden为2；Discover24、Focus23（已屏蔽持仓）保持不变。所有机器成员均为当天candidate，接口无废弃字段，workspace_error为空、Quote为CONNECTED、Holdings后台任务运行。启动时Massive仍按既有规则准备下一个成熟日，本轮不等待或验收其完整网络流程。
+- 同步List/Massive/UI唯一规范、behavior/development、README与三处AGENTS入口；194个本地文档链接和`git diff --check`通过。既有splits.json修改未处理。
+
+未覆盖：浏览器实际点击/绘制、全周期行情Ready、实时报警播放与账户交易链路。真实接口核对仅用于确认本次名单契约与服务恢复，未扩展为全链路验收。
+
 ## 2026-10-20：报警边框仅作用于 symbol row
 
 环境：本机macOS、TypeScript/Node；仅调整前端边框作用范围，未修改后台或重启服务。

@@ -22,7 +22,7 @@ from .additional_info import AdditionalInfo
 from .alerts import AlertEngine, price_cents
 from .alerts.engine import symbol_key
 from .alerts.sound import AlertSound
-from .list_rules import focus_classification
+from .list_rules import apply_rules, focus_classification
 
 log = logging.getLogger(__name__)
 
@@ -52,9 +52,8 @@ class Workbench:
         self.list_context = self._list_context()
         self.sound = sound if sound is not None else AlertSound() if not mock and only is None else None
         self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, sound=self.sound) if only is None else None
-        self.refresh_alert_scope()
-        self.refresh_scan_quotes()
         workspace.on_change = self.workspace_changed
+        self.workspace_changed()
 
     def refresh_scan_quotes(self):
         if self.monitor:
@@ -109,6 +108,8 @@ class Workbench:
             self.workspace.reclassify(snapshot, self.preferences)
 
     def workspace_changed(self):
+        if self.only is None and self.has_snapshot(self.workspace.date) and self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences):
+            return  # The save callback publishes the completed classification.
         context = self._list_context()
         if context != self.list_context:
             self.list_context = context
@@ -266,7 +267,8 @@ class Workbench:
         if not self.has_snapshot(value):
             return []
         snapshot = self.snapshot(value)
-        data = self.workspace.data if value == self.workspace.date else json.loads((self.workspace.root / value / 'workspace.json').read_text())
+        data = self.workspace.data if value == self.workspace.date else apply_rules(
+            json.loads((self.workspace.root / value / 'workspace.json').read_text()), snapshot, self.preferences)
         prior = previous_candidates(self.workspace.root, value) if value != self.selected_date else self.previous()
         view = derive_day_view(value, candidates(snapshot), prior, data)
         rows = {row['symbol']: row for row in snapshot['rows']}
@@ -280,7 +282,7 @@ class Workbench:
                 result.append({**rows.get(symbol, {}), **state, 'symbol': symbol, 'ticker': ticker,
                                'status': group, 'order_index': index, 'discover_priority': priority.get(ticker),
                                'pinned': ticker in pins, 'pin_index': pins.get(ticker),
-                               'is_new': ticker in view.new, 'is_returned': ticker in view.returned})
+                               'is_new': ticker in view.new})
         return result
 
     def monitor_board(self):
@@ -435,7 +437,6 @@ class Workbench:
         elif action == 'move':
             snapshot = self.snapshot(self.workspace.date)
             self.workspace.move_members(payload['tickers'], payload['source'], payload['target'], candidates(snapshot),
-                                        previous_candidates(self.workspace.root, snapshot['date']),
                                         classifications=self.focus_classifications(payload['tickers']))
         else:
             raise ValueError('Unknown list action')

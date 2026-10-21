@@ -22,24 +22,24 @@ Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为
 
 ## 每日规则
 
-新完成交易日 Daily 和 feature 准备成功后，按 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 为候选及全部继承的 Focus、Excluded（含 Hidden）计算完整 feature 和 Growth 数值。继承成员即使掉出候选或 RFL 前 50 也继续计算，不另行排名。统一计算最终归属后一次保存，不先释放再逐只移回，不增加定时器或实时 Quote 分类。
+新完成交易日只继承 Focus 与未满七个自然日的 Hidden。Discover 与自动 Excluded 每日按当天 candidate 和保存的 Tag 规则生成，不维护跨日机器排除成员名单。完整 feature 和 Growth 范围只在 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 维护。
 
-| 当前归属 | 完成日判断 | 最终归属 |
+| 输入 | 完成日判断 | 最终归属 |
 | --- | --- | --- |
-| Discover / Focus / 机器 Excluded | 匹配负面条件 | Excluded 对应机器 section |
-| 机器 Excluded | 确认不匹配任何负面条件，仍是当天候选 | Discover，按 Setup 分组，否则 Unclassified |
-| 机器 Excluded | 确认不匹配任何负面条件，不是当天候选 | 退出当前名单，不在 Discover 显示 |
+| 当天 candidate | 匹配负面条件，且不属于保留的 Focus/Hidden | Excluded 对应机器 section |
+| 当天 candidate | 不匹配负面条件，且不属于 Focus/Hidden | Discover，按 Setup 分组，否则 Unclassified |
+| Focus | 匹配负面条件 | 淘汰出 Focus；仍是当天 candidate 则显示机器 Excluded，否则退出当前名单 |
 | Focus | 不匹配负面条件 | 继续 Focus，失去 Setup 或候选资格不影响归属 |
 | Hidden | 未满七个自然日 | 保留 Hidden，跳过名单规则判断 |
-| Hidden | 满七个自然日 | 参与同一分类；负面匹配进机器 section，否则仅当天候选回 Discover |
+| Hidden | 满七个自然日 | 解除屏蔽；仅当天 candidate 重新参与普通分类，否则退出当前名单 |
 
-机器 section 优先级为 Broken → Extended → Under-50；保留全部实际匹配 Tag。机器排除没有屏蔽期限，每份完成日截面重新判断，可直接换到另一个机器 section。Setup（Surf/Bounce 等）只负责分组，匹配 Setup 不会自动进入 Focus。
+机器 section 优先级为 Broken → Extended → Under-50，保留全部实际匹配 Tag。机器结果只属于当天候选，可从同一份截面和当前规则重建；不保存其成员身份、section 或机器 Tag 结论。增加负面规则不增加持久名单。Setup 只负责分组，不会自动进入 Focus。
 
-缺少数据不表示条件已经恢复，也不推断为 Broken。没有已确认的负面匹配、且仍有启用的负面规则无法确定时，保留原机器 section；AND 条件中只要有已知条件不成立，该规则即可确定不匹配。已有 Focus 不因缺少特征或 Setup 自动淘汰。
+缺失特征不视为已确认的负面匹配，也不推断为 Broken；已有 Focus 不因特征或 Setup 缺失自动淘汰。无历史机器 section 需要保留或恢复。
 
-Hidden 是明确的人工屏蔽，只有它保留七个自然日期限。新日继承先保留到期 Hidden，完整特征准备后才决定最终归属，避免它掉出扫描范围；期限内仍计算完整特征，只跳过分类判断。可以提前手动释放或明确加入 Focus。
+Hidden 保留七个自然日，期间即使不在 candidate 中也保留并计算完整特征，可以提前 Release 或加入 Focus。到期的非候选无需继续计算特征或追踪。
 
-人工加入 / 保留 Focus 当天优先，次日重新接受规则；机器标签仍如实显示。人工 Setup/Label 补充和主 section 调整仅当天有效，Tag 定义和 Focus 成员长期保留。
+人工加入 / 保留 Focus 当天优先，次日重新接受规则；机器标签仍如实显示。当日人工 Discover 沿用搜索新增约定。人工 Setup/Label、主 section、Pin 与顺序继续按当日规则保存；这些人工信息不因自动 section 仅存在于内存而丢失。
 
 ## Tag、Section 与 Filter
 
@@ -77,7 +77,7 @@ Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，盘前/�
 这是手动与 Alert 入选 Focus 的唯一分类规则入口。实现：workspace._focus 清理来源结果，Workbench.focus_classifications 通过 list_rules.focus_classification 重新匹配，手动与 Alert 共用并一次保存。
 
 - 从 Discover 或任一 Excluded section 移入 Focus，都使用同一流程，包括手动 Add to Focus、单个/批量 Move to Focus，以及 [Alert 创建引起的入选](alert.md#创建时的名单处理)。
-- 丢弃来源保存的 `tags`、`manual_tags`、`manual_tags_date`、原主 section 与 `manual_section_date`，解除排除/释放状态；不复制 Discover/Excluded 的分类结果。只清该 symbol 的成员结果，不删除或修改 Tag 定义。
+- 丢弃来源保存的 `tags`、`manual_tags`、`manual_tags_date`、原主 section 与 `manual_section_date`，解除排除状态；不复制 Discover/Excluded 的分类结果。只清该 symbol 的成员结果，不删除或修改 Tag 定义。
 - 使用当前有效 workspace 对应的本地特征和当前已保存的 Tag 定义，复用 Focus 现有匹配逻辑重新计算全部匹配 Tag；不使用来源已保存的 Tag 列表、未保存编辑草稿或历史 Scan 的分类结果。
 - 主 section 仅从重新匹配的 Setup Tag 中选取，多个匹配按当前保存的 Setup 顺序选择第一个，例如 Surf、Bounce；没有匹配则为 Unclassified。缺失特征沿用现有 Missing 匹配语义，不猜测、不为入选触发网络下载。
 - 显式入选沿用当前的当日人工 Focus 优先：当天保留 Focus，重新算出的负面 Tag 可显示，但不会因本次入选立即回到 Excluded；次日恢复现有名单规则。这不新增 Alert 策略或新的 Tag 判定条件。

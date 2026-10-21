@@ -77,7 +77,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 Massive唯一要求见 [massive-data.md](massive-data.md)，共用bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。RuntimePaths统一所有正式路径：symbol-directory.json、massive/daily原始文件、massive/splits.json、massive/daily.sqlite3、longbridge/bars.sqlite3、holdings、additional-info/info.sqlite3与days；继续接受--runtime。正式Workbench和reconcile/verify注入Longbridge新路径；DataService独立/模拟器默认临时bars路径保持。两库共用BAR_SCHEMA、Bar、read_bars与指标，Daily ts为ET零点转Unix秒；不混库或拼接历史。显式--daily-db是只读外部入口，不运行内置Massive，筛选仍消费指定runtime的本地目录。
 
-build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录，按 [Massive 数据要求](massive-data.md) 完成候选筛选与全市场排名。随后对候选、Focus及全部Excluded（含Hidden）读取最多1000根建立完整特征，包含Growth使用的三种RFL数值；完整特征补算不改变资格、candidate或已有市场名次，不为继承名单另行排名。其他非候选仅保留轻量指标和资格标记。截面不再嵌入公司名称；旧截面遗留字段不用于UI。daily_metrics复用共用纯算子，不重复维护公式。workspace_scope读取同日或最近前日的全部Focus/Excluded，并纳入同日manual_discover_date成员；enrich_snapshot为本地成员补齐旧截面缺少的完整特征及RFL数值，记录feature_scope，不重跑全市场排名或下载。详细计算范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。
+build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录，按 [Massive 数据要求](massive-data.md) 完成候选筛选与全市场排名。随后对候选、Focus、有效Hidden及当日人工Discover读取最多1000根建立完整特征，包含Growth使用的三种RFL数值；完整特征补算不改变资格、candidate或已有市场名次，不为继承名单另行排名。其他非候选仅保留轻量指标和资格标记。截面不再嵌入公司名称；旧截面遗留字段不用于UI。daily_metrics复用共用纯算子，不重复维护公式。workspace_scope读取同日或最近前日的Focus和有效Hidden，并纳入同日manual_discover_date成员；enrich_snapshot为本地成员补齐旧截面缺少的完整特征及RFL数值，记录feature_scope，不重跑全市场排名或下载。详细计算范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。
 
 每步只保留单只历史与全市场标量，避免全市场历史fetchall；读到的bar均验证闭合/结构。checked_history复用Bar.validate，OHLC范围矛盾保留原值；后续阶段仅为上一窗口起点之前的矛盾追加日志，避免一次生成内重叠窗口重复记录。阶段耗时和证券/候选数量写普通日志，不新增指标持久化或性能框架。真实样本线程对照：单线程1000只约0.46秒、四线程约1.12秒；不添加更慢的线程池。全日生成继续在现有asyncio.to_thread中执行，不阻塞HTTP/WS事件循环。
 
@@ -115,7 +115,8 @@ Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一
 
 watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 watcher；线程仅把事件派发回 asyncio loop。默认跟随 days 最新文件；显式 --workspace 监听该文件父目录并固定文件。创建、修改、移动、删除事件触发重读，无定时扫描。自身写入产生的事件在 JSON 相同情况下不重复更新。
 
-List完整需求见 [list-design.md](list-design.md)。Workspace V3直接维护JSON：statuses保存discover/focus/excluded、主section和当日tags；orders维护三名单扁平顺序，excluded_at只属于Hidden。Focus与全部Excluded先跨候选空档继承，Discover只保留当日candidate。inherit_workspace保留到期Hidden供完整特征计算，derive_day_view只读取已分类结果，不处理到期；apply_rules统一判断Hidden期限和机器负面规则，生成完整结果后reclassify一次同步保存。机器排除无期限，确认恢复后候选回Discover、非候选删除；没有已确认负面匹配、且仍有负面规则因缺数据未知时，保留原机器section。AND中已知条件不成立优先于未知结果。新section成员置前，同section人工顺序保留。旧wait归Focus、旧hidden归Excluded/Hidden的现有V2读取迁移只在内存，不建立通用migration层。
+List完整需求见 [list-design.md](list-design.md)。Workspace V3继续直接维护JSON。内存statuses包含完整当日分类；persistent_workspace供Workspace.save和publish_day共用，落盘时移除机器Excluded成员身份、section和计算Tag，只保留人工Tag注记及独立Pin。Discover/Focus/Hidden的状态和人工顺序沿用现有字段，excluded_at仅属于Hidden。inherit_workspace只继承Focus和有效Hidden；apply_rules统一匹配Tag并生成当天候选归属，保留Focus自动淘汰，非候选淘汰后删除。无需保存历史机器section或未知特征恢复状态。derive_day_view只投影已分类结果及NEW。新section成员置前，同section人工顺序保留。Workspace.reload比较同一持久投影，忽略自身保存引发的文件事件；外部变化由Workbench.workspace_changed同步重建分类并更新行情范围。旧wait/hidden的V2读取迁移仍只在内存。
+
 
 preferences的activeTag为Tag ID或null，tags可为空、最多十个。前端草稿独立，空选择仍可编辑并保存新Tag；点击已选Tag保存null，全部定义仍参与分类。role为setup/extended/broken/under50/label；负面优先级broken → extended → under50，Setup顺序决定主section。manual_tags只允许setup/label，Workbench同时校验，apply_rules清理失效或负面人工ID。manual_tags_date/manual_section_date/manual_focus_date仅当前名单交易日有效；删除或改用途后的人工section回归有效setup/unclassified。写失败恢复原内存，沿用同步保存与单watcher。数据缺失不淘汰Focus。
 
@@ -169,7 +170,7 @@ List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受
 
 Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source:"discover",target:"focus"}`。列表状态增加app_mode、date、dates、preferences和mock；历史Scan日期或--symbols不可写。POST /v1/mode切换模式，POST /v1/scan选择/生成日期，POST /v1/preferences同步保存完整偏好；所有写入复用同源检查，body上限64KiB。生成保留同日人工覆盖，同时更新规则标签/分类。
 
-新日继承Focus与Excluded，Hidden期限跨候选空档保留。publish_day读取同日人工状态或继承上一日，读取preferences，再apply_rules；同日重算不清人工覆盖。正式默认days为runtime/days。旧人工数据保留，当前读取采用V3。
+新日只继承Focus与有效Hidden；候选自动Excluded不落盘、不继承。publish_day读取同日人工状态或继承上一日，读取preferences，再apply_rules；同日重算不清人工覆盖。正式默认days为runtime/days。旧人工数据保留，当前读取采用V3。
 
 前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口；Scan全局Search目标为Discover置顶，显式Focus section的+保留目标。Scan查询本地只读SQLite并截断到所选日，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 

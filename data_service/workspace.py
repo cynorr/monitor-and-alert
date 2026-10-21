@@ -67,6 +67,18 @@ def _workspace_orders(workspace: dict) -> dict[str, list[str]]:
     return result
 
 
+def persistent_workspace(data: dict) -> dict:
+    """Machine exclusions are a daily projection, not saved member identities."""
+    result = deepcopy(data)
+    result['statuses'] = {ticker: state for ticker, state in result['statuses'].items()
+                          if state.get('status') != 'excluded' or state.get('section') == 'hidden'}
+    for ticker, state in data['statuses'].items():
+        if ticker not in result['statuses'] and state.get('manual_tags'):
+            result['statuses'][ticker] = {key: state[key] for key in ('manual_tags', 'manual_tags_date')}
+    result['orders'] = _workspace_orders(result)
+    return result
+
+
 def migrate_workspace(data: dict, selected_date: str | None = None) -> dict:
     """Normalize legacy Focus/Wait/Hidden in memory; reads never write the file."""
     result = deepcopy(data)
@@ -90,20 +102,20 @@ def migrate_workspace(data: dict, selected_date: str | None = None) -> dict:
         else:
             state.pop('excluded_at', None)
     result['orders'] = _workspace_orders(result)
-    result['pinned'] = list(dict.fromkeys(ticker for ticker in result.get('pinned', []) if ticker in states))
+    # A pinned candidate may have a derived machine section absent from storage.
+    result['pinned'] = list(dict.fromkeys(result.get('pinned', [])))
     return result
 
 
-def inherit_workspace(previous: dict | None, previous_candidates: set[str],
-                      current_candidates: set[str], selected_date: str) -> dict:
-    """Focus and exclusion survive candidate gaps; daily conclusions are recomputed."""
+def inherit_workspace(previous: dict | None, selected_date: str) -> dict:
+    """Only Focus and unexpired manual Hidden survive a new trading date."""
     if previous is None:
         return empty_workspace()
     result = migrate_workspace(previous, selected_date)
     result['pinned'] = []
     states = result['statuses']
     for ticker, state in list(states.items()):
-        if state.get('status') == 'discover':
+        if state.get('status') != 'focus' and not is_hidden(state, selected_date):
             del states[ticker]
             continue
         state['tags'] = []
@@ -123,7 +135,6 @@ class DayView:
     focus: tuple[str, ...]
     excluded: tuple[str, ...]
     new: frozenset[str]
-    returned: frozenset[str]
     statuses: dict[str, dict[str, Any]]
 
     @property
@@ -133,32 +144,18 @@ class DayView:
     def as_dict(self) -> dict:
         return {'date': self.date, 'candidates': sorted(self.candidates), 'carried': sorted(self.carried),
                 'lists': {'discover': list(self.discover), 'focus': list(self.focus), 'excluded': list(self.excluded)},
-                'new': sorted(self.new), 'returned': sorted(self.returned), 'statuses': deepcopy(self.statuses)}
+                'new': sorted(self.new), 'statuses': deepcopy(self.statuses)}
 
 
 def derive_day_view(selected_date: str, candidates: set[str], previous_candidates: set[str], workspace: dict) -> DayView:
     data = migrate_workspace(workspace, selected_date)
     statuses = data['statuses']
-    returned = set()
     for ticker, state in statuses.items():
         if state.get('manual_tags_date') != selected_date:
             state['manual_tags'] = []
-        if state.get('released_at') == selected_date:
-            returned.add(ticker)
-    focus = {ticker for ticker, state in statuses.items() if state.get('status') == 'focus'}
-    excluded = {ticker for ticker, state in statuses.items() if state.get('status') == 'excluded'}
-    manual = {ticker for ticker, state in statuses.items()
-              if state.get('status') == 'discover' and state.get('manual_discover_date') == selected_date}
-    discover = (candidates | manual) - focus - excluded
-    for ticker in discover:
-        statuses.setdefault(ticker, {'status': 'discover', 'section': 'unclassified', 'tags': []})
-    for ticker, state in list(statuses.items()):
-        if state.get('status') == 'discover' and ticker not in discover:
-            del statuses[ticker]
-    data['orders'] = _workspace_orders(data)
     return DayView(selected_date, frozenset(candidates), frozenset(data['carried']),
                    tuple(data['orders']['discover']), tuple(data['orders']['focus']), tuple(data['orders']['excluded']),
-                   frozenset(candidates - previous_candidates), frozenset(returned), statuses)
+                   frozenset(candidates - previous_candidates), statuses)
 
 
 class Workspace:
@@ -184,7 +181,7 @@ class Workspace:
     def save(self, previous):
         # Existing direct synchronous persistence and rollback; no new queue or watcher.
         try:
-            self.path.write_text(json.dumps(self.data, ensure_ascii=False, indent=2) + '\n')
+            self.path.write_text(json.dumps(persistent_workspace(self.data), ensure_ascii=False, indent=2) + '\n')
         except OSError:
             self.data = previous
             self.error = 'Could not save workspace'
@@ -208,7 +205,7 @@ class Workspace:
     def _focus(self, ticker, classification=None):
         self._unpin(ticker)
         state = self.data['statuses'].setdefault(ticker, {})
-        for key in ('tags', 'manual_tags', 'manual_tags_date', 'manual_section_date', 'manual_discover_date', 'excluded_at', 'released_at'):
+        for key in ('tags', 'manual_tags', 'manual_tags_date', 'manual_section_date', 'manual_discover_date', 'excluded_at'):
             state.pop(key, None)
         state.update(status='focus', section='unclassified', tags=[], status_at=self.date, manual_focus_date=self.date)
         state.update(classification or {})
@@ -283,13 +280,12 @@ class Workspace:
         order.insert(at, ticker)
         self.save(previous)
 
-    def move_members(self, tickers, source, target, candidates, previous_candidates, *, classifications=None):
+    def move_members(self, tickers, source, target, candidates, *, classifications=None):
         if source == target or source not in ORDERED_STATUSES or target not in ('discover', 'focus', 'hidden'):
             raise ValueError('Choose a different destination list')
         if not tickers or len(set(tickers)) != len(tickers):
             raise ValueError('Select unique tickers')
-        view = derive_day_view(self.date, candidates, previous_candidates, self.data)
-        if not set(tickers) <= set(view.as_dict()['lists'].get(source, [])):
+        if any(self.section(ticker) != source for ticker in tickers):
             raise ValueError('Selection has changed; select again')
         if source == 'excluded' and target == 'discover' and any(
                 self.data['statuses'][ticker].get('section') != 'hidden' for ticker in tickers):
@@ -301,7 +297,7 @@ class Workspace:
             if target == 'discover':
                 self.data['statuses'].pop(ticker, None)
                 if ticker in candidates:
-                    self.data['statuses'][ticker] = {'status': 'discover', 'section': 'unclassified', 'tags': [], 'released_at': self.date}
+                    self.data['statuses'][ticker] = {'status': 'discover', 'section': 'unclassified', 'tags': []}
             elif target == 'focus':
                 self._focus(ticker, (classifications or {}).get(ticker))
             else:
@@ -352,7 +348,7 @@ class Workspace:
         path = max(path, self.path) if self.follow_latest else path
         selected_date = path.parent.name if re.fullmatch(r'\d{4}-\d{2}-\d{2}', path.parent.name) else date.today().isoformat()
         data = migrate_workspace(json.loads(path.read_text()), selected_date)
-        if path != self.path or data != self.data or self.error:
+        if path != self.path or data != migrate_workspace(persistent_workspace(self.data), selected_date) or self.error:
             self.path, self.data, self.error = path, data, None
             self.on_change()
 

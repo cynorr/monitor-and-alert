@@ -48,9 +48,9 @@ Daily与split统一按最新成熟交易日判断，保留ET18点门槛；周末
 
 需求背景与归属设计见 [list-design.md](list-design.md)，显示与交互的唯一规范见 [ui.md 的 List UI 章节](ui.md#list-ui)。
 
-Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 的日 K 和分类使用本地 Massive Daily，Scan 模式额外订阅 Quote，仅显示当前交易时段的价格轴标记（规则见 Longbridge 数据要求），不启动其完整行情或 Alert。Excluded 的恢复仍在完成日数据准备后判断，盘中明确入选 Focus 才开始完整实时监控。Scan 全局搜索确认后进入当日 Discover 置顶，不建立临时预览或跨日保存；新增与继承细则见 [List 设计](list-design.md#三个列表)。
+Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 的日 K 和分类使用本地 Massive Daily，Scan 模式额外订阅 Quote，仅显示当前交易时段的价格轴标记（规则见 Longbridge 数据要求），不启动其完整行情或 Alert。自动Excluded仅显示当天候选的规则结果、不保存成员身份；跨日只继承Focus和有效Hidden，Focus每日自动淘汰保留，非候选淘汰后退出当前名单。盘中明确入选Focus才开始完整实时监控。Scan 全局搜索确认后进入当日 Discover 置顶，不建立临时预览或跨日保存；新增与继承细则见 [List 设计](list-design.md#三个列表)。
 
-候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、当日人工Discover、Focus和全部Excluded（含Hidden）均计算完整特征与Growth所用RFL数值，即使继承成员不在候选或前50也继续计算，不为名单另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。已有人工成员不因候选门槛自动删除，短历史/缺数据不推断为Broken。启动在后台从本地Daily补齐旧截面缺少的成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
+候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、当日人工Discover、Focus和有效Hidden计算完整特征与Growth所用RFL数值，继承成员不另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。历史机器Excluded不扩大计算范围；Focus不因候选门槛、短历史或缺数据直接淘汰。启动在后台从本地Daily补齐旧截面缺少的有效成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 
 Tag 保存条件与用途：Setup用于Discover/Focus分组，Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可匹配多个Tag，按Setup定义顺序选主section；未匹配为Unclassified。人工补充仅允许Setup/Label。
 
@@ -58,7 +58,7 @@ Tag 选择可为空，点击已选 Tag 再次取消；空选择不应用保存 T
 
 Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑定。编辑外观草稿继续使用已指派及人工补充的匹配结果，只有修改条件才进入条件预览，不因调颜色改变名单归属或订阅。
 
-完成日Daily和feature准备后，统一重评Discover、Focus与全部Excluded。负面优先级为Broken → Extended → Under-50；机器排除没有七天期限，确认不匹配任何负面条件后，仅当天候选回Discover，否则退出名单。恢复后的Setup只负责分组，不自动进入Focus。没有已确认负面匹配、且仍有负面判断因缺数据未知时，保留原机器section；已知不成立的AND条件可确定不匹配。Hidden只有人工屏蔽七个自然日，期限内跳过规则判断但计算完整特征；到期保留在准备范围内，随后按同一规则分类。一次计算最终结果并保存，不增加定时扫描。
+完成日Daily和feature准备后，按 [每日规则](list-design.md#每日规则) 统一计算候选归属和Focus淘汰；机器分类不落盘。有效Hidden继续屏蔽，到期仅当天候选重新分类。分类复用已有算子和Tag匹配，不增加定时扫描。
 
 规则Tag每天重算；人工补Tag、主section和保留Focus例外仅当天有效。Focus成员及同section内部人工排序跨日保留，新进入section成员置顶。没有匹配Tag不淘汰Focus。人工入选Focus当天优先，仍显示机器负面标签，次日重新接受规则。当日置顶独立于Tag和section，顺序跨Scan/Monitor共享；新置顶后黑框和图表移到下一个可见成员，取消置顶保留当前选择并回原section，跨List取消，新完成日继承时清空，同日刷新/重启保留。临时Filter只改变显示，不移动名单或改变订阅；修改草稿预览，Save才更新条件并重新分类已有本地截面。
 

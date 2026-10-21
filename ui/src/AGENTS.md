@@ -9,7 +9,7 @@
 - `additional-info.ts`：独立信息身份校验、分类显示精简、可空格式化及纽约自然日倒计时；原始分类保留在数据契约中，数据与显示规则只读 [Additional Info](../../docs/additional-info.md)，不改变bar revision或Ready。
 - `chart.ts`：共用图表、十字线与成交量显示、交易日联动；`chart-settings.ts`：统一初始 bar spacing 与成交量区比例的集中人工参数。修改参数后构建并刷新页面，不增加设置界面。
 - 图表调整首先遵守 [Chart 首要开发准则](../../docs/chart-ui.md#implementation-principle)，优先内置参数和公开 API，保持 vendor 源码原样。
-- 名单归属、自动标签、排除期限由后端计算。Filter、格式化和拖拽显示不能扩大行情订阅，也不能改变底层增长数值或计算口径。
+- 名单归属、自动标签、Hidden 期限由后端计算；自动 Excluded 仅当天候选可见，成员新出现只显示 NEW 标记。Filter、格式化和拖拽显示不能扩大行情订阅，也不能改变底层增长数值或计算口径。
 - Tags 使用纯 SVG 轮廓；图形与外观只维护在 Logo / Icon，行高、列宽与折叠数量只维护在 List UI。新增图案保持已有 Icon ID 的含义，列表与编辑 preview 复用 `tag-appearance.ts`。不恢复文字堆叠或人工蓝色 badge，不引入图标库、测宽监听或另一套外观保存流程；前端初始化旧 Tag 缺失的外观，下次偏好保存才持久化。外观草稿不切换到纯条件预览，不改后端分类默认逻辑。
 - 图标不能改变操作语义：名单垃圾桶是移入 Hidden 七天；Release 仅用于 Hidden，Add to Focus 遵循统一入选规则。后续 Android/iOS 按 Logo / Icon 复用图形与外观契约，按平台实现触摸与可访问说明；Web 的 DOM、hover、CSS 与 px 不是原生实现要求。不提前建设移动端原生工程；Alert 声音由后台播放，前端显示持久未读边框及实际错误。
 - Monitor 的 Focus 与 Holdings 保留独立 selection source；Scan 日 K 统一使用本地 Massive Daily，当前时段报价仅作为一个独立价格轴标签。全局 Search 新股进入当日 Discover 置顶，复用 add/Pin，不建立临时预览系统。维持 request_id、mode、source 和 socket 身份检查。

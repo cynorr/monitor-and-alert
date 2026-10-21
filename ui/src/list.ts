@@ -344,10 +344,9 @@ export class Watchlist {
                 name.setAttribute('aria-label', `Select ${ticker.ticker}`);
                 const mark = document.createElement('span'); mark.className = 'warn'; mark.textContent = '!'; mark.hidden = true;
                 name.append(mark); cell.append(name);
-                const label = ticker.is_new ? 'NEW' : ticker.is_returned ? 'RETURNED' : '';
-                if (label) {
-                    const flag = document.createElement('span'); flag.className = 'symbol-flag' + (ticker.is_new ? ' new' : '');
-                    flag.textContent = label; cell.append(flag);
+                if (ticker.is_new) {
+                    const flag = document.createElement('span'); flag.className = 'symbol-flag new';
+                    flag.textContent = 'NEW'; cell.append(flag);
                 }
             } else if (column.field === 'growth') {
                 cell.className = 'growth-cell'; cell.title = '1M / 3M / 6M return from low';
@@ -446,7 +445,7 @@ export class Watchlist {
     }
 
     private rowKey(ticker: Ticker) {
-        return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.manual_tags, ticker.is_new, ticker.is_returned]);
+        return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.manual_tags, ticker.is_new]);
     }
 
     render() {
