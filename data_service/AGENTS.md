@@ -8,6 +8,7 @@ Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-
 - 手动与 Alert 移入 Focus 共用 [统一入选规则](../docs/list-design.md#统一移入-focus)；不继承来源 Tag/人工 section，不由 Alert 另写分类逻辑。
 - `preferences.py` 与前端共用 `filter-catalog.json`；Tag 的 `role` 决定用途，名称可以改。
 - 完整实时行情只含 Focus 与独立 Holdings；Scan 模式为完整 Discover/Excluded 增加 Quote-only 订阅，切出时移除。Daily 仍读 Massive，不授权其 Trade/candle 或 Alert；范围只在 Longbridge 数据要求维护。
+- Longbridge SDK 保留当天完整周期序列，ChartCache统一叠加官方closed；图表、指标与盘中状态共用该读取结果。同日恢复只用SQLite成功批次/最新closed判断缺口，不能用SDK暂定行跳过官方修正；全量窗口就绪后替换旧值，刷新/恢复期间保留有效显示。接口与生命周期只在Longbridge数据要求维护。
 - 候选、当日人工 Discover、Focus 和有效 Hidden 计算完整特征。只继承 Focus 和有效 Hidden；机器 Excluded 为当天候选的派生结果，不保存成员身份。Focus 仍每日自动淘汰；已非候选的淘汰成员直接退出。Hidden 七个自然日内跳过分类；到期非候选退出。新进入 section 的成员在队首。
 - 日分类改动使用 `tests/test_list_rules.py` 的现有真实截面/名单及真实 SQLite 做定向验证；不为此连接真实券商或建立 Mock。
 - `snaptrade.py`只获取原始账户数据；`holdings.py`统一买卖归属、余仓估值、当日清仓与日期规则；`workbench.py`复用共用Quote基准和时钟。HTTP/UI不另算会计，不通过其他历史ticker扩大范围。

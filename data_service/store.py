@@ -135,6 +135,11 @@ class BarStore:
     def window(self, symbol: str, timeframe: str) -> list[Bar]:
         return self.bars(symbol, timeframe)
 
+    def latest(self, symbol: str, timeframe: str) -> int | None:
+        self.check(symbol)
+        return self.db.execute('SELECT MAX(ts) FROM bars WHERE symbol=? AND timeframe=?',
+                               (symbol, timeframe)).fetchone()[0]
+
     def close(self) -> None:
         self.db.close()
 

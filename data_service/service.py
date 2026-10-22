@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .calendar import ET, PHASES, INTRADAY, TradingCalendar
 from .charts import ChartCache, bar_row
-from .downloader import BarDownloader, parse_candle, append_ohlc_log, ohlc_comparison
+from .downloader import BarDownloader, parse_candle, sdk_timestamp, append_ohlc_log, ohlc_comparison
 from .quotes import QuoteService
 from .store import BarStore
 from .validator import DataValidator
@@ -29,6 +29,7 @@ class SyncState:
     alert: bool = False
     task: asyncio.Task | None = None
     background: bool = False
+    loading: bool = False
 
 
 class DataService:
@@ -43,18 +44,19 @@ class DataService:
         self.calendar = calendar or TradingCalendar()
         self.store = BarStore(bars_path or runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
         self.validator = DataValidator(self.store, self.calendar)
-        self.charts = ChartCache(self.store, self.calendar, ready=self.window_ready)
+        self.charts = ChartCache(self.store, self.calendar, clock=self.now)
         self.alerts = alerts
         self.intraday = IntradayState(self.charts, notify=alerts.notify if alerts else None, clock=self.now) if intraday else None
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
         self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
-                                   on_reconnect=self.refresh_windows, on_reset=self.reset_realtime,
-                                   on_candle=self.apply_candle) if broker else None
+                                   on_reconnect=self.check_windows, on_reset=self.reset_realtime,
+                                   on_candle=self.apply_candles, candle_priority=self.candle_priority) if broker else None
         self.run_id = uuid.uuid4().hex
         self.started_at = int(self.now())
         self.session = self.calendar.window_session(self.started_at)
         self.focus = (self.symbols[0] if self.symbols else '', '5m')
-        self.sync = {(symbol, tf): SyncState() for symbol in self.symbols for tf in PHASES}
+        self.sync = {(symbol, tf): self.cached_state(symbol, tf) for symbol in self.symbols for tf in PHASES}
+        self.check_windows()
         self.workspace = None
         self.workspace_subset = None
         self.retired_tasks = set()
@@ -106,14 +108,13 @@ class DataService:
                     state.task.add_done_callback(self.retired_tasks.discard)
         for symbol in added:
             for tf in PHASES:
-                self.sync[symbol, tf] = SyncState()
+                self.sync[symbol, tf] = self.cached_state(symbol, tf)
         for symbol in removed:
-            for cache in (self.charts.active, self.charts.views):
-                for key in [key for key in cache if key[0] == symbol]:
-                    cache.pop(key)
+            self.charts.remove(symbol)
         if self.focus[0] not in symbols:
             self.focus = (symbols[0] if symbols else '', self.focus[1])
         self._update_quote_scope()
+        self.check_windows()
 
     def list_state(self):
         return {'board': self.board(), 'mode': self.mode,
@@ -169,17 +170,26 @@ class DataService:
         self.focus = (symbol, timeframe)
 
     def reset_realtime(self):
-        self.charts.active.clear()
         if self.alerts:
             self.alerts.reset()
         if self.intraday:
-            self.intraday.reset()
+            self.intraday.recover()
 
     def recover(self):
         self.reset_realtime()
         if self.quotes:
-            self.quotes.restart()
-        self.refresh_windows()
+            self.quotes.recover()
+        self.check_windows()
+
+    def cached_state(self, symbol, tf):
+        batch = self.store.batch(symbol, tf)
+        latest = self.store.latest(symbol, tf)
+        if batch and batch.get('session', [None])[0] == self.session[0] and latest is not None:
+            return SyncState(pending=False, refresh=False, complete=True, target=latest)
+        return SyncState()
+
+    def check_windows(self):
+        self._schedule(int(self.now()))
 
     def refresh_windows(self):
         for state in self.sync.values():
@@ -192,7 +202,7 @@ class DataService:
         now = int(self.now()) if now is None else now
         if self.broker is None:
             return self.validator.check(symbol, tf, now)['complete']
-        return self.session == self.calendar.window_session(now) and self.sync[symbol, tf].complete
+        return self.session[0] == self.calendar.window_session(now)[0] and self.sync[symbol, tf].complete
 
     def apply_quote(self, symbol, quote):
         if self.alerts:
@@ -200,21 +210,30 @@ class DataService:
         if self.intraday:
             self.intraday.quote(symbol, quote)
 
-    def apply_candle(self, symbol, tf, item, *, initial=False):
+    def apply_candles(self, symbol, tf, items, *, initial=False):
         self.store.check(symbol)
         now = int(self.now())
-        bar = parse_candle(item, symbol, tf, self.calendar, now, closed=False)
-        if bar.invalid_range:
-            append_ohlc_log(self.store.path.parent / 'invalid_ohlc.jsonl', [ohlc_comparison(
-                bar, self.calendar, now, 'Intraday',
-                {key: str(getattr(item, key)) for key in ('open', 'high', 'low', 'close', 'volume')})])
-        # Only the history pull writes closed bars, including SDK-confirmed candles.
-        if bar.ts == self.calendar.active_start(tf, now):
-            self.charts.apply_candle(symbol, tf, bar_row(bar), initial=initial)
-            if self.intraday and tf == '1d':
-                self.intraday.update(symbol, now)
-            return True
-        return False
+        day = datetime.fromtimestamp(now, ET).date()
+        rows, anomalies = [], []
+        for item in items:
+            if datetime.fromtimestamp(sdk_timestamp(item.timestamp), ET).date() != day:
+                continue
+            bar = parse_candle(item, symbol, tf, self.calendar, now, closed=False)
+            rows.append(bar_row(bar))
+            if bar.invalid_range:
+                anomalies.append(ohlc_comparison(bar, self.calendar, now, 'Intraday',
+                    {key: str(getattr(item, key)) for key in ('open', 'high', 'low', 'close', 'volume')}))
+        append_ohlc_log(self.store.path.parent / 'invalid_ohlc.jsonl', anomalies)
+        if rows and self.charts.apply_candles(symbol, tf, rows, replace=initial) and self.intraday:
+            self.intraday.update(symbol, now)
+        return bool(rows)
+
+    def candle_priority(self, key):
+        symbol, tf = key
+        order = ('5m', '15m', '1d', '30m', '1h', '2h')
+        selected = symbol == self.focus[0] and tf in ('5m', '1d', self.focus[1])
+        return (0 if selected else 1 if tf in ('5m', '15m') else 2,
+                self.symbols.index(symbol), order.index(tf))
 
     def priority(self, key):
         symbol, tf = key
@@ -225,17 +244,17 @@ class DataService:
             return (-2 if selected else -1, 0)
         if selected and tf in ('5m', '1d', self.focus[1]):
             return (0, order.index(tf))
-        return (order.index(tf) + 1, self.symbols.index(symbol))
+        return (1 if tf in ('5m', '1d') else 2, self.symbols.index(symbol), order.index(tf))
 
     async def _execute(self, key):
         state = self.sync[key]
         count = 1000 if state.refresh else 2
         state.refresh = False
+        state.loading = count == 1000
         try:
             batch = await self.downloader.fetch(*key, count=count, background=state.background)
             if batch is None:
                 state.refresh = state.pending = True
-                state.complete = False
                 state.due = 0
                 return
             check = self.validator.check(*key, int(self.now()))
@@ -243,7 +262,6 @@ class DataService:
                 raise ValueError('; '.join(check['errors']))
         except Exception as exc:
             state.error = str(exc)
-            state.complete = False
             state.refresh = state.pending = True
             state.attempt += 1
             if state.attempt >= state.limit:
@@ -253,17 +271,27 @@ class DataService:
             else:
                 state.due = self.now() + (2, 5, 10)[state.attempt - 1]
         else:
-            state.complete = not state.refresh  # A recovery may have arrived while this request was in flight.
+            state.complete = state.complete or not state.refresh
             state.pending = state.refresh
             state.target = check['target']
             state.error, state.alert = None, False
             state.attempt, state.limit, state.due = 0, 4, 0
+            if self.intraday:
+                self.intraday.update(key[0], int(self.now()))
+        finally:
+            state.loading = False
 
     def _schedule(self, now):
         session = self.calendar.window_session(now)
-        if session != self.session:
+        if session[0] != self.session[0]:
             self.session = session
-            self.recover()
+            self.charts.new_day()
+            self.reset_realtime()
+            if self.intraday:
+                self.intraday.reset()
+            self.refresh_windows()
+        else:
+            self.session = session
         targets = {tf: self.calendar.latest_closed(tf, now) for tf in PHASES}
         for (symbol, tf), state in self.sync.items():
             if state.pending or state.task is not None or state.target == targets[tf]:
@@ -338,8 +366,9 @@ class DataService:
             if self.quotes:
                 errors.extend(f'{tf} live: {error}' for (s, tf), error in self.quotes.candle_errors.items() if s == symbol)
         level = 'full' if len(completed) == len(PHASES) else 'basic' if all(tf in completed for tf in ('1d', '5m')) else 'loading'
-        refreshing = level == 'loading' and any(
-            tf not in completed and self.store.batch(symbol, tf) for tf in ('1d', '5m'))
+        refreshing = self.broker is not None and any(
+            (self.sync[symbol, tf].refresh or self.sync[symbol, tf].loading) and self.store.batch(symbol, tf)
+            for tf in PHASES)
         return {'stage': level, 'errors': errors, 'refreshing': bool(refreshing)}
 
     def quote(self, symbol, now):
@@ -412,5 +441,5 @@ class DataService:
             return {'symbol': symbol, 'timeframe': tf, 'adjust_type': 'ForwardAdjust',
                     'session': 'regular', 'closed_only': True,
                     'current': self.window_ready(symbol, tf, now),
-                    'bars': [bar_row(b) for b in self.store.window(symbol, tf)]}
+                    'bars': self.charts.closed(symbol, tf)[1]}
         raise KeyError(path)

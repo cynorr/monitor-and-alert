@@ -1,6 +1,6 @@
 # Chart UI
 
-Updated: 2026-10-08. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
+Updated: 2026-10-22. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
 
 ## Implementation principle
 
@@ -69,7 +69,7 @@ The default volume divider is moderately higher than before; it remains adjustab
 ## Mouse, zoom and periods
 
 - Use native pan, zoom, price scaling, pane resizing and scrollToRealTime. Realtime updates preserve a historical viewport.
-- A closed boundary or refresh retains the previous complete chart until the official replacement and usable active data arrive together. Routine tail replacement/append uses public series updates without clearing candles, rebuilding all history or resetting the viewport. The final Regular candle stays visible while its official replacement is pending.
+- At a closed boundary, keep the elapsed SDK candle visible and append the next SDK candle when available; official history corrects closed values when it arrives. Refresh keeps existing data until replacement is ready. Routine tail replacement/append uses public series updates without clearing candles, rebuilding all history or resetting the viewport. Daily does not wait for a 5m refresh.
 - On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and `[0,5)` minutes → 5m, `[5,15)` → 15m, `[15,30)` → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h is manual only. Controls: **5m, 15m, 30m, 1h, 2h**.
 - `↦` means Go to latest: return to the latest available trading day while retaining the chart's zoom. Period changes preserve the selected day when that day exists in the new period.
 
@@ -85,7 +85,7 @@ The default volume divider is moderately higher than before; it remains adjustab
 ## Data boundaries
 
 - Keep mode, request_id, source and socket identity checks. Mode/date changes reset chart context; backend run_id changes force full history. Indicators are calculated only in Python; reading or selecting charts does not trigger downloads.
-- All six Monitor periods use their own official closed history and SDK open candles.
+- All six Monitor periods use their own SDK candles and authoritative closed-history overlay.
 - Each period has its own loaded window. Insufficient SMA65 history leaves the line absent. Longbridge cache freshness and source boundaries follow [longbridge-data.md](longbridge-data.md).
 - Scan uses completed local Daily bars without an active candle or Intraday data.
 
@@ -95,6 +95,6 @@ Alert 在 Scan/Monitor 的创建、选择、改价、删除与跨图同步只在
 
 ## Chart status
 
-- Live Monitor: show a muted Refreshing label while a previously loaded Daily or 5m window awaits refresh; keep existing charts and live prices visible. Otherwise Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all six official periods complete, hidden after three seconds. Routine closed updates do not restart the timer.
+- Live Monitor: show a muted Refreshing label while any previously loaded period awaits a full refresh; keep existing charts and live prices visible. Otherwise Loading until Daily + 5m complete; yellow Ready while only those are complete; blue Ready when all six official periods complete, hidden after three seconds. These labels describe history readiness and never gate realtime data. Routine closed updates do not restart the timer.
 - Exhausted history retries and connection failures use one exclamation icon with reason on hover, retaining existing charts. Finite positive OHLC range contradictions do not produce UI warnings or retries; display official values unchanged.
 - Scan uses its local Daily date/status rather than live six-period readiness. Scan's date, preparation status and refresh controls follow [List UI](ui.md#scan-日期与准备状态).

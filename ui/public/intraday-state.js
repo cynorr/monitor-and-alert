@@ -15,14 +15,14 @@ export function stateAppearance(row, value) {
     row.dataset.intraday = value?.state ?? 'neutral';
 }
 export function adrText(value) {
-    if (!value)
+    if (!value?.state || value.up_adr == null || value.down_adr == null)
         return '—';
     const down = value.state.startsWith('down') ||
         (value.state === 'neutral' && value.role === 'holding' && value.down_adr > value.up_adr);
     return `${down ? '↓' : '↑'}${(down ? value.down_adr : value.up_adr).toFixed(2)}×`;
 }
 export function adrTitle(value) {
-    return value ? `Up ${value.up_adr.toFixed(2)}× · Down ${value.down_adr.toFixed(2)}× · Previous-day ADR20 ${value.adr20.toFixed(2)}%` : 'Waiting for current Regular price and Daily data';
+    return value?.up_adr != null && value.down_adr != null && value.adr20 != null ? `Up ${value.up_adr.toFixed(2)}× · Down ${value.down_adr.toFixed(2)}× · Previous-day ADR20 ${value.adr20.toFixed(2)}%` : 'Waiting for current Regular quote and historical ADR20';
 }
 export function volumeBadge(cell, value) {
     let badge = cell.querySelector('.volume-badge');

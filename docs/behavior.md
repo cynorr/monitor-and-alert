@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-16。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-10-23。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## Alert 与入选规则
 
@@ -16,7 +16,7 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote 与 SDK 实时 candle，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护。
 
-Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘。Quote 更新最新价格、持仓估值与 Alert；各周期活跃 candle 独立接收 SDK 推送。页面选股不改变券商订阅范围；切换模式按 Longbridge 数据要求增减 Scan 的额外 Quote，Focus/Holdings 的完整行情与 Alert 持续运行。关闭网页不停止后端。
+Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘；最新价格、ADR盘中状态、持仓估值与手动Alert直接使用Quote。同日重启复用各周期已确认历史；下一交易日准备由现有后台持续调度，不依赖解锁操作。当天各周期SDK序列先用于图表和盘中计算，官方历史随后覆盖已闭合同timestamp，所有下游消费同一份最新值。价格状态与分钟量比独立显示，开盘不重建行情，刷新期间保留有效显示；页面选择只调整待加载数据优先级，不扩大订阅或触发下载。切模式按Longbridge数据要求增减Scan额外Quote，Focus/Holdings后台持续运行。关闭网页不停止后端。
 
 ## Additional Info
 

@@ -2,6 +2,33 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-23：Longbridge 同日缓存复用与启动分级
+
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0、TypeScript5.9.3；北京时间10月23日零点后，对应美东10月22日Regular。停止原服务后，直接使用正式SQLite、当前Focus/Holdings与真实接口做两次35秒/55秒有界启动，分别始于12:42:03、12:43:13 ET；随后恢复普通Monitor服务。测量钩子仅在临时脚本内记录耗时和请求，不进入正式代码，没有额外并行行情context、Mock数据源或测试报警。
+
+- 两轮完整行情均为28个symbol。初始25个Focus共150个周期中，144个同日成功批次直接恢复；Holdings补入的有效缓存也逐周期复用。第一轮仅JBDI缺一根5m，执行一次count2；第二轮同一5m窗口内，有效symbol没有历史查询。两轮均只有TJGC六周期因官方最新closed缺失各尝试4次，返回码2明确表示该缺失，没有以SDK值冒充历史成功。
+- 从进入启动脚本计时，两轮全部Quote在4.8–5.4秒可用；25个具备有效状态输入的symbol同时得到ADR，无需等待SDK Daily。第一轮CumVol首次6.1秒、24个可用样本最晚28.0秒，LocalVol为6.4–20.3秒；第二轮25个可用状态的CumVol为5.8–20.5秒、LocalVol为7.0–20.1秒。暂缺某根或历史区间的symbol独立等待，未填零或阻塞其他股票。两轮28只的5m/15m SDK均在约20秒内完成初始化。
+- 正式服务恢复后跨过12:45闭合点：只读SQLite确认JBDI/AMC/TEAM的5m、15m批次在12:45:02至12:45:13提交，30m/1h仍为12:30批次，Daily/2h沿用此前有效批次；未重复全量。随后health为CONNECTED、Quote推送计数继续增长、Holdings任务运行；当前盘中状态范围25只，其中24只ADR/CumVol/LocalVol均可用，TJGC三项缺失与官方历史错误一致。
+- 161项后端定向回归通过；最后补强零点/周末与EMA首值用例后相关61项再次通过。覆盖同日逐周期恢复、缺一/多闭合边界、1h开盘对齐、SDK不能推进权威水位、连续运行跨零点及周末、9:25不重复刷新、恢复期间在途成功复用、Quote OHL同日保留/跨日清除、ADR不等Daily、价格与量比分开就绪、首个价格/EMA静默及既有Chart/Alert/Scan/Holdings消费契约。TypeScript构建与6项状态UI用例通过。
+- 清除盘前刷新标记及其调度，恢复不再无条件重拉六份历史窗口；未增加数据库表、额外水位或操作系统解锁监听。文档以Longbridge与Intraday State唯一规范为准，并同步职责、行为、UI及AGENTS入口。
+
+未覆盖：真实美东零点、系统断网/休眠/解锁、真实拆股日、首次无缓存的全名单启动，以及浏览器视觉与声音听辨。零点、周末、恢复和EMA首值由既有真实SQLite/交易日历定向用例覆盖，不作为上述真实事件的实测证据。量比仍需官方SDK逐symbol/周期初始化，不能承诺整个列表秒级齐备。
+
+## 2026-10-22：Longbridge 当天 SDK 序列与官方历史统一读取
+
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0；真实接口范围为当前Focus内AMC/MRNA及正式服务现有Focus/Holdings。先停止旧服务，使用两只股票的临时SQLite做有界初始化/恢复验证，再恢复正式Monitor；全程没有第二条并行券商连接，不创建测试报警，不注入断网或进行录屏。
+
+- 两symbol六周期初始化5.142秒，12个官方历史窗口各1000根，12个SDK周期注册。随后主动执行一次既有recover：原context与Quote callback代次不变，Quote推送计数3→5，无Quote/Trade退订或重订；六周期各重新取得SDK起点及官方历史，全部成功。含3秒后续观察的总用时12.988秒。
+- 正式服务09:25盘前全量刷新：MRNA Daily09:25:06、15m09:25:12、30m09:25:18、1h09:25:24、2h09:25:31完成；09:30开盘没有重启这些任务。09:30:07只读chart已同时包含Regular Quote、SDK Daily及5m，Daily volume465,301、5m volume18,470，各自保留官方口径。
+- 09:35:02官方5m增量以count2成功提交，缓存从1000自然增加到1001根，其他周期仍为09:25成功窗口，未在每5m重拉未闭合的大周期。
+- 153项定向回归通过：统一读取及权威覆盖、迟到SDK不能改回权威值、换桶无需等待REST、超过1000根、新日/开盘/恢复、限流与优先级、同秒历史修正后的量比/ADR失效、既有Manual Alert、SDK/Scan订阅范围、模拟器及持仓/Scan消费契约。只更新既有SDK测试替身的契约与旧周期数量，没有新建Mock数据源。未改TypeScript。
+- 最终版09:36:31启动，仍有120个历史任务pending时，Quote已CONNECTED且push_count为68；约09:37:48变为815，仅TJGC的六周期缺目标继续独立报错。MRNA的SDK Daily/分钟数据与列表状态在各自可用后持续显示。
+- 只读WS观察MRNA至09:40:15：09:35–09:40桶结束后0.142秒，closed序列已包含SDK根，volume338,866；2.822秒后同根被官方volume339,131覆盖，差265（约0.078%），OHLC均为233.95/237.29/233.035/236.66。557次开放volume数值变化；首次数据出现后Daily active消失、末根时间倒退、盘中状态消失均为0。旧一次观察因页面切Scan而中断，没有将其计作完整边界证据。
+- 重写Longbridge唯一说明，清除旧等待/清空/重建逻辑说明，同步README、behavior/development、Chart/UI、Intraday State及三处AGENTS。204个相关本地链接与git diff --check通过。正式Monitor服务已恢复；重启时既有Massive任务正常更新了运行缓存和splits.json，未改Massive处理逻辑。
+- 最后health核对：Monitor、Quote CONNECTED、push_count2,911、Holdings后台运行。TJGC六周期与PSIG当根5m的官方最新目标缺失，按既有有界回补独立报错/重试，保留可用SDK及旧历史，不填造权威根。
+
+未覆盖：真实断网/系统休眠、真实拆股日、1h/2h/Daily收盘、全部symbol逐根SDK/历史对照、浏览器视觉与声音听辨。边界连续性证据来自后端WS及只读SQLite，没有录屏或故障注入；SDK暂定误差与官方历史修正的产品前置条件保持不变。
+
 ## 2026-10-21：自动排除改为当天派生结果
 
 环境：本机macOS、Python3.13.1、TypeScript5.9.3；使用现有真实Daily SQLite、28份dated workspace、真实Scan截面及preferences。未建立Mock或另建行情连接，测试中的名单编辑只发生在真实数据的临时副本。

@@ -28,8 +28,8 @@ class DataValidator:
         # Historical holes are accepted, including within the returned recent window.
         # Only the current closed target must exist; never bridge old gaps.
         missing = [] if target in present else [target]
-        if batch and tuple(batch['session']) != session:
-            errors.append('Waiting for current session refresh')
+        if batch and batch['session'][0] != session[0]:
+            errors.append('Waiting for current trading-day refresh')
         if missing:
             errors.insert(0, f'Missing {len(missing)} bars; first timestamp {missing[0]}')
         result = {'complete': bool(batch) and not errors, 'target': target,

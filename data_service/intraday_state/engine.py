@@ -39,7 +39,6 @@ class IntradayState:
         self.volume = VolumeHistory(charts)
         self.focus, self.holdings = set(), set()
         self.quotes, self.previous, self.values, self.ranks, self.baselines = {}, {}, {}, {}, {}
-        self.volume_buckets = {}
         self.last_tick = 0
         self.day = None
 
@@ -48,7 +47,7 @@ class IntradayState:
         changed = (self.focus ^ focus) | (self.holdings ^ holdings)
         self.focus, self.holdings = focus, holdings
         for symbol in changed:
-            for mapping in (self.quotes, self.previous, self.values, self.ranks, self.baselines, self.volume.cache, self.volume_buckets):
+            for mapping in (self.quotes, self.previous, self.values, self.ranks, self.baselines, self.volume.cache):
                 mapping.pop(symbol, None)
 
     def reset(self):
@@ -56,7 +55,11 @@ class IntradayState:
         self.previous.clear()
         self.values.clear()
         self.ranks.clear()
-        self.volume_buckets.clear()
+
+    def recover(self):
+        """Keep displayed values while the first fresh quote reestablishes crossings."""
+        self.quotes.clear()
+        self.previous.clear()
 
     def quote(self, symbol, quote):
         now = int(self.now())
@@ -79,44 +82,40 @@ class IntradayState:
 
     def price(self, symbol, now):
         quote = self.quotes.get(symbol)
-        daily = self.charts.forming(symbol, '1d', now)
-        if not quote or not daily:
+        if not quote or not all(quote.get(field) for field in ('open', 'high', 'low')):
             return None
         price = quote['last_price']
-        _, rows, base, _ = self.charts.closed(symbol, '1d')
+        revision, rows, base, _ = self.charts.closed(symbol, '1d')
         day = datetime.fromtimestamp(now, ET).date()
         cached = self.baselines.get(symbol)
-        if cached is None or cached[0] != day:
+        signature = day, revision
+        if cached is None or cached[0] != signature:
             closed = [row for row in rows if datetime.fromtimestamp(row['time'], ET).date() < day][-20:]
             adr = adr_adv({key: [row[key] for row in closed] for key in ('high', 'low', 'close', 'volume')})['adr20'] if closed else None
-            self.baselines[symbol] = day, float(adr) if adr is not None else None
+            self.baselines[symbol] = signature, float(adr) if adr is not None else None
         adr = self.baselines[symbol][1]
         if adr is None or adr <= 0:
             return None
-        up = ((price - daily['low']) / daily['low']) / (adr / 100)
-        down = ((daily['high'] - price) / daily['high']) / (adr / 100)
+        up = ((price - quote['low']) / quote['low']) / (adr / 100)
+        down = ((quote['high'] - price) / quote['high']) / (adr / 100)
         holding = symbol in self.holdings
-        above = price > daily['open']
+        above = price > quote['open']
         up_level = level(up, self.config['up_notice'], self.config['up_urgent']) if holding or above else 0
         down_level = level(down, self.config['down_notice'], self.config['down_urgent']) if holding else 0
         state = ('down-urgent' if down_level == 2 else 'down-notice') if down_level else (
                 'up-urgent' if up_level == 2 else 'up-notice' if up_level else 'neutral')
-        indicators = preview(base, daily)
+        indicators = preview(base, self.charts.forming(symbol, '1d', now))
         distances = {name: price - indicators[name]['value'] for name in ('ema10', 'ema20') if name in indicators}
         return {'role': 'holding' if holding else 'candidate', 'state': state, 'above_open': above,
                 'adr20': adr, 'up_adr': up, 'down_adr': down, 'up_level': up_level, 'down_level': down_level,
                 'price': price, 'timestamp': quote['timestamp'], 'ema_distances': distances}
 
     def update(self, symbol, now):
-        value = self.price(symbol, now)
-        if value is None:
-            self.values.pop(symbol, None)
-            self.previous.pop(symbol, None)
-            self.ranks.pop(symbol, None)
-            self.volume_buckets.pop(symbol, None)
+        if symbol not in self.focus | self.holdings or not self.calendar.is_open(now):
             return
+        value = self.price(symbol, now)
         old = self.previous.get(symbol)
-        if old is not None:
+        if value is not None and old is not None:
             up = value['up_level'] > old['up_level']
             down = value['down_level'] > old['down_level']
             ema = (value['role'] == 'holding' or value['above_open']) and any(
@@ -128,24 +127,36 @@ class IntradayState:
                     self.notify(symbol, direction)
                 log.info('Intraday State %s %s price=%.4f up=%.2f down=%.2f', symbol, direction,
                          value['price'], value['up_adr'], value['down_adr'])
-        self.previous[symbol] = value
-        volumes = {key: self.values.get(symbol, {}).get(key) for key in ('cum_vol', 'local_vol')}
+        if value is not None:
+            self.previous[symbol] = value
+            if self.values.get(symbol, {}).get('state') is None:
+                self.ranks.pop(symbol, None)
+        else:
+            value = self.values.get(symbol) or {
+                'role': 'holding' if symbol in self.holdings else 'candidate', 'state': None,
+                **dict.fromkeys(('above_open', 'adr20', 'up_adr', 'down_adr', 'up_level', 'down_level', 'price', 'timestamp'))}
+        volumes = dict(zip(('cum_vol', 'local_vol'), self.volume.current(symbol, now)))
+        for key, comparison in volumes.items():
+            if comparison['actual'] is None and self.values.get(symbol, {}).get(key):
+                volumes[key] = self.values[symbol][key]
+            else:
+                comparison['level'] = sum(comparison['ratio'] >= threshold for threshold in self.config['volume_levels']) if comparison['ratio'] is not None else 0
         self.values[symbol] = {key: val for key, val in value.items() if key != 'ema_distances'} | volumes
         self.rank(symbol, now)
 
-    def rank(self, symbol, now, *, boundary=False):
+    def rank(self, symbol, now):
         value = self.values[symbol]
         if value['role'] == 'holding':
-            tier = {'down-urgent': 4, 'down-notice': 3, 'up-urgent': 2, 'up-notice': 1, 'neutral': 0}[value['state']]
+            tier = {'down-urgent': 4, 'down-notice': 3, 'up-urgent': 2, 'up-notice': 1, 'neutral': 0, None: 0}[value['state']]
         else:
-            tier = 3 if value['up_level'] == 2 else 2 if value['up_level'] else int(value['above_open'])
+            tier = 3 if value['up_level'] == 2 else 2 if value['up_level'] else int(bool(value['above_open']))
         volume_levels = [sum(comparison['ratio'] >= threshold for threshold in self.config['volume_levels'])
                          if comparison and comparison['ratio'] is not None else 0
                          for comparison in (value['cum_vol'], value['local_vol'])]
         bucket = self.calendar.active_start('5m', now)
         previous = self.ranks.get(symbol)
         # Ordinary strength, volume ranks and demotions wait for the 5m boundary.
-        if boundary or previous is None or previous[0] != bucket or (tier > previous[1][0] and value['state'] != 'neutral'):
+        if previous is None or previous[0] != bucket or (tier > previous[1][0] and value['state'] != 'neutral'):
             self.ranks[symbol] = bucket, [tier, *volume_levels]
         value['rank'] = self.ranks[symbol][1]
 
@@ -159,14 +170,6 @@ class IntradayState:
         self.last_tick = now
         for symbol in self.focus | self.holdings:
             self.update(symbol, now)
-            if symbol in self.values:
-                cumulative, local = self.volume.current(symbol, now)
-                for comparison in (cumulative, local):
-                    comparison['level'] = sum(comparison['ratio'] >= threshold for threshold in self.config['volume_levels']) if comparison['ratio'] is not None else 0
-                self.values[symbol].update(cum_vol=cumulative, local_vol=local)
-                bucket = self.calendar.active_start('5m', now)
-                self.rank(symbol, now, boundary=self.volume_buckets.get(symbol) != bucket)
-                self.volume_buckets[symbol] = bucket
 
     def state(self):
         return {'enabled': True, 'symbols': self.values}

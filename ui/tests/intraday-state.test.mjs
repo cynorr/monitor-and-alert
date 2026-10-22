@@ -8,6 +8,13 @@ import { attentionAppearance, attentionState } from '../public/attention.js';
 const row = (ticker, extra = {}) => ({ ticker, symbol: ticker + '.US', status: 'focus', ...extra });
 const state = (rank, extra = {}) => ({ rank, state: 'up-notice', up_adr: .7, down_adr: .2, adr20: 5, ...extra });
 
+test('volume-only state leaves ADR empty until its own inputs arrive', () => {
+    const partial = state([0, 2, 1], { state: null, up_adr: null, down_adr: null, adr20: null });
+    assert.equal(adrText(partial), '—');
+    assert.match(adrTitle(partial), /Waiting/);
+    assert.ok(compareRank(partial, state([0, 0, 0])) < 0);
+});
+
 test('pins keep owner order; price, cumulative and local discrete tiers precede stable original order', () => {
     const rows = [row('A'), row('PIN2', { pinned: true, pin_index: 1 }), row('B'), row('C'), row('PIN1', { pinned: true, pin_index: 0 }), row('D')];
     const states = { 'A.US': state([2, 2, 1]), 'B.US': state([3, 0, 0]), 'C.US': state([2, 2, 3]), 'D.US': state([2, 2, 1]) };

@@ -1,8 +1,8 @@
 {
   "status": "OK",
   "start_date": "2024-07-12",
-  "end_date": "2026-10-20",
-  "resultsCount": 3501,
+  "end_date": "2026-10-21",
+  "resultsCount": 3506,
   "results": [
     {
       "id": "E69d6ca86b3758d1626b2a0fd5b12cefe0ac75be322fe36b805b5597178356118",
@@ -6752,7 +6752,7 @@
       "split_to": 1.0162162162162163,
       "ticker": "AFOVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.915433
+      "historical_adjustment_factor": 0.902877
     },
     {
       "id": "Ef2ee29dec3dc87df506bc7e2e84515abdfab53f51cec04bdf1d05582e3937432",
@@ -13259,7 +13259,7 @@
       "split_to": 1.0068027210884354,
       "ticker": "AFOVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.930278
+      "historical_adjustment_factor": 0.917519
     },
     {
       "id": "Eae2a0153a84efc1fb2835da43d2854041267161a99904b9197e761106b831524",
@@ -13268,7 +13268,7 @@
       "split_to": 1.0197278911564627,
       "ticker": "AFOVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.936606
+      "historical_adjustment_factor": 0.92376
     },
     {
       "id": "Eaa1e692a7c28e63940e3a35e34f19d61369d140378f8d668b4d69033db5e9c4a",
@@ -18806,7 +18806,7 @@
       "historical_adjustment_factor": 160.0
     },
     {
-      "id": "E4287f60ce435eb25d8c0452cdbc448c5485d65a0b11b13aeb255b46173178eaa",
+      "id": "E1961d40baa5fe68e38dbb1b476fc877e6d24466738448f10316c260a4898b1ed",
       "execution_date": "2025-12-23",
       "split_from": 1.0,
       "split_to": 3.0,
@@ -19112,7 +19112,7 @@
       "historical_adjustment_factor": 6.0
     },
     {
-      "id": "Ed2efadc793f49a38bff002616b5acf9e8117c8b35c270ab7c545269c6aa26928",
+      "id": "Ed26e8dac7dc7cf22ea7996fd78592034173187e7452c0b49109838f6408815a1",
       "execution_date": "2026-01-02",
       "split_from": 30.0,
       "split_to": 1.0,
@@ -20000,7 +20000,7 @@
       "split_to": 1.0173913043478262,
       "ticker": "AFOVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.955083
+      "historical_adjustment_factor": 0.941984
     },
     {
       "id": "E90431f79042e09da5c2f724fff6c9e04c3ebcf7c8accf9acef997cd5f40c0195",
@@ -20009,7 +20009,7 @@
       "split_to": 1.0036231884057971,
       "ticker": "AFOVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.971693
+      "historical_adjustment_factor": 0.958366
     },
     {
       "id": "Ef104e39584c6f3c108ee93c6849967c0f2d50946e5944ccb8d0af86d5f6c97cc",
@@ -23819,7 +23819,7 @@
       "historical_adjustment_factor": 25.0
     },
     {
-      "id": "E4727fb74a1d41d26ca96d167dcf5dd266792fe2b24a38cd60dd8147f1931e312",
+      "id": "Ef42e81b29689efc7e0db8f11354194b26fa825d40d3a87fcd00ee0b24384a7cf",
       "execution_date": "2026-04-30",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -24242,7 +24242,7 @@
       "historical_adjustment_factor": 15.0
     },
     {
-      "id": "E0070baa8b8586e6dfa7ec3aa4cce3d07f506b65da2113d5e3600b1d12fcefbc1",
+      "id": "E89ff98c46b815933b75a011c2ff1b494412cae95a1141669534da4fb9cf2a909",
       "execution_date": "2026-05-08",
       "split_from": 1.0,
       "split_to": 1.047337278106509,
@@ -24293,7 +24293,7 @@
       "split_to": 1.0,
       "ticker": "DKI",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 16.0
+      "historical_adjustment_factor": 800.0
     },
     {
       "id": "E122d886e244d4d86046d4dd136971e97c2813d24f40658ba90c484329d96e656",
@@ -28325,7 +28325,7 @@
       "split_to": 1.003725782414307,
       "ticker": "AFOVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.975214
+      "historical_adjustment_factor": 0.961839
     },
     {
       "id": "Ec756c2f65ff14fe3ba4823a1584f9cd066e61f024eeeb712054b9f983746516a",
@@ -28334,7 +28334,7 @@
       "split_to": 1.0216095380029806,
       "ticker": "AFOVF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.978848
+      "historical_adjustment_factor": 0.965422
     },
     {
       "id": "E5f37fa0a84a41524331ac8a3fce8b5d9dde2efa84ee068e0d703534ff9e351b5",
@@ -31379,6 +31379,24 @@
       "historical_adjustment_factor": 16.0
     },
     {
+      "id": "E90ba4bef7dd22dabc988e5d029bb1a325fe3205dfd0e5bd67456e7c3010cbd17",
+      "execution_date": "2026-10-16",
+      "split_from": 1.0,
+      "split_to": 1.010119940029985,
+      "ticker": "AFOVF",
+      "adjustment_type": "stock_dividend",
+      "historical_adjustment_factor": 0.986285
+    },
+    {
+      "id": "E9e70b34cc219f83100ed240b492adfacd0aabcef4ea134ffd07c794ca389ff5b",
+      "execution_date": "2026-10-16",
+      "split_from": 1.0,
+      "split_to": 1.0037481259370316,
+      "ticker": "AFOVF",
+      "adjustment_type": "stock_dividend",
+      "historical_adjustment_factor": 0.996266
+    },
+    {
       "id": "E654004f4417352cb6e247103a38d3bbd709a13f6d5700fd17eea2cfd6b6d2d4c",
       "execution_date": "2026-10-16",
       "split_from": 5.0,
@@ -31512,6 +31530,33 @@
       "ticker": "REVB",
       "adjustment_type": "reverse_split",
       "historical_adjustment_factor": 7.0
+    },
+    {
+      "id": "E9efd2492fb51181186a87c4fc40ef3ab3a0b87b993424802f03d898957c36ac0",
+      "execution_date": "2026-10-21",
+      "split_from": 5.0,
+      "split_to": 1.0,
+      "ticker": "EHGO",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 5.0
+    },
+    {
+      "id": "E448c68d42d8c6850d7f53a0a8ef684e11eaf67ef14fa34856b03f5773de346df",
+      "execution_date": "2026-10-21",
+      "split_from": 10.0,
+      "split_to": 1.0,
+      "ticker": "SCNLF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 10.0
+    },
+    {
+      "id": "Ee79d05549be355f28b76ca5629016843211d1d80e63ca815fc58186bd2ae4459",
+      "execution_date": "2026-10-21",
+      "split_from": 200.0,
+      "split_to": 1.0,
+      "ticker": "STSUF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 200.0
     }
   ]
 }

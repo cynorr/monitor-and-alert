@@ -90,6 +90,7 @@ class FakeBroker:
         return self
 
     def set_on_quote(self, callback): self.callback = callback
+    def set_on_candlestick(self, callback): self.candle_callback = callback
     def check(self, symbols):
         assert set(symbols) <= self.allowed
 
@@ -103,6 +104,12 @@ class FakeBroker:
         self.calls.append(('subscribe_quote' if quote_only else 'subscribe',tuple(symbols)))
 
     async def unsubscribe(self, ctx, symbols, *, quote_only=False): self.calls.append(('unsubscribe_quote' if quote_only else 'unsubscribe',tuple(symbols)))
+    async def subscribe_candles(self, ctx, symbol, tf):
+        self.check([symbol])
+        self.calls.append(('candle', symbol, tf))
+        return []
+
+    async def unsubscribe_candles(self, ctx, symbol, tf): self.calls.append(('remove_candle', symbol, tf))
     async def snapshot(self, ctx, symbols):
         self.check(symbols)
         return [SimpleNamespace(symbol=symbol, timestamp=datetime.now(timezone.utc), last_done=10, volume=100) for symbol in symbols]

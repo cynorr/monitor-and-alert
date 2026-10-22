@@ -91,11 +91,11 @@ class BarDownloader:
         session = self.calendar.window_session(int(self.now()))
         if count != 1000:
             batch = self.store.batch(symbol, timeframe)
-            if batch is None or tuple(batch['session']) != session:
+            if batch is None or batch['session'][0] != session[0]:
                 return None
         raw = await self.broker.candles(symbol, timeframe, count, background=background)
         as_of = int(self.now())
-        if self.calendar.window_session(as_of) != session:
+        if self.calendar.window_session(as_of)[0] != session[0]:
             return None
         bars, rejected, forming = self._parse(raw, symbol, timeframe, as_of)
         target = self.calendar.latest_closed(timeframe, as_of)

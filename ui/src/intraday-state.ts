@@ -2,9 +2,9 @@ import type { Ticker } from './types.js';
 
 export type VolumeState = { ratio: number | null; actual: number | null; average: number | null; samples: number; level: number; window?: string };
 export type SymbolState = {
-    role: 'candidate' | 'holding'; state: 'neutral' | 'up-notice' | 'up-urgent' | 'down-notice' | 'down-urgent';
-    above_open: boolean; adr20: number; up_adr: number; down_adr: number;
-    up_level: number; down_level: number; rank: number[]; timestamp: number;
+    role: 'candidate' | 'holding'; state: 'neutral' | 'up-notice' | 'up-urgent' | 'down-notice' | 'down-urgent' | null;
+    above_open: boolean | null; adr20: number | null; up_adr: number | null; down_adr: number | null;
+    up_level: number | null; down_level: number | null; rank: number[]; timestamp: number | null;
     cum_vol: VolumeState | null; local_vol: VolumeState | null;
 };
 export type IntradayState = { enabled: boolean; symbols: Record<string, SymbolState> };
@@ -24,13 +24,13 @@ export function stateAppearance(row: HTMLElement, value?: SymbolState) {
     row.dataset.intraday = value?.state ?? 'neutral';
 }
 export function adrText(value?: SymbolState) {
-    if (!value) return '—';
+    if (!value?.state || value.up_adr == null || value.down_adr == null) return '—';
     const down = value.state.startsWith('down') ||
         (value.state === 'neutral' && value.role === 'holding' && value.down_adr > value.up_adr);
     return `${down ? '↓' : '↑'}${(down ? value.down_adr : value.up_adr).toFixed(2)}×`;
 }
 export function adrTitle(value?: SymbolState) {
-    return value ? `Up ${value.up_adr.toFixed(2)}× · Down ${value.down_adr.toFixed(2)}× · Previous-day ADR20 ${value.adr20.toFixed(2)}%` : 'Waiting for current Regular price and Daily data';
+    return value?.up_adr != null && value.down_adr != null && value.adr20 != null ? `Up ${value.up_adr.toFixed(2)}× · Down ${value.down_adr.toFixed(2)}× · Previous-day ADR20 ${value.adr20.toFixed(2)}%` : 'Waiting for current Regular quote and historical ADR20';
 }
 export function volumeBadge(cell: HTMLElement, value?: VolumeState | null) {
     let badge = cell.querySelector<HTMLElement>('.volume-badge');

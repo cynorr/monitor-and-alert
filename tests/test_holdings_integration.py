@@ -10,7 +10,7 @@ import pytest
 from aiohttp import ClientSession, web
 
 from data_service.config import Ticker
-from data_service.calendar import TradingCalendar
+from data_service.calendar import PHASES, TradingCalendar
 from data_service.holdings import Holdings, build, value_positions
 from data_service.http_api import create_app
 from data_service.service import DataService
@@ -398,7 +398,7 @@ def test_independent_membership_shares_market_state_and_never_changes_workspace(
     try:
         existing = service.sync['XYZ.US', '5m']
         service.update_holdings(['XYZ.US', 'OTHER.US'])
-        assert service.symbols == ['XYZ.US', 'OTHER.US'] and len(service.sync) == 10
+        assert service.symbols == ['XYZ.US', 'OTHER.US'] and len(service.sync) == 2 * len(PHASES)
         assert service.sync['XYZ.US', '5m'] is existing
         assert [row['ticker'] for row in service.board()] == ['XYZ']
         service.update_tickers([])

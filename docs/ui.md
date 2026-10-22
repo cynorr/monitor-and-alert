@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-16. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-22. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -11,7 +11,7 @@ Updated: 2026-10-16. This file is the UI entry point and the only current specif
 
 ## Chart UI
 
-Chart layout, colors, margins, headers, [volume and five-day comparison](chart-ui.md#volume-comparison), scale defaults, mouse/zoom, linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak chart status hint. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; visible history depends on that spacing and panel width.
+Chart layout, colors, margins, headers, [volume and five-day comparison](chart-ui.md#volume-comparison), scale defaults, mouse/zoom, linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak status hint while existing charts and valid values remain visible. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; visible history depends on that spacing and panel width.
 
 ## Alert UI
 
@@ -20,6 +20,8 @@ Scan/Monitor 图表设置、横线操作、统一未读边框与后台声音的�
 ## Intraday State UI
 
 独立需求、ADR字段、CumVol/LocalVol Badge和In Play自动聚集只在 [intraday-state.md](intraday-state.md#展示与-in-play) 维护。复用现有section，无展示模式选择；空section整个隐藏，全表空时只显示一份空状态。Holdings列与批次见 [holdings-ui.md](holdings-ui.md)。
+
+ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，不等待整行或全部股票完成初始化。
 
 ## Logo / Icon
 

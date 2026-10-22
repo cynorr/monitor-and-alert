@@ -105,7 +105,9 @@ class Broker:
                                TradeSessions.Intraday, symbols=[symbol], full=True)
 
     async def unsubscribe_candles(self, ctx, symbol, timeframe):
-        await self.call(ctx.unsubscribe_candlesticks, symbol, SDK_PERIODS[timeframe])
+        # Quote/Trade remain explicitly subscribed until all periods are removed.
+        # This operation therefore only removes the SDK's local period state.
+        await ctx.unsubscribe_candlesticks(symbol, SDK_PERIODS[timeframe])
 
     async def snapshot(self, ctx, symbols: list[str]):
         self.check(symbols)

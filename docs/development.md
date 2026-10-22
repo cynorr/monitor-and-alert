@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-16。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-10-23。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -21,13 +21,13 @@
 | broker.py | 单 SDK context、static_info、原生六周期历史/实时订阅、Quote / Trade、请求预算 |
 | snaptrade.py | 独立异步签名GET、指定账户、10次/滚动分钟预算、原始快照获取与成功提交；不提供HTTP服务、不调用Longbridge |
 | holdings.py | 买卖归属、余仓与当日清仓、Decimal估值/日基准/Days、30秒刷新与失败保留；唯一数据需求见holdings-data.md |
-| calendar.py | UTC/ET、XNYS、交易日刷新阶段、实际闭合边界、5m 到 2h 时间网格 |
+| calendar.py | UTC/ET、XNYS、交易日与时段、实际闭合边界、5m 到 2h 时间网格 |
 | downloader.py | 历史/实时共用 parse/validate；最新目标成功后提交、拒绝行诊断、OHLC 比较日志 |
 | store.py | 逐根官方 bars、最新成功批次、单窗口普通提交及 revision |
 | validator.py | 最近窗口完整性检查与缓存；不联网、不写状态文件 |
 | service.py | 每个 ticker/官方周期一份 SyncState，排序、执行、重试、恢复；API 组合 |
-| quotes.py | Quote 标准化、六周期 candle 订阅生命周期、callback 代次、snapshot/watchdog、恢复通知 |
-| charts.py / indicators.py | 原生 candle 显示与图表缓存；唯一指标公式 |
+| quotes.py | Quote 标准化与批量订阅、六周期 candle 起点/推送、callback 代次、snapshot/watchdog与恢复 |
+| charts.py / indicators.py | SDK当天序列与官方closed统一读取、revision/指标缓存；唯一指标公式 |
 | http_api.py | aiohttp 静态页面、诊断 HTTP、List mutation、WebSocket/Origin 校验 |
 | ui/src/main.ts / types.ts | WS 选择与重连、显示状态、契约 |
 | ui/src/list.ts | 统一内联搜索/新增、输入查询生命周期、置顶与拖动/快捷键移动、折叠、共用列定义和按字段更新行 |
@@ -136,25 +136,25 @@ SnapTrade固定请求配置account_id，不通过/accounts假设仅一个账户�
 
 ## Longbridge 同步与缓存实现
 
-获取、刷新时机、替换、失败与 Ready 的完整规则只在 [longbridge-data.md](longbridge-data.md) 维护。`service.sync[(symbol, timeframe)]` 是唯一任务记录；`calendar.window_session` 给出美东交易日与开盘前/开盘后刷新阶段。scheduler先处理阶段变化，再处理closed目标；同一任务在途时不重复请求，阶段变化或恢复到达不能被旧请求完成覆盖。reconcile复用调度器，所有任务完成或本轮耗尽即退出；诊断GET不改变任务。
+完整数据规则只在 [longbridge-data.md](longbridge-data.md) 维护。`service.sync[(symbol, timeframe)]` 是唯一历史任务记录；启动及成员加入从同日成功batch与`store.latest`恢复complete和权威closed目标，scheduler只补实际缺少的闭合边界。水位仅查SQLite，不读含SDK暂定行的ChartCache。新交易日由现有scheduler零点后整窗准备，Regular开盘不重建订阅；没有9:25额外刷新或解锁监听。恢复复用同一检查，同日成功在途结果不重复排队，跨日新要求不能被旧结果抹掉。reconcile复用调度器，任务完成或本轮耗尽即退出；GET不改变任务。
 
-`downloader.fetch` 在请求前后核对刷新阶段，响应通过逐根校验及最新closed目标检查后才提交。`store.upsert(replace=True)` 用已有SQLite连接的一次普通提交替换单个symbol/周期，普通增量按主键覆盖。bars保持共用逐根结构；batches仅含symbol、timeframe和payload，payload记录成功请求的阶段、时间与数量。数据库采用WAL/NORMAL；不设行数裁剪、历史水位、迁移或备份框架。
+`downloader.fetch`请求前后只核对交易日，允许跨盘前/Regular；校验最新closed目标及每根结构后提交。`store.upsert(replace=True)`在一次SQLite事务内替换单symbol/周期旧窗口，增量按主键覆盖。bars只含官方closed；batches记录成功请求日期、时间、数量与拒绝行。数据库采用WAL/NORMAL，不裁剪行数或管理旧历史。
 
-bars revision在行内容变化或窗口替换后递增。validator按revision、closed目标及刷新阶段缓存结果，不扫描历史连续性；共用Bar校验只在 [upstream-daily-data.md](upstream-daily-data.md) 定义。图表历史仅依赖本周期 revision，比较最终显示序列，内容未变不重发。未刷新周期的旧窗口继续独立展示，不参与当前 active 和本地 Daily 报价基准修正。
+`ChartCache.live`保存当天SDK全序列，`closed`先取其中已结束根，再由`store.window`覆盖同timestamp。依赖为store revision、SDK已结束序列revision及当前closed目标；只有最终显示序列变化才递增对外revision、重建指标和成交量参考。`forming`独立读取本周期当前SDK根，不等待历史Ready。`chart`沿用revision/bars/active/indicator_preview契约，不再缓存整份等待中的显示快照。
 
-ChartCache.views 每个 symbol/周期只保留最近一份完整显示，沿用 revision/bars/active/indicator_preview 契约。跨桶时检查本周期最新 closed 已到达及下一 SDK open 可用；等待时返回上一份快照。官方替换与新 active 同一条 WS view 发布，Daily 无 5m 依赖。移出范围清掉 active/views；GET 不下载。
+历史官方修正只改变统一数据；图表、量比、EMA和ADR按同一合并revision失效。价格Quote独立直接可用，不拿历史close替代最新价。`/v1/bars`读取统一closed序列；`/v1/readiness`检查官方历史任务，状态不拦住实时数据。
 
-UI契约为 `status: {stage: loading|basic|full, errors: string[], refreshing: boolean}`。正常closed等待不重置Ready；刷新状态由现有任务派生。详细complete/target/latest/count/missing/errors只在诊断接口提供。显示规范见 [Chart status](chart-ui.md#chart-status)。
+UI契约仍为 `status: {stage: loading|basic|full, errors: string[], refreshing: boolean}`，由现有历史任务派生。显示规则见 [Chart status](chart-ui.md#chart-status)。
 
 ## 实时 candle 与时段
 
-QuoteService 在同一 SDK context 注册 Quote 与 candle callback，通过现有 asyncio loop 派发并检查 callback 代次和当前白名单。`candle_subscribed[(symbol, tf)]` 管理六周期订阅，`candle_errors` 保留独立错误；Quote 成功不能清掉 candle 错误。订阅返回的尾根以 initial 标记进入同一处理入口，已到达的新推送不能被较旧初始化覆盖。
+`QuoteService`在同一context注册Quote/candle callback，经既有asyncio loop派发并检查回调代次和当前范围。Quote/Trade和快照按批建立；`candle_subscribed`、`candle_errors`分别管理周期注册与错误。初始化排序与历史任务共同优先当前选中股票，其他按周期推进。
 
-`downloader.parse_candle` 是历史与实时共用的 Bar 转换/校验；closed 校验用于落盘，实时只接受当前网格时间桶。历史响应拒绝非法行并写入当前 batch 的 rejected；最新 closed 目标无效或缺失仍失败回补。上下界矛盾照常保留与记录。DataService.apply_candle 将原始完整 OHLCV 交给 `ChartCache.active[(symbol, tf)]`，不读取其他周期或 Quote。SDK confirmed 不落盘，closed 仅由 downloader 提交。
+`subscribe_candlesticks`返回的序列及callback统一以list送入`DataService.apply_candles`，由`downloader.parse_candle`复用Bar校验；只接收当天有效行。初始化期间用短暂字典接住新推送，返回时按timestamp覆盖起点。全量起点成功后替换该SDK窗口，普通push覆盖单根；volume始终覆盖。NoAdjust隔日行不进入应用缓存，SDK confirmed不写SQLite。
 
-DataService.recover 清掉 active，刷新窗口并唤醒行情循环；先退订 candle 再重新订阅，保证 SDK 取得新起点。connect 的 on_reset 同时重置 Alert 起点，on_reconnect 只刷新 closed 任务，避免递归恢复。历史请求仍共用同一 broker/context。行情基础与限制见 [Longbridge 数据说明](longbridge-data.md)。
+`DataService.recover`重置报警比较起点、刷新历史并唤醒既有QuoteService循环。循环逐周期本地退订再注册，期间不关闭Quote/Trade或callback，保留已有应用数据直至新起点到达。真正连接失败才进入disconnect/connect；connect的on_reset重置比较起点，on_reconnect只刷新历史，避免递归恢复。只有实际网络请求经过Broker公共限流，本地candle删除不消耗请求额度。
 
-Quote 接收不按 UI 选择筛选；regular/pre/post/overnight 共用 apply，snapshot 归一化后走同一入口，时段报价与 candle 独立。active preview 只用本周期已缓存的指标标量。
+Quote的regular/pre/post/overnight统一标准化；snapshot与push走同一入口，快照不增加push_count。Quote推送计数表示应用收到的有效Quote消息数，不代表Trade或candle总数。各时段报价与candle分别存内存；preview只使用本周期缓存标量。validator的complete是官方历史诊断，不是SDK显示开关。
 
 ## 传输
 
@@ -182,11 +182,11 @@ Scan批量动作同样使用POST /v1/list：`{action:"move",tickers:[...],source
 
 ## Intraday State 实现
 
-唯一需求见 [intraday-state.md](intraday-state.md)，模块维护见 [AGENTS.md](../data_service/intraday_state/AGENTS.md)。DataService在正式Workbench完整会话创建IntradayState，Quote回调与Daily candle更新负责价格/均线变化，现有scheduler每秒更新量比和边界rank；不创建新任务服务，不依赖HTTP或图表选择。Mock默认没有声音，--symbols子集不创建状态模块。
+唯一需求见 [intraday-state.md](intraday-state.md)，模块维护见 [AGENTS.md](../data_service/intraday_state/AGENTS.md)。DataService在正式Workbench完整会话创建IntradayState；Quote、SDK candle及官方历史提交统一调用update，立即计算当前价格状态、量比与等级；现有scheduler秒级tick处理经过时间与边界rank。不创建新任务服务，不依赖HTTP或图表选择。Mock默认没有声音，--symbols子集不创建状态模块。
 
-Workbench.refresh_alert_scope同时传入Focus候选与当前余仓角色，排除仅当天清仓的ticker；不改变原手动Alert与行情白名单。状态/穿越/冻结ADR与排序等级由engine.py维护；原始行情和SQLite仍由既有模块管理。恢复清掉比较起点，首份完整状态静默，派生状态不另存业务库，不逐份Quote落盘。
+Workbench.refresh_alert_scope同时传入Focus候选与当前余仓角色，排除仅当天清仓的ticker；不改变原手动Alert与行情白名单。状态/穿越/截至昨日ADR与排序等级由engine.py维护，ADR缓存键包含日线revision。盘中ADR直接使用Quote的Regular开高低和最新价，不等待SDK Daily；EMA仍复用Daily preview。价格状态和分钟量比独立就绪，统一接口中缺价格字段为null，volume仍可用；前端按字段显示缺失。恢复只清比较起点，保留有效显示，首份新价格状态静默；派生状态不另存业务库，不逐份Quote落盘。
 
-volume.py把旧ChartCache.closed_volume的连续区间覆盖核心恢复为共用计算，只读现有多周期closed及SDK open。按store revision缓存分钟volume索引；每个历史日期独立覆盖后再平均。配置直接读取config/intraday-state.json，启动校验阈值顺序，不增加配置监听或规则编辑器。
+volume.py只读ChartCache统一closed及SDK open，按合并revision缓存多周期分钟volume索引；区间覆盖只返回标量，每个历史日期独立覆盖后再平均。配置直接读取config/intraday-state.json，启动校验阈值顺序，不增加配置监听或规则编辑器。
 
 GET /v1/intraday-state只读返回enabled和symbols；现有list快照增加同名intraday字段，Scan历史关闭该字段。symbol状态含role/state、ADR20、上下行倍数/等级、above_open、price/timestamp、cum_vol/local_vol和rank。量比含ratio/actual/average/samples/level，LocalVol另含window；缺值为null。rank是价格/CumVol/LocalVol三个离散整数，前端不重新计算业务阈值。
 

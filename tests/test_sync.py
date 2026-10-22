@@ -140,7 +140,7 @@ def test_missing_latest_closed_target_triggers_full_retry(tmp_path, cal):
     finally: service.store.close()
 
 
-def test_recovery_during_inflight_request_is_not_lost(tmp_path, cal):
+def test_recovery_reuses_successful_inflight_history_request(tmp_path, cal):
     now=at('2026-09-18T10:01')
     class Fake:
         async def candles(self, symbol, tf, count, **kwargs):
@@ -150,7 +150,7 @@ def test_recovery_during_inflight_request_is_not_lost(tmp_path, cal):
     try:
         asyncio.run(service._execute(('PAYS.US','5m')))
         state=service.sync['PAYS.US','5m']
-        assert state.pending and state.refresh and not state.complete
+        assert not state.pending and not state.refresh and state.complete
     finally: service.store.close()
 
 
@@ -168,6 +168,82 @@ def test_partial_and_full_status_and_no_redundant_price_revision(tmp_path, cal):
         service.store.upsert(rows,now)
         assert service.store.revisions['PAYS.US','5m']==rev
     finally: service.store.close()
+
+
+def test_opening_does_not_reset_stream_or_loaded_windows(tmp_path, cal):
+    now = [at('2026-09-18T09:29')]
+    service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: now[0])
+    try:
+        for tf, state in ((key[1], state) for key, state in service.sync.items()):
+            state.pending = state.refresh = False
+            state.complete = True
+            state.target = cal.latest_closed(tf, now[0])
+        now[0] = at('2026-09-18T09:30')
+        service._schedule(now[0])
+        assert not service.quotes.candle_refresh and not service.quotes.changed.is_set()
+        assert all(state.complete and not state.pending for state in service.sync.values())
+    finally:
+        service.store.close()
+
+
+@pytest.mark.parametrize('restart, pending, refresh', [
+    ('2026-09-18T10:04:59', (), ()),
+    ('2026-09-18T10:05:02', ('5m',), ()),
+    ('2026-09-18T10:20:02', ('5m', '15m'), ('5m',)),
+    ('2026-09-18T10:30:02', ('5m', '15m', '30m', '1h'), ('5m', '15m')),
+])
+def test_restart_restores_each_official_window_and_only_schedules_missing_boundaries(tmp_path, cal, restart, pending, refresh):
+    initial = at('2026-09-18T10:01')
+    service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: initial)
+    for tf in PHASES:
+        install_batch(service.store, cal, initial, tf=tf)
+    service.store.close()
+    service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: at(restart))
+    try:
+        assert all(state.complete for state in service.sync.values())
+        assert {tf for (_, tf), state in service.sync.items() if state.pending} == set(pending)
+        assert {tf for (_, tf), state in service.sync.items() if state.refresh} == set(refresh)
+        # A newer SDK provisional bar cannot advance the official repair watermark.
+        service.charts.apply_candle('PAYS.US', '5m', {'time': cal.latest_closed('5m', at(restart)),
+            'open': 10, 'high': 12, 'low': 9, 'close': 11, 'volume': 20})
+        assert service.cached_state('PAYS.US', '5m').target == cal.latest_closed('5m', initial)
+        service.recover()
+        assert {tf for (_, tf), state in service.sync.items() if state.pending} == set(pending)
+    finally:
+        service.store.close()
+
+
+def test_midnight_preload_runs_without_unlock_and_no_extra_preopen_refresh(tmp_path, cal):
+    now = [at('2026-09-17T23:59:59')]
+    service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: now[0])
+    try:
+        for tf in PHASES:
+            install_batch(service.store, cal, now[0], tf=tf)
+            service.sync['PAYS.US', tf] = service.cached_state('PAYS.US', tf)
+        now[0] = at('2026-09-18T00:00:00')
+        service._schedule(now[0])
+        assert all(state.pending and state.refresh and not state.complete for state in service.sync.values())
+        for tf in PHASES:
+            install_batch(service.store, cal, now[0], tf=tf)
+            service.sync['PAYS.US', tf] = service.cached_state('PAYS.US', tf)
+        now[0] = at('2026-09-18T09:25')
+        service._schedule(now[0])
+        assert all(state.complete and not state.pending for state in service.sync.values())
+        now[0] = at('2026-09-18T16:00:02')
+        for tf in PHASES:
+            install_batch(service.store, cal, now[0], tf=tf)
+            service.sync['PAYS.US', tf] = service.cached_state('PAYS.US', tf)
+        for stamp in ('2026-09-19T10:00', '2026-09-20T10:00'):
+            now[0] = at(stamp)
+            service._schedule(now[0])
+            assert service.session[0] == '2026-09-18'
+            assert all(state.complete and not state.pending for state in service.sync.values())
+        now[0] = at('2026-09-21T00:00')
+        service._schedule(now[0])
+        assert all(state.refresh and state.pending and not state.complete for state in service.sync.values())
+        assert service.store.latest('PAYS.US', '5m') == at('2026-09-18T15:55')
+    finally:
+        service.store.close()
 
 
 def test_reserved_rate_and_concurrency_admit_two_interactive_requests():
@@ -218,7 +294,8 @@ def test_scheduler_selection_priority_and_bad_symbol_isolation(tmp_path,cal):
         assert len(service.status('BLSH.US',now)['errors'])==len(PHASES)
         service.recover()
         service.select('BLSH.US','2h')
-        assert service.priority(('BLSH.US','5m'))<service.priority(('PAYS.US','5m'))
+        assert not service.sync['PAYS.US', '5m'].pending
+        assert service.priority(('BLSH.US','5m'))<service.priority(('BLSH.US','15m'))
     finally: service.store.close()
 
 

@@ -12,18 +12,17 @@ class VolumeHistory:
         self.cache = {}
 
     def rows(self, symbol):
-        store = self.charts.store
-        signature = tuple(store.revisions.get((symbol, tf), 0) for tf in PERIODS)
+        windows = {tf: self.charts.closed(symbol, tf) for tf in PERIODS}
+        signature = tuple(window[0] for window in windows.values())
         cached = self.cache.get(symbol)
         if cached is None or cached[0] != signature:
-            rows = {tf: {b.ts: b.volume for b in store.window(symbol, tf)} for tf in PERIODS}
+            rows = {tf: {row['time']: row['volume'] for row in window[1]} for tf, window in windows.items()}
             self.cache[symbol] = signature, rows
         return self.cache[symbol][1]
 
     def cover(self, symbol, start, end):
         """Cover [start, end) once. A gap is unavailable, never zero volume.
 
-        Reuses the former ChartCache.closed_volume interval-cover algorithm.
         This calculates a scalar only; it does not rebuild or persist candles.
         """
         rows, cursor, total = self.rows(symbol), start, 0

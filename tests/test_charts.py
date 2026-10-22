@@ -57,6 +57,39 @@ def test_summary_uses_recent_twenty_records_for_sparse_history(store, cal):
     assert daily_summary(rows, cal, now)['samples'] == 20
 
 
+def test_sdk_rollover_and_history_overlay_share_one_revisioned_view(store, cal):
+    from data_service.charts import bar_row
+    start = at('2026-09-18T09:30')
+    now = [start + 299]
+    cache = ChartCache(store, cal, clock=lambda: now[0])
+    first = bar_row(bar(start))
+    cache.apply_candles('PAYS.US', '5m', [first], replace=True)
+    before = cache.chart('PAYS.US', '5m', now[0])
+    assert before['active']['volume'] == first['volume'] and not before['bars']
+    now[0] = start + 300
+    rolled = cache.chart('PAYS.US', '5m', now[0], before['revision'])
+    assert rolled['bars'][0]['time'] == start and rolled['active'] is None
+    cache.apply_candle('PAYS.US', '5m', {**first, 'time': start + 300, 'volume': 3})
+    assert cache.chart('PAYS.US', '5m', now[0])['active']['volume'] == 3
+    corrected = Bar('PAYS.US', '5m', start, 10, 12, 9, 11, 500)
+    store.upsert([corrected], now[0])
+    official = cache.chart('PAYS.US', '5m', now[0], rolled['revision'])
+    assert official['bars'][0]['volume'] == 500
+    cache.apply_candle('PAYS.US', '5m', {**first, 'volume': 1})
+    late = cache.chart('PAYS.US', '5m', now[0], official['revision'])
+    assert late['revision'] == official['revision'] and 'bars' not in late
+    assert cache.closed('PAYS.US', '5m')[1][0]['volume'] == 500
+
+
+def test_window_can_grow_past_initial_query_count(store, cal):
+    now = at('2026-09-18T12:00')
+    timestamps = [start for day in cal.completed_days(now, 20) for start, _ in cal.grid(day, '5m')][-1001:]
+    store.upsert([bar(ts) for ts in timestamps[:1000]], now, replace=True)
+    store.upsert([bar(timestamps[-1])], now)
+    cache = ChartCache(store, cal, clock=lambda: now)
+    assert len(cache.closed('PAYS.US', '5m')[1]) == 1001
+
+
 def test_bad_turnover_falls_back_without_rejecting_valid_ohlc(store, cal):
     ts = at('2026-09-18T09:30')
     class Fake:

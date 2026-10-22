@@ -47,6 +47,22 @@ class Broker:
         self.calls.append(('remove_candle', symbol, timeframe))
 
 
+def test_regular_quote_retains_native_ohl_only_within_same_day(cal):
+    quotes = QuoteService(Broker(), ['TEST.US'], cal)
+    stamp = datetime.now(ET) - timedelta(days=1)
+    def event(**fields):
+        return SimpleNamespace(timestamp=stamp, last_done=11, volume=100,
+                               trade_session='Intraday', **fields)
+    quotes.apply('TEST.US', event(open=10, high=12, low=9))
+    quotes.apply('TEST.US', event(open=0, high=0, low=0))
+    assert quotes.values['TEST.US']['Intraday']['high'] == 12
+    quotes.apply('TEST.US', event(open=8, high=20, low=7), snapshot=True)
+    assert quotes.values['TEST.US']['Intraday']['high'] == 12
+    stamp += timedelta(days=1)
+    quotes.apply('TEST.US', event(open=0, high=0, low=0))
+    assert 'high' not in quotes.values['TEST.US']['Intraday']
+
+
 @pytest.mark.parametrize('clock, expected', [
     ('2026-10-16T03:59:59-04:00', None),
     ('2026-10-16T04:00:00-04:00', 'Pre'),
@@ -148,12 +164,19 @@ def test_scan_quote_batches_toggle_and_promote_without_reconnecting_or_expanding
         quotes.set_symbols(['CORE.US'], ['CORE.US', *extras])
         await quotes.connect()
         assert broker.context_calls == 1 and resets == [True]
-        assert len([c for c in broker.calls if c[0] == 'subscribe' and c[2]]) == 2
+        assert len([c for c in broker.calls if c[0] == 'subscribe' and c[2]]) == 1
         assert quotes.quote_subscribed == set(extras)
         core_candles = {('CORE.US', tf) for tf in PHASES}
         assert quotes.candle_subscribed == core_candles
         assert set(quotes.values) == {'CORE.US', *extras}
         generation = quotes.generation
+
+        count = len(broker.calls)
+        quotes.recover()
+        await quotes.update_subscriptions()
+        assert quotes.candle_subscribed == core_candles and not quotes.candle_refresh
+        assert broker.context_calls == 1 and quotes.generation == generation and resets == [True]
+        assert all(c[0] in {'remove_candle', 'candle'} for c in broker.calls[count:])
 
         quotes.set_symbols(['CORE.US'])
         await quotes.update_subscriptions()

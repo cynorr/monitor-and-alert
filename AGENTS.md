@@ -6,7 +6,8 @@
 - 每次启动重读 workspace；完整 Longbridge 行情仅覆盖 Focus 与 SnapTrade 当前 Holdings（含仅保留当天的已清仓批次）；Scan 模式额外订阅完整 Discover/Excluded 的 Quote，日 K 仍用 Massive。订阅范围只在 Longbridge 数据要求维护。Holdings 归属独立，同 ticker 底层行情去重；不以其他历史成交或报告中的 ticker 作为白名单。
 - Massive 完整特征覆盖候选、当日人工 Discover、Focus 和有效 Hidden；跨日只继承 Focus/Hidden，机器 Excluded 由当天候选生成、不保存成员身份。保留 Focus 每日自动淘汰，非候选淘汰后退出名单；继承成员不另行排名。详细范围只在 [Massive 数据要求](docs/massive-data.md#名单完整特征范围) 维护。
 - 唯一正式 SDK 入口是 broker.py。Quote / Trade 与六周期 SDK candle 共用一个行情 context；UI 不调用券商。
-- Longbridge 服务 Monitor 核心行情、Alert 与 Scan 当前时段报价，按 [Longbridge 数据要求](docs/longbridge-data.md) 维护可重建缓存。Massive 单独存库；两源共用 Bar、指标和显示，不拼接、交叉验证或互相补缺。
+- Longbridge 当天 SDK 序列与官方 closed 缓存统一读取，同时间戳由官方历史覆盖；下游只消费最新合并值，修正必须使相关计算缓存失效。开盘保持连接与显示，已知恢复重新取得 candle 起点；具体生命周期只维护在 Longbridge 数据要求。
+- Longbridge 服务 Monitor 核心行情、Alert 与 Scan 当前时段报价，按 [Longbridge 数据要求](docs/longbridge-data.md) 维护可重建缓存；按 symbol/周期复用同日成功历史批次，只按实际闭合边界补缺。Massive 单独存库；两源共用 Bar、指标和显示，不拼接、交叉验证或互相补缺。
 - OHLC 正数有限值与基本结构必须验证；仅上下界矛盾保留官方原值，追加 invalid_ohlc.jsonl，不修正、不告警、不重试。
 - Longbridge 获取、刷新、失败与状态遵循唯一数据要求文档，不新增历史研究功能。Massive 独立按交易日获取原始文件；split API 保留完整分页及两年窗口覆盖。
 - Longbridge 缺失和请求失败用同一回补任务重试；次数与节点见 Longbridge 数据要求。正式服务启动一次 Massive 准备任务，Ready 跳过；网络失败有界重试，本地派生构建失败直接报错，下次从 raw 重建。切模式只增减 Scan 额外 Quote，Monitor/Alert/SnapTrade 持续后台运行。不要把 UI 查询变成历史下载触发器。

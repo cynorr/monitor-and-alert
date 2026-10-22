@@ -24,7 +24,7 @@ def state(tmp_path, calendar):
     rows = [Bar('TEST.US', '1d', calendar.grid(d, '1d')[0][0], 102, 105, 100, 102, 1000)
             for d in calendar.previous_days(day, 25)]
     store.upsert(rows, opened)
-    charts = ChartCache(store, calendar, ready=lambda *_: True)
+    charts = ChartCache(store, calendar, clock=lambda: now[0])
     charts.apply_candle('TEST.US', '1d', {'time': calendar.grid(day, '1d')[0][0],
                          'open': 100, 'high': 110, 'low': 100, 'close': 102, 'volume': 100})
     sound = Mock()
@@ -34,9 +34,12 @@ def state(tmp_path, calendar):
     store.close()
 
 
-def tick(value, price, *, source='push', timestamp=None):
+def tick(value, price, *, source='push', timestamp=None, **ohlc):
+    fields = {'open': 100, 'high': 110, 'low': 100}
+    fields.update({key: item for key, item in value.quotes.get('TEST.US', {}).items() if key in fields})
+    fields.update(ohlc)
     value.quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': timestamp or int(value.now()),
-                           'last_price': price, 'source': source})
+                           'last_price': price, 'source': source, **fields})
 
 
 def test_candidate_gate_thresholds_reentry_and_silent_downgrade(state):
@@ -53,16 +56,14 @@ def test_candidate_gate_thresholds_reentry_and_silent_downgrade(state):
     tick(value, 105)
     assert sound.play.call_args.args == ('TEST.US', 'urgent') and sound.play.call_count == 3
     # A large rise from LOD below open remains outside candidate notifications.
-    value.charts.active['TEST.US', '1d'].update(open=108)
-    tick(value, 106)
+    tick(value, 106, open=108)
     assert value.values['TEST.US']['state'] == 'neutral' and sound.play.call_count == 3
 
 
 def test_holdings_risk_above_open_dominates_up_and_unmasking_is_silent(state):
     value, now, sound = state
     value.scope(set(), {'TEST.US'})
-    value.charts.active['TEST.US', '1d']['high'] = 112
-    tick(value, 112)
+    tick(value, 112, high=112)
     tick(value, 108)
     row = value.values['TEST.US']
     assert row['above_open'] and row['up_level'] == 2 and row['state'] == 'down-notice'
@@ -82,7 +83,7 @@ def test_ema_recross_repeats_without_manual_reset_or_cooldown(state):
     assert [call.args[1] for call in sound.play.call_args_list] == ['up', 'up']
 
 
-def test_restart_snapshot_and_extended_do_not_replay_and_adr_is_fixed(state):
+def test_recovery_snapshot_and_extended_do_not_replay_and_adr_tracks_history_correction(state):
     value, now, sound = state
     tick(value, 105)
     assert value.values['TEST.US']['state'] == 'up-urgent' and not sound.play.called
@@ -90,7 +91,7 @@ def test_restart_snapshot_and_extended_do_not_replay_and_adr_is_fixed(state):
     value.charts.store.db.execute('UPDATE bars SET high=110')
     value.charts.store.revisions['TEST.US', '1d'] += 1
     tick(value, 104)
-    assert value.values['TEST.US']['adr20'] == old
+    assert value.values['TEST.US']['adr20'] == old * 2
     value.reset(); tick(value, 105)
     assert not sound.play.called
     tick(value, 100, source='snapshot')
@@ -151,6 +152,40 @@ def test_cumulative_largest_first_missing_small_bars_and_partial_history(state):
     assert local['ratio'] == 2
 
 
+def test_adr_uses_quote_before_native_daily_initializes(state):
+    value, now, sound = state
+    value.charts.live.pop(('TEST.US', '1d'))
+    tick(value, 103)
+    assert value.values['TEST.US']['up_adr'] == pytest.approx(.6)
+    assert value.values['TEST.US']['state'] == 'up-notice'
+    assert value.previous['TEST.US']['ema_distances'] == {} and not sound.play.called
+    value.charts.apply_candle('TEST.US', '1d', {'time': value.calendar.active_start('1d', now[0]),
+        'open': 100, 'high': 110, 'low': 100, 'close': 103, 'volume': 100})
+    value.update('TEST.US', now[0])
+    assert value.previous['TEST.US']['ema_distances'] and not sound.play.called
+
+
+def test_volume_is_available_without_quote_or_daily_and_price_initializes_silently(state):
+    value, now, sound = state
+    day = date(2026, 10, 16)
+    previous = value.calendar.previous_days(day)[-1]
+    add_volume(value, previous, '5m', 0, 100)
+    opened, _ = value.calendar.session(day)
+    value.charts.live.pop(('TEST.US', '1d'))
+    value.charts.apply_candle('TEST.US', '5m', {'time': opened, 'open': 100,
+         'high': 105, 'low': 100, 'close': 102, 'volume': 40})
+    value.update('TEST.US', now[0])
+    row = value.values['TEST.US']
+    assert row['state'] is None and row['up_adr'] is None
+    assert row['cum_vol']['ratio'] == 2 and row['local_vol']['ratio'] == 2
+    tick(value, 105)
+    assert value.values['TEST.US']['rank'][0] == 3
+    assert not sound.play.called
+    value.scope(set(), set())
+    value.update('TEST.US', now[0])
+    assert not value.values
+
+
 def test_volume_window_switches_at_fifteen_and_missing_day_is_not_zero(state):
     value, now, _ = state
     day = date(2026, 10, 16)
@@ -164,8 +199,31 @@ def test_volume_window_switches_at_fifteen_and_missing_day_is_not_zero(state):
     assert row['cum_vol']['ratio'] == 2 and row['local_vol']['window'] == '5m'
     now[0] = opened + 900
     value.tick()
+    assert value.values['TEST.US']['local_vol']['window'] == '5m'  # Retain the last value until the new candle arrives.
+    value.charts.apply_candle('TEST.US', '15m', {'time': opened + 900, 'open': 100, 'high': 105, 'low': 100, 'close': 102, 'volume': 10})
+    value.update('TEST.US', now[0])
     assert value.values['TEST.US']['local_vol']['window'] == '15m'
     assert value.values['TEST.US']['local_vol']['ratio'] is None
+
+
+def test_volume_reads_sdk_closed_then_history_correction_without_waiting_for_tick(state):
+    value, now, _ = state
+    day = date(2026, 10, 16)
+    opened, _ = value.calendar.session(day)
+    previous = value.calendar.previous_days(day)[-1]
+    for minute in (0, 5):
+        add_volume(value, previous, '5m', minute, 100)
+    now[0] = opened + 360
+    first = {'time': opened, 'open': 100, 'high': 105, 'low': 100, 'close': 102, 'volume': 40}
+    value.charts.apply_candles('TEST.US', '5m', [first, {**first, 'time': opened + 300, 'volume': 10}], replace=True)
+    tick(value, 103)
+    assert value.values['TEST.US']['cum_vol']['actual'] == 50
+    add_volume(value, day, '5m', 0, 500)
+    value.update('TEST.US', now[0])
+    assert value.values['TEST.US']['cum_vol']['actual'] == 510
+    value.charts.apply_candle('TEST.US', '5m', {**first, 'volume': 900})
+    value.update('TEST.US', now[0])
+    assert value.values['TEST.US']['cum_vol']['actual'] == 510
 
 
 def test_historical_half_day_is_skipped_at_missing_afternoon_and_dst_aligns(state):
@@ -183,9 +241,8 @@ def test_quote_at_boundary_cannot_freeze_the_previous_volume_rank(state):
     value, now, _ = state
     opened, _ = value.calendar.session(date(2026, 10, 16))
     tick(value, 103); value.tick()
-    value.values['TEST.US']['cum_vol'] = {'ratio': 3.1}
     now[0] = opened + 300
-    # The price callback gets there before the background volume calculation.
+    # The price callback computes volume before updating the boundary rank.
     tick(value, 104)
     value.tick()
     assert value.values['TEST.US']['rank'][1] == 0
@@ -198,13 +255,13 @@ def test_data_service_forwards_quotes_and_resets_automatic_baselines(state, tmp_
     service = DataService([Ticker('TEST.US', 'TEST', 'focus')], tmp_path / 'service', clock=lambda: now[0])
     service.intraday = value
     try:
-        service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 101})
-        service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 103})
+        service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 101, 'open': 100, 'high': 110, 'low': 100})
+        service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 103, 'open': 100, 'high': 110, 'low': 100})
         assert value.state()['symbols']['TEST.US']['state'] == 'up-notice'
         assert sound.play.call_args.args == ('TEST.US', 'up')
         service.reset_realtime()
-        assert not value.state()['symbols']
-        service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 105})
+        assert value.state()['symbols']['TEST.US']['state'] == 'up-notice'
+        service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 105, 'open': 100, 'high': 110, 'low': 100})
         assert sound.play.call_count == 1
     finally:
         service.store.close()
