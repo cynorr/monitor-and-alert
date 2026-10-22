@@ -7,14 +7,14 @@ from types import SimpleNamespace
 import pytest
 from aiohttp import ClientSession, web
 
-from data_service.charts import ChartCache
+from data_service.chart_cache import ChartCache
 from data_service.config import Ticker
-from data_service.downloader import BarDownloader
+from data_service.longbridge.history import BarDownloader
 from data_service.http_api import create_app
 from data_service.indicators import series, preview, daily_summary
-from data_service.service import DataService
-from data_service.store import BarStore, Bar
-from data_service.broker import RateLimiter
+from data_service.monitor import MonitorService
+from data_service.storage import BarStore, Bar
+from data_service.longbridge.client import RateLimiter
 from test_data_service import cal, store, at, bar, raw
 
 
@@ -58,7 +58,7 @@ def test_summary_uses_recent_twenty_records_for_sparse_history(store, cal):
 
 
 def test_sdk_rollover_and_history_overlay_share_one_revisioned_view(store, cal):
-    from data_service.charts import bar_row
+    from data_service.storage import bar_row
     start = at('2026-09-18T09:30')
     now = [start + 299]
     cache = ChartCache(store, cal, clock=lambda: now[0])
@@ -114,7 +114,7 @@ def test_global_limiter_rolling_window():
 
 
 def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
-    service = DataService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, calendar=cal)
+    service = MonitorService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, calendar=cal)
     async def receive_view(ws):
         while True:
             message = await ws.receive_json(timeout=2)
@@ -162,7 +162,7 @@ def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
 
 
 def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
-    from data_service.quotes import QuoteService
+    from data_service.longbridge.realtime import RealtimeFeed
     now = int(time.time()) - 3
     class Fake:
         async def snapshot(self, ctx, symbols):
@@ -170,7 +170,7 @@ def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
                      last_done=11, volume=100,
                      post_market_quote=SimpleNamespace(timestamp=datetime.fromtimestamp(now+1), last_done=12, volume=7),
                      pre_market_quote=None)]
-    q = QuoteService(Fake(), ['PAYS.US'], cal)
+    q = RealtimeFeed(Fake(), ['PAYS.US'], cal)
     asyncio.run(q._snapshot(None, ['PAYS.US']))
     assert q.values['PAYS.US']['Post']['last_price'] == 12
     assert q.values['PAYS.US']['Intraday']['cumulative_volume'] == 100
@@ -178,9 +178,9 @@ def test_snapshot_restores_extended_sessions_without_fake_pushes(cal):
 
 
 def test_broker_request_budget_shared_by_all_callers():
-    from data_service.broker import Broker
+    from data_service.longbridge.client import LongbridgeClient
     async def scenario():
-        broker = object.__new__(Broker)
+        broker = object.__new__(LongbridgeClient)
         broker.timeout, broker.secrets = 1, ()
         broker.limiter, broker.inflight = RateLimiter(10, 0.04), asyncio.Semaphore(5)
         active = maximum = 0

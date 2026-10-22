@@ -3,7 +3,8 @@ import asyncio
 
 import pytest
 
-from data_service.network import create_session, proxy_url, read_massive_token
+from data_service.network import create_session, proxy_url
+from data_service.massive.settings import read_massive_token
 
 
 def test_explicit_proxy_default_override_and_direct_connection(monkeypatch):
@@ -37,7 +38,7 @@ def test_massive_token_prefers_environment_and_missing_config_is_clear(tmp_path,
 
 @pytest.mark.parametrize('configured_proxy,expected', [('http://127.0.0.1:7899', 'http://127.0.0.1:7899'), ('', None)])
 def test_massive_request_uses_shared_proxy_and_safe_http_errors(tmp_path, monkeypatch, configured_proxy, expected):
-    from data_service import pipeline
+    from data_service.massive import pipeline
     from data_service.paths import RuntimePaths
     monkeypatch.setenv('MARKET_PROXY', configured_proxy)
     monkeypatch.setattr(pipeline, 'read_massive_token', lambda path: 'test-secret')

@@ -15,9 +15,9 @@ from .calendar import TradingCalendar, ET
 from .paths import RuntimePaths
 from .preferences import INITIAL_PREFERENCES, validate_preferences
 from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot, day_start
-from .service import DataService
+from .monitor import MonitorService
 from .workspace import derive_day_view, normalize_ticker
-from .store import atomic_json
+from .storage import atomic_json
 from .additional_info import AdditionalInfo
 from .alerts import AlertEngine, price_cents
 from .alerts.engine import symbol_key
@@ -156,7 +156,7 @@ class Workbench:
             wanted = {s if s.endswith('.US') else s + '.US' for s in self.only}
             tickers = [t for t in tickers if t.symbol in wanted]
         broker = self.broker_factory({ticker.symbol for ticker in tickers})
-        self.monitor = DataService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path,
+        self.monitor = MonitorService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path,
                                    alerts=self.alerts, intraday=self.only is None)
         self.workspace_changed()
         self.monitor_task = asyncio.create_task(self.monitor.run())

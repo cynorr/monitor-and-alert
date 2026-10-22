@@ -8,6 +8,8 @@ Alert 与统一移入 Focus 已实现；完整需求分别见 [Alert](docs/alert
 
 Intraday State（盘中状态）提供 Focus/余仓的 Regular 状态、量比、自动声音和 In Play自动聚集；独立需求见 [intraday-state.md](docs/intraday-state.md)，模块入口见 [AGENTS.md](data_service/intraday_state/AGENTS.md)。参数在 [config/intraday-state.json](config/intraday-state.json)，修改后重启后台。
 
+后端代码按职责直接组织：`data_service/longbridge/`为SDK、实时订阅与历史处理，`massive/`为全市场获取与准备，`additional_info/`为公司/财报及独立证券目录，`snaptrade.py`为账户接口。`monitor.py`与`workbench.py`组合业务，`storage.py`、`chart_cache.py`、`network.py`提供共用数据、缓存和网络基础。完整职责与依赖见 [开发维护](docs/development.md#文件与依赖)。
+
 ## 启动
 
 首次安装需 Python 3.11+：

@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data_service.calendar import TradingCalendar, ET
 from data_service.config import load_tickers
 from data_service.http_api import start_http
-from data_service.service import DataService
+from data_service.monitor import MonitorService
 from data_service.workspace import Workspace
 from simulator.market import Market, SessionClock, SimulatedQuotes, default_start
 
@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def create_simulation(tickers, runtime, calendar, clock):
     market = Market([t.symbol for t in tickers], calendar, clock)
-    service = DataService(tickers, runtime, market, calendar, clock=clock)
+    service = MonitorService(tickers, runtime, market, calendar, clock=clock)
     service.mode = 'simulation'
     service.quotes = SimulatedQuotes(market, service.charts)
     return service

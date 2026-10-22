@@ -4,6 +4,8 @@
 
 Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-info.md)，维护模块前另读 [additional_info/AGENTS.md](additional_info/AGENTS.md)。
 
+- `longbridge/`仅含官方SDK入口、实时订阅与历史获取/检查；`monitor.py`组合行情、名单及盘中状态；`massive/pipeline.py`管理Massive准备任务。共享Bar、持久化和OHLC诊断集中在`storage.py`，图表序列与指标缓存集中在`chart_cache.py`，来源包不作为共用工具入口。
+
 - `workspace.py` 管三名单归属、顺序、迁移与同步保存；`list_rules.py` 只做纯条件匹配和分类，不请求行情。
 - 手动与 Alert 移入 Focus 共用 [统一入选规则](../docs/list-design.md#统一移入-focus)；不继承来源 Tag/人工 section，不由 Alert 另写分类逻辑。
 - `preferences.py` 与前端共用 `filter-catalog.json`；Tag 的 `role` 决定用途，名称可以改。

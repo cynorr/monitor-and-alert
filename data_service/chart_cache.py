@@ -6,12 +6,7 @@ from datetime import datetime
 
 from .calendar import ET
 from .indicators import series, preview, daily_summary, volume_context, volume_comparison
-from .store import Bar
-
-
-def bar_row(bar):
-    return {'time': bar.ts, 'open': bar.open, 'high': bar.high, 'low': bar.low,
-            'close': bar.close, 'volume': bar.volume, 'turnover': bar.turnover}
+from .storage import Bar, bar_row
 
 
 class ChartCache:

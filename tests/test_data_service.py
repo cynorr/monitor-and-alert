@@ -9,11 +9,11 @@ import pytest
 
 from data_service.calendar import ET, PHASES, TradingCalendar
 from data_service.config import Ticker, load_tickers
-from data_service.downloader import BarDownloader
-from data_service.quotes import QuoteService
-from data_service.service import DataService
-from data_service.store import Bar, BarStore
-from data_service.validator import DataValidator
+from data_service.longbridge.history import BarDownloader
+from data_service.longbridge.realtime import RealtimeFeed
+from data_service.monitor import MonitorService
+from data_service.storage import Bar, BarStore
+from data_service.longbridge.history import HistoryValidator
 
 
 @pytest.fixture(scope='module')
@@ -95,7 +95,7 @@ def test_quote_is_cumulative_separated_and_monotonic(cal):
     class Fake:
         def check(self, symbols):
             assert symbols == ['PAYS.US']
-    service = QuoteService(Fake(), ['PAYS.US'], cal)
+    service = RealtimeFeed(Fake(), ['PAYS.US'], cal)
     ts = int(time.time()) - 3
     def quote(t, volume, session='TradeSession.Intraday'):
         return SimpleNamespace(timestamp=datetime.fromtimestamp(t, ET), last_done=10,
@@ -111,7 +111,7 @@ def test_quote_is_cumulative_separated_and_monotonic(cal):
 
 
 def test_api_blocks_nonuniverse_and_returns_lightweight_chart_rows(tmp_path, cal):
-    service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, calendar=cal)
+    service = MonitorService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, calendar=cal)
     try:
         with pytest.raises(ValueError, match='outside Focus and Holdings'):
             asyncio.run(service.api('/v1/bars', {'symbol': ['AAPL.US']}))
@@ -144,7 +144,7 @@ def test_reconnect_restores_snapshot_and_ignores_old_connection(cal):
     async def scenario():
         fake = Fake()
         recoveries = []
-        quotes = QuoteService(fake, ['PAYS.US'], cal, on_reconnect=lambda: recoveries.append(True))
+        quotes = RealtimeFeed(fake, ['PAYS.US'], cal, on_reconnect=lambda: recoveries.append(True))
         await quotes.connect()
         assert not recoveries
         old_callback = quotes.ctx.callback
@@ -172,7 +172,7 @@ def test_snapshot_failure_does_not_claim_live(cal):
             pass
         async def snapshot(self, ctx, symbols):
             raise RuntimeError('snapshot failed')
-    quotes = QuoteService(Fake(), ['PAYS.US'], cal)
+    quotes = RealtimeFeed(Fake(), ['PAYS.US'], cal)
     with pytest.raises(RuntimeError, match='No quote snapshot'):
         asyncio.run(quotes.connect())
     assert quotes.connection_health == 'CONNECTING'

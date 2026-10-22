@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from ..calendar import ET
-from ..store import atomic_json
+from ..storage import atomic_json
 
 BASE_URL = 'https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks'
 HISTORY_YEARS = 2

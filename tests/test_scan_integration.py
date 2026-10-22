@@ -15,7 +15,7 @@ from data_service.indicators import daily_summary
 from data_service.preferences import INITIAL_PREFERENCES, validate_preferences
 from data_service.scan import build_day, daily_chart, publish_day, read_snapshot, candidates
 from data_service.workbench import Workbench
-from data_service.service import DataService
+from data_service.monitor import MonitorService
 from data_service.list_rules import apply_rules
 from data_service.workspace import Workspace, derive_day_view, inherit_workspace
 from scripts.build_scan_mock import build_mock
@@ -138,7 +138,7 @@ def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
                                        state=lambda quotes, as_of: {})
         core = focus | {'HOLD.US'}
         broker = app.broker_factory(core)
-        app.monitor = DataService(app.workspace.tickers(), app_data, broker, app.calendar)
+        app.monitor = MonitorService(app.workspace.tickers(), app_data, broker, app.calendar)
         app.workspace_changed()
         all_scan = {row['symbol'] for row in app.scan_board()}
         assert broker.allowed == core | all_scan
@@ -571,7 +571,7 @@ def test_massive_cli_works_without_workspace_or_longbridge_credentials(tmp_path,
             calls.append('closed')
     def forbidden(*args, **kwargs):
         raise AssertionError('Massive CLI must not load workspace or construct a broker')
-    monkeypatch.setitem(sys.modules, 'data_service.pipeline', SimpleNamespace(MassivePipeline=ReadyPipeline))
+    monkeypatch.setitem(sys.modules, 'data_service.massive.pipeline', SimpleNamespace(MassivePipeline=ReadyPipeline))
     monkeypatch.setattr(cli, 'load_tickers', forbidden)
     monkeypatch.setattr(cli, 'resolve_latest_workspace', forbidden)
     monkeypatch.setattr(cli, 'run', forbidden)
@@ -586,7 +586,7 @@ def test_massive_cli_uses_the_same_runtime_lock(tmp_path, monkeypatch):
     from data_service import __main__ as cli
     def forbidden(*args, **kwargs):
         raise AssertionError('A busy runtime must not start another pipeline')
-    monkeypatch.setitem(sys.modules, 'data_service.pipeline', SimpleNamespace(MassivePipeline=forbidden))
+    monkeypatch.setitem(sys.modules, 'data_service.massive.pipeline', SimpleNamespace(MassivePipeline=forbidden))
     with (tmp_path / 'service.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert cli.main(['massive', '--runtime', str(tmp_path)]) == 1

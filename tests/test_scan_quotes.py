@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from data_service.calendar import ET, PHASES
-from data_service.quotes import QuoteService
+from data_service.longbridge.realtime import RealtimeFeed
 from data_service.workbench import Workbench
 from test_data_service import cal
 
@@ -48,7 +48,7 @@ class Broker:
 
 
 def test_regular_quote_retains_native_ohl_only_within_same_day(cal):
-    quotes = QuoteService(Broker(), ['TEST.US'], cal)
+    quotes = RealtimeFeed(Broker(), ['TEST.US'], cal)
     stamp = datetime.now(ET) - timedelta(days=1)
     def event(**fields):
         return SimpleNamespace(timestamp=stamp, last_done=11, volume=100,
@@ -83,7 +83,7 @@ def test_regular_quote_retains_native_ohl_only_within_same_day(cal):
 def test_scan_quote_selects_only_current_session(cal, clock, expected):
     local = datetime.fromisoformat(clock).astimezone(ET)
     now = int(local.timestamp())
-    quotes = QuoteService(Broker(), ['SCAN.US'], cal)
+    quotes = RealtimeFeed(Broker(), ['SCAN.US'], cal)
     closed_hour = 13 if local.date().isoformat() == '2026-11-27' else 16
     values = {name: {'last_price': price, 'timestamp': int(local.replace(hour=hour, minute=minute,
               second=0, microsecond=0).timestamp()), 'trade_session': name}
@@ -110,7 +110,7 @@ def test_scan_quote_selects_only_current_session(cal, clock, expected):
 
 
 def test_broker_scan_scope_allows_quote_but_rejects_trade_and_candles():
-    from data_service.broker import Broker as LiveBroker, SubType
+    from data_service.longbridge.client import LongbridgeClient as LiveBroker, SubType
     broker = LiveBroker.__new__(LiveBroker)
     broker.allowed = frozenset({'CORE.US', 'SCAN.US'})
     broker.candle_allowed = frozenset({'CORE.US'})
@@ -132,7 +132,7 @@ def test_broker_scan_scope_allows_quote_but_rejects_trade_and_candles():
 
 
 def test_broker_rechecks_full_scope_while_symbol_remains_quote_only():
-    from data_service.broker import Broker as LiveBroker
+    from data_service.longbridge.client import LongbridgeClient as LiveBroker
     async def scenario():
         gate = asyncio.Event()
         class Limiter:
@@ -158,7 +158,7 @@ def test_scan_quote_batches_toggle_and_promote_without_reconnecting_or_expanding
     async def scenario():
         broker = Broker()
         resets = []
-        quotes = QuoteService(broker, ['CORE.US'], cal, on_candle=lambda *args, **kwargs: True,
+        quotes = RealtimeFeed(broker, ['CORE.US'], cal, on_candle=lambda *args, **kwargs: True,
                               on_reset=lambda: resets.append(True))
         extras = [f'SCAN{i}.US' for i in range(25)]
         quotes.set_symbols(['CORE.US'], ['CORE.US', *extras])
@@ -214,7 +214,7 @@ def test_unavailable_scan_symbol_does_not_block_other_quotes_or_monitor(cal):
                 raise RuntimeError('Symbol unavailable')
             await original(ctx, symbols, quote_only=quote_only)
         broker.subscribe = subscribe
-        quotes = QuoteService(broker, ['CORE.US'], cal, on_candle=lambda *args, **kwargs: True)
+        quotes = RealtimeFeed(broker, ['CORE.US'], cal, on_candle=lambda *args, **kwargs: True)
         quotes.set_symbols(['CORE.US'], ['BAD.US', 'GOOD.US'])
         await quotes.connect()
         assert quotes.connection_health == 'CONNECTED' and broker.context_calls == 1

@@ -8,7 +8,7 @@ import pytest
 from data_service.calendar import TradingCalendar
 from data_service.massive import build
 from data_service.paths import RuntimePaths
-from data_service.store import atomic_json
+from data_service.storage import atomic_json
 
 TARGET = date(2026, 10, 1)
 

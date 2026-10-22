@@ -1,3 +1,4 @@
+"""The single Longbridge SDK context and its request budget."""
 from __future__ import annotations
 
 import asyncio
@@ -8,10 +9,17 @@ from pathlib import Path
 
 from longbridge.openapi import AdjustType, AsyncQuoteContext, Config, Period, PushCandlestickMode, SubType, TradeSessions
 
-from .config import read_credentials, redact
+from ..config import redact
 
 SDK_PERIODS = {'1d': Period.Day, '5m': Period.Min_5, '15m': Period.Min_15,
                '30m': Period.Min_30, '1h': Period.Min_60, '2h': Period.Min_120}
+
+
+def read_credentials(path: Path) -> tuple[str, str, str]:
+    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    if len(lines) != 6 or lines[::2] != ['App Key', 'App Secret', 'App Token']:
+        raise ValueError('Expected App Key / App Secret / App Token labels, each followed by its value')
+    return tuple(lines[1::2])
 
 
 class RateLimiter:
@@ -36,7 +44,7 @@ class RateLimiter:
             await asyncio.sleep(delay)
 
 
-class Broker:
+class LongbridgeClient:
     def __init__(self, credentials: Path, allowed: set[str], runtime: Path,
                  region: str = 'cn', timeout: float = 15):
         self.allowed = frozenset(allowed)
@@ -118,7 +126,7 @@ class Broker:
         await self.call(ctx.unsubscribe, symbols, [SubType.Quote] if quote_only else [SubType.Quote, SubType.Trade])
 
     async def validate_ticker(self, ticker: str):
-        from .workspace import normalize_ticker
+        from ..workspace import normalize_ticker
         symbol = normalize_ticker(ticker) + '.US'
         rows = await self.call(self.context().static_info, [symbol])
         info = next((row for row in rows if row.symbol == symbol and row.name_en), None)

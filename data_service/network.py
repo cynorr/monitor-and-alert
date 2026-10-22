@@ -1,6 +1,5 @@
-"""Shared HTTP sessions, explicit proxy configuration, and Massive credentials."""
+"""Shared HTTP session creation and explicit proxy configuration."""
 import os
-from pathlib import Path
 
 import aiohttp
 
@@ -11,15 +10,3 @@ def proxy_url() -> str | None:
 
 def create_session(timeout: float) -> aiohttp.ClientSession:
     return aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout), trust_env=False)
-
-
-def read_massive_token(path: Path = Path('massive-token.txt')) -> str:
-    token = os.environ.get('MASSIVE_API_KEY', '').strip()
-    if not token:
-        try:
-            token = path.read_text().strip()
-        except FileNotFoundError:
-            pass
-    if not token:
-        raise ValueError('Massive credentials missing: set MASSIVE_API_KEY or create massive-token.txt')
-    return token

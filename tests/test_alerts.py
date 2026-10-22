@@ -7,7 +7,7 @@ import pytest
 from aiohttp import ClientSession, web
 
 from data_service.alerts import AlertEngine, price_cents
-from data_service.quotes import QuoteService
+from data_service.longbridge.realtime import RealtimeFeed
 from data_service.http_api import create_app
 from test_data_service import at, cal
 from test_scan_integration import make_app, app_data, mock_data
@@ -133,10 +133,10 @@ def test_invalid_threshold_rejected(price):
 def test_quote_pipeline_accepts_same_second_push_rejects_old_snapshot_and_resets_before_connect(cal):
     from unittest.mock import patch
     received, resets = [], []
-    service = QuoteService(None, ['NVDA.US'], cal, on_quote=lambda s,q: received.append(q))
+    service = RealtimeFeed(None, ['NVDA.US'], cal, on_quote=lambda s,q: received.append(q))
     event = lambda price: SimpleNamespace(timestamp=datetime.fromtimestamp(at('2026-10-05T09:31:00')),
                                           last_done=price, volume=100, trade_session='Intraday')
-    with patch('data_service.quotes.time.time', return_value=at('2026-10-05T09:31:00')):
+    with patch('data_service.longbridge.realtime.time.time', return_value=at('2026-10-05T09:31:00')):
         service.apply('NVDA.US', event(9)); service.apply('NVDA.US', event(10))
         service.apply('NVDA.US', event(8), snapshot=True)
     assert [q['last_price'] for q in received] == [9,10,10]
@@ -223,7 +223,7 @@ def test_alert_http_origin_and_independent_empty_selection_stream(app_data):
 def test_reconnect_snapshot_establishes_baseline_before_next_live_cross(engine, tmp_path, cal):
     from unittest.mock import patch
     from data_service.config import Ticker
-    from data_service.service import DataService
+    from data_service.monitor import MonitorService
     value, clock = engine
     alert = value.create('NVDA.US', 10)
     tick(value, 9)
@@ -235,9 +235,9 @@ def test_reconnect_snapshot_establishes_baseline_before_next_live_cross(engine, 
         async def subscribe(self, ctx, symbols): pass
         async def snapshot(self, ctx, symbols):
             return [SimpleNamespace(symbol='NVDA.US', timestamp=datetime.fromtimestamp(clock[0]), last_done=12, volume=100)]
-    service = DataService([Ticker(symbol='NVDA.US', ticker='NVDA', status='focus')], tmp_path / 'bars', Broker(), cal, alerts=value)
+    service = MonitorService([Ticker(symbol='NVDA.US', ticker='NVDA', status='focus')], tmp_path / 'bars', Broker(), cal, alerts=value)
     async def scenario():
-        with patch('data_service.quotes.time.time', return_value=clock[0]):
+        with patch('data_service.longbridge.realtime.time.time', return_value=clock[0]):
             service.quotes.has_connected = True
             await service.quotes.connect()
             assert not value.state()['unread']

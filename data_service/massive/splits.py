@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
 from .daily import shift_year
-from ..store import atomic_json
+from ..storage import atomic_json
 
 BASE_URL = 'https://api.massive.com/stocks/v1/splits'
 FIELDS = {'id', 'ticker', 'execution_date', 'adjustment_type', 'split_from', 'split_to'}

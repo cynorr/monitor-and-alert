@@ -10,8 +10,8 @@ import pytest
 from data_service import scan
 from data_service.calendar import TradingCalendar
 from data_service.massive.settings import load_config
-from data_service.store import BAR_SCHEMA, atomic_json
-from data_service.symbol_directory import make_snapshot
+from data_service.storage import BAR_SCHEMA, atomic_json
+from data_service.additional_info.symbol_directory import make_snapshot
 from data_service.workbench import Workbench
 from data_service.workspace import Workspace
 from scripts.build_scan_mock import build_mock

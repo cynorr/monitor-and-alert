@@ -2,6 +2,19 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+## 2026-10-23：后端目录与模块命名整理
+
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0；北京时间10月23日，对应美东10月22日Regular。仅调整代码归属、导入和类名，正式运行目录、SQLite路径、请求额度与调度规则保持原状。
+
+- Longbridge收拢为client/realtime/history三个模块；历史读取检查合入history。Massive准备流程归入massive包，证券目录归入additional_info并保持独立CLI。共用Bar、持久化、序列化和OHLC诊断集中于storage，图表缓存与Monitor编排分别使用chart_cache、monitor。未保留旧模块转发，后端Python文件总数42→42。
+- 对照改名前HEAD的174个原有函数/类，归一化四个类名和导入后，语法树函数体全部相同。42个内部模块的82条顶层导入依赖无环，41个后端子模块在新解释器中全部导入成功；Scan单独导入不加载Longbridge SDK。保留既有函数内延迟导入，未为目录调整改写业务依赖。
+- 正式CLI、live_check、证券目录获取、附加信息获取、Massive获取、Scan Mock生成器及模拟器共7个help入口通过。新路径成功读取现有真实证券目录13,289只；没有触发目录或历史重新下载。
+- 现有311项后端用例中308项通过、3项失败，另11个subtest通过。3项均为Scan旧断言：要求继承机器Excluded身份或将机器Excluded保存到workspace。将改名前HEAD的代码与原用例提取到临时目录，三项出现完全相同失败；本轮保留现有产品规则，仅更新导入与符号，不修改这些断言来制造通过。未新增Mock数据源或测试框架。
+- 原服务停止后以原Monitor模式恢复，真实范围仍为28个symbol。短时HTTP核对Quote为CONNECTED，推送计数3秒内1,127→1,151；AMC Daily/15m均含实时active及历史，持仓任务运行，Massive为Ready，附加信息缓存无错误并正常返回。既有TJGC六周期官方最新closed缺失继续独立重试，未因迁移增加其他错误。
+- README、开发职责、数据入口及AGENTS同步新结构；脚本、模拟器、测试中的直接导入和字符串patch/sys.modules路径已更新。未改TypeScript，不重复前端构建。
+
+未覆盖：浏览器视觉与声音听辨、真实断网/休眠、拆股日及首次无缓存的全量下载。本轮是目录与依赖迁移，没有再次进行行情算法或启动性能对照。
+
 ## 2026-10-23：Longbridge 同日缓存复用与启动分级
 
 环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0、TypeScript5.9.3；北京时间10月23日零点后，对应美东10月22日Regular。停止原服务后，直接使用正式SQLite、当前Focus/Holdings与真实接口做两次35秒/55秒有界启动，分别始于12:42:03、12:43:13 ET；随后恢复普通Monitor服务。测量钩子仅在临时脚本内记录耗时和请求，不进入正式代码，没有额外并行行情context、Mock数据源或测试报警。
@@ -86,7 +99,7 @@
 
 - 后端定向 `tests/test_intraday_state.py tests/test_alert_sound.py tests/test_alerts.py`：41 项通过。覆盖候选 open 门槛、上下行阈值与再次穿越、持仓回撤优先且降级静默、EMA 重穿、冻结 ADR、首次/恢复静默、范围清理、5m 延后降级与量能边界更新、连续大窗口覆盖、历史尾部插值、缺失/半日/DST、配置校验、真实回调接入及手动 Alert 兼容。HTTP 用例仅使用临时库。
 - 前端定向 `ui/tests/intraday-state.test.mjs ui/tests/holdings.test.mjs ui/tests/scan.test.mjs`：25 项通过；`npm run build --prefix ui` 通过。验证离散等级与人工 Pin 稳定顺序、不修改输入名单、持仓批次与清仓尾部、格式化及新增列。Markdown 相对目标检查及 `git diff --check` 通过。
-- 隔离 UI：既有 FakeBroker、临时 workspace/SQLite、真实状态引擎与模拟有效 Quote/SDK candle，localhost:8767，不读凭证。确认候选蓝色、持仓黄/红色、ADR 与两个圆角量比格，Dynamic 跨组排列、Pin 优先、无重复成员及空 section 隐藏；Grouped 恢复原 Surf/Bounce。NVDA 保持选中，状态从浅蓝升级亮蓝后图表与操作焦点保留；同档相对顺序稳定。截图 `/tmp/intraday-state-ui.png` 为模拟数据，量比缺失用 `—`；最终临时页、服务与数据库已清理。浏览器无 JavaScript error。
+- 隔离 UI：既有 FakeLongbridgeClient、临时 workspace/SQLite、真实状态引擎与模拟有效 Quote/SDK candle，localhost:8767，不读凭证。确认候选蓝色、持仓黄/红色、ADR 与两个圆角量比格，Dynamic 跨组排列、Pin 优先、无重复成员及空 section 隐藏；Grouped 恢复原 Surf/Bounce。NVDA 保持选中，状态从浅蓝升级亮蓝后图表与操作焦点保留；同档相对顺序稳定。截图 `/tmp/intraday-state-ui.png` 为模拟数据，量比缺失用 `—`；最终临时页、服务与数据库已清理。浏览器无 JavaScript error。
 - 声音直接使用新后台播放器依次播放上行、下行、紧急，每组原声四遍；afplay 均成功，用户确认“都听到，紧急声音能区分”。优先级用定向用例验证，不额外合成或施加时长上限。
 - 本轮只读真实 Longbridge 缓存 ABCL.US、EFOR.US：冻结 ADR20 分别 6.3545%、4.9475%，26 分钟历史累计基准各有五个样本，分别 331721.76、12663.56。没有额外供应商查询或写正式数据；证据 `/tmp/intraday-real-cache-check.json`。
 - 正式后台按原 Monitor 展示模式重启，PID 20306；`/health` 为 running / CONNECTED，`/v1/intraday-state` 已启用。现场读取 CAI.US 的真实 Regular 状态、CumVol 与 15m LocalVol，两者都有五个历史样本。重启前后原有七条手动 Alert 内容相同，未处理事件均为零；没有向正式进程注入模拟行情。结束前状态已覆盖30个symbol，待处理窗口从118降至6；服务启动仍按原流程初始化行情窗口，本轮不将这些样本表述为全名单Ready。证据 `/tmp/intraday-live-check.json`，日志 `runtime/intraday-state-live.log`。
@@ -110,7 +123,7 @@
 - 27项定向Python用例通过，61项未运行。覆盖完整行情/Quote白名单与等待请求额度后的重检、模式切换和Focus升降级复用同一context、不扩大六周期任务、Holdings去重、25只额外Quote按两批获取、单只不可用隔离、Pre/Post日期过滤与历史日隐藏，以及原有Quote重连/名单规则相关场景。
 - `npm run build --prefix ui`通过；仅运行2项UI定向用例：Pre/Post轴标签颜色、隐藏横线、分别更新/清除与公开自动缩放API；Scan Search沿用add并切到Discover置顶、已有Discover置顶选择，显式Focus section和Monitor搜索目标保留。未运行浏览器或全链路测试。
 - 真实日库只读验证在临时runtime复制最近两份名单/截面和偏好：AAPL原非候选，加入当日Discover置顶并补齐均线/RFL约0.229s；仍非candidate，不扩大完整行情范围，新日继承移除该成员及Pin。日图有真实历史、无active candle；正式SQLite、名单、偏好与split的大小/mtime保持不变。
-- 该临时环境的订阅验证使用明确的Broker替身：145个Quote标的中只有29个完整行情标的及174个candle订阅；Scan→Monitor→Scan共用一个替身context，保留全部原SyncState。这个结果验证调度范围，不冒充真实SDK连接/行情实测。临时业务库和目录已清理。
+- 该临时环境的订阅验证使用明确的LongbridgeClient替身：145个Quote标的中只有29个完整行情标的及174个candle订阅；Scan→Monitor→Scan共用一个替身context，保留全部原SyncState。这个结果验证调度范围，不冒充真实SDK连接/行情实测。临时业务库和目录已清理。
 - 同步Longbridge/Massive/List/UI及行为、职责和AGENTS入口；204个本地Markdown链接与`git diff --check`检查通过。既有正式split修改与.DS_Store未处理。
 
 未覆盖：真实Longbridge订阅与盘前/盘后推送、浏览器价格轴实际绘制和人工搜索交互、Alert实时穿越及账户链路。本轮只读获取现有服务状态未成功，没有为验证另建真实行情连接；以上未覆盖项不能视为已验收。
@@ -220,7 +233,7 @@
 - `.venv/bin/python -m pytest -q tests/test_alert_sound.py tests/test_alerts.py`：28 项通过。覆盖新事件提交后才播放、同条不重复播放、失败写入不播放、恢复/处理卡片不重播、Mock默认静音、任务启动/退出，以及串行音频、播放错误和后续新事件恢复。localhost 用例在沙箱外运行，所有数据写临时目录。
 - `npm run build --prefix ui`、改动 Python 编译、文档链接和 `git diff --check` 通过。离线构建 wheel 确认包含两个 WAV 及 sound.py，不含旧 macos.py 或原生通知依赖；刷新本地 editable 安装后 `pip check` 通过。
 - 明确启用实际声音，用 CHECK.US 的临时 Regular 最新价经 AlertEngine 依次触发上穿和下穿，间隔约两秒，两个事件均持久化、声音状态 error=null。用户确认“两次都听到，声音不同”。没有读取行情凭证或在正式 Alert 中制造触发，临时库已清理。
-- Chrome 使用 Scan Mock 副本、临时库和既有 FakeBroker，localhost:8767 限时120秒。两张未处理卡片在刷新前后均存在，原通知按钮为0个，页面无 console error。完整截图保存在 `/tmp/alert-cards-refresh-2026-10-07.png`；临时服务、目录与页面已关闭。
+- Chrome 使用 Scan Mock 副本、临时库和既有 FakeLongbridgeClient，localhost:8767 限时120秒。两张未处理卡片在刷新前后均存在，原通知按钮为0个，页面无 console error。完整截图保存在 `/tmp/alert-cards-refresh-2026-10-07.png`；临时服务、目录与页面已关闭。
 - 正常退出旧原生进程，实际删除 `dist/Market Monitor.app`、macos 构建目录、launcher/setup/build脚本及 PyObjC/py2app 和其专用依赖；原 WAV 移入 Alert 模块。正式 runtime 改用现有 Python CLI 启动，/health 为 running、Quote 为 CONNECTED；Alert sound 为 enabled=true、error=null。切换前后正式库均为3条 Alert、2条历史事件、0条未处理事件。Safari Charts 已刷新，恢复 Monitor 与 PLSE 选择。
 - Alert 需求、职责/契约、产品行为、UI 总入口、README 与模块 AGENTS 已同步为后台声音和持久卡片。
 
@@ -264,7 +277,7 @@
 
 环境：本机项目工作树；本轮仅修改 Markdown 与 AGENTS.md，不修改 Python/TypeScript、运行数据或凭证，不启动/重启服务，不调用真实行情或账户接口。
 
-- 对照本轮用户修订、quotes.py、workspace.py、list_rules.py、workbench.py、现有 List/Chart/UI/开发文档，建立独立 alert.md 和 data_service/alerts/AGENTS.md，并同步总入口及局部维护约束。新需求和新入选规则均明确标为已确认待实现。
+- 对照本轮用户修订、longbridge/realtime.py、workspace.py、list_rules.py、workbench.py、现有 List/Chart/UI/开发文档，建立独立 alert.md 和 data_service/alerts/AGENTS.md，并同步总入口及局部维护约束。新需求和新入选规则均明确标为已确认待实现。
 - 核对 Regular-only、鼠标水平线价格、到达算触发、无停机补报、symbol 共用身份、Scan Discover/全部 Excluded 创建先入 Focus，以及手动/Alert 共用清理来源 Tag、重新匹配与组首插入规则；清除旧入口中禁止开发 Alert 的过时约束。
 - 进行文档差异、相对链接/锚点与入口一致性检查。未修改 TypeScript，未运行 npm build 或产品测试；这些文档检查不是运行功能验收。
 
@@ -404,7 +417,7 @@
 环境：同日本机 macOS，Chrome 与正式 Safari Charts 窗口；Lightweight Charts 5.2.0、TypeScript 5.9.3。仅修改前端交互/显示，Alert Engine、行情、名单与通知契约保持原有实现。
 
 - `npm run build --prefix ui` 通过，22 项 UI 用例通过。既有双图/成交量用例补充验证鼠标价格双向传递、成交量 pane 使用对应 series、programmatic 更新不回传覆盖鼠标价格；Vol 的悬停保持、刷新与清空继续通过。
-- 使用 Scan Mock 副本、临时 SQLite 与既有 FakeBroker，localhost:8767 最长300秒。PAYS 验证细线段虚线、箭头紧贴价格轴边缘、无 Alert 价格轴标签；悬停价格胶囊包含两位小数与线性垃圾桶，拖动11.40→11.74重新激活，垃圾桶立即删除。Monitor 验证 Command+Option 创建66.45、双图共用横线、悬停胶囊与 Backspace 删除。未修改正式 Alert/名单，也未投递系统通知；临时服务、目录与浏览器页已清理。
+- 使用 Scan Mock 副本、临时 SQLite 与既有 FakeLongbridgeClient，localhost:8767 最长300秒。PAYS 验证细线段虚线、箭头紧贴价格轴边缘、无 Alert 价格轴标签；悬停价格胶囊包含两位小数与线性垃圾桶，拖动11.40→11.74重新激活，垃圾桶立即删除。Monitor 验证 Command+Option 创建66.45、双图共用横线、悬停胶囊与 Backspace 删除。未修改正式 Alert/名单，也未投递系统通知；临时服务、目录与浏览器页已清理。
 - Monitor 实际绘制确认 Daily→Intraday 两侧十字线显示67.33，独立于对应 candle close；超出 peer 价格范围时不吸附到可见 candle。所有图使用内置1px LargeDashed及匹配的Alert primitive线段；两张图的Vol显示正确。
 - 正式 Safari Charts 窗口已刷新加载构建，恢复刷新前 BAND 选择，确认 Daily/Intraday 均显示 Vol。没有重启或扩大真实行情订阅。
 - 需求分别同步 alert.md（悬停/删除）、chart-ui.md（共用虚线/十字线/Vol）、ui.md（图形），职责与入口同步 development.md、behavior.md。相对链接/锚点及git diff --check通过；vendor未修改。
@@ -415,7 +428,7 @@
 环境：本机 macOS、Chrome 离线验证页和正式 Safari Charts；Lightweight Charts 5.2.0、TypeScript 5.9.3。本轮只修改 UI 与相应文档。
 
 - `npm run build --prefix ui` 通过，23 项 UI 用例通过。新增定向用例覆盖无对应日期时水平线保留与复用、重新匹配日期时切回原生十字线、价格超出范围时仍传递时间、成交量 pane、离开与清空后的移除；程序更新不回传覆盖鼠标值的既有用例继续通过。
-- 浏览器使用 Scan Mock 副本、临时 SQLite 与现有 FakeBroker，localhost:8767 限时300秒，不读取凭证或投递系统通知。Scan 验证胶囊位于绘图区约2/3处、无重复上下箭头、右箭头左侧竖边对齐原生价格标签左缘并进入价格轴。
+- 浏览器使用 Scan Mock 副本、临时 SQLite 与现有 FakeLongbridgeClient，localhost:8767 限时300秒，不读取凭证或投递系统通知。Scan 验证胶囊位于绘图区约2/3处、无重复上下箭头、右箭头左侧竖边对齐原生价格标签左缘并进入价格轴。
 - Monitor 实际验证：Daily 悬停旧日期（Intraday 无该日数据），两图仍显示67.33水平线，Intraday不显示虚构时间线；同一Alert在两图可见。Intraday拖动66.46→66.68，Daily同步；Daily继续拖动66.68→67.12，Intraday同步，悬停胶囊显示相同已保存价格。另用同样临时环境限时60秒保存完整截图 `/tmp/alert-ui-final.png`，显示旧日期的Daily胶囊与Intraday独立水平线。
 - 正式 Charts 窗口已刷新加载构建并恢复刷新前BTGO选择；未重启真实服务或修改正式Alert。临时页已关闭，验证服务按时结束并清除临时库。
 - 需求和职责同步 alert.md、chart-ui.md、ui.md、development.md、behavior.md；相对链接/锚点及 `git diff --check` 通过。未修改 vendor。未重新覆盖真实Regular触发、macOS通知、全部周期/价格轴缩放/pane resize或macOS27；离线UI证据不替代这些验收。

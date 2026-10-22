@@ -1,3 +1,4 @@
+"""Monitor orchestration: scoped market data, history tasks and consumer views."""
 from __future__ import annotations
 
 import asyncio
@@ -8,11 +9,10 @@ from datetime import datetime
 from pathlib import Path
 
 from .calendar import ET, PHASES, INTRADAY, TradingCalendar
-from .charts import ChartCache, bar_row
-from .downloader import BarDownloader, parse_candle, sdk_timestamp, append_ohlc_log, ohlc_comparison
-from .quotes import QuoteService
-from .store import BarStore
-from .validator import DataValidator
+from .chart_cache import ChartCache
+from .longbridge.history import BarDownloader, HistoryValidator, parse_candle, sdk_timestamp
+from .longbridge.realtime import RealtimeFeed
+from .storage import BarStore, bar_row, append_ohlc_log, ohlc_comparison
 from .intraday_state import IntradayState
 
 
@@ -32,7 +32,7 @@ class SyncState:
     loading: bool = False
 
 
-class DataService:
+class MonitorService:
     def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None, intraday=False):
         self.tickers = tickers
         self.holdings_symbols = []
@@ -43,12 +43,12 @@ class DataService:
         self.mode = 'live'
         self.calendar = calendar or TradingCalendar()
         self.store = BarStore(bars_path or runtime / 'bars.sqlite3', self.calendar, set(self.symbols))
-        self.validator = DataValidator(self.store, self.calendar)
+        self.validator = HistoryValidator(self.store, self.calendar)
         self.charts = ChartCache(self.store, self.calendar, clock=self.now)
         self.alerts = alerts
         self.intraday = IntradayState(self.charts, notify=alerts.notify if alerts else None, clock=self.now) if intraday else None
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
-        self.quotes = QuoteService(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
+        self.quotes = RealtimeFeed(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
                                    on_reconnect=self.check_windows, on_reset=self.reset_realtime,
                                    on_candle=self.apply_candles, candle_priority=self.candle_priority) if broker else None
         self.run_id = uuid.uuid4().hex

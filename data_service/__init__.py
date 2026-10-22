@@ -1,1 +1,1 @@
-"""Longbridge data service. Importing this package never connects to the broker."""
+"""Market Monitor backend. Importing the package never starts network connections."""

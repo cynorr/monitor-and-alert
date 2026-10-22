@@ -11,11 +11,11 @@ from aiohttp import ClientSession
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from data_service.broker import Broker
+from data_service.longbridge.client import LongbridgeClient
 from data_service.config import load_tickers
 from data_service.http_api import start_http
-from data_service.service import DataService
-from data_service.store import atomic_json
+from data_service.monitor import MonitorService
+from data_service.storage import atomic_json
 from data_service.workspace import resolve_latest_workspace
 
 
@@ -23,7 +23,7 @@ async def run(args):
     tickers = load_tickers(resolve_latest_workspace(), args.symbols)
     runtime = Path(tempfile.mkdtemp(prefix='longbridge-check-'))
     requests = []
-    class ObservedBroker(Broker):
+    class ObservedBroker(LongbridgeClient):
         async def candles(self, symbol, timeframe, count=1000, *, background=False):
             started = time.monotonic()
             rows = await super().candles(symbol, timeframe, count, background=background)
@@ -31,7 +31,7 @@ async def run(args):
                              'returned': len(rows), 'seconds': round(time.monotonic() - started, 3)})
             return rows
     broker = ObservedBroker(ROOT / 'longbridge-token.txt', {t.symbol for t in tickers}, runtime)
-    service = DataService(tickers, runtime, broker)
+    service = MonitorService(tickers, runtime, broker)
     runner = await start_http(service, args.port)
     task = asyncio.create_task(service.run())
     counts = {'messages': 0, 'history_snapshots': 0}

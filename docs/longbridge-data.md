@@ -17,7 +17,7 @@ Longbridge 服务 Monitor 的 Daily / Intraday、名单、持仓行情、Alert �
 
 Scan 模式额外订阅有效 workspace 的完整 Discover / Excluded（含 Hidden）的 Quote，不随折叠、Filter 或选中股票缩减；额外成员不请求 Trade/candle、不写 bars、不加入 Alert。全部按 symbol 去重。切模式只增减 Scan 额外 Quote，Focus / Holdings 后台持续工作；名单变化按差集增删。
 
-唯一 SDK 入口为 `broker.py`；所有报价、实时 candle 与历史请求共用一个 `AsyncQuoteContext` 和一条行情长连接。context 是 SDK 持有连接、订阅和 candle 内存的客户端对象，不是历史数据库，也不是每次查询应重建的 session id。关闭网页不停止后台。
+唯一 SDK 入口为 `data_service/longbridge/client.py`；所有报价、实时 candle 与历史请求共用一个 `AsyncQuoteContext` 和一条行情长连接。context 是 SDK 持有连接、订阅和 candle 内存的客户端对象，不是历史数据库，也不是每次查询应重建的 session id。关闭网页不停止后台。
 
 Scan 日 K 与指标使用 Massive，Monitor 使用 Longbridge；两源分别存库，共用 Bar、指标与显示，不拼接、交叉验证或补缺。
 

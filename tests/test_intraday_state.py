@@ -4,10 +4,10 @@ from unittest.mock import Mock
 import pytest
 
 from data_service.calendar import ET, TradingCalendar
-from data_service.charts import ChartCache
+from data_service.chart_cache import ChartCache
 from data_service.intraday_state import IntradayState
 from data_service.intraday_state.engine import load_config
-from data_service.store import Bar, BarStore
+from data_service.storage import Bar, BarStore
 
 
 @pytest.fixture(scope='module')
@@ -250,9 +250,9 @@ def test_quote_at_boundary_cannot_freeze_the_previous_volume_rank(state):
 
 def test_data_service_forwards_quotes_and_resets_automatic_baselines(state, tmp_path):
     from data_service.config import Ticker
-    from data_service.service import DataService
+    from data_service.monitor import MonitorService
     value, now, sound = state
-    service = DataService([Ticker('TEST.US', 'TEST', 'focus')], tmp_path / 'service', clock=lambda: now[0])
+    service = MonitorService([Ticker('TEST.US', 'TEST', 'focus')], tmp_path / 'service', clock=lambda: now[0])
     service.intraday = value
     try:
         service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 101, 'open': 100, 'high': 110, 'low': 100})

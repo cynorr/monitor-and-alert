@@ -7,8 +7,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from data_service.paths import RuntimePaths
-from data_service import symbol_directory
-from data_service.store import atomic_json
+from data_service.additional_info import symbol_directory
+from data_service.storage import atomic_json
 
 
 def main(argv=None):

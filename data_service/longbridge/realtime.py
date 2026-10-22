@@ -1,3 +1,4 @@
+"""Realtime quotes and native SDK candles on the shared Longbridge context."""
 from __future__ import annotations
 
 import asyncio
@@ -7,14 +8,14 @@ import time
 from datetime import datetime
 from types import SimpleNamespace
 
-from .broker import SDK_PERIODS
-from .calendar import ET, PHASES
-from .downloader import sdk_timestamp
+from .client import SDK_PERIODS
+from ..calendar import ET, PHASES
+from .history import sdk_timestamp
 
 log = logging.getLogger(__name__)
 
 
-class QuoteService:
+class RealtimeFeed:
     def __init__(self, broker, symbols: list[str], calendar, stale_seconds: int = 90,
                  on_quote=None, on_reconnect=None, on_reset=None, on_candle=None, candle_priority=None):
         self.broker, self.symbols, self.calendar = broker, symbols, calendar
