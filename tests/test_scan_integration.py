@@ -130,7 +130,7 @@ def make_app(root, *, mock=True, pipeline=None):
     return app, brokers
 
 
-def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
+def test_quote_scope_keeps_all_lists_in_both_modes_and_keeps_monitor_windows(app_data):
     async def scenario():
         app, brokers = make_app(app_data, mock=False)
         focus = {t.symbol for t in app.workspace.tickers()}
@@ -144,11 +144,16 @@ def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
         assert broker.allowed == core | all_scan
         assert broker.candle_allowed == core
         windows = dict(app.monitor.sync)
+        extra = list(app.monitor.quotes.extra_symbols)
+        app.monitor.quotes.changed.clear()
         await app.switch_mode('monitor')
-        assert broker.allowed == core and not app.monitor.scan_symbols
+        assert broker.allowed == core | all_scan
+        assert set(app.monitor.quote_symbols) == all_scan
         assert app.monitor.sync == windows
+        assert app.monitor.quotes.extra_symbols == extra and not app.monitor.quotes.changed.is_set()
         await app.switch_mode('scan')
         assert broker.allowed == core | all_scan and app.monitor.sync == windows
+        assert app.monitor.quotes.extra_symbols == extra and not app.monitor.quotes.changed.is_set()
         from data_service.calendar import ET
         now = datetime(2026, 10, 1, 8, tzinfo=ET)
         app.monitor.now = lambda: int(now.timestamp())
@@ -156,11 +161,11 @@ def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
         for session, stamp in [('Pre', now), ('Post', datetime(2026, 9, 30, 18, tzinfo=ET))]:
             app.monitor.quotes.apply(symbol, SimpleNamespace(timestamp=stamp, last_done=15, volume=100),
                                      snapshot=True, session_override=session)
-        assert set(app.view(symbol, '5m')['quote']['extended']) == {'Pre'}
+        assert app.view(symbol, '5m')['quote']['latest']['trade_session'] == 'Pre'
         app.monitor.quotes.values[symbol]['Pre']['timestamp'] -= 86400
-        assert not app.scan_quote(symbol)['extended']
+        assert app.scan_quote(symbol)['latest']['trade_session'] == 'Post'
         await app.action('scan', {'date': '2026-09-29'})
-        assert not app.view(symbol, '5m')['quote']['extended']
+        assert app.view(symbol, '5m')['quote']['latest'] is None
         assert not broker.calls  # No context, subscription or candle request is created by the reads.
         await app.close()
     asyncio.run(scenario())

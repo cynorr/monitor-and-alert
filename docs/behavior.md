@@ -16,7 +16,7 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote 与 SDK 实时 candle，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护。
 
-Quote 统一接收和校验，regular 与 extended 按时段保存最新值，两者均不落盘；最新价格、ADR盘中状态、持仓估值与手动Alert直接使用Quote。同日重启复用各周期已确认历史；下一交易日准备由现有后台持续调度，不依赖解锁操作。当天各周期SDK序列先用于图表和盘中计算，官方历史随后覆盖已闭合同timestamp，所有下游消费同一份最新值。价格状态与分钟量比独立显示，开盘不重建行情，刷新期间保留有效显示；页面选择只调整待加载数据优先级，不扩大订阅或触发下载。切模式按Longbridge数据要求增减Scan额外Quote，Focus/Holdings后台持续运行。关闭网页不停止后端。
+Quote 统一接收和校验，regular 与 extended 按时段保存最新值，quote.latest按timestamp统一提供最后报价，均不落盘；最新价格、ADR盘中状态、持仓估值与手动Alert直接使用Quote。同日重启复用各周期已确认历史；下一交易日准备由现有后台持续调度，不依赖解锁操作。当天各周期SDK序列先用于图表和盘中计算，官方历史随后覆盖已闭合同timestamp，所有下游消费同一份最新值。价格状态与分钟量比独立显示，开盘不重建行情，刷新期间保留有效显示；页面选择只调整待加载数据优先级，不扩大订阅或触发下载。切模式复用三名单Quote订阅与缓存，Focus/Holdings后台持续运行。关闭网页不停止后端。
 
 ## Additional Info
 
@@ -48,7 +48,7 @@ Daily与split统一按最新成熟交易日判断，保留ET18点门槛；周末
 
 需求背景与归属设计见 [list-design.md](list-design.md)，显示与交互的唯一规范见 [ui.md 的 List UI 章节](ui.md#list-ui)。
 
-Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 的日 K 和分类使用本地 Massive Daily，Scan 模式额外订阅 Quote，仅显示当前交易时段的价格轴标记（规则见 Longbridge 数据要求），不启动其完整行情或 Alert。自动Excluded仅显示当天候选的规则结果、不保存成员身份；跨日只继承Focus和有效Hidden，Focus每日自动淘汰保留，非候选淘汰后退出当前名单。盘中明确入选Focus才开始完整实时监控。Scan 全局搜索确认后进入当日 Discover 置顶，不建立临时预览或跨日保存；新增与继承细则见 [List 设计](list-design.md#三个列表)。
+Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 的日 K 和分类使用本地 Massive Daily，Scan/Monitor均为完整三名单保留Quote；最新Scan日显示最新报价，Monitor双图也显示扩展报价价格轴标签（规则见Longbridge数据要求），不启动其完整行情或Alert。自动Excluded仅显示当天候选的规则结果、不保存成员身份；跨日只继承Focus和有效Hidden，Focus每日自动淘汰保留，非候选淘汰后退出当前名单。盘中明确入选Focus才开始完整实时监控。Scan 全局搜索确认后进入当日 Discover 置顶，不建立临时预览或跨日保存；新增与继承细则见 [List 设计](list-design.md#三个列表)。
 
 候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、当日人工Discover、Focus和有效Hidden计算完整特征与Growth所用RFL数值，继承成员不另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。历史机器Excluded不扩大计算范围；Focus不因候选门槛、短历史或缺数据直接淘汰。启动在后台从本地Daily补齐旧截面缺少的有效成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 

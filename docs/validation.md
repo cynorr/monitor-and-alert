@@ -2,6 +2,20 @@
 
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
+
+## 2026-10-23：三名单最新报价与 Overnight
+
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0、TypeScript5.9.3；真实美东10月23日00点后夜盘。重启原正式Monitor服务加载Overnight配置，复用一条行情context；未创建另一条券商连接、测试报警或模拟行情。验证结束恢复Monitor模式。
+
+- 正式服务收到Overnight推送，推送计数由初始98增长至121；随后30秒Monitor/Scan有界WS观察又增长5。当前有效范围按真实名单与持仓去重为27只完整行情、73只Quote-only；服务CONNECTED，切模式前后started_at一致，日志无连接重建。
+- Monitor的MRNA.US共74份view，夜盘价200.70→200.21→200.20；Scan额外成员ASST.US共71份view，夜盘价29.44→29.43。所有latest均等于同份响应中各时段报价的最大timestamp项；两轮观察中candle active和indicator_preview保持不变，Scan没有active candle。
+- 真实PAYS.US没有Overnight报价，latest保留Post15.00；原始快照的JBDI.US latest为Overnight2.30。将这两份真实响应送入实际Panel.setQuotePrice，分别得到蓝色#2962ff与黑色#000000，价格正确，candle/volume序列不变。此检查复用既有UI测试的绘图库替身，只验证应用公开API调用，不冒充浏览器像素验收。
+- 97项相关后端回归通过，覆盖最新值/缺值/历史Scan、常驻批量订阅、完整与Quote-only范围、前收盘基准、图表、持仓、模拟器、Alert及Intraday State。TypeScript构建与20项相关UI用例通过，覆盖来源颜色、价格轴替换/清理、自动缩放和原生candle标签。未新增Mock数据源、恢复机制或历史下载入口。
+- 当前需求统一维护在Longbridge及Chart UI，README、behavior/development、UI总入口、List说明及AGENTS同步契约；移除被替代的时钟/日期报价过滤、前端二次选价、旧SDK字段别名、时段文字及相关旧规则验证段落。报价只在内存；Quote、Trade、candle共用原连接与恢复流程。
+- 正式服务重启按既有流程完成下一日Massive准备，更新运行缓存及splits.json；未修改Massive逻辑。
+
+未覆盖：真实Regular/Pre/Post逐跳推送、断网/休眠、周末连续运行及浏览器实际视觉验收。本轮夜盘真实推送与静态快照样本不替代这些场景。
+
 ## 2026-10-23：后端目录与模块命名整理
 
 环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0；北京时间10月23日，对应美东10月22日Regular。仅调整代码归属、导入和类名，正式运行目录、SQLite路径、请求额度与调度规则保持原状。
@@ -104,29 +118,6 @@
 - 本轮只读真实 Longbridge 缓存 ABCL.US、EFOR.US：冻结 ADR20 分别 6.3545%、4.9475%，26 分钟历史累计基准各有五个样本，分别 331721.76、12663.56。没有额外供应商查询或写正式数据；证据 `/tmp/intraday-real-cache-check.json`。
 - 正式后台按原 Monitor 展示模式重启，PID 20306；`/health` 为 running / CONNECTED，`/v1/intraday-state` 已启用。现场读取 CAI.US 的真实 Regular 状态、CumVol 与 15m LocalVol，两者都有五个历史样本。重启前后原有七条手动 Alert 内容相同，未处理事件均为零；没有向正式进程注入模拟行情。结束前状态已覆盖30个symbol，待处理窗口从118降至6；服务启动仍按原流程初始化行情窗口，本轮不将这些样本表述为全名单Ready。证据 `/tmp/intraday-live-check.json`，日志 `runtime/intraday-state-live.log`。
 - 未覆盖：整个 Regular 交易日运行、真实盘中所有规则穿越、物理断网/休眠、全部名单行情初始化、macOS 27、触屏。离线用例和本轮短时现场读取不替代这些证据。
-
-## 2026-10-16：Scan 报价按当前交易时段互斥显示
-
-环境：本机macOS、Python3.13.1、TypeScript5.9.3，以及现有localhost:8765的Monitor服务。本轮仅修复Scan报价显示，不修改订阅、Alert、名单或Massive数据。
-
-- 原实现只按报价日期过滤，Regular时也会返回当天Pre与上一交易日Post。现在由服务时钟与XNYS日历选择唯一报价窗口，并验证报价时间戳属于该窗口；缺失/旧报价、休市和历史Scan不返回实时标记，保留原Quote缓存。
-- 16项定向Python用例通过、35项未运行，覆盖04:00、Regular开收盘、20:00、提前收盘、夏令时、周末/休市、旧值/缺值、历史日隐藏及已有Scan范围切换。`npm run build --prefix ui`通过；1项图表定向用例通过，验证单个标签的Pre/Regular/Post价格与颜色切换、旧标签清除、原收盘价标签显隐、自动缩放和Massive candle不变。
-- 美东10:46:58只读现有服务一只Focus股票CAI.US的缓存报价：Pre时间戳为当日09:30:00，Post为上一交易日19:39:52。把真实响应交给本轮`scan_quote`过滤后，仅保留Regular价格31.01，extended为空。仅验证该样本后结束，不建立新券商连接、不读取凭证、不触发下载或账户刷新。
-- 同步Longbridge、Chart UI、UI总入口、behavior/development与简要入口说明；`git diff --check`通过。
-
-未覆盖：真实盘前/盘后推送与浏览器实际绘制；没有执行全链路或全量测试。正式服务未重启，本轮真实样本验证的是新函数对现有缓存响应的处理，不能冒充已运行服务加载了修复；运行中服务需重启后端并刷新页面生效。
-
-## 2026-10-16：Scan Pre/Post 与搜索加入 Discover
-
-环境：本机 macOS，Python 3.13.1、TypeScript 5.9.3。真实输入为2026-10-15的Massive SQLite与已生成截面/名单（全市场12,651只、自动候选82只）。本轮没有启动/重启正式服务，不读取券商凭证、不调用真实行情/账户接口或播放声音。
-
-- 27项定向Python用例通过，61项未运行。覆盖完整行情/Quote白名单与等待请求额度后的重检、模式切换和Focus升降级复用同一context、不扩大六周期任务、Holdings去重、25只额外Quote按两批获取、单只不可用隔离、Pre/Post日期过滤与历史日隐藏，以及原有Quote重连/名单规则相关场景。
-- `npm run build --prefix ui`通过；仅运行2项UI定向用例：Pre/Post轴标签颜色、隐藏横线、分别更新/清除与公开自动缩放API；Scan Search沿用add并切到Discover置顶、已有Discover置顶选择，显式Focus section和Monitor搜索目标保留。未运行浏览器或全链路测试。
-- 真实日库只读验证在临时runtime复制最近两份名单/截面和偏好：AAPL原非候选，加入当日Discover置顶并补齐均线/RFL约0.229s；仍非candidate，不扩大完整行情范围，新日继承移除该成员及Pin。日图有真实历史、无active candle；正式SQLite、名单、偏好与split的大小/mtime保持不变。
-- 该临时环境的订阅验证使用明确的LongbridgeClient替身：145个Quote标的中只有29个完整行情标的及174个candle订阅；Scan→Monitor→Scan共用一个替身context，保留全部原SyncState。这个结果验证调度范围，不冒充真实SDK连接/行情实测。临时业务库和目录已清理。
-- 同步Longbridge/Massive/List/UI及行为、职责和AGENTS入口；204个本地Markdown链接与`git diff --check`检查通过。既有正式split修改与.DS_Store未处理。
-
-未覆盖：真实Longbridge订阅与盘前/盘后推送、浏览器价格轴实际绘制和人工搜索交互、Alert实时穿越及账户链路。本轮只读获取现有服务状态未成功，没有为验证另建真实行情连接；以上未覆盖项不能视为已验收。
 
 ## 2026-10-16：Holdings 轻量错误详情与统一圆圈感叹号
 

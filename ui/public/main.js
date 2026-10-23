@@ -1,5 +1,5 @@
 import { attentionState } from './attention.js';
-import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
+import { $, money, compact, nyTime, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
@@ -124,14 +124,14 @@ function apply(view) {
         return;
     currentView = view;
     daily.render(view.charts['1d']);
-    daily.setSessionPrices(appMode === 'scan' ? view.quote : undefined);
+    daily.setQuotePrice(view.quote, appMode === 'monitor');
     if (appMode === 'monitor') {
         intraday.render(view.charts[timeframe]);
+        intraday.setQuotePrice(view.quote, true);
         dayLink.restore();
     }
-    const extended = appMode === 'scan' ? undefined : extendedQuote(view.quote), quote = appMode === 'scan' ? null : extended ?? view.quote.regular;
+    const quote = appMode === 'scan' ? null : view.quote.latest;
     document.querySelectorAll('.last-price').forEach(node => node.textContent = money(quote?.last_price));
-    document.querySelectorAll('.session').forEach(node => { node.hidden = !extended; node.textContent = extended?.trade_session.toUpperCase() ?? ''; });
     document.querySelectorAll('.clock').forEach(node => node.textContent = nyTime.format(new Date(view.server_time * 1000)) + ' ET');
     const bid = quote?.bid_price, ask = quote?.ask_price;
     document.querySelectorAll('.spread').forEach(node => { node.hidden = !bid && !ask; const sell = node.querySelector('.bid'), buy = node.querySelector('.ask'); sell.hidden = !bid; buy.hidden = !ask; sell.textContent = `Sell ${money(bid)}`; buy.textContent = `Buy ${money(ask)}`; });
@@ -161,7 +161,7 @@ function select(next, tf, source = selectionSource, key = holdingKey, viewed = f
     document.querySelectorAll('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
     additional.update(null);
     document.querySelectorAll('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
-    document.querySelectorAll('.session,.spread,.quality').forEach(node => node.hidden = true);
+    document.querySelectorAll('.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
     watchlist.selected = source === 'watchlist' ? symbol : '';
     watchlist.keyboardEnabled = source === 'watchlist';

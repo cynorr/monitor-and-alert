@@ -178,7 +178,7 @@ class SimulatedQuotes:
 
     def output(self, symbol, now):
         self.market.check([symbol])
-        return {'symbol':symbol, 'regular':self.values.get(symbol), 'extended':{},
+        return {'symbol':symbol, 'regular':self.values.get(symbol), 'extended':{}, 'latest':self.values.get(symbol),
                 'connection_health':self.connection_health, 'error':None}
 
     async def run(self):

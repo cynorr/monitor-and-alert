@@ -61,7 +61,7 @@ Filter 仅改变显示，不移动名单、不改变实时订阅。自动分类�
 
 ## Scan 与 Monitor
 
-Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，盘前/盘后报价按 [Longbridge 范围](longbridge-data.md#定位与范围) 共用连接。Monitor 展示 Focus 和独立 Holdings；只有 Focus/Holdings 使用完整 Monitor 行情和 Alert，Scan 的额外 Quote 不扩大这两个范围。
+Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，最新报价（含盘前/盘后/夜盘）按 [Longbridge 范围](longbridge-data.md#定位与范围) 共用连接。Monitor 展示 Focus 和独立 Holdings；只有 Focus/Holdings 使用完整 Monitor 行情和 Alert，Scan 的额外 Quote 不扩大这两个范围。
 
 因此 Excluded 的盘中恢复不被实时发现；每日完成日扫描发现恢复。仍希望当天实时关注的股票，应明确留在 Focus。切换模式不停止后台 Focus 行情或 Holdings 刷新。
 

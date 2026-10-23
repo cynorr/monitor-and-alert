@@ -55,11 +55,11 @@ class Workbench:
         workspace.on_change = self.workspace_changed
         self.workspace_changed()
 
-    def refresh_scan_quotes(self):
+    def refresh_list_quotes(self):
         if self.monitor:
             symbols = [row['symbol'] for row in self.scan_board(self.workspace.date)] if (
-                self.mode == 'scan' and not self.mock and self.only is None) else []
-            self.monitor.update_scan_symbols(symbols)
+                not self.mock and self.only is None) else []
+            self.monitor.update_quote_symbols(symbols)
 
     def refresh_alert_scope(self):
         day = datetime.fromtimestamp(time.time(), ET).date().isoformat()
@@ -124,7 +124,7 @@ class Workbench:
                 tickers = [ticker for ticker in tickers if ticker.symbol in wanted]
             self.monitor.update_tickers(tickers)
         self.refresh_alert_scope()
-        self.refresh_scan_quotes()
+        self.refresh_list_quotes()
 
     async def switch_mode(self, mode):
         if mode not in ('scan', 'monitor'):
@@ -141,7 +141,7 @@ class Workbench:
                 # Mock Scan stays offline; only an explicit Monitor switch may connect.
                 await self.stop_monitor()
             self.mode = mode
-            self.refresh_scan_quotes()
+            self.refresh_list_quotes()
             self.run_id = uuid.uuid4().hex
             self.focus = (self.symbols[0] if self.symbols else '', self.focus[1])
             return self.list_state()
@@ -188,7 +188,7 @@ class Workbench:
         self.previous_cache.clear()
         if self.has_snapshot(self.workspace.date):
             self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences)
-        self.refresh_scan_quotes()
+        self.refresh_list_quotes()
         self.run_id = uuid.uuid4().hex
 
     async def stop_monitor(self):
@@ -355,31 +355,11 @@ class Workbench:
                 'quote': self.scan_quote(symbol)}
 
     def scan_quote(self, symbol):
-        result = {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}
         if (self.selected_date != self.workspace.date or self.mock or not self.monitor or
                 symbol not in self.monitor.quotes.all_symbols):
-            return result
-        now = int(self.monitor.now())
-        result = self.monitor.quotes.output(symbol, now)
-        regular, extended = result['regular'], result['extended']
-        result['regular'], result['extended'] = None, {}
-        local = datetime.fromtimestamp(now, ET)
-        session = self.calendar.session(local.date())
-        if not session:
-            return result
-        opened, closed = session
-        pre = int(local.replace(hour=4, minute=0, second=0, microsecond=0).timestamp())
-        post = int(local.replace(hour=20, minute=0, second=0, microsecond=0).timestamp())
-        for name, start, end in (('Pre', pre, opened), ('Intraday', opened, closed), ('Post', closed, post)):
-            if start <= now < end:
-                value = regular if name == 'Intraday' else extended.get(name)
-                if value and start <= value['timestamp'] < end:
-                    if name == 'Intraday':
-                        result['regular'] = value
-                    else:
-                        result['extended'][name] = value
-                break
-        return result
+            return {'regular': None, 'extended': {}, 'latest': None,
+                    'connection_health': 'OFFLINE', 'error': None}
+        return self.monitor.quotes.output(symbol, int(self.monitor.now()))
 
     def additional_info(self, symbol):
         return self.additional.info(symbol)

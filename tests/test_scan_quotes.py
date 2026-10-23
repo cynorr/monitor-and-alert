@@ -63,50 +63,34 @@ def test_regular_quote_retains_native_ohl_only_within_same_day(cal):
     assert 'high' not in quotes.values['TEST.US']['Intraday']
 
 
-@pytest.mark.parametrize('clock, expected', [
-    ('2026-10-16T03:59:59-04:00', None),
-    ('2026-10-16T04:00:00-04:00', 'Pre'),
-    ('2026-10-16T09:29:59-04:00', 'Pre'),
-    ('2026-10-16T09:30:00-04:00', 'Intraday'),
-    ('2026-10-16T15:59:59-04:00', 'Intraday'),
-    ('2026-10-16T16:00:00-04:00', 'Post'),
-    ('2026-10-16T19:59:59-04:00', 'Post'),
-    ('2026-10-16T20:00:00-04:00', None),
-    ('2026-10-17T10:00:00-04:00', None),
-    ('2026-11-26T10:00:00-05:00', None),
-    ('2026-11-27T12:59:59-05:00', 'Intraday'),
-    ('2026-11-27T13:00:00-05:00', 'Post'),
-    ('2026-10-30T13:30:00+00:00', 'Intraday'),
-    ('2026-11-02T14:29:59+00:00', 'Pre'),
-    ('2026-11-02T14:30:00+00:00', 'Intraday'),
-])
-def test_scan_quote_selects_only_current_session(cal, clock, expected):
-    local = datetime.fromisoformat(clock).astimezone(ET)
-    now = int(local.timestamp())
-    quotes = RealtimeFeed(Broker(), ['SCAN.US'], cal)
-    closed_hour = 13 if local.date().isoformat() == '2026-11-27' else 16
-    values = {name: {'last_price': price, 'timestamp': int(local.replace(hour=hour, minute=minute,
-              second=0, microsecond=0).timestamp()), 'trade_session': name}
-              for name, price, hour, minute in [('Pre', 10, 4, 0), ('Intraday', 11, 9, 30),
-                                                ('Post', 12, closed_hour, 0)]}
-    quotes.values['SCAN.US'] = values
+@pytest.mark.parametrize('clock', ['2026-10-23T00:30:00-04:00', '2026-10-24T12:00:00-04:00'])
+def test_scan_quote_keeps_latest_received_price_without_clock_filtering(cal, clock):
+    now = int(datetime.fromisoformat(clock).timestamp())
+    quotes = RealtimeFeed(Broker(), ['PAYS.US'], cal)
+    # Real official PAYS quote fields from this change's overnight verification.
+    values = {
+        'Pre': {'last_price': 15.36, 'timestamp': 1792675551, 'trade_session': 'Pre'},
+        'Intraday': {'last_price': 15.21, 'timestamp': 1792699200, 'trade_session': 'Intraday'},
+        'Post': {'last_price': 15.0, 'timestamp': 1792712415, 'trade_session': 'Post'},
+    }
+    quotes.values['PAYS.US'] = values
     original = deepcopy(values)
     app = Workbench.__new__(Workbench)
-    app.calendar, app.mock = cal, False
-    app.workspace = SimpleNamespace(date='2026-10-15')
+    app.mock = False
+    app.workspace = SimpleNamespace(date='2026-10-22')
     app.selected_date = app.workspace.date
     app.monitor = SimpleNamespace(now=lambda: now, quotes=quotes)
-    result = app.scan_quote('SCAN.US')
-    assert result['regular'] == (values['Intraday'] if expected == 'Intraday' else None)
-    assert result['extended'] == ({expected: values[expected]} if expected in ('Pre', 'Post') else {})
-    assert values == original  # Scan filtering must not discard Monitor's cached sessions.
-    if expected:
-        values[expected]['timestamp'] -= int(timedelta(days=1).total_seconds())
-        stale = app.scan_quote('SCAN.US')
-        assert stale['regular'] is None and not stale['extended']
-        del values[expected]
-        missing = app.scan_quote('SCAN.US')
-        assert missing['regular'] is None and not missing['extended']
+    result = app.scan_quote('PAYS.US')
+    assert result['latest'] == values['Post']
+    assert result['regular'] == values['Intraday']
+    assert values == original
+    del values['Post']
+    assert app.scan_quote('PAYS.US')['latest'] == values['Intraday']
+    app.selected_date = '2026-10-21'
+    assert app.scan_quote('PAYS.US')['latest'] is None
+    app.selected_date = app.workspace.date
+    quotes.values.clear()
+    assert app.scan_quote('PAYS.US')['latest'] is None
 
 
 def test_broker_scan_scope_allows_quote_but_rejects_trade_and_candles():

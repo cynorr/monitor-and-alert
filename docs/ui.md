@@ -179,7 +179,9 @@ Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式
 
 ### Scan 日期与准备状态
 
-- Scan 使用截至所选日的完成 Daily，Focus 也用同一来源，无活跃 candle 或 Intraday，最新日仅叠加Longbridge当前时段的一个价格轴标签（Pre、Regular或Post），历史日隐藏。图表显示所选日期；正常时隐藏独立准备状态，不重复显示 Ready 日期或完成时间。
+- Scan 使用截至所选日的完成 Daily，Focus 也用同一来源，无活跃 candle 或 Intraday，最新日仅叠加Longbridge最新报价的一个价格轴标签（含Overnight），历史日隐藏。图表显示所选日期；正常时隐藏独立准备状态，不重复显示 Ready 日期或完成时间。
+
+- Monitor双图在最新报价来自扩展时段时显示价格轴标签，Intraday最新值保留原生candle价格；缺少新报价保留最后值，不增加时段提示，仅显示price，外观及刷新规则见Chart UI，数据范围见Longbridge说明。
 - 日期下拉仅列已生成日。Refresh Scan 补齐并打开最新可用日，与正在查看的历史日期无关；已完成的步骤跳过，全部完成仍切回最新日。自动完成保留历史选择和展示模式，新日按 List 生命周期继承。配置变更/指定日重算仅由CLI处理。
 - 未完成、处理中或失败时才显示目标日期与当前阶段，例如 Downloading daily / Updating splits / Building daily bars / Building features，失败详情放悬停；旧日期和结果继续可查看。准备中禁用重复 Refresh，但允许切换模式。GET、选图、Filter 和切页不触发下载。
 - 实时报价失败或连接中断复用图表现有质量图标与悬停原因，不改变 Scan 完成状态、不阻止本地日 K 展示；有效价格轴标签的外观只在 [Chart UI](chart-ui.md#colors-margins-and-reference-lines) 维护。

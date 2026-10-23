@@ -232,6 +232,7 @@ class RealtimeFeed:
                        == datetime.fromtimestamp(now, ET).date())
         return {'symbol': symbol, 'regular': regular,
                 'extended': {key: value for key, value in sessions.items() if key != 'Intraday'},
+                'latest': max(sessions.values(), key=lambda value: value['timestamp'], default=None),
                 'connection_health': self.connection_health,
                 'regular_quote_age_seconds': now - regular['timestamp'] if regular else None,
                 'current_regular_session': current and self.calendar.is_open(now),
@@ -242,7 +243,7 @@ class RealtimeFeed:
         for row in rows:
             self.apply(row.symbol, row, snapshot=True)
             for field, session in (('pre_market_quote', 'Pre'), ('post_market_quote', 'Post'),
-                                   ('overnight_quote', 'Overnight'), ('over_night_quote', 'Overnight')):
+                                   ('overnight_quote', 'Overnight')):
                 extended = getattr(row, field, None)
                 if extended is not None:
                     event = SimpleNamespace(timestamp=extended.timestamp, last_done=extended.last_done,

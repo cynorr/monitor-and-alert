@@ -9,7 +9,7 @@
 | 文件 | 唯一职责 |
 | --- | --- |
 | data_service/__main__.py | CLI、单实例锁、生命周期、有限运行报告 |
-| workbench.py | 同一 Workspace、Scan/Monitor展示、模式对应的Quote范围、持续后台行情/账户及本地Scan API |
+| workbench.py | 同一Workspace、Scan/Monitor展示、两种模式共用的名单Quote范围、持续后台行情/账户及本地Scan API |
 | paths.py / network.py | 唯一runtime布局、共用HTTP session创建与显式代理配置；各数据源自行管理连接和额度 |
 | massive/daily.py / splits.py / build.py | 原始Daily补文件、两年split覆盖、新日增量追加；输入修订或失败后从raw全量重建派生SQLite |
 | additional_info/symbol_directory.py / scripts/pull_symbol_directory.py | 独立免费Nasdaq目录获取/校验/原子发布；仅保存.US官方ETF标记，用于扫描资格 |
@@ -74,7 +74,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 ## 模式与上游数据
 
-同一个服务、同一个Workspace、一个全局展示模式。正式serve在HTTP可响应后启动一次LongbridgeClient/MonitorService与Holdings；切Scan不停止它们，服务关闭才cancel/await并释放context/store/session；模式变化只更新额外Quote-only范围。Mock Scan与有界--symbols禁用Massive与真实账户；Mock明确切Monitor才构造Longbridge，回到Mock Scan时释放。后台准备与展示切换分离，仅禁止重复生成，不建立第二个服务或通用source接口。
+同一个服务、同一个Workspace、一个全局展示模式。正式serve在HTTP可响应后启动一次LongbridgeClient/MonitorService与Holdings；切Scan不停止它们，服务关闭才cancel/await并释放context/store/session；三名单Quote-only范围不随展示模式改变。Mock Scan与有界--symbols禁用Massive与真实账户；Mock明确切Monitor才构造Longbridge，回到Mock Scan时释放。后台准备与展示切换分离，仅禁止重复生成，不建立第二个服务或通用source接口。
 
 Massive唯一要求见 [massive-data.md](massive-data.md)，共用bars契约见 [upstream-daily-data.md](upstream-daily-data.md)。RuntimePaths统一所有正式路径：symbol-directory.json、massive/daily原始文件、massive/splits.json、massive/daily.sqlite3、longbridge/bars.sqlite3、holdings、additional-info/info.sqlite3与days；继续接受--runtime。正式Workbench和reconcile/verify注入Longbridge新路径；MonitorService独立/模拟器默认临时bars路径保持。两库共用BAR_SCHEMA、Bar、read_bars与指标，Daily ts为ET零点转Unix秒；不混库或拼接历史。显式--daily-db是只读外部入口，不运行内置Massive，筛选仍消费指定runtime的本地目录。
 
@@ -84,7 +84,7 @@ build_day仅对D当日有bar的symbol生成截面，重读配置和本地目录�
 
 latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)回退推断；缺少完成日则失败并保留原状态。CLI scan未传--date、页面Refresh未传date时用该完成日，build_day继续拒绝未收盘日或无当日bar。成功后同步publish_day、reload workspace并明确选中新生成日期，首次才创建workspace。相同日期重算不重新继承；生成失败释放busy并保留原日期/名单。离线scan和serve共用runtime单实例锁，运行中的生成通过POST /v1/scan。
 
-只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有实时active、Intraday或Ready实时状态；Daily复用同一个Panel。Workbench.scan_quote只读同一RealtimeFeed缓存，按服务时钟、XNYS交易日边界及报价窗口返回当前时段唯一有效值，不改原缓存；历史日期隐藏，行情K线revision不变也随WS更新报价。Panel复用一个价格轴标签，有实时值时隐藏原closed价标签；时段规则与外观分别见Longbridge数据要求和Chart UI。
+只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有实时active、Intraday或Ready实时状态；Daily复用同一个Panel。Workbench.scan_quote只读同一RealtimeFeed.output，最新Scan日与Monitor共用quote.latest；历史日期返回latest=null，行情K线revision不变也随WS更新报价。Panel复用一个价格轴标签，有最新报价时隐藏原closed价标签；报价选择与外观分别见Longbridge数据要求和Chart UI。
 
 indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。指标直接消费已选来源的价格；不同供应商的结果允许不同。
 
@@ -125,7 +125,7 @@ Workbench.start_background先异步补本地成员feature并分类，再启动�
 
 Workbench持有唯一workspace回调，Monitor通过update_tickers接收变更；独立模拟器继续使用MonitorService.attach_workspace。update_tickers 同步更新当前白名单、调度任务及选择。删除任务取消并在退出时收尾；保留成员复用 SyncState。RealtimeFeed 用内存事件唤醒现有行情循环，按当前成员增删 Quote / Trade 与六周期 candle 订阅；移除时先清 candle，再退订底层行情；失败沿用重连/30 秒重试。LongbridgeClient 在等待额度后再次检查请求范围；unsubscribe 允许清理已移出白名单的 symbol。static_info 是搜索/添加前唯一可查询候选 ticker 的例外，验证本身不扩大行情白名单，仍共用全局限流及同一 context。
 
-Workbench.refresh_scan_quotes在模式/名单/新截面变化时，将当前Scan三名单交给MonitorService.update_scan_symbols；仅正式Scan启用。MonitorService.symbols、store.allowed、LongbridgeClient.candle_allowed和SyncState仍只包含Focus/Holdings；LongbridgeClient.allowed是完整Quote并集。RealtimeFeed.symbols为完整行情集合，extra_symbols排除其中重复成员；subscribed与quote_subscribed分别管理完整订阅及Quote-only。set_symbols只唤醒既有循环，按差集批量订阅/快照，不重置context或generation。移出Scan只退订额外Quote；入选Focus才增加Trade/candle。单只不可用时按既有单只方式隔离，Quote-only请求超时只记录错误并在既有周期重试，不中断核心行情。
+Workbench.refresh_list_quotes将最新workspace完整三名单交给MonitorService.update_quote_symbols，正式Scan/Monitor共用，Mock与symbol子集保持隔离。MonitorService.symbols、store.allowed、LongbridgeClient.candle_allowed和SyncState仍只包含Focus/Holdings；quote_symbols记录三名单，LongbridgeClient.allowed是两者并集。RealtimeFeed.extra_symbols排除完整行情重复成员；subscribed与quote_subscribed分别管理完整订阅及Quote-only。切模式不改变集合、不重置context或generation，名单变化才唤醒既有循环按差集批量订阅/快照；入选Focus才增加Trade/candle。单只不可用按既有方式隔离，Quote-only超时独立重试，不中断核心行情。
 
 Workspace.add_ticker的discover分支原子保存当日manual_discover_date及Pin，重复已有归属不迁移。derive_day_view/apply_rules把同日人工Discover纳入成员范围并保留人工归属、如实计算Tag；inherit_workspace删除Discover与全部Pin，只有明确加入Focus才按原生命周期跨日。Scan新增补特征复用enrich_snapshot，保持candidate和rank；不增加预览缓存或独立保存文件。
 
@@ -155,7 +155,7 @@ UI契约仍为 `status: {stage: loading|basic|full, errors: string[], refreshing
 
 `MonitorService.recover`重置报警比较起点、核对历史closed边界并唤醒既有RealtimeFeed循环。循环逐周期本地退订再注册，期间不关闭Quote/Trade或callback，保留已有应用数据直至新起点到达。真正连接失败才进入disconnect/connect；connect的on_reset重置比较起点，on_reconnect只检查历史任务，避免递归恢复。只有实际网络请求经过LongbridgeClient公共限流，本地candle删除不消耗请求额度。
 
-Quote的regular/pre/post/overnight统一标准化；snapshot与push走同一入口，快照不增加push_count。Quote推送计数表示应用收到的有效Quote消息数，不代表Trade或candle总数。各时段报价与candle分别存内存；preview只使用本周期缓存标量。validator的complete是官方历史诊断，不是SDK显示开关。
+LongbridgeClient显式enable_overnight=True。Quote的regular/pre/post/overnight统一标准化；snapshot与push走同一入口，快照不增加push_count。RealtimeFeed.output按timestamp返回quote.latest，同时保留regular/extended；Scan与Monitor不再分别过滤时段。MonitorService.quote修正Regular前收盘基准时同步更新指向该Regular的latest。Panel.setQuotePrice、Intraday顶部价格和Ext直接消费latest，不在前端排序或读取时钟；模拟器遵循同一latest契约。Quote推送计数表示应用收到的有效Quote消息数，不代表Trade或candle总数。各时段报价与candle分别存内存；preview只使用本周期缓存标量。validator的complete是官方历史诊断，不是SDK显示开关。
 
 ## 传输
 

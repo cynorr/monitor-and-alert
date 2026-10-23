@@ -71,6 +71,7 @@ export type QuoteValue = {
 export type Quote = {
     regular: QuoteValue | null;
     extended: Record<string, QuoteValue>;
+    latest: QuoteValue | null;
     connection_health: string;
     error: string | null;
     current_regular_session?: boolean;
@@ -118,10 +119,8 @@ export type View = {
     };
 };
 export function extendedQuote(quote?: Quote) {
-    if (!quote)
-        return undefined;
-    const regular = quote.regular;
-    return Object.values(quote.extended).filter(q => !regular || q.timestamp > regular.timestamp).sort((a, b) => b.timestamp - a.timestamp)[0];
+    const latest = quote?.latest;
+    return latest && latest.trade_session !== 'Intraday' ? latest : undefined;
 }
 
 export const selectionRequest = (symbol: string, timeframe: string, request_id: number, mode: 'scan' | 'monitor', source: 'watchlist' | 'holdings') =>

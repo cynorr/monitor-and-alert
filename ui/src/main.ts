@@ -1,5 +1,5 @@
 import { attentionState } from './attention.js';
-import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest, type View } from './types.js';
+import { $, money, compact, nyTime, defaultTimeframe, scanProgress, selectionRequest, type View } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist, type ListState } from './list.js';
 import { initLayout } from './layout.js';
@@ -98,11 +98,14 @@ function apply(view: View) {
         return;
     currentView = view;
     daily.render(view.charts['1d']);
-    daily.setSessionPrices(appMode === 'scan' ? view.quote : undefined);
-    if (appMode === 'monitor') { intraday.render(view.charts[timeframe]); dayLink.restore(); }
-    const extended = appMode === 'scan' ? undefined : extendedQuote(view.quote), quote = appMode === 'scan' ? null : extended ?? view.quote.regular;
+    daily.setQuotePrice(view.quote, appMode === 'monitor');
+    if (appMode === 'monitor') {
+        intraday.render(view.charts[timeframe]);
+        intraday.setQuotePrice(view.quote, true);
+        dayLink.restore();
+    }
+    const quote = appMode === 'scan' ? null : view.quote.latest;
     document.querySelectorAll<HTMLElement>('.last-price').forEach(node => node.textContent = money(quote?.last_price));
-    document.querySelectorAll<HTMLElement>('.session').forEach(node => { node.hidden = !extended; node.textContent = extended?.trade_session.toUpperCase() ?? ''; });
     document.querySelectorAll<HTMLElement>('.clock').forEach(node => node.textContent = nyTime.format(new Date(view.server_time * 1000)) + ' ET');
     const bid = quote?.bid_price, ask = quote?.ask_price;
     document.querySelectorAll<HTMLElement>('.spread').forEach(node => { node.hidden = !bid && !ask; const sell = node.querySelector<HTMLElement>('.bid')!, buy = node.querySelector<HTMLElement>('.ask')!; sell.hidden = !bid; buy.hidden = !ask; sell.textContent = `Sell ${money(bid)}`; buy.textContent = `Buy ${money(ask)}`; });
@@ -131,7 +134,7 @@ function select(next: string, tf: string, source: 'watchlist' | 'holdings' = sel
     document.querySelectorAll<HTMLElement>('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
     additional.update(null);
     document.querySelectorAll<HTMLElement>('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
-    document.querySelectorAll<HTMLElement>('.session,.spread,.quality').forEach(node => node.hidden = true);
+    document.querySelectorAll<HTMLElement>('.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
     watchlist.selected = source === 'watchlist' ? symbol : '';
     watchlist.keyboardEnabled = source === 'watchlist';

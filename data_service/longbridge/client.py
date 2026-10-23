@@ -53,7 +53,8 @@ class LongbridgeClient:
         domain = 'cn' if region == 'cn' else 'com'
         os.environ['LONGBRIDGE_REGION'] = 'cn' if region == 'cn' else 'hk'
         self.config = Config.from_apikey(
-            *self.secrets, enable_print_quote_packages=False, push_candlestick_mode=PushCandlestickMode.Realtime,
+            *self.secrets, enable_overnight=True, enable_print_quote_packages=False,
+            push_candlestick_mode=PushCandlestickMode.Realtime,
             http_url=f'https://openapi.longbridge.{domain}',
             quote_ws_url=f'wss://openapi-quote.longbridge.{domain}/v2')
         self.timeout, self.limiter = timeout, RateLimiter()

@@ -47,7 +47,6 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 #daily-earnings-countdown { flex-shrink: 0; }
 .market-clock { display: flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; }
 .clock { font-size: var(--font-row); height: 26px; line-height: 26px; color: #293341; }
-.session { height: 26px; font-size: var(--font-small); }
 .latest { font-size: 18px; }
 .latest:hover { background: #dfe4ec; }
 #daily-latest { margin-left: 0; }

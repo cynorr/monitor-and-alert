@@ -13,17 +13,21 @@
 
 ## 定位与范围
 
-Longbridge 服务 Monitor 的 Daily / Intraday、名单、持仓行情、Alert 和 Intraday State，以及 Scan 当前时段的价格标记。完整行情范围为当前 Focus 与当前 Holdings 的并集，含仅保留当天的已清仓批次；这些 symbol 请求 Quote、Trade 和六周期行情，并进入既有 Alert 白名单。当前余仓的自动风险监控范围另见 Intraday State，不把已清仓批次加入风险监控。
+Longbridge 服务 Monitor 的 Daily / Intraday、名单、持仓行情、Alert 和 Intraday State，以及 Scan 的最新价格标记。完整行情范围为当前 Focus 与当前 Holdings 的并集，含仅保留当天的已清仓批次；这些 symbol 请求 Quote、Trade 和六周期行情，并进入既有 Alert 白名单。当前余仓的自动风险监控范围另见 Intraday State，不把已清仓批次加入风险监控。
 
-Scan 模式额外订阅有效 workspace 的完整 Discover / Excluded（含 Hidden）的 Quote，不随折叠、Filter 或选中股票缩减；额外成员不请求 Trade/candle、不写 bars、不加入 Alert。全部按 symbol 去重。切模式只增减 Scan 额外 Quote，Focus / Holdings 后台持续工作；名单变化按差集增删。
+正式服务在Scan与Monitor两种模式都订阅有效workspace完整Discover / Focus / Excluded（含Hidden）的Quote，不随模式、折叠、Filter或选中股票缩减。Focus / Holdings仍保留完整行情，其余成员仅Quote，不请求Trade/candle或历史、不写bars、不加入Alert。全部按symbol去重，名单变化按差集增删；切模式复用已有订阅和缓存。三名单通常少于200只，沿用官方批量订阅及快照，不新增分批上限。
 
 唯一 SDK 入口为 `data_service/longbridge/client.py`；所有报价、实时 candle 与历史请求共用一个 `AsyncQuoteContext` 和一条行情长连接。context 是 SDK 持有连接、订阅和 candle 内存的客户端对象，不是历史数据库，也不是每次查询应重建的 session id。关闭网页不停止后台。
 
 Scan 日 K 与指标使用 Massive，Monitor 使用 Longbridge；两源分别存库，共用 Bar、指标与显示，不拼接、交叉验证或补缺。
 
-### Scan 当前报价
+### 最新报价与 Overnight
 
-仅最新 Scan 日显示当前时段报价：交易日美东04:00至Regular开盘为 Pre，Regular期间为 Intraday，Regular收盘至20:00为 Post。边界复用 XNYS，包含 DST 与提前收盘；报价时间戳必须属于当天对应窗口。当前窗口缺价、历史日期、休市日或窗口之外不显示其他时段缓存。契约沿用 `quote.regular` 与 `quote.extended.Pre/Post`；过滤只作用于 Scan 响应，不删除 Monitor / 持仓的原始缓存。价格标记不改变 Massive OHLC、volume 或指标。
+SDK配置显式启用`enable_overnight=True`，Pre、Intraday（Regular）、Post和Overnight共用现有Quote订阅、快照和连接恢复；不为扩展时段创建独立连接或回补任务。三名单Quote在Regular及非Regular均常驻，切Scan/Monitor不退订；只有成员变化才按差集调整。
+
+各时段在内存保留最后一份有效报价。`RealtimeFeed.output`统一以报价的`timestamp`选取最新值，通过`quote.latest`提供给显示层；无报价为null。不按当前时钟屏蔽旧时段，不按消息到达顺序或固定时段优先级选价；缺少新报价时继续显示最后值。来源直接保留官方`trade_session`，不推断新成交、不增加Last Post等提示。`quote.regular`和`quote.extended`保留原始分时段报价，供既有Regular指标与持仓等消费。
+
+最新Scan日的Daily显示`quote.latest`；历史Scan不显示实时报价。Monitor双图在最新值来自Pre/Post/Overnight时显示独立价格标签，最新值为Intraday时继续使用原生candle价格；Intraday顶部价格同样读取latest，不另行选价。标签颜色按报价来源，而非当前时钟，具体外观只维护在Chart UI。所有报价只存内存；扩展报价不生成或更新candle、volume、指标或数据库，不参与Regular Alert/Intraday State。无新报价时不设置价格过期计时或额外恢复机制。
 
 ## 官方接口及特点
 
@@ -31,9 +35,9 @@ Scan 日 K 与指标使用 Massive，Monitor 使用 Longbridge；两源分别存
 
 | 接口 | 含义与本项目使用 |
 | --- | --- |
-| `ctx.subscribe(symbols, [Quote, Trade])` | 批量订阅完整范围的报价与逐笔成交；Scan额外范围只订阅Quote。单次最多500个symbol，没有20只分批限制。 |
+| `ctx.subscribe(symbols, [Quote, Trade])` | 批量订阅完整范围的报价与逐笔成交；两种模式的其余名单成员只订阅Quote。单次最多500个symbol，没有20只分批限制。 |
 | `ctx.set_on_quote(callback)` | 最新报价推送。主要字段为last_done、open/high/low、timestamp、日累计volume/turnover、trade_status、trade_session；用于最新价、ADR盘中状态、持仓估值与手动价格线。 |
-| `ctx.quote(symbols)` | 报价快照，含prev_close及可用extended报价。初始化补齐当前状态，此后每30秒刷新；快照不冒充推送计数。 |
+| `ctx.quote(symbols)` | 批量报价快照，含Regular、prev_close和可用pre_market_quote/post_market_quote/overnight_quote。初始化补齐当前状态，此后每30秒刷新；快照不冒充推送计数。 |
 | `ctx.subscribe_candlesticks(symbol, period, Intraday)` | 每次一个symbol/周期；首次返回最近最多1000根NoAdjust起点，并注册该周期持续计算。重复注册已存在的周期只返回SDK缓存。 |
 | `ctx.set_on_candlestick(callback)` | `PushCandlestickMode.Realtime`下接收该周期完整OHLCV快照；既接收开放根更新，也接收闭合/换桶更新。应用用整根新值覆盖同timestamp，不累加volume。 |
 | `ctx.candlesticks(symbol, period, count, ForwardAdjust, Intraday)` | 官方历史查询，count最多1000；响应可能含未闭合尾根，本项目只提交实际closed行。六周期分别查询，不从小周期合成。 |
@@ -47,7 +51,7 @@ candle包含timestamp、open/high/low/close、volume、turnover、trade_session�
 
 六周期固定为 `1d / 5m / 15m / 30m / 1h / 2h`。SDK初始化只使用属于当前美东日期的全部有效candle，保留当天已结束根与开放根；此前的NoAdjust行不进入显示或数据库。历史库采用ForwardAdjust，当前日SDK原始值与其直接连接显示，不二次复权。SDK `is_confirmed`不决定SQLite提交。
 
-官方参考：[批量订阅](https://open.longbridge.com/docs/quote/subscribe/subscribe)、[报价快照](https://open.longbridge.com/docs/quote/pull/quote)、[逐笔成交推送](https://open.longbridge.com/docs/quote/push/trade)、[最近K线](https://open.longbridge.com/docs/quote/pull/candlestick)、[Python SDK](https://longbridge.github.io/openapi/python/reference_all/)、[SDK 5.0.0 初始化/合并/恢复源码](https://github.com/longbridge/openapi/blob/v5.0.0/rust/src/quote/core.rs)。
+官方参考：[Overnight配置](https://open.longbridge.com/docs/qa/broker#q7-enable-overnight-quote-in-openapi-sdk)、[批量订阅](https://open.longbridge.com/docs/quote/subscribe/subscribe)、[报价快照](https://open.longbridge.com/docs/quote/pull/quote)、[逐笔成交推送](https://open.longbridge.com/docs/quote/push/trade)、[最近K线](https://open.longbridge.com/docs/quote/pull/candlestick)、[Python SDK](https://longbridge.github.io/openapi/python/reference_all/)、[SDK 5.0.0 初始化/合并/恢复源码](https://github.com/longbridge/openapi/blob/v5.0.0/rust/src/quote/core.rs)。
 
 ## 统一读取与下游计算
 
@@ -86,7 +90,7 @@ Regular时间网格由XNYS决定，包含DST、提前收盘与尾根。OHLC须�
 | 已知休眠/调度跳跃超过30秒 | 按交易日及各周期实际closed边界补缺；同日成功在途请求可继续使用 | 保留Quote/Trade、callback和context；各周期先本地退订再注册，取得新起点后替换旧SDK序列 |
 | 应用级重连 | 同一边界检查，不无条件重拉六份整窗 | 在既有连接生命周期重新订阅；失败清理不了时释放context再建 |
 | 单请求失败、缺目标、错过多个边界 | 对应周期count1000回补 | 维持其他已有行情 |
-| 移出完整范围 | 取消该symbol任务，不主动追删磁盘数据 | 删除SDK序列/注册；Scan仍需时保留Quote-only，否则批量退订 |
+| 移出完整范围 | 取消该symbol任务，不主动追删磁盘数据 | 删除SDK序列/注册；仍在三名单时保留Quote-only，否则批量退订 |
 
 现有调度器持续比较美东交易日；服务已运行且未休眠时到零点自动准备，开机或服务重启立即检查，真实休眠后由调度跳跃恢复检查。锁屏本身无需监听：进程仍运行就照常处理，实际休眠则唤醒后处理。不新增解锁事件、定时服务或9:25额外刷新。周末/休市沿用最近交易日，不因自然日期变化重复全量。
 

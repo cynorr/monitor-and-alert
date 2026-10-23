@@ -12,7 +12,8 @@
 - 名单归属、自动标签、Hidden 期限由后端计算；自动 Excluded 仅当天候选可见，成员新出现只显示 NEW 标记。Filter、格式化和拖拽显示不能扩大行情订阅，也不能改变底层增长数值或计算口径。
 - Tags 使用纯 SVG 轮廓；图形与外观只维护在 Logo / Icon，行高、列宽与折叠数量只维护在 List UI。新增图案保持已有 Icon ID 的含义，列表与编辑 preview 复用 `tag-appearance.ts`。不恢复文字堆叠或人工蓝色 badge，不引入图标库、测宽监听或另一套外观保存流程；前端初始化旧 Tag 缺失的外观，下次偏好保存才持久化。外观草稿不切换到纯条件预览，不改后端分类默认逻辑。
 - 图标不能改变操作语义：名单垃圾桶是移入 Hidden 七天；Release 仅用于 Hidden，Add to Focus 遵循统一入选规则。后续 Android/iOS 按 Logo / Icon 复用图形与外观契约，按平台实现触摸与可访问说明；Web 的 DOM、hover、CSS 与 px 不是原生实现要求。不提前建设移动端原生工程；Alert 声音由后台播放，前端显示持久未读边框及实际错误。
-- Monitor 的 Focus 与 Holdings 保留独立 selection source；Scan 日 K 统一使用本地 Massive Daily，当前时段报价仅作为一个独立价格轴标签。全局 Search 新股进入当日 Discover 置顶，复用 add/Pin，不建立临时预览系统。维持 request_id、mode、source 和 socket 身份检查。
+- Monitor 的 Focus 与 Holdings 保留独立 selection source；Scan 日 K 统一使用本地 Massive Daily，最新报价仅作为一个独立价格轴标签。全局 Search 新股进入当日 Discover 置顶，复用 add/Pin，不建立临时预览系统。维持 request_id、mode、source 和 socket 身份检查。
+- Scan Daily及Monitor双图统一使用后端`quote.latest`，颜色直接读取trade_session，不据时钟推断来源或另选报价；无新报价保留最后值，无时段/陈旧提示。扩展报价不更新volume或candle；Intraday最新值保留Monitor原生candle标签。
 - TS 源码是维护入口；在项目根目录用 `npm run build --prefix ui` 生成对应 public JS，不直接修改生成 JS。保留图表 vendor 文件与许可。
 - Alert 创建价格取鼠标水平线，Scan/Monitor 共用 symbol 归属；UI 不计算名单分类或直接请求券商，入选 Focus 交由同一后端操作完成，详细规则不在这里重复。
 - `alerts.ts`：公开图表primitive、手势、mutation和错误；`attention.ts`：仅symbol row的统一未读/播放边框，不聚合标题；`main.ts`：主动row点击成功选图后read，自动选择不read。API持久化结果才更新横线，row已读不改变灰线或generation，不建倒计时删除。

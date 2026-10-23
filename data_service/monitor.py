@@ -36,7 +36,7 @@ class MonitorService:
     def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None, intraday=False):
         self.tickers = tickers
         self.holdings_symbols = []
-        self.scan_symbols = []
+        self.quote_symbols = []
         self.symbols = [t.symbol for t in tickers]
         self.runtime, self.broker = runtime, broker
         self.now = clock or time.time
@@ -82,16 +82,16 @@ class MonitorService:
         self.holdings_symbols = list(symbols)
         self._update_symbols()
 
-    def update_scan_symbols(self, symbols):
-        self.scan_symbols = list(dict.fromkeys(symbols))
+    def update_quote_symbols(self, symbols):
+        self.quote_symbols = list(dict.fromkeys(symbols))
         self._update_quote_scope()
 
     def _update_quote_scope(self):
         if self.broker:
-            self.broker.allowed = frozenset(self.symbols) | set(self.scan_symbols)
+            self.broker.allowed = frozenset(self.symbols) | set(self.quote_symbols)
             self.broker.candle_allowed = frozenset(self.symbols)
         if self.quotes:
-            self.quotes.set_symbols(self.symbols, self.scan_symbols)
+            self.quotes.set_symbols(self.symbols, self.quote_symbols)
 
     def _update_symbols(self):
         symbols = list(dict.fromkeys([t.symbol for t in self.tickers] + self.holdings_symbols))
@@ -373,13 +373,16 @@ class MonitorService:
 
     def quote(self, symbol, now):
         result = self.quotes.output(symbol, now) if self.quotes else {
-            'symbol': symbol, 'regular': None, 'extended': {}, 'connection_health': 'DISCONNECTED', 'error': None}
+            'symbol': symbol, 'regular': None, 'extended': {}, 'latest': None,
+            'connection_health': 'DISCONNECTED', 'error': None}
         regular = result['regular']
         if regular and self.window_ready(symbol, '1d', now):
             day = datetime.fromtimestamp(regular['timestamp'], ET).date()
             previous = next((b['close'] for b in reversed(self.charts.closed(symbol, '1d')[1])
                              if datetime.fromtimestamp(b['time'], ET).date() < day), None)
             result['regular'] = {**regular, 'prev_close': previous or regular.get('prev_close')}
+            if result['latest'] is regular:
+                result['latest'] = result['regular']
         return result
 
     def view(self, symbol, tf, revisions=None, source='watchlist'):
