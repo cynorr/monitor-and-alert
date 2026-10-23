@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-22. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-23. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -15,7 +15,7 @@ Chart layout, colors, margins, headers, [volume and five-day comparison](chart-u
 
 ## Alert UI
 
-Scan/Monitor 图表设置、横线操作、统一未读边框与后台声音的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开series primitive、图表手势与symbol持久未读状态。
+Scan/Monitor 图表设置、横线操作、统一未读边框与后台声音的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开series primitive、图表手势与Regular内持久未读状态；所有选图/当前chart更新统一已读，收盘清理。未读跳转与保留Tag筛选的规则见[List交互](list-interactions.md#未读-alert-导航)。
 
 ## Intraday State UI
 

@@ -17,12 +17,11 @@ let socket: WebSocket | null = null;
 let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, currentView: View | null = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource: 'watchlist' | 'holdings' = 'watchlist', holdingKey = '';
-const watchlist = new Watchlist((next, viewed) => select(next, timeframe, 'watchlist', '', viewed), applyList);
-const holdings = new HoldingsList((next, key, viewed) => select(next, timeframe, 'holdings', key, viewed), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
+const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList);
+const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
-let readOnView = '';
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async selected => {
     const tf = timeframe;
     if (appMode === 'scan' && scan.activeList !== 'focus') await scan.showList();
@@ -114,12 +113,10 @@ function apply(view: View) {
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
     alerts.redraw();
-    if (readOnView === view.symbol && daily.rows.length) {
-        readOnView = ''; void alerts.read(view.symbol);
-    }
+    void alerts.read(view.symbol);
 }
-function select(next: string, tf: string, source: 'watchlist' | 'holdings' = selectionSource, key = holdingKey, viewed = false) {
-    readOnView = viewed ? next : '';
+function select(next: string, tf: string, source: 'watchlist' | 'holdings' = selectionSource, key = holdingKey) {
+    void alerts.read(next);
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
@@ -184,6 +181,12 @@ function connect() {
 }
 document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => button.addEventListener('click', () => { if (symbol)
     void select(symbol, button.dataset.tf!); }));
+document.addEventListener('keydown', event => {
+    if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
+        (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
+    if (event.key.toLowerCase() === 'g') { event.preventDefault(); void watchlist.jumpUnread(); }
+    if (event.key.toLowerCase() === 'u' && appMode === 'monitor') { event.preventDefault(); holdings.jumpUnread(); }
+});
 document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button => button.addEventListener('click', async () => {
     if (button.dataset.appMode === appMode || modePending) return;
     modePending = true;

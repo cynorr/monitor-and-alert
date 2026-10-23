@@ -65,6 +65,7 @@ class AlertEngine:
             self.sound.on_change = self._signal
         self.heartbeat = self.now()
         self._index()
+        self._clean_unread(self.heartbeat)
 
     def _index(self):
         self.by_symbol = {}
@@ -85,6 +86,15 @@ class AlertEngine:
         self.baselines.clear()
         self.latest.clear()
 
+    def _clean_unread(self, now):
+        stale = [row['symbol'] for row in self.db.execute('SELECT symbol,fired_at FROM unread')
+                 if not self._regular_day(now, row['fired_at']) or
+                 (self.scope_known and row['symbol'] not in self.allowed)]
+        if stale:
+            with self.db:
+                self.db.executemany('DELETE FROM unread WHERE symbol=?', [(symbol,) for symbol in stale])
+            self._signal()
+
     def maintain(self, allowed, scope_known):
         now = self.now()
         if now - self.heartbeat > 30:
@@ -94,12 +104,7 @@ class AlertEngine:
         if allowed != self.allowed or scope_known != self.scope_known:
             self.revision += 1
         self.allowed, self.scope_known = allowed, scope_known
-        if scope_known:
-            stale = [row['symbol'] for row in self.db.execute('SELECT symbol FROM unread') if row['symbol'] not in allowed]
-            if stale:
-                with self.db:
-                    self.db.executemany('DELETE FROM unread WHERE symbol=?', [(symbol,) for symbol in stale])
-                self._signal()
+        self._clean_unread(now)
         removed = [a['id'] for a in self.alerts.values() if a['expires_at'] <= now or
                    (scope_known and a['symbol'] not in allowed)]
         if removed:
@@ -223,6 +228,7 @@ class AlertEngine:
                     self.baselines[alert['id']] = baseline
 
     def state(self):
+        self._clean_unread(self.now())
         return {'revision': self.revision, 'alerts': list(self.alerts.values()),
                 'unread': [row['symbol'] for row in self.db.execute('SELECT symbol FROM unread ORDER BY fired_at DESC')],
                 'eligible_symbols': sorted(self.allowed), 'scope_known': self.scope_known,

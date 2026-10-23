@@ -129,12 +129,12 @@ export class ScanControls {
         this.render();
     }
 
-    visible(rows: Ticker[]) {
+    visible(rows: Ticker[], list = this.activeList, filtered = true) {
         rows = this.available(rows);
         const sort = this.enabled ? this.preferences?.sort ?? 'default' : 'default';
-        const inList = (row: Ticker) => this.enabled ? row.status === this.activeList : row.status === 'focus';
+        const inList = (row: Ticker) => this.enabled ? row.status === list : row.status === 'focus';
         const useTags = this.preferences ? this.useAssignedTags() : false;
-        return rows.filter(row => inList(row) && (!this.draft || matchesTag(row, this.draft, useTags)))
+        return rows.filter(row => inList(row) && (!filtered || !this.draft || matchesTag(row, this.draft, useTags)))
             .sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) ||
                 (a.pinned && b.pinned ? rank(a, 'pin_index') - rank(b, 'pin_index') :
                     (sort === 'default' ? 0 : rank(a, sort + '_rank') - rank(b, sort + '_rank')) || rank(a,'order_index') - rank(b,'order_index')));
@@ -144,11 +144,11 @@ export class ScanControls {
     available(rows: Ticker[]) { return rows.filter(row => !this.isHolding(row.symbol)); }
 
     get activeList() { return this.enabled ? this.preferences?.activeList ?? 'discover' : 'focus'; }
-    async showList(list = 'focus') {
+    async showList(list = 'focus', resetTag = true) {
         if (!this.preferences) return;
         this.preferences.activeList = list;
-        this.preferences.activeTag = null;
-        this.resetDraft(); this.render();
+        if (resetTag) { this.preferences.activeTag = null; this.resetDraft(); }
+        this.render();
         await this.persist(this.preferences);
     }
     get busy() { return this.pending; }

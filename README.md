@@ -103,10 +103,10 @@ Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，�
 
 ## 使用
 
-Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，无需安装独立应用或授权系统通知。继续使用上面的 `data_service serve` 命令启动；后台保持运行即可，Safari/Chrome 关闭或在后台不影响检测和声音。symbol未读边框持久化，刷新或重启后恢复，恢复时不重播声音。声音与运行要求见 [Alert 后台声音](docs/alert.md#后台声音与运行)。
+Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，无需安装独立应用或授权系统通知。继续使用上面的 `data_service serve` 命令启动；后台保持运行即可，Safari/Chrome 关闭或在后台不影响检测和声音。symbol未读边框仅在所属Regular内持久化，收盘失效；选图或图表更新即已读，恢复时不重播声音。声音与运行要求见 [Alert 后台声音](docs/alert.md#后台声音与运行)。
 
 - 图表按住 **Command + Option** 左键创建，价格取鼠标水平线；点击横线选中后 **Backspace** 删除，上下拖动改价并重新激活。
-- Regular到达/穿越后价格线立即变灰，拖动重新激活；row虚线在主动点击查看后标记已读，两者独立。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
+- Regular到达/穿越后价格线立即变灰，拖动重新激活；row虚线在任意方式选图或图表更新时标记已读，两者独立。Command+G/U分别查看Focus/Holdings未读，保留Tag筛选，详见[List交互](docs/list-interactions.md#未读-alert-导航)。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
 - Scan：Discover/Focus/Excluded与日期、Refresh同排，38项Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选、当日人工Discover、Focus与有效Hidden均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。直接操作当前选中 symbol，快捷键与行为见 [List 交互](docs/list-interactions.md)。历史日期名单只读；Refresh 跳过已准备数据但重新分类名单。

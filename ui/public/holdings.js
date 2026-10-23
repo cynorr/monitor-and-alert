@@ -95,7 +95,7 @@ export class HoldingsList {
             }
             const row = target.closest('[data-holding]');
             if (row)
-                this.choose(row.dataset.holding, true);
+                this.choose(row.dataset.holding);
         });
         $('holdings-table').querySelector('thead').addEventListener('click', event => {
             const button = event.target.closest('[data-holdings-sort]');
@@ -133,10 +133,10 @@ export class HoldingsList {
             }
         });
     }
-    choose(key, viewed = false) {
+    choose(key) {
         for (const holding of this.data?.data?.holdings ?? []) {
             if (holding.sequences.some(sequence => sequence.buy_ids.join(':') === key)) {
-                this.onSelect(symbolFor(holding.ticker), key, viewed);
+                this.onSelect(symbolFor(holding.ticker), key);
                 return;
             }
         }
@@ -149,6 +149,20 @@ export class HoldingsList {
     forSymbol(symbol) {
         const row = this.ordered().find(row => symbolFor(row.holding.ticker) === symbol);
         return row ? { symbol, key: row.sequence.buy_ids.join(':') } : null;
+    }
+    jumpUnread() {
+        const next = this.ordered().find(row => this.attention.unread.has(symbolFor(row.holding.ticker)));
+        if (!next)
+            return;
+        this.collapsed = false;
+        try {
+            localStorage.setItem('holdings-collapsed', 'false');
+        }
+        catch { /* Optional storage. */ }
+        const key = next.sequence.buy_ids.join(':');
+        this.choose(key);
+        this.render();
+        this.rows.get(key)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     update(state, regularSession, intraday) {
         this.data = state;

@@ -124,6 +124,61 @@ def test_scope_removal_cleans_unread_and_expiry_removes_lines(engine):
     assert not value.alerts and not value.state()['unread']
 
 
+@pytest.mark.parametrize('fired,closed', [
+    ('2026-10-05T15:59:00', '2026-10-05T16:00:00'),
+    ('2026-11-27T12:59:00', '2026-11-27T13:00:00'),
+])
+def test_unread_expires_at_regular_close_without_changing_price_lines(tmp_path, cal, fired, closed):
+    clock = [at(fired)]
+    value = AlertEngine(tmp_path / 'alerts.sqlite3', cal, clock=lambda: clock[0])
+    try:
+        value.maintain({'NVDA.US'}, True)
+        gray = value.create('NVDA.US', 10)
+        value.create('NVDA.US', 20)
+        tick(value, 9); tick(value, 10)
+        before = value.state()['alerts']
+        assert value.state()['unread'] == ['NVDA.US']
+        clock[0] = at(closed)
+        value.maintain(set(), False)  # Time expiry does not wait for Holdings scope readiness.
+        assert not value.state()['unread']
+        assert value.state()['alerts'] == before
+        assert value.alerts[gray['id']]['state'] == 'triggered'
+        assert not value.db.execute('SELECT * FROM unread').fetchall()
+    finally:
+        value.close()
+
+
+@pytest.mark.parametrize('restored_at,unread', [
+    ('2026-10-23T15:59:01', ['NVDA.US']),
+    ('2026-10-23T17:00:00', []),
+    ('2026-10-24T08:00:00', []),
+    ('2026-10-26T08:00:00', []),
+    ('2026-10-26T09:31:00', []),
+])
+def test_unread_restart_or_wake_only_restores_current_regular(tmp_path, cal, restored_at, unread):
+    clock = [at('2026-10-23T15:59:00')]
+    path = tmp_path / 'alerts.sqlite3'
+    sound = RecordingSound()
+    value = AlertEngine(path, cal, clock=lambda: clock[0], sound=sound)
+    value.maintain({'NVDA.US'}, True)
+    value.create('NVDA.US', 10)
+    tick(value, 9); tick(value, 10)
+    prices = value.state()['alerts']
+    value.close()
+    clock[0] = at(restored_at)
+    value = AlertEngine(path, cal, clock=lambda: clock[0], sound=sound)
+    try:
+        assert [row['symbol'] for row in value.db.execute('SELECT symbol FROM unread')] == unread
+        assert value.state()['alerts'] == prices
+        assert sound.calls == [('NVDA.US', 'up')]
+        # State output also clears after sleep, even before the existing maintenance loop resumes.
+        clock[0] = at('2026-10-26T16:00:00')
+        assert not value.state()['unread']
+        assert value.state()['alerts'] == prices
+    finally:
+        value.close()
+
+
 @pytest.mark.parametrize('price', [0,-1,0.004,float('nan'),float('inf'),True,None])
 def test_invalid_threshold_rejected(price):
     with pytest.raises(ValueError, match='positive and finite'):
@@ -186,6 +241,7 @@ def test_scan_and_manual_promotions_share_fresh_focus_classification(app_data, s
 def test_alert_http_origin_and_independent_empty_selection_stream(app_data):
     async def scenario():
         app, _ = make_app(app_data)
+        app.alerts.now = lambda: at('2026-10-05T09:31:00')
         runner = web.AppRunner(create_app(app)); await runner.setup()
         site = web.TCPSite(runner, '127.0.0.1', 0); await site.start()
         url = f'http://127.0.0.1:{site._server.sockets[0].getsockname()[1]}'
@@ -329,10 +385,11 @@ def test_old_card_table_migrates_latest_per_symbol_without_replaying(tmp_path, c
     path = tmp_path / 'old.sqlite3'
     with sqlite3.connect(path) as db:
         db.execute('CREATE TABLE events (symbol TEXT,direction TEXT,fired_at REAL,handled_at REAL)')
+        now = at('2026-10-05T09:31:00')
         db.executemany('INSERT INTO events VALUES (?,?,?,?)', [
-            ('NVDA.US','up',1,None), ('NVDA.US','down',2,None), ('MU.US','up',3,4)])
+            ('NVDA.US','up',now-1,None), ('NVDA.US','down',now,None), ('MU.US','up',now,now+1)])
     sound = RecordingSound()
-    value = AlertEngine(path, cal, sound=sound)
+    value = AlertEngine(path, cal, clock=lambda: now, sound=sound)
     try:
         assert value.state()['unread'] == ['NVDA.US']
         assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'down'

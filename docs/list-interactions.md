@@ -16,6 +16,8 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | --- | --- | --- |
 | Scan / Monitor | ↑ / ↓ | 按当前可见顺序选上一只／下一只，跳过折叠组，不循环 |
 | Scan / Monitor | Page Up / Page Down | 跳到前／后一个非空 section 的第一只，不循环 |
+| Scan / Monitor | Command + G | 查看完整Focus中按当前排列最上方的未读Alert symbol |
+| Monitor | Command + U | 查看Holdings中按当前排列最上方的未读Alert symbol |
 | Scan / Monitor | Shift + ↑ / ↓ | 同 section 内向上／下移动一位，保留选中；边界不动 |
 | Scan / Monitor | Shift + Command + ↑ / ↓ | 置顶／取消置顶，明确设置，不是 toggle |
 | Scan · Discover | Delete / Backspace | 移入 Hidden |
@@ -31,6 +33,12 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 - 已置顶再按置顶、未置顶再按取消，均无操作、不跳下一只。取消置顶回到真实 section；若当前满足 In Play，仍按现有聚集规则显示。
 - 输入框、搜索及可编辑内容保留文本编辑行为；历史 Scan 与受限会话不可修改名单，导航仍可用。
 - Monitor 不新增 Delete/Backspace 名单操作。Scan 停用 Alert 的 Backspace 删除，只通过横线垃圾桶删除 Alert；Monitor 的既有 Alert 按键原样保留，详情见 [Alert](alert.md#图表交互)。
+
+## 未读 Alert 导航
+
+- 每次按键从当前排列找第一只未读symbol；选图即按 [Alert统一已读](alert.md#统一未读边框) 清除未读，再按就找到下一只。没有未读时保持原选择，不弹提示；不保存遍历游标、队列或另一套排序。
+- Command+G覆盖完整Focus，不含被Holdings接管显示的symbols；顺序与列表共用Pinned、In Play、原分组及组内顺序。包含折叠组，命中时展开；Scan当前在Discover/Excluded时切到Focus，保持原Tag与Filter。即使目标被Tag筛选隐藏，仍展示其chart，普通后台名单更新保留该选择；目标行可见时滚动定位，不修改筛选、Tag、名单归属或排序。
+- Command+U按当前Holdings主行顺序查找，同symbol多批次选第一条主行，共享symbol已读；整体折叠时展开。Scan不处理该快捷键、不切模式。两个快捷键均不受当前选择来源限制；输入框、搜索与可编辑内容保留原键盘行为。
 
 ## 单只名单操作
 
@@ -51,7 +59,7 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 - 以操作前的可见顺序找后项，允许跨 section，不跨 List；跳过已不可见的成员。
 - 无后项时选操作后当前可见名单的最后一只，不绕回开头；只剩一只则选该只，全空则清图。
 - 黑框、图表和滚动位置一起更新。保存期间不先跳首行再跳候补；期间主动选择其他 symbol 或切换 List/模式后，不抢回选择。
-- 操作未选中的行、失败和无实际变化不自动跳转。自动候补不标记 Alert 已读。
+- 操作未选中的行、失败和无实际变化不自动跳转。自动候补选图与其他选图方式一样，标记该symbol的Alert已读。
 - 组内移动、拖动、Filter、折叠、Refresh、外部更新、搜索新增与 Alert 引起的入选不接入此流程，保持既有行为。Search 仍选中搜索目标，Alert 创建后仍停留该 symbol。
 
 ## Refresh Scan

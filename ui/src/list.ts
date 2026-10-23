@@ -41,7 +41,7 @@ export class Watchlist {
     private get stateVisible() { return this.intraday.enabled && this.regularSession && (!this.scan?.enabled || this.scan.activeList === 'focus'); }
     private get inPlayActive() { return this.stateVisible && !this.search; }
 
-    constructor(private onSelect: (symbol: string, viewed?: boolean) => void, private onUpdate: (data: ListState) => void) {
+    constructor(private onSelect: (symbol: string) => void, private onUpdate: (data: ListState) => void) {
         this.input.addEventListener('focus', () => { if (!this.search) this.beginSearch(); });
         this.input.addEventListener('input', () => this.changeSearch());
         $('symbols').addEventListener('click', event => {
@@ -74,8 +74,8 @@ export class Watchlist {
             if (target.closest('[data-list-action]')) {
                 const item = this.tickers.find(t => t.symbol === row.dataset.symbol)!;
                 void this.actOnTicker(item, target.closest<HTMLElement>('[data-list-action]')!.dataset.listAction as 'remove' | 'focus');
-            } else if (this.search) { this.endSearch(); this.onSelect(row.dataset.symbol!, true); }
-            else this.onSelect(row.dataset.symbol!, true);
+            } else if (this.search) { this.endSearch(); this.onSelect(row.dataset.symbol!); }
+            else this.onSelect(row.dataset.symbol!);
         });
         $('symbols').addEventListener('pointerdown', event => {
             const target = event.target as HTMLElement;
@@ -189,6 +189,21 @@ export class Watchlist {
         const symbol = target.dataset.firstSymbol!;
         this.render(); this.onSelect(symbol);
         this.rows.get(symbol)?.scrollIntoView({ block: 'nearest' });
+    }
+
+    async jumpUnread() {
+        const rows = this.scan?.visible(this.tickers, 'focus', false) ?? this.tickers.filter(t => t.status === 'focus');
+        const sections = this.sections(rows, 'focus', this.intraday.enabled && this.regularSession);
+        for (const { group, items } of sections) {
+            const next = items.find(t => this.attention.unread.has(t.symbol));
+            if (!next) continue;
+            this.collapsed.delete(collapseKey(this.scan?.enabled === true, group.key));
+            this.onSelect(next.symbol);
+            if (this.scan?.enabled && this.scan.activeList !== 'focus') await this.scan.showList('focus', false);
+            this.render();
+            this.rows.get(next.symbol)?.scrollIntoView({ block: 'nearest' });
+            return;
+        }
     }
 
     private async actOnTicker(item: Ticker, action: 'remove' | 'focus') {
@@ -312,7 +327,8 @@ export class Watchlist {
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
         const visible = this.visible();
-        if (maintainSelection && !this.isAdvancing() && !visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
+        const members = (this.scan?.available(this.tickers) ?? this.tickers).filter(t => t.status === (this.scan?.activeList ?? 'focus'));
+        if (maintainSelection && !this.isAdvancing() && !members.some(t => t.symbol === this.selected) && (this.selected || visible.length))
             this.onSelect(visible[0]?.symbol ?? '');
         this.render();
     }
@@ -505,9 +521,26 @@ export class Watchlist {
         return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.manual_tags, ticker.is_new]);
     }
 
+    private sections(original: Ticker[], list = this.scan?.activeList ?? 'focus', inPlay = this.inPlayActive) {
+        const visible = inPlay ? rankedRows(original, this.intraday.symbols) : original;
+        const extracted = new Set(inPlay ? visible.filter(t => !t.pinned && (this.intraday.symbols[t.symbol]?.rank[0] ?? 0) > 0).map(t => t.symbol) : []);
+        const seen = new Set<string>();
+        const sections: ListSection[] = listSections(this.scan?.enabled === true, list, this.preferences?.tags ?? []).flatMap(group => {
+            const pinned = !seen.has(group.list) && visible.some(t => t.pinned && t.status === group.list);
+            seen.add(group.list);
+            return pinned ? [{ list: group.list, id: 'pinned', key: `${group.list}:pinned`, name: 'Pinned', pinned: true }, group] : [group];
+        });
+        if (extracted.size) sections.splice(sections[0]?.pinned ? 1 : 0, 0,
+            { list: 'focus', id: 'in-play', key: 'focus:in-play', name: 'In Play', inPlay: true });
+        return sections.map(group => ({ group, items: visible.filter(t => group.pinned ? t.pinned && t.status === group.list :
+            group.inPlay ? extracted.has(t.symbol) : !t.pinned && !extracted.has(t.symbol) && sectionKey(t) === group.key) }))
+            .filter(section => section.items.length);
+    }
+
     render() {
         const original = this.search ? this.matches() : this.visible();
-        const visible = this.inPlayActive ? rankedRows(original, this.intraday.symbols) : original;
+        const sections = this.sections(original);
+        const visible = sections.flatMap(section => section.items);
         $('symbol-count').textContent = String(visible.length);
         const scan = this.scan?.enabled === true;
         const columns = listColumns(scan, this.regularSession, this.stateVisible);
@@ -528,15 +561,7 @@ export class Watchlist {
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.scan?.isHolding(candidate.ticker + '.US') && !this.tickers.some(t => t.ticker === candidate.ticker);
         const tags = this.preferences?.tags ?? [];
-        const seen = new Set<string>();
-        const extracted = new Set(this.inPlayActive ? visible.filter(t => !t.pinned && (this.intraday.symbols[t.symbol]?.rank[0] ?? 0) > 0).map(t => t.symbol) : []);
-        const sections: ListSection[] = listSections(scan, this.scan?.activeList ?? 'focus', tags).flatMap(group => {
-            const pinned = !seen.has(group.list) && visible.some(t => t.pinned && t.status === group.list);
-            seen.add(group.list);
-            return pinned ? [{ list: group.list, id: 'pinned', key: `${group.list}:pinned`, name: 'Pinned', pinned: true }, group] : [group];
-        });
-        if (extracted.size) sections.splice(sections[0]?.pinned ? 1 : 0, 0,
-            { list: 'focus', id: 'in-play', key: 'focus:in-play', name: 'In Play', inPlay: true });
+        const extracted = new Set(sections.filter(section => section.group.inPlay).flatMap(section => section.items.map(t => t.symbol)));
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search) $('list-notice').textContent = this.search.message;
         const key = JSON.stringify([visible.map(t => [this.rowKey(t), extracted.has(t.symbol)]), columnsKey,
@@ -554,9 +579,7 @@ export class Watchlist {
                 const company = document.createElement('span'); company.className = 'security-name'; company.textContent = candidate.name;
                 result.append(name, action, company); fragment.append(result);
             }
-            for (const group of sections) {
-                const items = visible.filter(t => group.pinned ? t.pinned && t.status === group.list : group.inPlay ? extracted.has(t.symbol) : !t.pinned && !extracted.has(t.symbol) && sectionKey(t) === group.key);
-                if (!items.length) continue;
+            for (const { group, items } of sections) {
                 const section = document.createElement('section'); section.dataset.section = group.id; section.dataset.list = group.list;
                 section.dataset.pinned = String(!!group.pinned); section.dataset.firstSymbol = items[0].symbol;
                 const heading = document.createElement('div'); heading.className = 'group';

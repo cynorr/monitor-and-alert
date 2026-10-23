@@ -65,12 +65,14 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 需求只在 [alert.md](alert.md)，模块入口见 [alerts/AGENTS.md](../data_service/alerts/AGENTS.md)。Workbench持有AlertEngine与AlertSound，MonitorService只把校验后的Regular Quote交给手动检测，把Intraday State转换交给同一notify入口；不创建第二个行情context。
 
 - runtime/alerts/alerts.sqlite3保存alerts和unread。前者按alert_id保存阈值/generation/state/期限，后者以symbol为主键只保留最新direction/fired_at。旧events表启动时把未处理记录合并为最新symbol未读后删除，一次迁移不播放声音。
+- AlertEngine共用_clean_unread，用已有_regular_day同时校验当前时刻和fired_at是否属于同一Regular，并合并原scope清理。构造、maintain和state输出都经过此入口；跨收盘清理不等待scope_known，不改价格线，不增加期限字段、任务或Massive/Refresh依赖。
 - create/rearm/delete仍管理手动线；read(symbol)只删除当前symbol的unread，不改变任何线条或generation。触发后灰线保留，无点击后倒计时；只有拖动重新激活、主动删除、到期或出范围改变线生命周期。
 - notify(symbol,direction,alert=...)是唯一报警入口：手动触发时将Triggered和未读写在同一事务，自动规则只覆盖未读；提交成功后才独立播放四遍。读取状态和恢复未读不播放，失败沿用明确错误。
 - sound.py每次play(symbol,direction)建立独立asyncio任务，依次运行四次原始afplay。任务字典提供当前playing symbols；没有声音队列、优先级、抢占或同symbol替换。退出取消全部任务并终止播放器，FFmpeg仅离线整理资源。
 - GET /v1/alerts及WS alerts包含revision/alerts/unread/eligible_symbols/scope_known/sound/error；sound含enabled/error/playing。POST /v1/alerts接受create/rearm/delete/read，read仅携带symbol。卡片事件ID、acknowledge与跳转接口全部移除。
 - 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
-- ui/src/attention.ts按单个symbol设置row未读与播放边框，不聚合到section或Holdings标题；alerts.ts只管理图表线、mutation和错误；main.ts在主动鼠标点击后收到匹配的图表响应才read。自动选择、键盘/周期切换及刷新不标记已读。价格线与row未读完全独立。
+- ui/src/attention.ts按单个symbol设置row未读与播放边框，不聚合到section或Holdings标题；alerts.ts管理图表线、mutation和错误；main.ts所有select及当前图表apply均直接调用read，不保留viewed/readOnView或渲染成功检查。价格线与row未读完全独立。
+- Command+G/U在main.ts路由到各名单jumpUnread。Watchlist.sections同时供render与完整Focus导航使用；ScanControls.visible可指定Focus并忽略显示筛选，showList可保留Tag草稿。Watchlist.update仅在成员退出当前List或转入Holdings时自动候补，Tag遮住的已选chart不因后台推送跳走；用户主动修改筛选仍沿用原反馈。Holdings复用ordered与choose，不增加已访问集合。
 
 ## 模式与上游数据
 

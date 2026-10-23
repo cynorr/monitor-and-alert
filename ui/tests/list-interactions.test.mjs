@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Watchlist } from '../public/list.js';
+import { ScanControls } from '../public/scan.js';
+import { HoldingsList } from '../public/holdings.js';
 
 const ticker = (name, status = 'discover', section = 'unclassified') =>
     ({ ticker: name, symbol: name + '.US', status, section });
 function listFixture() {
     const list = Object.create(Watchlist.prototype);
     Object.assign(list, { editable: true, busy: false, keyboardEnabled: true, search: null,
-        scan: { enabled: true, activeList: 'discover' }, tickers: [ticker('A')], selected: 'A.US', collapsed: new Set() });
+        scan: { enabled: true, activeList: 'discover', available: rows => rows }, tickers: [ticker('A')], selected: 'A.US', collapsed: new Set() });
     return list;
 }
 const key = (key, extra = {}) => ({ key, target: { closest: () => null }, preventDefault() {}, ...extra });
@@ -110,4 +112,66 @@ test('saving skips transient first-row fallback; failure and ordinary edits do n
         assert.deepEqual(choices, []); assert.equal(list.selected, 'B.US');
         assert.equal(list.advancing, undefined);
     } finally { delete globalThis.document; delete globalThis.fetch; }
+});
+
+test('unread Focus navigation shares section order, includes folded and filtered symbols, and preserves Tags', async () => {
+    const list = listFixture(), choices = [], scrolls = [];
+    const scan = Object.create(ScanControls.prototype);
+    const tags = ['surf', 'bounce'].map(id => ({ id, name: id, role: 'setup', filters: {} }));
+    Object.assign(scan, { enabled: true, holdingSymbols: new Set(['HELD.US']), preferences: { activeList: 'discover', activeTag: 'surf', sort: 'default', tags },
+        draft: { id: 'surf', filters: { adr20: { min: 99 } } }, useAssignedTags: () => true });
+    const draft = scan.draft, preferences = structuredClone(scan.preferences);
+    scan.render = () => {};
+    scan.persist = async () => {};
+    list.scan = scan;
+    list.preferences = scan.preferences;
+    list.tickers = [ticker('NORMAL', 'focus', 'surf'), ticker('UP', 'focus', 'bounce'),
+        { ...ticker('PIN', 'focus', 'bounce'), pinned: true, pin_index: 0 }, ticker('HELD', 'focus', 'surf'), ticker('OTHER')];
+    list.intraday = { enabled: true, symbols: { 'UP.US': { rank: [3, 0, 0] } } }; list.regularSession = true;
+    list.attention = { unread: new Set(list.tickers.map(t => t.symbol)), playing: new Set() };
+    list.collapsed = new Set(['scan:focus:pinned', 'scan:focus:in-play', 'scan:focus:surf']);
+    list.onSelect = symbol => { choices.push(symbol); list.selected = symbol; list.attention.unread.delete(symbol); };
+    list.render = () => { list.rows = new Map([['PIN.US', { scrollIntoView() { scrolls.push('PIN'); } }]]); };
+    await list.jumpUnread(); await list.jumpUnread(); await list.jumpUnread(); await list.jumpUnread();
+    assert.deepEqual(choices, ['PIN.US', 'UP.US', 'NORMAL.US']);
+    assert.deepEqual(scrolls, ['PIN']);
+    assert.equal(scan.activeList, 'focus');
+    assert.equal(scan.preferences.activeTag, preferences.activeTag);
+    assert.equal(scan.draft, draft);
+    assert.equal(list.collapsed.size, 0);
+    assert.ok(list.attention.unread.has('HELD.US') && list.attention.unread.has('OTHER.US'));
+});
+
+test('ordinary list updates keep a chart selection hidden by a Tag filter without a special selection state', () => {
+    const list = listFixture(), choices = [];
+    list.scan = { activeList: 'focus', available: rows => rows };
+    list.selected = 'HIDDEN.US'; list.render = () => {};
+    list.visible = () => [ticker('VISIBLE', 'focus')];
+    list.onSelect = symbol => choices.push(symbol);
+    globalThis.document = { getElementById: () => ({}) };
+    try {
+        list.update({ board: [ticker('VISIBLE', 'focus'), ticker('HIDDEN', 'focus')], editable: true });
+        assert.deepEqual(choices, []);
+        list.update({ board: [ticker('VISIBLE', 'focus')], editable: true });
+        assert.deepEqual(choices, ['VISIBLE.US']);
+    } finally { delete globalThis.document; }
+});
+
+test('Holdings unread navigation follows the current table order, opens the table and reads each symbol once', () => {
+    const list = Object.create(HoldingsList.prototype), choices = [], scrolls = [];
+    Object.assign(list, { collapsed: true, sort: 'market_value', regularSession: false, intraday: { enabled: false },
+        attention: { unread: new Set(['A.US', 'B.US']), playing: new Set() },
+        data: { data: { holdings: [
+            { ticker: 'A', sequences: [{ buy_ids: ['a1'], market_value: '1' }, { buy_ids: ['a2'], market_value: '3' }] },
+            { ticker: 'B', sequences: [{ buy_ids: ['b'], market_value: '2' }] },
+        ] } } });
+    list.onSelect = (symbol, key) => { choices.push([symbol, key]); list.attention.unread.delete(symbol); };
+    list.render = () => { list.rows = new Map(['a2', 'b'].map(key => [key, { scrollIntoView() { scrolls.push(key); } }])); };
+    globalThis.localStorage = { setItem() {} };
+    try {
+        list.jumpUnread(); list.jumpUnread(); list.jumpUnread();
+        assert.deepEqual(choices, [['A.US', 'a2'], ['B.US', 'b']]);
+        assert.deepEqual(scrolls, ['a2', 'b']);
+        assert.equal(list.collapsed, false);
+    } finally { delete globalThis.localStorage; }
 });

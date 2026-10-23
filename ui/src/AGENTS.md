@@ -16,5 +16,5 @@
 - Scan Daily及Monitor双图统一使用后端`quote.latest`，颜色直接读取trade_session，不据时钟推断来源或另选报价；无新报价保留最后值，无时段/陈旧提示。扩展报价不更新volume或candle；Intraday最新值保留Monitor原生candle标签。
 - TS 源码是维护入口；在项目根目录用 `npm run build --prefix ui` 生成对应 public JS，不直接修改生成 JS。保留图表 vendor 文件与许可。
 - Alert 创建价格取鼠标水平线，Scan/Monitor 共用 symbol 归属；UI 不计算名单分类或直接请求券商，入选 Focus 交由同一后端操作完成，详细规则不在这里重复。
-- `alerts.ts`：公开图表primitive、手势、mutation和错误；`attention.ts`：仅symbol row的统一未读/播放边框，不聚合标题；`main.ts`：主动row点击成功选图后read，自动选择不read。API持久化结果才更新横线，row已读不改变灰线或generation，不建倒计时删除。
+- `alerts.ts`：公开图表primitive、手势、mutation和错误；`attention.ts`：仅symbol row的统一未读/播放边框，不聚合标题；`main.ts`：所有选图和当前chart更新统一read，不区分主动/自动、不等待渲染。Command+G/U调用各名单jumpUnread，复用当前分组/排序，不改Tag筛选或另存游标。API持久化结果才更新横线，已读不改变灰线或generation，不建倒计时删除；未读有效期只按Alert需求由后台维护。
 - 只验证本次改动相关的离线场景；live 必须有明确范围与时限。同步唯一 UI 文档和必要产品文档，不新增交易入口、Atomic feature 自动 Alert 或通用框架。

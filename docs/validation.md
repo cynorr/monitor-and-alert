@@ -1,5 +1,15 @@
 # 验证记录
 
+## 2026-10-23：Alert Regular 未读生命周期与键盘导航
+
+环境：本机macOS、Python3.13.1、TypeScript/Node。当前09:06 ET检查时8765服务未运行，本轮不启动正式后台或触发任何行情/账户下载；只覆盖本次清理、已读和未读导航。
+
+- 后端定向`tests/test_alerts.py -k 'unread or read_only or scope_removal or reaches_or_crosses or old_card'`15项通过；HTTP/WS定向`-k 'alert_http_origin'`1项通过。覆盖正常/提前收盘准确失效、同Regular重启保留、跨夜/周末/下一Regular清理、scope尚未就绪也清理、state首次输出前清理、灰线/Active线逐字段与期限不变、不补播。HTTP用例首次因沙箱禁止临时端口失败，允许本机临时绑定后通过，未修改用例绕过权限。
+- 前端`ui/tests/list-interactions.test.mjs ui/tests/scan.test.mjs`22项通过；新增覆盖完整Focus共用分组顺序、Pinned/In Play/原分组、折叠目标、Tag隐藏但不改筛选、后台更新保留隐藏选图、持仓按当前主行排序与同symbol多批次只跳一次、全部读完无操作。`npm run build --prefix ui`与`git diff --check`通过。
+- 实际生成的main.js以Node VM加载，图表/DOM/网络使用轻量替身，直接验证连续选图尚无响应也立即read、持仓及切周期同入口、零bar图表更新仍read、G/U不依赖当前选择来源、输入/修饰键保留及Scan不处理U。证据`/tmp/alert-main-check-2026-10-23.mjs`；这是主界面接线检查，不是浏览器视觉或实际按键验收。
+- 09:06 ET只读备份当前真实`runtime/alerts/alerts.sqlite3`到临时目录后运行实际AlertEngine：原16条价格线逐字段不变，3条已过所属Regular的未读变为0；无scope准备依赖、无新表、无播放。正式库未写入，副本已删除，结果`/tmp/alert-session-audit-2026-10-23.json`。
+- README、Alert、List交互、Holdings/UI、behavior/development及模块AGENTS同步；没有新增viewed/已读等待状态、遍历游标、期限字段或服务依赖。未跑全项目测试，未覆盖本轮浏览器实按G/U、真实市场收盘瞬间推送或物理睡眠唤醒，也未重测未修改的声音/图表拖动。
+
 ## 2026-10-23：List 单只操作与 Refresh 统一清理
 
 环境：macOS、Python 3.13.1、TypeScript 5.9.3；本机已有真实 Massive 截面/名单与 SQLite、现有 8765 服务。仅本次相关验证，不运行全项目测试。

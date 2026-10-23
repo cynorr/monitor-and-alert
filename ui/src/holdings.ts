@@ -61,7 +61,7 @@ export class HoldingsList {
     attention = attentionState();
     private ordered() { return sortedHoldingRows(this.data?.data?.holdings ?? [], this.sort, this.intraday.enabled && this.regularSession ? this.intraday.symbols : {}); }
 
-    constructor(private onSelect: (symbol: string, key: string, viewed?: boolean) => void, private isActive: () => boolean,
+    constructor(private onSelect: (symbol: string, key: string) => void, private isActive: () => boolean,
         private onWidth: (width: number) => void) {
         try { this.collapsed = localStorage.getItem('holdings-collapsed') === 'true'; } catch { /* Optional storage. */ }
         $('holdings-warning').addEventListener('click', () => {
@@ -86,7 +86,7 @@ export class HoldingsList {
                 this.render(); return;
             }
             const row = target.closest<HTMLElement>('[data-holding]');
-            if (row) this.choose(row.dataset.holding!, true);
+            if (row) this.choose(row.dataset.holding!);
         });
         $('holdings-table').querySelector('thead')!.addEventListener('click', event => {
             const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-holdings-sort]');
@@ -115,10 +115,10 @@ export class HoldingsList {
         });
     }
 
-    private choose(key: string, viewed = false) {
+    private choose(key: string) {
         for (const holding of this.data?.data?.holdings ?? []) {
             if (holding.sequences.some(sequence => sequence.buy_ids.join(':') === key)) {
-                this.onSelect(symbolFor(holding.ticker), key, viewed); return;
+                this.onSelect(symbolFor(holding.ticker), key); return;
             }
         }
     }
@@ -131,6 +131,17 @@ export class HoldingsList {
     forSymbol(symbol: string) {
         const row = this.ordered().find(row => symbolFor(row.holding.ticker) === symbol);
         return row ? { symbol, key: row.sequence.buy_ids.join(':') } : null;
+    }
+
+    jumpUnread() {
+        const next = this.ordered().find(row => this.attention.unread.has(symbolFor(row.holding.ticker)));
+        if (!next) return;
+        this.collapsed = false;
+        try { localStorage.setItem('holdings-collapsed', 'false'); } catch { /* Optional storage. */ }
+        const key = next.sequence.buy_ids.join(':');
+        this.choose(key);
+        this.render();
+        this.rows.get(key)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
 
     update(state: HoldingsState | null, regularSession?: boolean, intraday?: IntradayState) {
