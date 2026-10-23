@@ -3,7 +3,7 @@ export function listColumns(scan, regular, intraday = false) {
     const symbol = { field: 'symbol', label: 'Symbol', width: `minmax(${scan ? 84 : 100}px,1.1fr)` };
     const price = { field: 'price', label: scan ? 'Price' : 'Last', width: 'minmax(62px,.7fr)' };
     const tags = { field: 'tags', label: 'Tags', width: 'minmax(110px,1.15fr)' };
-    const actions = { field: 'actions', label: '', width: '60px' };
+    const actions = { field: 'actions', label: '', width: scan ? '98px' : '60px' };
     const state = intraday ? [
         { field: 'state-adr', label: 'ADR', width: '64px' },
         { field: 'cum-vol', label: 'CumVol', width: '62px' },

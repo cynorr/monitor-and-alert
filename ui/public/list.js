@@ -24,6 +24,7 @@ export class Watchlist {
     lookupTimer;
     lookupController;
     busy = false;
+    advancing;
     dragStart = null;
     suppressClick = false;
     regularSession = false;
@@ -86,16 +87,9 @@ export class Watchlist {
             const row = target.closest('[data-symbol]');
             if (!row)
                 return;
-            if (target.matches('[data-check]')) {
-                this.scan?.toggle(row.dataset.symbol);
-                return;
-            }
-            if (target.closest('.hide-ticker,.release-ticker')) {
+            if (target.closest('[data-list-action]')) {
                 const item = this.tickers.find(t => t.symbol === row.dataset.symbol);
-                if (target.closest('.release-ticker'))
-                    void this.mutate({ action: 'move', tickers: [item.ticker], source: 'excluded', target: 'discover' });
-                else
-                    void this.mutate({ action: 'hide', ticker: item.ticker });
+                void this.actOnTicker(item, target.closest('[data-list-action]').dataset.listAction);
             }
             else if (this.search) {
                 this.endSearch();
@@ -172,44 +166,101 @@ export class Watchlist {
             void this.mutate(pinned ? { action: 'pin_move', ticker, index } : { action: 'move', ticker, list_name: list, section, index });
         });
         $('symbols').addEventListener('pointercancel', () => this.endDrag());
-        document.addEventListener('keydown', event => {
-            if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing)
-                return;
-            if (event.key === '/') {
-                event.preventDefault();
-                this.beginSearch();
-                return;
-            }
-            if (event.key === ' ' && this.scan?.enabled && this.selected && this.editable && !event.target.closest('input,textarea,select,button')) {
-                event.preventDefault();
-                this.scan.toggle(this.selected);
-                return;
-            }
-            if (this.search && ['Escape', 'Enter'].includes(event.key)) {
-                event.preventDefault();
-                if (event.key === 'Escape')
-                    this.endSearch();
-                else
-                    void this.commitSearch();
-                return;
-            }
-            if (event.target.closest('input,textarea,select,[contenteditable="true"]') ||
-                !this.keyboardEnabled || !['ArrowUp', 'ArrowDown'].includes(event.key))
-                return;
+        document.addEventListener('keydown', event => this.handleKey(event));
+    }
+    handleKey(event) {
+        if (event.ctrlKey || event.altKey || event.isComposing)
+            return;
+        const arrow = event.key === 'ArrowUp' || event.key === 'ArrowDown';
+        const pin = event.metaKey && event.shiftKey && arrow;
+        if (event.metaKey && !pin)
+            return;
+        if (event.key === '/') {
             event.preventDefault();
-            const direction = event.key === 'ArrowDown' ? 1 : -1;
-            if (event.shiftKey) {
+            this.beginSearch();
+            return;
+        }
+        if (this.search && ['Escape', 'Enter'].includes(event.key)) {
+            event.preventDefault();
+            if (event.key === 'Escape')
+                this.endSearch();
+            else
+                void this.commitSearch();
+            return;
+        }
+        if (event.target.closest('input,textarea,select,[contenteditable="true"]') ||
+            !this.keyboardEnabled || this.search)
+            return;
+        if (['PageUp', 'PageDown'].includes(event.key) && !event.shiftKey) {
+            event.preventDefault();
+            this.jumpSection(event.key === 'PageDown' ? 1 : -1);
+            return;
+        }
+        const ticker = this.tickers.find(t => t.symbol === this.selected);
+        const canEdit = this.editable && !this.busy && !this.scan?.busy;
+        if (pin) {
+            event.preventDefault();
+            if (canEdit && ticker)
+                void this.togglePin(ticker, event.key === 'ArrowUp');
+            return;
+        }
+        if (this.scan?.enabled && ['Delete', 'Backspace'].includes(event.key) && !event.shiftKey) {
+            event.preventDefault();
+            if (canEdit && ticker)
+                void this.actOnTicker(ticker, 'remove');
+            return;
+        }
+        if (this.scan?.enabled && event.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+            event.preventDefault();
+            if (canEdit && ticker && ((ticker.status === 'discover' && event.key === 'ArrowRight') ||
+                (ticker.status === 'excluded' && event.key === 'ArrowLeft')))
+                void this.actOnTicker(ticker, 'focus');
+            return;
+        }
+        if (!arrow)
+            return;
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        if (event.shiftKey) {
+            if (canEdit)
                 void this.swapSelected(direction);
+            return;
+        }
+        const rows = [...this.rows.values()];
+        if (!rows.length)
+            return;
+        const index = rows.findIndex(row => row.dataset.symbol === this.selected);
+        const next = Math.max(0, Math.min(rows.length - 1, index + direction));
+        this.onSelect(rows[next].dataset.symbol);
+        rows[next].scrollIntoView({ block: 'nearest' });
+    }
+    jumpSection(direction) {
+        const sections = Array.from($('symbols').querySelectorAll('[data-section]'));
+        const current = this.rows.get(this.selected)?.closest('[data-section]');
+        const index = sections.findIndex(section => section === current);
+        const target = sections[index < 0 ? 0 : index + direction];
+        if (!target)
+            return;
+        this.collapsed.delete(target.querySelector('[data-toggle]').dataset.toggle);
+        const symbol = target.dataset.firstSymbol;
+        this.render();
+        this.onSelect(symbol);
+        this.rows.get(symbol)?.scrollIntoView({ block: 'nearest' });
+    }
+    async actOnTicker(item, action) {
+        if (!this.editable || this.busy || this.scan?.busy)
+            return;
+        if (action === 'focus') {
+            if (item.status === 'focus')
                 return;
-            }
-            const rows = [...this.rows.values()];
-            if (!rows.length)
-                return;
-            const index = rows.findIndex(row => row.dataset.symbol === this.selected);
-            const next = Math.max(0, Math.min(rows.length - 1, index + direction));
-            this.onSelect(rows[next].dataset.symbol);
-            rows[next].scrollIntoView({ block: 'nearest' });
-        });
+            await this.mutate({ action: 'move', ticker: item.ticker, target: 'focus' }, item);
+        }
+        else if (item.status === 'excluded' && item.section !== 'hidden')
+            return;
+        else if (item.section === 'hidden' || (this.scan?.enabled && item.status === 'focus'))
+            await this.mutate({ action: 'move', ticker: item.ticker, target: 'discover' }, this.scan?.enabled ? item : undefined);
+        else
+            await this.mutate({ action: 'hide', ticker: item.ticker }, this.scan?.enabled ? item : undefined);
     }
     query() { return this.input.value.trim().toUpperCase(); }
     visible() { return this.scan ? this.scan.visible(this.tickers) : this.tickers; }
@@ -333,7 +384,7 @@ export class Watchlist {
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
         const visible = this.visible();
-        if (maintainSelection && !visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
+        if (maintainSelection && !this.isAdvancing() && !visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
             this.onSelect(visible[0]?.symbol ?? '');
         this.render();
     }
@@ -353,21 +404,34 @@ export class Watchlist {
         this.clearDrop();
         document.querySelector('.dragging')?.classList.remove('dragging');
     }
-    async togglePin(item) {
-        const selected = this.selected, symbols = [...this.rows.keys()], index = symbols.indexOf(selected);
-        const next = !item.pinned && index >= 0 ?
-            [...symbols.slice(index + 1), ...symbols.slice(0, index)].find(symbol => symbol !== item.symbol) : undefined;
-        const section = item.pinned ? sectionKey(item) : `${item.status}:pinned`;
+    async togglePin(item, pinned = !item.pinned) {
+        if (!this.editable || this.busy || this.scan?.busy || !!item.pinned === pinned)
+            return;
+        const section = pinned ? `${item.status}:pinned` : sectionKey(item);
         this.collapsed.delete(collapseKey(this.scan?.enabled === true, section));
-        if (await this.mutate({ action: 'pin', ticker: item.ticker, pinned: !item.pinned }) && next && this.selected === selected) {
-            this.onSelect(next);
-            this.rows.get(next)?.scrollIntoView({ block: 'nearest' });
-        }
+        await this.mutate({ action: 'pin', ticker: item.ticker, pinned }, item);
     }
-    async mutate(payload) {
+    isAdvancing() {
+        return this.advancing && this.keyboardEnabled && this.selected === this.advancing.symbol &&
+            (this.scan?.activeList ?? 'focus') === this.advancing.list &&
+            (this.scan?.enabled === true) === this.advancing.scan;
+    }
+    advanceSelection() {
+        if (!this.isAdvancing())
+            return;
+        const { symbol, order } = this.advancing;
+        const after = order.slice(order.indexOf(symbol) + 1);
+        const next = after.find(symbol => this.rows.has(symbol)) ?? [...this.rows.keys()].at(-1) ?? '';
+        this.onSelect(next);
+        this.rows.get(next)?.scrollIntoView({ block: 'nearest' });
+    }
+    async mutate(payload, advance) {
         if (this.busy)
             return null;
         this.busy = true;
+        if (advance?.symbol === this.selected && this.keyboardEnabled && this.rows.has(this.selected))
+            this.advancing = { symbol: this.selected, list: this.scan?.activeList ?? 'focus',
+                scan: this.scan?.enabled === true, order: [...this.rows.keys()] };
         const search = this.search;
         if (search)
             search.message = 'Saving…';
@@ -376,6 +440,7 @@ export class Watchlist {
         try {
             const data = await post('list', payload);
             this.onUpdate(data);
+            this.advanceSelection();
             if (!this.search)
                 $('list-notice').textContent = data.notice ?? '';
             return data;
@@ -389,6 +454,7 @@ export class Watchlist {
             return null;
         }
         finally {
+            this.advancing = undefined;
             this.busy = false;
             this.render();
         }
@@ -408,13 +474,6 @@ export class Watchlist {
             cell.dataset.field = column.field;
             if (column.field === 'symbol') {
                 cell.className = 'scan-symbol';
-                if (scan) {
-                    const check = document.createElement('input');
-                    check.type = 'checkbox';
-                    check.dataset.check = ticker.symbol;
-                    check.setAttribute('aria-label', `Select ${ticker.ticker} for move`);
-                    cell.append(check);
-                }
                 const name = document.createElement('button');
                 name.className = 'ticker';
                 name.textContent = ticker.ticker;
@@ -476,12 +535,22 @@ export class Watchlist {
                 pin.setAttribute('aria-pressed', String(!!ticker.pinned));
                 pin.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16${ticker.pinned ? 'M12 8v12M6 14l6 6 6-6' : 'M12 20V8M6 14l6-6 6 6'}"/></svg>`;
                 cell.append(pin);
+                if (scan && ticker.status !== 'focus') {
+                    const focus = document.createElement('button');
+                    focus.className = 'focus-ticker icon-button';
+                    focus.dataset.listAction = 'focus';
+                    focus.textContent = ticker.status === 'discover' ? '→' : '←';
+                    focus.title = `Add ${ticker.ticker} to Focus`;
+                    focus.setAttribute('aria-label', focus.title);
+                    cell.append(focus);
+                }
                 if (ticker.status !== 'excluded' || ticker.section === 'hidden') {
                     const action = document.createElement('button');
-                    if (ticker.section === 'hidden') {
+                    action.dataset.listAction = 'remove';
+                    if (ticker.section === 'hidden' || (scan && ticker.status === 'focus')) {
                         action.className = 'release-ticker icon-button';
                         action.textContent = '↩';
-                        action.title = `Release ${ticker.ticker} to Discover`;
+                        action.title = `Release ${ticker.ticker} to automatic classification`;
                     }
                     else {
                         action.className = 'hide-ticker icon-button';
@@ -547,9 +616,6 @@ export class Watchlist {
                 cell.className = change == null ? '' : change >= 0 ? 'positive' : 'negative';
         };
         if (scan) {
-            const check = row.querySelector('[data-check]');
-            check.checked = this.scan.selected.has(ticker.symbol);
-            check.disabled = !this.editable || this.scan.busy;
             value('price', money(ticker.close));
             value('adr', ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%');
             value('adv', ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20));
@@ -635,6 +701,7 @@ export class Watchlist {
                 section.dataset.section = group.id;
                 section.dataset.list = group.list;
                 section.dataset.pinned = String(!!group.pinned);
+                section.dataset.firstSymbol = items[0].symbol;
                 const heading = document.createElement('div');
                 heading.className = 'group';
                 const foldKey = collapseKey(scan, group.key);

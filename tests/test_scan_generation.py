@@ -250,7 +250,7 @@ def test_refresh_uses_completed_metadata_and_selects_new_day(tmp_path):
         state = await app.action('scan', {'generate': True})
         assert state['date'] == app.workspace.date == '2026-10-01'
         assert state['editable'] and '2026-10-01' in state['dates']
-        assert app.workspace.data['orders']['focus'] == ['PAYS', 'NVDA']
+        assert app.workspace.data['orders']['focus'] == ['NVDA', 'PAYS']
         assert 'wait' not in app.workspace.data['orders']
         assert previous.read_bytes() == before
         new_before = app.workspace.path.read_bytes()

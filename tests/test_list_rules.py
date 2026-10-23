@@ -127,7 +127,7 @@ def test_real_machine_pin_hidden_release_and_focus_round_trip(saved_real_workspa
     restored.hide_ticker(ticker)
     restored.reclassify(snapshot, preferences)
     assert json.loads(ws.path.read_text())['statuses'][ticker]['section'] == 'hidden'
-    restored.move_members([ticker], 'excluded', 'discover', candidates(snapshot))
+    restored.move_member(ticker, 'discover', candidates(snapshot))
     restored.reclassify(snapshot, preferences)
     assert restored.section(ticker) == 'excluded'
     row = next(r for r in snapshot['rows'] if r['symbol'] == ticker + '.US')
@@ -168,3 +168,56 @@ def test_real_search_discover_is_same_day_only(saved_real_workspace, real_data):
     assert ticker in workspace_scope(ws.root, ws.date)
     tomorrow = (date.fromisoformat(ws.date) + timedelta(days=1)).isoformat()
     assert ticker not in inherit_workspace(restored.data, tomorrow)['statuses']
+
+
+def test_explicit_refresh_resets_real_manual_state_like_new_day(saved_real_workspace, real_data, monkeypatch):
+    """Reuse real cached data; only the copied workspace may change."""
+    import asyncio
+    from data_service.workbench import Workbench
+    ws = saved_real_workspace
+    _, snapshot, preferences = real_data
+    machine = next(t for t, s in ws.data['statuses'].items() if s['status'] == 'excluded' and s['section'] != 'hidden')
+    hidden = next(t for t in candidates(snapshot) if t != machine)
+    extra = next(r['symbol'].removesuffix('.US') for r in snapshot['rows']
+                 if not r['candidate'] and r['symbol'].removesuffix('.US') not in ws.data['statuses'])
+    rows = {r['symbol'].removesuffix('.US'): r for r in snapshot['rows']}
+    ws.move_member(machine, 'focus', candidates(snapshot), classification=focus_classification(rows[machine], preferences))
+    ws.hide_ticker(hidden)
+    ws.add_ticker(extra, 'discover')
+    ws.pin_ticker(machine, True)
+    setup = next(t['id'] for t in preferences['tags'] if tag_role(t) == 'setup')
+    ws.set_manual_tags(machine, [setup])
+    ws.move_ticker(machine, setup, 0)
+    ws.reclassify(snapshot, preferences)
+    expiry = ws.data['statuses'][hidden]['excluded_at']
+    before = deepcopy(ws.data)
+    expected = apply_rules(inherit_workspace(before, ws.date), snapshot, preferences)
+    cached = (ws.path.parent / 'scan.json').read_bytes()
+    app = Workbench(ws, ws.root.parent, RUNTIME / 'massive/daily.sqlite3',
+                    lambda *_: pytest.fail('No broker is needed for List Refresh'))
+    monkeypatch.setattr('data_service.workbench.latest_completed_date', lambda _: ws.date)
+    monkeypatch.setattr('data_service.workbench.build_day', lambda *a, **kw: pytest.fail('Do not rebuild ready data'))
+
+    async def scenario():
+        try:
+            state = await app.action('scan', {'generate': True})
+            assert state['date'] == ws.date
+            assert ws.data['statuses'] == expected['statuses']
+            assert ws.data['orders'] == expected['orders']
+            assert ws.data['carried'] == before['carried']  # Same-day Refresh is not a new trading date.
+            assert ws.data['pinned'] == []
+            assert machine not in ws.data['orders']['focus']  # Manual same-day immunity is gone.
+            assert extra not in ws.data['statuses']
+            assert ws.data['statuses'][hidden]['excluded_at'] == expiry
+            assert all(not any(k.startswith('manual_') for k in s) for s in ws.data['statuses'].values())
+            assert (ws.path.parent / 'scan.json').read_bytes() == cached
+            first = ws.path.read_bytes()
+            await app.action('scan', {'generate': True})
+            assert ws.path.read_bytes() == first
+            with pytest.raises(ValueError, match='Machine exclusions'):
+                await app.list_action({'action': 'move', 'ticker': machine, 'target': 'discover'})
+            await app.list_action({'action': 'move', 'ticker': machine, 'target': 'focus'})
+            assert ws.section(machine) == 'focus'
+        finally:
+            await app.close()
+    asyncio.run(scenario())

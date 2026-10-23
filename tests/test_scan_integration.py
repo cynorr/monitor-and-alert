@@ -57,25 +57,25 @@ def test_source_contract_date_cutoff_and_shared_metrics(app_data):
         build_day(path, '2026-09-29', cal, now)
 
 
-def test_batch_move_once_and_same_day_generation_keeps_manual_state(app_data):
+def test_single_move_once_and_same_day_publication_keeps_manual_state(app_data):
     ws = Workspace(root=app_data / 'days')
     snapshot = read_snapshot(ws.root, ws.date)
     members = candidates(snapshot)
     view = derive_day_view(ws.date, members, set(), ws.data)
-    moving = list(view.discover[:2])
+    moving = view.discover[0]
     events = []
     ws.on_change = lambda: events.append(True)
-    ws.move_members(moving, 'discover', 'focus', members)
-    assert ws.data['orders']['focus'][:2] == moving and len(events) == 1
+    ws.move_member(moving, 'focus', members)
+    assert ws.data['orders']['focus'][0] == moving and len(events) == 1
     before = ws.path.read_bytes()
     with pytest.raises(ValueError, match='destination'):
-        ws.move_members(moving, 'discover', 'wait', members)
+        ws.move_member(moving, 'wait', members)
     assert ws.path.read_bytes() == before
     publish_day(ws.root, snapshot)
     assert ws.path.read_bytes() == before
-    ws.move_members(['PAYS'], 'focus', 'hidden', members)
+    ws.hide_ticker('PAYS')
     assert 'PAYS' in derive_day_view(ws.date, members, set(), ws.data).excluded
-    ws.move_members(['PAYS'], 'excluded', 'discover', members)
+    ws.move_member('PAYS', 'discover', members)
     assert 'PAYS' not in ws.data['statuses'] and 'PAYS' not in ws.data['orders']['discover']
 
 
@@ -191,7 +191,7 @@ def test_search_adds_non_candidate_to_pinned_discover_until_next_day(app_data):
         new_day = inherit_workspace(restored.data, '2026-10-01')
         assert ticker not in new_day['statuses'] and not new_day['pinned']
         assert ranks == {row['symbol']: {k: v for k, v in row.items() if k.endswith('_rank')} for row in app.snapshot()['rows']}
-        await app.list_action({'action': 'move', 'source': 'discover', 'target': 'focus', 'tickers': [ticker]})
+        await app.list_action({'action': 'move', 'target': 'focus', 'ticker': ticker})
         carried = inherit_workspace(app.workspace.data, '2026-10-01')
         assert carried['statuses'][ticker]['status'] == 'focus'
         assert 'manual_discover_date' not in carried['statuses'][ticker]
@@ -207,7 +207,7 @@ def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):
         row = next(row for row in app.scan_board() if row['status'] == 'discover')
         app.select(row['symbol'],'5m')
         assert set(app.view(row['symbol'],'5m')['charts']) == {'1d'}
-        await app.list_action({'action':'move','source':'discover','target':'focus','tickers':[row['ticker']]})
+        await app.list_action({'action':'move','target':'focus','ticker': row['ticker']})
         assert not brokers
         await app.switch_mode('monitor')
         await asyncio.sleep(.1)
@@ -219,7 +219,7 @@ def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):
         assert app.monitor is None and app.monitor_task is None and task.done() and first.closed
         before = len(first.calls)
         app.view(row['symbol'],'5m')
-        await app.list_action({'action':'move','source':'focus','target':'hidden','tickers':[row['ticker']]})
+        await app.list_action({'action':'hide','ticker': row['ticker']})
         await asyncio.sleep(.05)
         assert len(first.calls) == before
         await app.switch_mode('monitor')
@@ -395,13 +395,13 @@ def test_refresh_skips_completed_scan_and_opens_latest_date(app_data, monkeypatc
             monkeypatch.setattr(pipeline, 'run', ready_run)
         app, brokers = make_app(app_data, mock=not with_pipeline, pipeline=pipeline)
         monkeypatch.setattr('data_service.workbench.build_day', lambda *a, **kw: pytest.fail('Completed scan must not be rebuilt'))
-        before = {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/*.json')}
+        before = {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/scan.json')}
         await app.action('scan', {'date': '2026-09-29'})
         run_id = app.run_id
         result = await app.action('scan', {'generate': True})
         assert result['date'] == '2026-09-30' and app.run_id != run_id
         await app.action('scan', {'generate': True})
-        assert before == {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/*.json')}
+        assert before == {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/scan.json')}
         if pipeline:
             assert pipeline.calls == [False, False]
         with pytest.raises(ValueError, match='scan --date'):
@@ -426,7 +426,7 @@ def test_real_scan_keeps_background_market_and_preparation_does_not_lock_modes_o
         row = next(row for row in app.scan_board() if row['status'] == 'discover')
         app.select(row['symbol'], '5m')
         assert row['symbol'] not in monitor.symbols  # Scan selection alone never expands subscriptions.
-        await app.list_action({'action': 'move', 'source': 'discover', 'target': 'focus', 'tickers': [row['ticker']]})
+        await app.list_action({'action': 'move', 'target': 'focus', 'ticker': row['ticker']})
         assert row['symbol'] in monitor.symbols and row['symbol'] in brokers[0].allowed
         await app.action('scan', {'date': '2026-09-29'})
         pipeline.release.set()
@@ -595,3 +595,21 @@ def test_massive_cli_uses_the_same_runtime_lock(tmp_path, monkeypatch):
     with (tmp_path / 'service.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert cli.main(['massive', '--runtime', str(tmp_path)]) == 1
+
+
+def test_failed_refresh_keeps_manual_list_state(app_data, monkeypatch):
+    async def scenario():
+        pipeline = FakePipeline(app_data)
+        async def failed_run(**kwargs):
+            pipeline.value['features'].update(status='error', error='Preparation failed')
+        monkeypatch.setattr(pipeline, 'run', failed_run)
+        app, brokers = make_app(app_data, mock=False, pipeline=pipeline)
+        item = next(iter(app.workspace.data['statuses']))
+        app.workspace.pin_ticker(item, True)
+        before = app.workspace.path.read_bytes()
+        state = await app.action('scan', {'generate': True})
+        assert state['massive']['features']['status'] == 'error'
+        assert app.workspace.path.read_bytes() == before
+        assert not brokers
+        await app.close()
+    asyncio.run(scenario())

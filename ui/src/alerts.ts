@@ -174,7 +174,7 @@ export class AlertController {
         document.addEventListener('keydown', event => {
             if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
             if (event.key === 'Escape') { this.layers.forEach(layer => layer.cancel()); this.choose(''); }
-            if (event.key === 'Backspace' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
+            if (event.key === 'Backspace' && this.mode() === 'monitor' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
         }, true);
         $('alert-error-close').addEventListener('click', () => { this.error = ''; this.render(); });
     }

@@ -1,5 +1,16 @@
 # 验证记录
 
+## 2026-10-23：List 单只操作与 Refresh 统一清理
+
+环境：macOS、Python 3.13.1、TypeScript 5.9.3；本机已有真实 Massive 截面/名单与 SQLite、现有 8765 服务。仅本次相关验证，不运行全项目测试。
+
+- TypeScript build 及 git diff --check 通过。6 个定向 UI 用例通过：Scan 删除/左右入选、两模式组内移动与 Command 置顶的按键分流、机器释放禁止、重复置顶不跳、保存成功/失败选择、末尾不循环、跨 section 展开与搜索仍选中目标。
+- 17 个相关后端用例通过。真实截面测试仅编辑临时 workspace 副本：同日 Refresh 与新日首次分类的 statuses/orders 一致，清除 Pin/人工 Tag/section/Discover/排序，Focus 恢复自动淘汰，Hidden 不延期；同日 carried 不伪装成新日。重复 Refresh 幂等，Ready 数据不重新 build，准备失败保留人工名单。单只入选继续与 Alert 共用重新匹配，Hidden 释放和机器禁止释放沿用既有规则。
+- 正式服务页面仅做显示/导航检查：Monitor Page Down 到下一组首只，在末组不循环；Scan 不再显示勾选框/Move to，显示单只 Add to Focus，Page Up 展开折叠 Bounce-20 并选中 PDSB。检查后恢复 Monitor，未提交正式名单移动、置顶、删除或 Refresh，也未更改真实 Alert。
+- 原 Monitor 服务按原配置重启加载后端改动，确认 Quote CONNECTED、27 个完整行情 symbol、Massive Ready；不新增测试券商连接或扩大订阅范围。重启前已存在的 TJGC 历史缺失不属于本次改动，不以启动时 errors 为空宣称解决该问题。
+- 未覆盖：真实账户上的名单修改/Alert 删除、所有键盘硬件、全天运行及其他模块全流程。真实数据副本验证不冒充正式名单实操；样式仅做当前页面检查。
+
+
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
 

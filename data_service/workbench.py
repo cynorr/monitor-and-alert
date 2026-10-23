@@ -408,16 +408,17 @@ class Workbench:
             if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags'] if tag['role'] in ('setup', 'label')}:
                 raise ValueError('Manual Tags must be Setup or Label')
             self.workspace.set_manual_tags(normalize_ticker(payload['ticker']), payload['tags'])
-        elif action == 'move' and not payload.get('tickers'):
+        elif action == 'move' and 'target' in payload:
+            ticker = normalize_ticker(payload['ticker'])
+            classification = self.focus_classifications([ticker])[ticker] if payload['target'] == 'focus' else None
+            self.workspace.move_member(ticker, payload['target'], candidates(self.snapshot(self.workspace.date)),
+                                       classification=classification)
+        elif action == 'move':
             sections = {'unclassified', 'focus', 'wait'} | {tag['id'] for tag in self.preferences['tags'] if tag['role'] == 'setup'}
             if payload['section'] not in sections:
                 raise ValueError('Unknown setup section')
             self.workspace.move_ticker(normalize_ticker(payload['ticker']), payload['section'], payload['index'],
                                       list_name=payload.get('list_name', 'focus'))
-        elif action == 'move':
-            snapshot = self.snapshot(self.workspace.date)
-            self.workspace.move_members(payload['tickers'], payload['source'], payload['target'], candidates(snapshot),
-                                        classifications=self.focus_classifications(payload['tickers']))
         else:
             raise ValueError('Unknown list action')
         await self.prepare_lists()
@@ -492,6 +493,10 @@ class Workbench:
                                                                 directory_path=RuntimePaths(self.runtime).symbol_directory)
                             publish_day(self.workspace.root, snapshot)
                             self.scan_published()
+                    # Ready data stays cached; explicit Refresh still resets the daily manual layer.
+                    self.workspace.reload()
+                    if value == self.workspace.date and (not self.pipeline or self.pipeline.state()['ready']):
+                        self.workspace.reclassify(self.snapshot(value), self.preferences, reset=True)
                     if value and value != self.selected_date:
                         self.selected_date = value
                         self.run_id = uuid.uuid4().hex

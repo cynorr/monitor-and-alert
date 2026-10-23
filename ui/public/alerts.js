@@ -231,7 +231,7 @@ export class AlertController {
                 this.layers.forEach(layer => layer.cancel());
                 this.choose('');
             }
-            if (event.key === 'Backspace' && this.selected) {
+            if (event.key === 'Backspace' && this.mode() === 'monitor' && this.selected) {
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 void this.mutate({ action: 'delete', id: this.selected });

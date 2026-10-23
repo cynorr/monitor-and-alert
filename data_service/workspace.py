@@ -107,8 +107,8 @@ def migrate_workspace(data: dict, selected_date: str | None = None) -> dict:
     return result
 
 
-def inherit_workspace(previous: dict | None, selected_date: str) -> dict:
-    """Only Focus and unexpired manual Hidden survive a new trading date."""
+def reset_daily_workspace(previous: dict | None, selected_date: str) -> dict:
+    """Shared clean classification input for a new date and explicit Refresh."""
     if previous is None:
         return empty_workspace()
     result = migrate_workspace(previous, selected_date)
@@ -119,10 +119,18 @@ def inherit_workspace(previous: dict | None, selected_date: str) -> dict:
             del states[ticker]
             continue
         state['tags'] = []
+        if state.get('status') == 'focus':
+            state['section'] = 'unclassified'
         for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date', 'manual_tags_date', 'manual_tags'):
             state.pop(key, None)
-    result['carried'] = sorted(ticker for ticker, state in states.items() if state.get('status') == 'focus')
+    result['orders'] = {}
     result['orders'] = _workspace_orders(result)
+    return result
+
+
+def inherit_workspace(previous: dict | None, selected_date: str) -> dict:
+    result = reset_daily_workspace(previous, selected_date)
+    result['carried'] = sorted(ticker for ticker, state in result['statuses'].items() if state.get('status') == 'focus')
     return result
 
 
@@ -189,9 +197,10 @@ class Workspace:
         self.error = None
         self.on_change()
 
-    def reclassify(self, snapshot, preferences):
+    def reclassify(self, snapshot, preferences, *, reset=False):
         from .list_rules import apply_rules
-        result = apply_rules(self.data, snapshot, preferences, self.date)
+        source = reset_daily_workspace(self.data, self.date) if reset else self.data
+        result = apply_rules(source, snapshot, preferences, self.date)
         if result == self.data:
             return False
         previous, self.data = self.data, result
@@ -280,32 +289,23 @@ class Workspace:
         order.insert(at, ticker)
         self.save(previous)
 
-    def move_members(self, tickers, source, target, candidates, *, classifications=None):
-        if source == target or source not in ORDERED_STATUSES or target not in ('discover', 'focus', 'hidden'):
+    def move_member(self, ticker, target, candidates, *, classification=None):
+        source = self.section(ticker)
+        if source not in ORDERED_STATUSES or source == target or target not in ('discover', 'focus'):
             raise ValueError('Choose a different destination list')
-        if not tickers or len(set(tickers)) != len(tickers):
-            raise ValueError('Select unique tickers')
-        if any(self.section(ticker) != source for ticker in tickers):
-            raise ValueError('Selection has changed; select again')
-        if source == 'excluded' and target == 'discover' and any(
-                self.data['statuses'][ticker].get('section') != 'hidden' for ticker in tickers):
+        if source == 'excluded' and target == 'discover' and self.data['statuses'][ticker].get('section') != 'hidden':
             raise ValueError('Machine exclusions are released by scan rules')
         previous = deepcopy(self.data)
-        for ticker in tickers:
-            self._unpin(ticker)
-            self._remove_order(ticker)
-            if target == 'discover':
-                self.data['statuses'].pop(ticker, None)
-                if ticker in candidates:
-                    self.data['statuses'][ticker] = {'status': 'discover', 'section': 'unclassified', 'tags': []}
-            elif target == 'focus':
-                self._focus(ticker, (classifications or {}).get(ticker))
-            else:
-                self.data['statuses'].setdefault(ticker, {}).update(status='excluded', section='hidden', tags=[], status_at=self.date, excluded_at=self.date)
-                for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date', 'manual_tags', 'manual_tags_date'):
-                    self.data['statuses'][ticker].pop(key, None)
-        destination = 'excluded' if target == 'hidden' else target
-        self.data['orders'][destination] = [ticker for ticker in tickers if ticker in self.data['statuses']] + self.data['orders'][destination]
+        self._unpin(ticker)
+        self._remove_order(ticker)
+        if target == 'focus':
+            self._focus(ticker, classification)
+        else:
+            self.data['statuses'].pop(ticker)
+            if ticker in candidates:
+                self.data['statuses'][ticker] = {'status': 'discover', 'section': 'unclassified', 'tags': []}
+        if ticker in self.data['statuses']:
+            self.data['orders'][target].insert(0, ticker)
         self.save(previous)
 
     def _unpin(self, ticker):

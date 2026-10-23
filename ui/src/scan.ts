@@ -13,15 +13,12 @@ export const matchesTag = (row: Ticker, tag: Tag, useAssigned = true) =>
 
 export class ScanControls {
     enabled = false;
-    selected = new Set<string>();
     readonly sortControl = document.createElement('select');
     preferences?: Preferences;
     private draft?: Tag;
     private baseline?: Tag;
     private rows: Ticker[] = [];
     private savedKey = '';
-    private date = '';
-    private editable = false;
     private panel?: FilterPanel;
     private pending = false;
     private serverRunning = false;
@@ -36,13 +33,13 @@ export class ScanControls {
         void fetch('/v1/filter-catalog').then(response => response.json()).then((catalog: Field[]) => {
             if (!Array.isArray(catalog)) return; // The standalone simulator has no Scan endpoints.
             this.panel = new FilterPanel($('filter-rules'), catalog, filters => {
-                this.draft!.filters = filters; this.selected.clear(); this.render(); this.changed();
+                this.draft!.filters = filters; this.render(); this.changed();
             });
             this.render();
         });
         $('scan-lists').addEventListener('click', event => {
             const group = (event.target as HTMLElement).closest<HTMLElement>('[data-list]')?.dataset.list;
-            if (group && this.preferences) { this.preferences.activeList = group; this.selected.clear(); this.render(); this.changed(); void this.persist(this.preferences); }
+            if (group && this.preferences) { this.preferences.activeList = group; this.render(); this.changed(); void this.persist(this.preferences); }
         });
         this.sortControl.id = 'scan-sort';
         this.sortControl.setAttribute('aria-label', 'Scan sort');
@@ -55,12 +52,12 @@ export class ScanControls {
         });
         $('scan-date').addEventListener('change', event => { void this.action('scan', { date: (event.target as HTMLSelectElement).value }); });
         $('scan-refresh').addEventListener('click', () => { void this.action('scan', { generate: true }); });
-        $('scan-refresh').title = 'Prepare and open the latest completed trading date; skip completed steps';
+        $('scan-refresh').title = 'Refresh latest lists from automatic rules; clear daily manual adjustments; reuse prepared data';
         $('scan-tags').addEventListener('click', event => {
             const id = (event.target as HTMLElement).closest<HTMLElement>('[data-tag]')?.dataset.tag;
             if (id) this.protectDraft(() => {
                 this.preferences!.activeTag = this.preferences!.activeTag === id ? null : id;
-                this.resetDraft(); this.selected.clear(); this.render(); this.changed(); void this.persist(this.preferences!);
+                this.resetDraft(); this.render(); this.changed(); void this.persist(this.preferences!);
             });
         });
         $('tag-add').addEventListener('click', () => this.protectDraft(() => {
@@ -89,11 +86,7 @@ export class ScanControls {
             void this.persist(preferences, true);
         });
         $('tag-discard').addEventListener('click', () => { const proceed = this.discard; this.discard = undefined; proceed?.(); });
-        $('clear-filters').addEventListener('click', () => { this.draft!.filters = {}; this.selected.clear(); this.render(); this.changed(); });
-        $('scan-move').addEventListener('click', event => {
-            const target = (event.target as HTMLElement).closest<HTMLElement>('[data-target]')?.dataset.target;
-            if (target) void this.move(target);
-        });
+        $('clear-filters').addEventListener('click', () => { this.draft!.filters = {}; this.render(); this.changed(); });
         window.addEventListener('beforeunload', event => { if (this.dirty()) { event.preventDefault(); event.returnValue = ''; } });
     }
 
@@ -114,12 +107,12 @@ export class ScanControls {
     }
 
     update(data: ListState) {
-        this.enabled = data.app_mode === 'scan'; this.rows = data.board; this.editable = data.editable;
+        this.enabled = data.app_mode === 'scan'; this.rows = data.board;
         this.holdingSymbols = new Set(data.holding_symbols ?? []);
         this.serverRunning = data.scan_running === true;
         $('scan-controls').hidden = !data.preferences;
         $('list-tools').hidden = !data.preferences;
-        for (const id of ['scan-navigation', 'scan-move']) $(id).hidden = !this.enabled;
+        $('scan-navigation').hidden = !this.enabled;
         if (!data.preferences) return;
         const preferences = { ...data.preferences, tags: data.preferences.tags.map(tag => ({ ...tag, appearance: tagAppearance(tag) })) };
         const key = JSON.stringify(preferences);
@@ -127,14 +120,12 @@ export class ScanControls {
             const keepDraft = this.dirty() && this.preferences?.activeTag === preferences.activeTag &&
                 JSON.stringify(this.preferences.tags) === JSON.stringify(preferences.tags);
             this.savedKey = key; this.preferences = structuredClone(preferences);
-            if (!keepDraft) { this.resetDraft(); this.selected.clear(); }
+            if (!keepDraft) { this.resetDraft(); }
         }
-        if (this.date !== data.date) { this.date = data.date!; this.selected.clear(); }
         const select = $('scan-date') as HTMLSelectElement;
         if (JSON.stringify(Array.from(select.options).map(option => option.value)) !== JSON.stringify(data.dates))
             select.replaceChildren(...(data.dates ?? []).map(date => new Option(date, date)));
-        select.value = this.date;
-        this.selected = new Set([...this.selected].filter(symbol => this.available(data.board).some(row => row.symbol === symbol)));
+        select.value = data.date ?? '';
         this.render();
     }
 
@@ -157,13 +148,11 @@ export class ScanControls {
         if (!this.preferences) return;
         this.preferences.activeList = list;
         this.preferences.activeTag = null;
-        this.selected.clear();
         this.resetDraft(); this.render();
         await this.persist(this.preferences);
     }
     get busy() { return this.pending; }
     get manualOrder() { return !this.enabled || this.preferences?.sort === 'default'; }
-    toggle(symbol: string) { if (this.selected.has(symbol)) this.selected.delete(symbol); else this.selected.add(symbol); this.render(); this.changed(); }
 
     private async persist(preferences: Preferences, fold = false) {
         this.pending = true; $('scan-error').textContent = ''; this.render();
@@ -194,18 +183,11 @@ export class ScanControls {
         finally { this.pending = false; this.render(); }
     }
 
-    private async move(target: string) {
-        const tickers = this.visible(this.rows).filter(row => this.selected.has(row.symbol)).map(row => row.ticker);
-        if (await this.action('list', { action: 'move', source: this.activeList, target, tickers })) this.selected.clear();
-        this.render(); this.changed();
-    }
-
     private render() {
         if (!this.preferences || !this.draft) return;
         $('filter-editor').hidden = !this.editorOpen;
         $('filter-toggle').setAttribute('aria-expanded', String(this.editorOpen));
         const available = this.available(this.rows);
-        const filtered = this.visible(this.rows);
         $('scan-lists').querySelectorAll<HTMLButtonElement>('[data-list]').forEach(button => {
             const group = button.dataset.list!, count = available.filter(row => row.status === group && matchesTag(row, this.draft!, this.useAssignedTags())).length;
             button.replaceChildren(group[0].toUpperCase() + group.slice(1), countBadge(count));
@@ -235,14 +217,6 @@ export class ScanControls {
         $('filter-rules').querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(node => { node.disabled = this.pending; });
         this.panel?.render(this.draft.filters, available);
         $('filter-count').replaceChildren(countBadge(Object.keys(this.draft.filters).length));
-        const selected = filtered.filter(row => this.selected.has(row.symbol));
-        const count = selected.length;
-        $('scan-move').querySelectorAll<HTMLButtonElement>('[data-target]').forEach(button => {
-            const target = button.dataset.target;
-            button.disabled = !this.editable || this.pending || !count || target === this.activeList ||
-                (target === 'hidden' && selected.every(row => row.section === 'hidden')) ||
-                (target === 'discover' && this.activeList === 'excluded' && selected.some(row => row.section !== 'hidden'));
-        });
         ($('scan-refresh') as HTMLButtonElement).disabled = this.pending || this.serverRunning;
         for (const id of ['scan-date', 'tag-name', 'tag-cancel', 'tag-delete', 'clear-filters', 'tag-icon', 'tag-color', 'tag-background'])
             ($(id) as HTMLInputElement | HTMLButtonElement).disabled = this.pending;

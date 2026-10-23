@@ -75,7 +75,7 @@
 | Triggered 继续收到行情 | 不再次触发 |
 | 成功拖动/重新设置 | 新 generation，Active，黑色横线 |
 | 点击row并成功显示图表 | 只标记该symbol已读，灰线保持 |
-| Backspace 删除 | 删除选中 Alert 及横线 |
+| Monitor Backspace 删除 | 删除选中 Alert 及横线；Scan 只用横线垃圾桶 |
 | 到期或出范围 | 删除 Alert 及横线，停止后续触发 |
 | 服务/Mac 重启 | 恢复尚未到期且仍在范围中的原状态 |
 
@@ -92,7 +92,7 @@
 - 创建：按住 `Command + Option (Alt)`，左键按压主价格绘图区，直接创建；不弹确认，不新增价格输入框。图表标题、成交量区域、时间轴与价格轴不创建 Alert。
 - Alert 显示为细水平线段虚线和紧贴右侧价格刻度边缘的向右箭头，视觉对照 TradingView macOS 客户端；触发后改为灰色。不在右侧价格轴显示 Alert 方块、数字或 tick；虚线样式统一遵循 [Chart UI](chart-ui.md#colors-margins-and-reference-lines)，图形定义见 [Alert 图形](ui.md#alert-图形)。
 - 平时只显示虚线与右箭头。鼠标悬停横线时，在绘图区宽度约 2/3 处显示两位小数价格胶囊，以鼠标上下调整光标提示拖动，不另画重复的上下箭头；离开横线/胶囊即隐藏，单纯选中不常驻显示价格。胶囊右端的垃圾桶左键立即删除该条 Alert，无二次确认，不启动拖动或交易日联动。拖动期间胶囊跟随线条并显示当前预览价格。
-- 普通点击横线选中；选中后 Backspace 立即删除，无二次确认。macOS 键帽上的 Delete 退格键按浏览器 `Backspace` 处理。
+- 普通点击横线选中；Monitor 选中后 Backspace 立即删除，无二次确认；Scan 停用 Alert 的键盘删除，保留横线垃圾桶，Delete/Backspace 用于 [List 单只操作](list-interactions.md)。macOS 键帽上的 Delete 退格键按浏览器 `Backspace` 处理。
 - 点击空白或 Esc 取消选中；输入框、搜索和可编辑内容获得焦点时，Backspace 保持原来的文本编辑含义。
 - 上下拖动时跟随鼠标预览两位小数价格，松手才提交一次。成功提交恢复 Active 并重新计算期限；明确拖动后提交相同的归一价格也可以重新激活灰线，普通点击不重设。
 - 拖动取消或提交失败恢复服务端已保存状态，并显示简短错误；不把未保存的预览当成 Active。

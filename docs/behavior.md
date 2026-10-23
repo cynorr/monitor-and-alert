@@ -38,7 +38,7 @@ Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多
 
 Massive 数据要求、拆股/整数成交量、来源时段与筛选配置统一见 [massive-data.md](massive-data.md)。Longbridge 数据要求统一见 [longbridge-data.md](longbridge-data.md)。读取、指标和图表不再做复权；两源共享格式与计算，数据互不干涉。Daily Symbol右侧可以显示本地Nasdaq目录名称，缺失正常留空，两模式共用。
 
-全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 补齐并打开最新可用日，完成的步骤跳过，也不重算日期下拉框当前选中的旧日。指定日重算只由 CLI 的 scan --date D 执行；不带 --date 的 scan 命令重算本地库最新完成日。GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读，普通Refresh仅生成缺失的最新日截面。日期下拉框仅显示已生成的日期。
+全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 补齐并打开最新可用日，完成的步骤跳过，也不重算日期下拉框当前选中的旧日。指定日重算只由 CLI 的 scan --date D 执行；不带 --date 的 scan 命令重算本地库最新完成日。GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读，普通 Refresh 仅生成缺失的最新日截面，但即使准备跳过仍清理人工状态并重新分类。日期下拉框仅显示已生成的日期。
 
 正式服务启动触发一次Massive后台准备，依次完成Daily、split、SQLite和features；已有目标日及匹配行情版本的完整产物则跳过。免费Nasdaq目录由独立脚本维护；缺失/损坏或配置错误先于Massive请求失败，保留旧结果并提示。网络获取按数据要求有界重试；本地构建失败直接报错，派生SQLite删除后在下次运行重建。没有定时轮询。手动脚本与页面Refresh复用同一流程，GET、图表和切页不触发下载；同一时刻仅一份准备任务。
 
@@ -46,7 +46,7 @@ Daily与split统一按最新成熟交易日判断，保留ET18点门槛；周末
 
 ## List、Tag 与 Filter
 
-需求背景与归属设计见 [list-design.md](list-design.md)，显示与交互的唯一规范见 [ui.md 的 List UI 章节](ui.md#list-ui)。
+需求背景与归属设计见 [list-design.md](list-design.md)，显示见 [List UI](ui.md#list-ui)，交互的唯一规范见 [List 交互](list-interactions.md)。
 
 Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两模式共享。Monitor 展示 Focus 与独立 Holdings；Discover 与全部 Excluded 的日 K 和分类使用本地 Massive Daily，Scan/Monitor均为完整三名单保留Quote；最新Scan日显示最新报价，Monitor双图也显示扩展报价价格轴标签（规则见Longbridge数据要求），不启动其完整行情或Alert。自动Excluded仅显示当天候选的规则结果、不保存成员身份；跨日只继承Focus和有效Hidden，Focus每日自动淘汰保留，非候选淘汰后退出当前名单。盘中明确入选Focus才开始完整实时监控。Scan 全局搜索确认后进入当日 Discover 置顶，不建立临时预览或跨日保存；新增与继承细则见 [List 设计](list-design.md#三个列表)。
 
@@ -60,9 +60,9 @@ Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑�
 
 完成日Daily和feature准备后，按 [每日规则](list-design.md#每日规则) 统一计算候选归属和Focus淘汰；机器分类不落盘。有效Hidden继续屏蔽，到期仅当天候选重新分类。分类复用已有算子和Tag匹配，不增加定时扫描。
 
-规则Tag每天重算；人工补Tag、主section和保留Focus例外仅当天有效。Focus成员及同section内部人工排序跨日保留，新进入section成员置顶。没有匹配Tag不淘汰Focus。人工入选Focus当天优先，仍显示机器负面标签，次日重新接受规则。当日置顶独立于Tag和section，顺序跨Scan/Monitor共享；新置顶后黑框和图表移到下一个可见成员，取消置顶保留当前选择并回原section，跨List取消，新完成日继承时清空，同日刷新/重启保留。临时Filter只改变显示，不移动名单或改变订阅；修改草稿预览，Save才更新条件并重新分类已有本地截面。
+规则 Tag 每日重算；人工调整在普通更新/重启时保留，显式 Refresh 与新日首次分类共用清理逻辑，再执行 Focus 淘汰和候选分类。清理范围、Hidden 期限及入选规则只在 [List 设计](list-design.md#每日规则) 维护。Filter 仅影响显示，不改变归属或订阅。
 
-Add to Focus清除排除状态并开始订阅；Move to Hidden（行垃圾桶及批量操作）明确屏蔽七个自然日。Move to Discover结束Focus归属或提前释放Hidden，仅当天候选返回Discover并立即按当前规则分类；机器section没有人工Release。扫描初筛和RFL排名不受Tag影响。批量操作一次同步落盘，历史日期名单只读。旧Focus/Wait合并为Focus，旧Hidden转Excluded/Hidden并保留期限。
+名单操作直接作用于单只 symbol；机器 Excluded 禁止人工释放，Hidden/Focus 释放后重新分类。快捷键、行按钮和限定自动下一只见 [List 交互](list-interactions.md)。Holdings 与 Monitor 的名单删除按键维持既有边界。
 
 搜索仍使用列表上方Search与/入口。Monitor通过同一Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整 section，本次不新增 Quote 形态规则。保存失败回退内存并显示错误。
 
