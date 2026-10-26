@@ -14,17 +14,22 @@ export function rankedRows(rows, states) {
 export function stateAppearance(row, value) {
     row.dataset.intraday = value?.state ?? 'neutral';
 }
-export function adrText(value) {
+export function adrText(value, quiet = false) {
     if (!value?.state || value.up_adr == null || value.down_adr == null)
         return '—';
     const down = value.state.startsWith('down') ||
         (value.state === 'neutral' && value.role === 'holding' && value.down_adr > value.up_adr);
-    return `${down ? '↓' : '↑'}${(down ? value.down_adr : value.up_adr).toFixed(2)}×`;
+    const ratio = down ? value.down_adr : value.up_adr;
+    return quiet && ratio <= .5 ? '' : `${down ? '↓' : '↑'}${ratio.toFixed(2)}×`;
 }
 export function adrTitle(value) {
     return value?.up_adr != null && value.down_adr != null && value.adr20 != null ? `Up ${value.up_adr.toFixed(2)}× · Down ${value.down_adr.toFixed(2)}× · Previous-day ADR20 ${value.adr20.toFixed(2)}%` : 'Waiting for current Regular quote and historical ADR20';
 }
-export function volumeBadge(cell, value) {
+export function volumeBadge(cell, value, quiet = false) {
+    if (quiet && value?.ratio != null && value.ratio <= .5) {
+        cell.replaceChildren();
+        return;
+    }
     let badge = cell.querySelector('.volume-badge');
     if (!badge) {
         badge = document.createElement('span');

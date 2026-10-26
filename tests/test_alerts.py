@@ -37,10 +37,10 @@ def test_reaches_or_crosses_once_and_persists(engine, start, end, direction):
     assert not value.state()['unread']
     clock[0] += 1; tick(value, end)
     events = value.state()['unread']
-    assert events == ['NVDA.US']
+    assert [notice['symbol'] for notice in events] == ['NVDA.US']
     assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == direction
     tick(value, start); tick(value, end)
-    assert value.state()['unread'] == ['NVDA.US']
+    assert [notice['symbol'] for notice in value.state()['unread']] == ['NVDA.US']
     assert value.db.execute("SELECT count(*) FROM alerts WHERE state='triggered'").fetchone()[0] == 2
 
 
@@ -62,7 +62,7 @@ def test_raw_price_precision_equality_and_snapshot_order(engine):
     assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'down'
 
 
-def test_read_only_clears_border_and_never_deletes_gray_or_rearmed_line(engine):
+def test_read_only_clears_unread_and_never_deletes_gray_or_rearmed_line(engine):
     value, clock = engine
     alert = value.create('NVDA.US', 10)
     tick(value, 9); tick(value, 10)
@@ -77,7 +77,7 @@ def test_read_only_clears_border_and_never_deletes_gray_or_rearmed_line(engine):
     value.read('NVDA.US')
     assert value.alerts[alert['id']]['state'] == 'active'
     tick(value, 11); tick(value, 10)
-    assert value.state()['unread'] == ['NVDA.US']
+    assert [notice['symbol'] for notice in value.state()['unread']] == ['NVDA.US']
     value.read('NVDA.US')
     assert value.alerts[alert['id']]['state'] == 'triggered'
 
@@ -137,7 +137,7 @@ def test_unread_expires_at_regular_close_without_changing_price_lines(tmp_path, 
         value.create('NVDA.US', 20)
         tick(value, 9); tick(value, 10)
         before = value.state()['alerts']
-        assert value.state()['unread'] == ['NVDA.US']
+        assert [notice['symbol'] for notice in value.state()['unread']] == ['NVDA.US']
         clock[0] = at(closed)
         value.maintain(set(), False)  # Time expiry does not wait for Holdings scope readiness.
         assert not value.state()['unread']
@@ -170,7 +170,7 @@ def test_unread_restart_or_wake_only_restores_current_regular(tmp_path, cal, res
     try:
         assert [row['symbol'] for row in value.db.execute('SELECT symbol FROM unread')] == unread
         assert value.state()['alerts'] == prices
-        assert sound.calls == [('NVDA.US', 'up')]
+        assert [call[:3] for call in sound.calls] == [('NVDA.US', 'up', 1)]
         # State output also clears after sleep, even before the existing maintenance loop resumes.
         clock[0] = at('2026-10-26T16:00:00')
         assert not value.state()['unread']
@@ -265,7 +265,7 @@ def test_alert_http_origin_and_independent_empty_selection_stream(app_data):
                 while True:
                     state = await stream.receive_json(timeout=2)
                     if state['type'] == 'alerts' and state['unread']: break
-                assert state['unread'] == [target] and state['alerts'][0]['state'] == 'triggered'
+                assert [notice['symbol'] for notice in state['unread']] == [target] and state['alerts'][0]['state'] == 'triggered'
                 response = await client.post(url + '/v1/alerts', json={'action':'read','symbol':target})
                 read = await response.json()
                 assert not read['unread'] and read['alerts'][0]['state'] == 'triggered'
@@ -324,7 +324,7 @@ def test_focus_saved_alert_write_rejected_returns_explicit_partial_result(app_da
 
 class RecordingSound:
     def __init__(self): self.calls = []
-    def play(self, symbol, direction): self.calls.append((symbol, direction))
+    def play(self, symbol, direction, level, fired_at): self.calls.append((symbol, direction, level, fired_at))
     def state(self): return {'enabled': True, 'error': None, 'playing': []}
 
 
@@ -337,14 +337,14 @@ def test_shared_notify_keeps_only_latest_unread_and_restore_never_replays(tmp_pa
     alert = value.create('NVDA.US', 10)
     tick(value, 9); tick(value, 10)
     tick(value, 9); tick(value, 11)
-    assert sound.calls == [('NVDA.US', 'up')]
-    value.notify('NVDA.US', 'urgent')
-    assert value.state()['unread'] == ['NVDA.US']
-    assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'urgent'
+    assert [call[:3] for call in sound.calls] == [('NVDA.US', 'up', 1)]
+    value.notify('NVDA.US', 'down', 2)
+    assert [notice['symbol'] for notice in value.state()['unread']] == ['NVDA.US']
+    assert value.state()['unread'] == [{'symbol':'NVDA.US','direction':'down','level':2,'fired_at':clock()}]
     value.close()
     restored = AlertEngine(path, cal, clock=clock, sound=sound)
     try:
-        assert restored.state()['unread'] == ['NVDA.US']
+        assert [notice['symbol'] for notice in restored.state()['unread']] == ['NVDA.US']
         assert len(sound.calls) == 2
         restored.read('NVDA.US')
         assert restored.alerts[alert['id']]['state'] == 'triggered'
@@ -380,20 +380,17 @@ def test_workbench_sound_lifecycle_and_mock_defaults(app_data):
     asyncio.run(scenario())
 
 
-def test_old_card_table_migrates_latest_per_symbol_without_replaying(tmp_path, cal):
+def test_unread_level_migration_preserves_direction_without_inventing_urgent_history(tmp_path, cal):
     import sqlite3
     path = tmp_path / 'old.sqlite3'
+    now = at('2026-10-05T09:31:00')
     with sqlite3.connect(path) as db:
-        db.execute('CREATE TABLE events (symbol TEXT,direction TEXT,fired_at REAL,handled_at REAL)')
-        now = at('2026-10-05T09:31:00')
-        db.executemany('INSERT INTO events VALUES (?,?,?,?)', [
-            ('NVDA.US','up',now-1,None), ('NVDA.US','down',now,None), ('MU.US','up',now,now+1)])
+        db.execute('CREATE TABLE unread (symbol TEXT PRIMARY KEY,direction TEXT NOT NULL,fired_at REAL NOT NULL)')
+        db.executemany('INSERT INTO unread VALUES (?,?,?)', [('NVDA.US', 'up', now), ('MU.US', 'urgent', now)])
     sound = RecordingSound()
     value = AlertEngine(path, cal, clock=lambda: now, sound=sound)
     try:
-        assert value.state()['unread'] == ['NVDA.US']
-        assert value.db.execute('SELECT direction FROM unread').fetchone()[0] == 'down'
-        assert not value.db.execute("SELECT 1 FROM sqlite_master WHERE name='events'").fetchone()
+        assert value.state()['unread'] == [{'symbol':'NVDA.US','direction':'up','level':1,'fired_at':now}]
         assert not sound.calls
     finally:
         value.close()

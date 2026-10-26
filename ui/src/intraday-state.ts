@@ -23,16 +23,18 @@ export function rankedRows(rows: Ticker[], states: Record<string, SymbolState>) 
 export function stateAppearance(row: HTMLElement, value?: SymbolState) {
     row.dataset.intraday = value?.state ?? 'neutral';
 }
-export function adrText(value?: SymbolState) {
+export function adrText(value?: SymbolState, quiet = false) {
     if (!value?.state || value.up_adr == null || value.down_adr == null) return '—';
     const down = value.state.startsWith('down') ||
         (value.state === 'neutral' && value.role === 'holding' && value.down_adr > value.up_adr);
-    return `${down ? '↓' : '↑'}${(down ? value.down_adr : value.up_adr).toFixed(2)}×`;
+    const ratio = down ? value.down_adr : value.up_adr;
+    return quiet && ratio <= .5 ? '' : `${down ? '↓' : '↑'}${ratio.toFixed(2)}×`;
 }
 export function adrTitle(value?: SymbolState) {
     return value?.up_adr != null && value.down_adr != null && value.adr20 != null ? `Up ${value.up_adr.toFixed(2)}× · Down ${value.down_adr.toFixed(2)}× · Previous-day ADR20 ${value.adr20.toFixed(2)}%` : 'Waiting for current Regular quote and historical ADR20';
 }
-export function volumeBadge(cell: HTMLElement, value?: VolumeState | null) {
+export function volumeBadge(cell: HTMLElement, value?: VolumeState | null, quiet = false) {
+    if (quiet && value?.ratio != null && value.ratio <= .5) { cell.replaceChildren(); return; }
     let badge = cell.querySelector<HTMLElement>('.volume-badge');
     if (!badge) { badge = document.createElement('span'); badge.className = 'volume-badge'; cell.replaceChildren(badge); }
     badge.textContent = value?.ratio == null ? '—' : value.ratio.toFixed(1) + '×';

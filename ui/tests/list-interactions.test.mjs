@@ -128,7 +128,7 @@ test('unread Focus navigation shares section order, includes folded and filtered
     list.tickers = [ticker('NORMAL', 'focus', 'surf'), ticker('UP', 'focus', 'bounce'),
         { ...ticker('PIN', 'focus', 'bounce'), pinned: true, pin_index: 0 }, ticker('HELD', 'focus', 'surf'), ticker('OTHER')];
     list.intraday = { enabled: true, symbols: { 'UP.US': { rank: [3, 0, 0] } } }; list.regularSession = true;
-    list.attention = { unread: new Set(list.tickers.map(t => t.symbol)), playing: new Set() };
+    list.attention = { unread: new Map(list.tickers.map(t => [t.symbol, {symbol:t.symbol,direction:'up',level:1,fired_at:1}])), playing: new Map() };
     list.collapsed = new Set(['scan:focus:pinned', 'scan:focus:in-play', 'scan:focus:surf']);
     list.onSelect = symbol => { choices.push(symbol); list.selected = symbol; list.attention.unread.delete(symbol); };
     list.render = () => { list.rows = new Map([['PIN.US', { scrollIntoView() { scrolls.push('PIN'); } }]]); };
@@ -160,7 +160,7 @@ test('ordinary list updates keep a chart selection hidden by a Tag filter withou
 test('Holdings unread navigation follows the current table order, opens the table and reads each symbol once', () => {
     const list = Object.create(HoldingsList.prototype), choices = [], scrolls = [];
     Object.assign(list, { collapsed: true, sort: 'market_value', regularSession: false, intraday: { enabled: false },
-        attention: { unread: new Set(['A.US', 'B.US']), playing: new Set() },
+        attention: { unread: new Map(['A.US', 'B.US'].map(symbol => [symbol, {symbol,direction:'up',level:1,fired_at:1}])), playing: new Map() },
         data: { data: { holdings: [
             { ticker: 'A', sequences: [{ buy_ids: ['a1'], market_value: '1' }, { buy_ids: ['a2'], market_value: '3' }] },
             { ticker: 'B', sequences: [{ buy_ids: ['b'], market_value: '2' }] },

@@ -16,3 +16,5 @@
 - 变更行为同步 behavior；变更职责/契约同步 development；UI 同步 ui 总入口及对应的唯一详细规范，不复制完整规则。验证记录写日期、环境、覆盖和未覆盖范围。
 - Android 原生 App 是后续确定目标，iOS 可能接入。维护跨平台的产品语义、图形含义与数据契约，平台绘制和交互细节另行适配；Logo/Icon 只维护一份当前规范，不在 AGENTS.md 复制数值，不提前引入移动端原生框架。Alert 后台声音按其独立需求实现，不依赖原生通知应用。
 - TypeScript 改动后 npm run build --prefix ui；数据/调度改动只做相关的必要真实数据验证与定向用例。历史记录不能当成本轮 live 证据。
+
+- Symbol 行的选中、价格／量能分区与未读波浪只按 [Symbol row template](docs/ui.md#symbol-row-template)；配色名称见 [Color palette](docs/ui.md#color-palette)，代码复用 `ui/src/palette.ts`。新增行或提醒复用 `symbol-row.ts`、`attention.ts` 与 `AlertEngine.notify`，未读只保留最后一次方向／等级，禁止叠加或保存通知历史。

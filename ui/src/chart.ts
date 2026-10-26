@@ -1,3 +1,4 @@
+import { palette } from './palette.js';
 import type { IChartApi, ISeriesApi, IPriceLine, UTCTimestamp, Time, CandlestickData, LineData, AutoscaleInfo } from 'lightweight-charts';
 import type * as ChartLibrary from 'lightweight-charts';
 import { $, money, compact, dayKey, type Row, type Point, type ChartData, type Quote } from './types.js';
@@ -54,14 +55,14 @@ export class Panel {
             localization: { locale: 'en-US', timeFormatter: (t: Time) => daily ? dayKey(Number(t)) : `${dayKey(Number(t))} ${timeFormat.format(dateOf(t))}` },
             crosshair: { mode: L.CrosshairMode.Normal, vertLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' }, horzLine: { width: 1, style: L.LineStyle.LargeDashed, color: '#737d8c', labelBackgroundColor: '#4c5667' } },
         });
-        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', priceLineVisible: false,
+        this.candles = this.chart.addSeries(L.CandlestickSeries, { upColor: palette.candleUp, downColor: palette.candleDown, borderVisible: false, wickUpColor: palette.candleUp, wickDownColor: palette.candleDown, priceLineVisible: false,
             autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
                 const info = original();
                 if (!info?.priceRange) return info;
                 if (!this.quotePrice) return info;
                 return { ...info, priceRange: { minValue: Math.min(info.priceRange.minValue, this.quotePrice.price), maxValue: Math.max(info.priceRange.maxValue, this.quotePrice.price) } };
             } });
-        const colors = { ema10: '#2962ff', ema20: '#e4b400', [daily ? 'sma50' : 'sma65']: '#e53935' };
+        const colors = { ema10: palette.blue, ema20: palette.yellow, [daily ? 'sma50' : 'sma65']: palette.red };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
         this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
@@ -138,13 +139,13 @@ export class Panel {
         }
         const price = value.last_price;
         const session = value.trade_session, pre = session === 'Pre';
-        const color = session === 'Intraday' ? (price >= (value.prev_close ?? price) ? '#26a69a' : '#ef5350')
-            : pre ? '#e4b400' : session === 'Post' ? '#2962ff' : '#000000';
+        const color = session === 'Intraday' ? (price >= (value.prev_close ?? price) ? palette.candleUp : palette.candleDown)
+            : pre ? palette.yellow : session === 'Post' ? palette.blue : palette.ink;
         const options = { price, color, lineVisible: false, axisLabelVisible: true, axisLabelColor: color, axisLabelTextColor: pre ? '#171b20' : '#ffffff', title: '' };
         if (current) { current.price = price; current.line.applyOptions(options); }
         else this.quotePrice = { line: this.candles.createPriceLine(options), price };
     }
-    histogram(row: Row) { return row.volume == null ? { time: row.time as UTCTimestamp } : { time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? '#26a69a99' : '#ef535099' }; }
+    histogram(row: Row) { return row.volume == null ? { time: row.time as UTCTimestamp } : { time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? palette.candleUp + '99' : palette.candleDown + '99' }; }
     render(data: ChartData) {
         const next = data.active;
         const rebuild = data.bars !== undefined || this.active?.time !== next?.time;

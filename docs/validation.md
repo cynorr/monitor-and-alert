@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-10-26：Symbol 模板、未读波浪与统一声音节奏
+
+环境：本机 macOS、Python 3.13.1、TypeScript 5.9.3；现有正式 Monitor、Longbridge 与 Holdings 数据。只验证本次模板、显示阈值和提醒契约，没有运行全项目测试。
+
+- `npm run build --prefix ui` 通过；Alert、Intraday State 与声音模块共 51 项相关后端用例通过，21 项相关 UI 用例通过。HTTP/WS 用例首次受沙箱端口绑定限制，允许本机绑定后单独通过。覆盖最新方向／等级覆盖和恢复、旧无方向 urgent 清理而不改变价格线、播放并行及退出清理、旧播放不能恢复已读提醒、节拍去重，以及 Focus 原始量比阈值与 Holdings 原显示不变。
+- 临时页面直接使用正式构建的 Watchlist、HoldingsList、Symbol 模板与 attention 模块，数据使用 Mock。浏览器检查两表 Symbol 对齐、完整 Holdings 价格区域、独立量能胶囊、整行选中、低值留白、强底色文字、同时未读、最新颜色覆盖及点击已读。修正价格区域末端留白，避免半圆裁切 ADR。截图 `/tmp/symbol-row-2026-10-26.png`；临时页面已删除，没有新增正式预览入口。
+- 三种完整 WAV 经实际后台 `afplay` 播放成功；上行 4、下行 6、紧急 8 次节拍反馈，无播放错误。最终下行及紧急音色替换后仅重验这两种。播放命令与节拍成功不代表用户已完成主观听辨；音画使用同一节奏，未承诺采样级同步。
+- 正式服务按原 Monitor 命令重启，Quote 为 CONNECTED、Massive 为 Ready；浏览器只读确认真实图表、Holdings、Focus 和新选中外观，检查后恢复原 CAI 选择。未创建正式 Alert、改变名单、手动 Refresh 或增加券商连接。既有 TJGC 六周期最新 closed 缺失与重启前一致；启动任务按原规则更新 Massive 缓存及 `splits.json`，未修改数据准备逻辑。
+- UI 唯一入口维护 Symbol 模板和颜色名称；Alert、Holdings、Intraday State、behavior/development、README 与各 AGENTS 同步。删除旧虚线／闪烁样式与重复价格区域实现，声音不再循环播放旧短文件，未读不叠加或保存历史。`git diff --check` 通过。
+
+未覆盖：真实 Regular 市场事件触发、多 symbol 实时音画同步及最终音色主观确认。正式页面检查发生在 Regular 之外，动态外观以实际组件的 Mock 状态验证，不作为真实市场触发证据。
+
 ## 2026-10-23：Alert Regular 未读生命周期与键盘导航
 
 环境：本机macOS、Python3.13.1、TypeScript/Node。当前09:06 ET检查时8765服务未运行，本轮不启动正式后台或触发任何行情/账户下载；只覆盖本次清理、已读和未读导航。

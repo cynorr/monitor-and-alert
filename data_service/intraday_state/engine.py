@@ -121,11 +121,18 @@ class IntradayState:
             ema = (value['role'] == 'holding' or value['above_open']) and any(
                 old['ema_distances'].get(name, float('inf')) < 0 <= distance
                 for name, distance in value['ema_distances'].items())
-            direction = 'urgent' if (up and value['up_level'] == 2) or (down and value['down_level'] == 2) else 'down' if down else 'up' if up or ema else None
+            if down and value['down_level'] == 2:
+                direction, severity = 'down', 2
+            elif up and value['up_level'] == 2:
+                direction, severity = 'up', 2
+            elif down:
+                direction, severity = 'down', 1
+            else:
+                direction, severity = ('up' if up or ema else None), 1
             if direction:
                 if self.notify:
-                    self.notify(symbol, direction)
-                log.info('Intraday State %s %s price=%.4f up=%.2f down=%.2f', symbol, direction,
+                    self.notify(symbol, direction, severity)
+                log.info('Intraday State %s %s level=%s price=%.4f up=%.2f down=%.2f', symbol, direction, severity,
                          value['price'], value['up_adr'], value['down_adr'])
         if value is not None:
             self.previous[symbol] = value

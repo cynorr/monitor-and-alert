@@ -1,4 +1,5 @@
 import { attentionState, attentionAppearance } from './attention.js';
+import { symbolRow } from './symbol-row.js';
 import { $ } from './types.js';
 import { compareRank, stateAppearance, adrText, adrTitle, volumeBadge } from './intraday-state.js';
 export function holdingsErrorAdvice(kind) {
@@ -63,6 +64,7 @@ export class HoldingsList {
         this.onSelect = onSelect;
         this.isActive = isActive;
         this.onWidth = onWidth;
+        new ResizeObserver(() => this.measurePriceWidth()).observe($('holdings-table'));
         try {
             this.collapsed = localStorage.getItem('holdings-collapsed') === 'true';
         }
@@ -267,6 +269,7 @@ export class HoldingsList {
                     }
                     for (let column = 1; column < 12; column++)
                         this.cell(row, '');
+                    symbolRow(row, label);
                     body.append(row);
                     this.rows.set(key, row);
                     const group = [row];
@@ -302,7 +305,7 @@ export class HoldingsList {
                 const key = sequence.buy_ids.join(':'), row = this.rows.get(key);
                 const state = showState && !sequence.closed_today ? this.intraday.symbols[symbolFor(holding.ticker)] : undefined;
                 stateAppearance(row, state);
-                attentionAppearance(row, symbolFor(holding.ticker), this.attention);
+                attentionAppearance(row, sequence.closed_today ? '' : symbolFor(holding.ticker), this.attention);
                 row.cells[9].textContent = adrText(state);
                 row.cells[9].title = adrTitle(state);
                 volumeBadge(row.cells[10], state?.cum_vol);
@@ -388,5 +391,12 @@ export class HoldingsList {
             this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + scroll.offsetWidth - scroll.clientWidth);
         }
         this.onWidth(this.minimumWidth);
+        this.measurePriceWidth();
+    }
+    measurePriceWidth() {
+        const table = $('holdings-table');
+        const headers = table.tHead.rows[0].cells;
+        const end = headers[this.intraday.enabled && this.regularSession ? 9 : 8];
+        table.style.setProperty('--holding-price-width', `${end.getBoundingClientRect().right - headers[0].getBoundingClientRect().left}px`);
     }
 }

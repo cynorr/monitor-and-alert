@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { rankedRows, compareRank, adrText, adrTitle } from '../public/intraday-state.js';
+import { rankedRows, compareRank, adrText, adrTitle, volumeBadge } from '../public/intraday-state.js';
 import { sortedHoldingRows } from '../public/holdings.js';
 import { listColumns } from '../public/board.js';
 import { attentionAppearance, attentionState } from '../public/attention.js';
@@ -44,18 +44,30 @@ test('state columns are confined to an enabled current Focus presentation', () =
     assert.ok(!listColumns(true, true).some(c => c.field === 'state-adr'));
 });
 
-test('symbol unread and concurrent playback are independent from read and price state', () => {
-    const classes = () => {
-        const values = new Set();
-        return { values, classList: { toggle: (key, on) => on ? values.add(key) : values.delete(key) } };
-    };
-    const a = classes(), b = classes();
-    const playing = attentionState({ unread: ['A.US','B.US'], sound: { playing: ['A.US','B.US'] } });
-    attentionAppearance(a, 'A.US', playing); attentionAppearance(b, 'B.US', playing);
-    assert.ok(a.values.has('ringing') && b.values.has('ringing'));
-    const read = attentionState({ unread: ['B.US'], sound: { playing: ['A.US','B.US'] } });
-    attentionAppearance(a, 'A.US', read); attentionAppearance(b, 'B.US', read);
-    assert.equal(a.values.size, 0); assert.ok(b.values.has('ringing'));
-    attentionAppearance(b, 'B.US', attentionState({ unread: ['B.US'], sound: { playing: [] } }));
-    assert.ok(b.values.has('attention') && !b.values.has('ringing'));
+test('latest unread direction and grade replace the wave; old playback cannot revive it after read', () => {
+    const pulses = [];
+    const wave = { dataset: {}, animate: frames => { pulses.push(frames); return {}; } };
+    const node = { dataset: {}, querySelector: () => wave };
+    const now = Date.now() / 1000;
+    const notice = { symbol:'A.US', direction:'down', level:2, fired_at:now };
+    const state = attentionState({ unread:[notice], sound:{ playing:[{symbol:'A.US',fired_at:now-1,pulse_at:now}] } });
+    attentionAppearance(node, 'A.US', state);
+    assert.equal(node.dataset.alert, 'down-urgent'); assert.equal(pulses.length, 0);
+    state.playing.set('A.US', {symbol:'A.US',fired_at:now,pulse_at:now});
+    attentionAppearance(node, 'A.US', state); attentionAppearance(node, 'A.US', state);
+    assert.equal(pulses.length, 1);
+    state.unread.set('A.US', {...notice,direction:'up',level:1});
+    attentionAppearance(node, 'A.US', state); assert.equal(node.dataset.alert, 'up-notice');
+    state.unread.clear(); attentionAppearance(node, 'A.US', state);
+    assert.equal(node.dataset.alert, undefined); assert.equal(pulses.length, 1);
+});
+
+test('Focus hides small raw multiples without treating them as missing or changing Holdings formatting', () => {
+    const value = state([0,0,0], {state:'neutral',up_adr:.5});
+    assert.equal(adrText(value, true), ''); assert.equal(adrText(value), '↑0.50×');
+    assert.equal(adrText({...value,up_adr:.501}, true), '↑0.50×');
+    assert.equal(adrText(undefined, true), '—');
+    let cleared = false;
+    volumeBadge({replaceChildren:()=>{cleared=true;}}, {ratio:.5}, true);
+    assert.ok(cleared);
 });

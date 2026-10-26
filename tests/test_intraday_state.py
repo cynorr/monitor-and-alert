@@ -50,11 +50,11 @@ def test_candidate_gate_thresholds_reentry_and_silent_downgrade(state):
     assert value.values['TEST.US']['state'] == 'up-notice'
     tick(value, 104)
     tick(value, 105)
-    assert [call.args[1] for call in sound.play.call_args_list] == ['up', 'urgent']
+    assert [call.args[1:] for call in sound.play.call_args_list] == [('up', 1), ('up', 2)]
     tick(value, 104); tick(value, 103)
     assert sound.play.call_count == 2
     tick(value, 105)
-    assert sound.play.call_args.args == ('TEST.US', 'urgent') and sound.play.call_count == 3
+    assert sound.play.call_args.args == ('TEST.US', 'up', 2) and sound.play.call_count == 3
     # A large rise from LOD below open remains outside candidate notifications.
     tick(value, 106, open=108)
     assert value.values['TEST.US']['state'] == 'neutral' and sound.play.call_count == 3
@@ -69,7 +69,7 @@ def test_holdings_risk_above_open_dominates_up_and_unmasking_is_silent(state):
     assert row['above_open'] and row['up_level'] == 2 and row['state'] == 'down-notice'
     tick(value, 106)
     assert value.values['TEST.US']['state'] == 'down-urgent'
-    assert [call.args[1] for call in sound.play.call_args_list] == ['down', 'urgent']
+    assert [call.args[1:] for call in sound.play.call_args_list] == [('down', 1), ('down', 2)]
     # Up was already urgent before the warning; exposing its color is not a new crossing.
     tick(value, 110)
     assert value.values['TEST.US']['state'] == 'up-urgent'
@@ -258,7 +258,7 @@ def test_data_service_forwards_quotes_and_resets_automatic_baselines(state, tmp_
         service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 101, 'open': 100, 'high': 110, 'low': 100})
         service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 103, 'open': 100, 'high': 110, 'low': 100})
         assert value.state()['symbols']['TEST.US']['state'] == 'up-notice'
-        assert sound.play.call_args.args == ('TEST.US', 'up')
+        assert sound.play.call_args.args == ('TEST.US', 'up', 1)
         service.reset_realtime()
         assert value.state()['symbols']['TEST.US']['state'] == 'up-notice'
         service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 105, 'open': 100, 'high': 110, 'low': 100})

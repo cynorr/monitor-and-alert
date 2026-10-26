@@ -11,3 +11,5 @@
 - 不逐份Quote写库，不做补报、故障注入、回放或下单。手动线生命周期独立；自动转换调用AlertEngine.notify，共用持久未读与独立声音，不直接调用播放器。
 - 配置在config/intraday-state.json，启动直接读取；前端intraday-state.ts负责格式化与离散rank比较，list.ts用In Play复用section，holdings.ts维持独立排序；两者保留节点、选择与焦点，不重新计算业务规则。
 - 只跑本次必要定向验证，真实范围/时限明确。同步独立需求、development、对应UI入口与validation，不把离线结果当作实盘或macOS27证据。
+
+- 自动转换向AlertEngine.notify传递实际方向和等级，不提前合并成urgent；未读由该入口覆盖，禁止另外维护报警颜色、声音或历史。Symbol/量能/颜色复用前端模板和palette，规则见[Symbol模板](../../docs/ui.md#symbol-row-template)。

@@ -1,4 +1,5 @@
 import { attentionState } from './attention.js';
+import { installPalette } from './palette.js';
 import { $, money, compact, nyTime, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
@@ -8,6 +9,7 @@ import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
 import { AlertController } from './alerts.js';
 import { AdditionalInfoDisplay, acceptsAdditional } from './additional-info.js';
+installPalette();
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);

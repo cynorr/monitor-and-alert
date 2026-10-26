@@ -1,6 +1,6 @@
 # Intraday State：盘中状态
 
-更新：2026-10-23。本文件是盘中状态、自动提醒、量比与In Play展示的唯一需求入口。手动价格线与统一未读交互只在 [alert.md](alert.md) 维护。开发遵循 [development-principles.md](development-principles.md)，模块入口为 [intraday_state/AGENTS.md](../data_service/intraday_state/AGENTS.md)，职责见 [development.md](development.md#intraday-state-实现)。
+更新：2026-10-26。本文件是盘中状态、自动提醒、量比与In Play展示的唯一需求入口。手动价格线与统一未读交互只在 [alert.md](alert.md) 维护。开发遵循 [development-principles.md](development-principles.md)，模块入口为 [intraday_state/AGENTS.md](../data_service/intraday_state/AGENTS.md)，职责见 [development.md](development.md#intraday-state-实现)。
 
 ## 范围与原则
 
@@ -40,9 +40,9 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 - EMA10/20 每次由下方到达/上穿都提醒，不要求手动重设。一次更新触发多个条件时只播放最紧急的一种，紧急优先，其次回撤，再其次上行。
 - 任何降级都不发声。回撤颜色退去后露出原本已满足的上行颜色，不凭显示颜色变化误发上行声；根据各项规则自己的前后状态判断。
 - 首次有效状态、新交易日、范围/角色改变及已知重连/休眠恢复后只建立起点，不补报历史穿越。刷新、重连网页只读状态，不发声。
-- 所有自动报警与手动价格报警共用symbol未读边框，规则见 [统一未读边框](alert.md#统一未读边框)。手动线的触发/灰线/generation保持独立。
-- 共用后台上行、下行、紧急三种短声，每次原声四遍，不主动加间隔。各报警独立并行，无优先级、排队或同symbol播放替换。来源及许可见 [声音资源](../data_service/alerts/sounds/SOURCES.md)。
-- WAV 首尾按-50dB用FFmpeg裁切，保留内部节奏；仅准备资源时使用FFmpeg，运行时仍只调用系统afplay。播放错误沿用Alert现有错误提示/日志，不改变状态或补播历史。
+- 所有自动报警与手动价格报警共用symbol未读提醒，规则见 [统一未读提醒](alert.md#统一未读提醒)。手动线的触发/灰线/generation保持独立。
+- 共用[Alert后台声音与节拍](alert.md#后台声音与运行)，方向与等级分开传递；上行增强仍保留上行身份，不因使用紧急声音变成回撤。各报警独立并行，无优先级、排队或同symbol播放替换。来源及许可见 [声音资源](../data_service/alerts/sounds/SOURCES.md)。
+- 声音资源与生成方式只在[声音资源](../data_service/alerts/sounds/SOURCES.md)维护；运行时只调用系统afplay。播放错误沿用Alert现有错误提示/日志，不改变状态或补播历史。
 
 ## CumVol：全天同进度累计量比
 
@@ -71,10 +71,10 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 - In Play复用现有section的标题、计数、折叠与空组隐藏。空section整个隐藏，无标题或No symbols；全表空时保留一份全局空状态。
 - 排序键为价格离散等级 → CumVol离散等级 → LocalVol离散等级 → 原相对顺序，不按连续小数排序。价格升级立即前移；普通强弱、降级和量能重排在5m边界调整。
 - 量能数值和Badge在行情或官方历史变化时立即重算，另由秒级tick推进历史插值；5m只约束位置更新，不延迟监控、数值或颜色，也不额外订阅1m周期。
-- Monitor candidate价格背景和强色白字只覆盖Symbol、Last、Chg%、ADR四列；Volume保留自身圆角Badge，Tags及操作按钮保持正常外观。Scan与Holdings沿用各自价格状态配色。颜色数值只在UI图形规范维护。
+- Focus价格与量能分区、低倍数隐藏、强色文字及未读波浪只在[UI Symbol模板](ui.md#symbol-row-template)维护；隐藏低值只影响显示，不改等级、rank和触发。
 - 自动提取的In Play成员不参与人工拖动/Shift改序，不能拖入In Play修改真实section；其他原section保留原有编辑规则，Pin顺序仍可人工调整。重排复用节点，保持选中symbol、图表、焦点和滚动位置。
 - Tag/Filter与搜索仍只影响可见结果，不停止后台监控。搜索沿用原名单查找，不建立另一种可选展示模式。
-- Holdings独立显示，按既定风险等级优先排序，再按量能离散等级和已选列；明细/清仓尾部保持原语义。其价格底色仍整行，未读标记与声音按symbol共享。
+- Holdings独立显示，按既定风险等级优先排序，再按量能离散等级和已选列；明细/清仓尾部保持原语义。价格／财务胶囊边界见Holdings UI，未读与声音按symbol共享。
 
 ## 实现与验证边界
 

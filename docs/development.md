@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-23。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-10-26。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -56,6 +56,8 @@ chart.ts 的 syncSeries 用公开 data/update API 比较已显示数据：相同
 
 List 显示要求见 [List UI](ui.md#list-ui)，操作规则只在 [List 交互](list-interactions.md) 维护，局部 AI 约束见 ui/src/AGENTS.md。board.listColumns分别定义Scan/Monitor列和宽度，list.ts共用它创建标题和行，按data-field更新单元，不依赖children位置；Monitor无Growth渲染。ScanControls持有唯一sortControl及其事件，list.ts在Scan列头中挂载，模式切换重建列头时复用同一控件。board.growthValue仅供Scan格式化RFL，原始百分比及排名不变；三个值用等宽CSS grid及子列边框对齐。ScanControls.available统一屏蔽holding_symbols，供筛选/计数/搜索/导航/单只操作使用；原board仍保留完整后端成员。导航与日期控件用单行flex布局，CSS维护独立列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
 
+共享语义配色的唯一代码来源为 `ui/src/palette.ts`，Chart/Alert/Tag默认值直接引用，main启动安装对应CSS变量；名称和用途只在[Color palette](ui.md#color-palette)维护。Symbol共用模板见[UI](ui.md#symbol-row-template)，不复制行绘制、波浪或默认色值。
+
 Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted',backgroundColor}`，不从显示名称反推已保存外观，也不影响 role、filters、分类与订阅。前端只为旧偏好中缺失的外观初始化默认值，下次偏好保存持久化；后端校验内置 icon、背景枚举与六位 HEX 颜色，不接收任意 SVG/URL/CSS。列表和编辑 preview 复用 `tag-appearance.ts`，无外部图标依赖。固定展示数量不引入测宽监听。Save/Cancel 检查完整 Tag 草稿，筛选预览只检查条件变化，外观编辑保留人工匹配成员。图形要求统一见 [Logo / Icon](ui.md#logo--icon)，名单排布见 [List UI](ui.md#list-ui)。
 
 后续客户端明确包含 Android 原生 App，iOS 可能接入。迁移时以 behavior/list-design 的产品语义、本文件的接口与保存契约、ui 的设计要求为入口；保留 Tag Icon ID、外观和名单操作含义，按平台重做绘制、密度与触摸交互。Web 的 DOM/CSS/SVG 和 px 仅是当前实现参考；不提前建设移动端原生工程或通用适配层。Alert 后台声音按下节实现。
@@ -64,14 +66,14 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 
 需求只在 [alert.md](alert.md)，模块入口见 [alerts/AGENTS.md](../data_service/alerts/AGENTS.md)。Workbench持有AlertEngine与AlertSound，MonitorService只把校验后的Regular Quote交给手动检测，把Intraday State转换交给同一notify入口；不创建第二个行情context。
 
-- runtime/alerts/alerts.sqlite3保存alerts和unread。前者按alert_id保存阈值/generation/state/期限，后者以symbol为主键只保留最新direction/fired_at。旧events表启动时把未处理记录合并为最新symbol未读后删除，一次迁移不播放声音。
+- runtime/alerts/alerts.sqlite3保存alerts和unread。未读以symbol为主键，只保留direction(up/down)、level(1/2)、fired_at；新报警直接覆盖，无历史或聚合。旧unread表启动时追加level，保留有方向的普通提醒；旧urgent没有方向，迁移时清理该记录，不猜测方向，不影响价格线。
 - AlertEngine共用_clean_unread，用已有_regular_day同时校验当前时刻和fired_at是否属于同一Regular，并合并原scope清理。构造、maintain和state输出都经过此入口；跨收盘清理不等待scope_known，不改价格线，不增加期限字段、任务或Massive/Refresh依赖。
 - create/rearm/delete仍管理手动线；read(symbol)只删除当前symbol的unread，不改变任何线条或generation。触发后灰线保留，无点击后倒计时；只有拖动重新激活、主动删除、到期或出范围改变线生命周期。
-- notify(symbol,direction,alert=...)是唯一报警入口：手动触发时将Triggered和未读写在同一事务，自动规则只覆盖未读；提交成功后才独立播放四遍。读取状态和恢复未读不播放，失败沿用明确错误。
-- sound.py每次play(symbol,direction)建立独立asyncio任务，依次运行四次原始afplay。任务字典提供当前playing symbols；没有声音队列、优先级、抢占或同symbol替换。退出取消全部任务并终止播放器，FFmpeg仅离线整理资源。
-- GET /v1/alerts及WS alerts包含revision/alerts/unread/eligible_symbols/scope_known/sound/error；sound含enabled/error/playing。POST /v1/alerts接受create/rearm/delete/read，read仅携带symbol。卡片事件ID、acknowledge与跳转接口全部移除。
+- notify(symbol,direction,level=1,alert=...)是唯一报警入口：手动触发时将Triggered和未读写在同一事务，自动规则只覆盖未读；提交成功后交给sound.play(symbol,direction,level,fired_at)。Intraday State保留触发方向和等级，不把两种紧急方向提前压成urgent。读取与恢复不播放。
+- sound.py每次play建立独立任务，一次afplay播放完整两段WAV。beat_offsets是资源生成与播放节拍的共同来源；播放器启动后按实际本机时钟发布pulse_at，沿用现有Alert WS。playing每symbol仅输出最新任务的symbol/fired_at/pulse_at；旧任务仍可自然播放完，前端只响应当前未读fired_at的节拍。没有队列、抢占、历史或逐帧消息。退出取消任务并终止播放器；scripts/build_alert_sounds.py只用于离线准备资源。
+- GET /v1/alerts及WS alerts包含revision/alerts/unread/eligible_symbols/scope_known/sound/error；unread为最新提醒对象数组，sound包含enabled/error/playing，字段如上。POST接受create/rearm/delete/read，read仅携带symbol；没有通知历史、事件ack或跳转API。
 - 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
-- ui/src/attention.ts按单个symbol设置row未读与播放边框，不聚合到section或Holdings标题；alerts.ts管理图表线、mutation和错误；main.ts所有select及当前图表apply均直接调用read，不保留viewed/readOnView或渲染成功检查。价格线与row未读完全独立。
+- ui/src/symbol-row.ts为Grid名单和Table持仓创建同一price-surface/price-wave；attention.ts仅应用最新提醒方向／等级及本次pulse_at，通过Web Animations短暂改变同一波浪亮度，不聚合标题。main.ts所有select及当前chart更新仍直接read。列表表面用Grid列范围定位；持仓表面挂在首个td，宽度由现有列几何计算，table ResizeObserver只同步这一个范围。选中轮廓、状态底色与提醒独立。
 - Command+G/U在main.ts路由到各名单jumpUnread。Watchlist.sections同时供render与完整Focus导航使用；ScanControls.visible可指定Focus并忽略显示筛选，showList可保留Tag草稿。Watchlist.update仅在成员退出当前List或转入Holdings时自动候补，Tag遮住的已选chart不因后台推送跳走；用户主动修改筛选仍沿用原反馈。Holdings复用ordered与choose，不增加已访问集合。
 
 ## 模式与上游数据
@@ -195,4 +197,4 @@ volume.py只读ChartCache统一closed及SDK open，按合并revision缓存多周
 
 GET /v1/intraday-state只读返回enabled和symbols；现有list快照增加同名intraday字段，Scan历史关闭该字段。symbol状态含role/state、ADR20、上下行倍数/等级、above_open、price/timestamp、cum_vol/local_vol和rank。量比含ratio/actual/average/samples/level，LocalVol另含window；缺值为null。rank是价格/CumVol/LocalVol三个离散整数，前端不重新计算业务阈值。
 
-ui/src/intraday-state.ts集中格式化、Badge和rank比较；ADR数值方向独立于预警阈值，持仓neutral时选择较大的一项。list.ts直接使用In Play section，复用标题/折叠/空组隐藏，删除Grouped/Dynamic状态与偏好。holdings.ts保持独立风险排序和清仓尾部；重排复用节点、恢复焦点和滚动位置。全部报警及未读通过AlertEngine.notify/read共用上述Alert契约，Intraday State不自行播放声音或存另一份通知。
+ui/src/intraday-state.ts集中格式化、Badge和rank比较；quiet参数仅供Focus隐藏低倍数，Holdings保留完整数值，缺失仍为—；ADR数值方向独立于预警阈值，持仓neutral时选择较大的一项。list.ts直接使用In Play section，复用标题/折叠/空组隐藏，删除Grouped/Dynamic状态与偏好。holdings.ts保持独立风险排序和清仓尾部；重排复用节点、恢复焦点和滚动位置。全部报警及未读通过AlertEngine.notify/read共用上述Alert契约，Intraday State不自行播放声音或存另一份通知。

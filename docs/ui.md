@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-23. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-26. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -15,13 +15,53 @@ Chart layout, colors, margins, headers, [volume and five-day comparison](chart-u
 
 ## Alert UI
 
-Scan/Monitor 图表设置、横线操作、统一未读边框与后台声音的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开series primitive、图表手势与Regular内持久未读状态；所有选图/当前chart更新统一已读，收盘清理。未读跳转与保留Tag筛选的规则见[List交互](list-interactions.md#未读-alert-导航)。
+Scan/Monitor 图表设置、横线操作、统一未读提醒与后台声音的唯一详细要求见 [alert.md](alert.md)。图形及其颜色只在本文件下方 [Alert 图形](#alert-图形) 维护；加入 Focus 的分类规则见 [List 入选规则](list-design.md#统一移入-focus)。当前实现为公开series primitive、图表手势与Regular内持久未读状态；所有选图/当前chart更新统一已读，收盘清理。未读跳转与保留Tag筛选的规则见[List交互](list-interactions.md#未读-alert-导航)。
 
 ## Intraday State UI
 
 独立需求、ADR字段、CumVol/LocalVol Badge和In Play自动聚集只在 [intraday-state.md](intraday-state.md#展示与-in-play) 维护。复用现有section，无展示模式选择；空section整个隐藏，全表空时只显示一份空状态。Holdings列与批次见 [holdings-ui.md](holdings-ui.md)。
 
-ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，不等待整行或全部股票完成初始化。
+ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，不等待整行初始化。Focus有效倍数≤0.5留空，量能同时隐藏对应Badge但保留列宽；按原值判断，只影响显示，不改排序、报警或Scan ADR20。Holdings维持自身数值显示范围。
+
+## Color palette
+
+共享颜色速查，2026-10-26 对照当前 CSS、Chart 与 Tag 默认值整理。英文名用于需求沟通；代码的唯一默认色值来源为 `ui/src/palette.ts`，Chart、Tag 默认值与 Symbol 模板直接复用，`installPalette()` 将同一份值安装为 `--color-*` CSS 变量。颜色对应的业务条件仍由各模块唯一需求文档维护。
+
+| 名称 | 色值 | 当前用途 |
+| --- | --- | --- |
+| Blue / 主蓝 | `#2962ff` | EMA10、MA10 Tag、NEW、上行增强底色 |
+| Blue Soft / 浅蓝 | `#e8f1ff` | 上行关注底色 |
+| Yellow / 主黄 | `#e4b400` | EMA20、MA20 Tag、Pre 价格标签 |
+| Yellow Text / 黄文字 | `#b89100` | Chart EMA20 图例文字；比主黄深 |
+| Yellow Soft / 浅黄 | `#fff3c4` | 回撤预警底色 |
+| Red / 主红 | `#e53935` | SMA50 / SMA65、MA50 Tag |
+| Red Strong / 深红 | `#b42318` | 回撤紧急底色、Alert 错误文字 |
+| Positive / 上涨文字 | `#008f83` | Holdings 正向涨跌及盈亏数字 |
+| Negative / 下跌文字 | `#df4543` | Holdings 负向涨跌及盈亏数字 |
+| Candle Up / 上涨柱 | `#26a69a` | 上涨 K 线与成交量柱；现有 CSS 变量 `--up` |
+| Candle Down / 下跌柱 | `#ef5350` | 下跌 K 线与成交量柱；现有 CSS 变量 `--down` |
+| Tag Neutral / 中性线条 | `#64748b` | 无 MA 关联的默认 Tag 线条 |
+| Volume Base / 量能普通 | `#f4f5f7` | 普通量能 Badge 底色 |
+| Volume Low / 量能一级 | `#e5e7eb` | 一级量能底色，也用于默认 Tag 毛玻璃底色 |
+| Volume Medium / 量能二级 | `#cbd2db` | 二级量能底色 |
+| Volume High / 量能三级 | `#374151` | 三级量能底色、普通至二级量能文字 |
+| Ink / 黑 | `#000000` | 选中轮廓、Active Alert 线、Overnight 价格标签 |
+| White / 白 | `#ffffff` | 卡片底色、强状态底色上的文字 |
+| Muted / 已触发灰 | `#9ca3af` | Triggered Alert 线与操作控件 |
+
+“亮蓝”目前就是 Blue，没有独立的第二个高饱和蓝。主红、回撤深红、下跌文字红和下跌柱红是不同用途；讨论改色时使用上表的完整名字。涨跌文字在强蓝/深红状态底色上沿用白字，不能强行保留红绿而降低可读性。用户保存的 Tag 自定义颜色优先于默认值。
+
+## Symbol row template
+
+背景与设计哲学：在有限行高中突出 Symbol、价格和有效提醒，减少无效数字与装饰。Chart 采用大圆角容器，名单采用胶囊；共用颜色与轻阴影语言，按信息密度调整阴影强度。行的选择、实时价格状态、最新未读报警分别表达，不增加新的选中模式或点击区域。
+
+- Focus、Holdings、Discover、Excluded 共用 Symbol 起始缩进，给半圆端部和 Holdings 展开三角留白。选中始终作用于整行，使用黑色细胶囊轮廓和轻微外阴影，不改背景；未选中 hover 为浅灰，不能覆盖价格状态。普通行与量能胶囊不额外加阴影。
+- 价格区域为连续胶囊。Monitor Focus 覆盖 Symbol、Last、Chg%、ADR；非 Regular 的 Ext 也属于价格区域。Tags、量能与操作独立。Scan 保持自身数据列，使用相同模板，不为两种量能重排列。Holdings 的区域边界只在 [Holdings UI](holdings-ui.md#列与格式) 维护。
+- 已读时底色表达当前实时状态：Blue Soft / Blue 对应上行关注／增强，Yellow Soft / Red Strong 对应回撤预警／紧急；强蓝、深红价格区域使用白字。Candidate Chg% 使用 Positive / Negative，强底色时继承白字；白色未读区域恢复通常文字配色。其他字段保持本色。
+- 未读时价格区域中间为稳定白底，文字不运动；边缘叠加横向流动的渐变波浪。颜色只取最后一次未读报警的方向与等级，直接覆盖，不叠加或保存历史；当前价格状态仍持续更新，已读后立即恢复当时最新底色。上行关注边缘使用 Blue 与 White 的 68% 混色以保证可见，上行增强使用 Blue；下行预警使用 Yellow，紧急使用 Red Strong。手动穿越及 EMA 上穿为相应方向的普通等级。
+- 整条只用一份长边渐变遮罩，取消端部单独拼接、实色色带和虚线。当前 Web 波浪每 2.8s 平移一个周期；遮罩可见峰值 0.48，向内 6px 淡至透明，中央保持白色。波浪没有实色停留段；外层胶囊自然裁切，不另做内圈 border。音频每声通过同一入口触发一次短亮度脉冲，不缩放数字或整行；播放结束后只保留流动波浪。
+- 仅 symbol 主行承载提醒，section、Holdings 标题、Buy/Sold 明细及 Total 不聚合提醒。已读、期限与声音行为只在 [Alert](alert.md#统一未读提醒) 维护。
+- Web 复用 `symbol-row.ts` 创建 `.price-surface` / `.price-wave`，`attention.ts` 应用最后一条提醒及本次节拍；Grid 与 Holdings Table 使用同一套 CSS。Chart 与行阴影分别由 `--panel-shadow` / `--row-shadow` 集中定义。不为未来功能复制绘制或增加动画框架；平台实现可以调整绘制方式，保留上述语义。
 
 ## Logo / Icon
 
@@ -83,7 +123,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 
 Chart标记使用简单的应用层绘制，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶表示移入 Hidden，Release 回转箭头表示释放归属，方向箭头表示加入 Focus；动作在 [List 交互](list-interactions.md) 维护。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
 
-symbol未读提示仅作用于symbol row，section及Holdings标题不显示该边框或闪烁。使用独立的1px虚线边框、内缩3px，普通背景为#333；持仓蓝/红整行深色时边框为白色。正在播放时按0.35s周期切换边框可见性，播放结束保持静态虚线；多个symbol可同时闪烁。选中行继续保留独立细实线轮廓。边框不改变布局、Tags颜色或价格线状态，业务语义见 [统一未读边框](alert.md#统一未读边框)。
+Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，与 Chart Alert 水平虚线是不同用途。
 
 ### 品牌与平台实现
 
@@ -132,7 +172,7 @@ symbol未读提示仅作用于symbol row，section及Holdings标题不显示该�
 - Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑只提供 Setup/Label，修改当日人工补充；Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
 - NEW 使用 Symbol 旁的小标记，颜色与 EMA10 一致为蓝色 **#2962ff**。ticker 不显示 `.US`。不显示成员勾选框。
 - Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。
-- 选中行保留圆角黑色内边框，不改变背景；仅未选中 hover 行使用灰背景。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
+- 选中、hover 与价格区域外观共用 [Symbol row template](#symbol-row-template)。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
 
 ### Section、顺序与选择
 
@@ -190,6 +230,4 @@ Run `npm run build --prefix ui` after TypeScript edits and only the related offl
 
 ### Intraday State 图形与颜色
 
-状态颜色在Focus与当前余仓共用，Monitor candidate仅铺Symbol/Last/Chg%/ADR四列，连续跨过列间距；Tags、Volume与操作按钮保留本色。Holdings仍铺整行，Scan沿用原价格状态外观。具体业务阈值只在独立需求维护。上行关注为浅蓝#e8f1ff、上行增强为蓝#2962ff配白字；回撤预警为浅黄#fff3c4、回撤紧急为深红#b42318配白字。强背景对应的价格单元格及其ticker/涨跌数字继承白色；Monitor非价格列不继承白色。选择边框仍可辨认，鼠标悬停不覆盖状态色。ADR字段以↑/↓加倍数表达方向，不能仅靠颜色辨认。
-
-量能采用圆角胶囊，普通#f4f5f7、一级#e5e7eb、二级#cbd2db、三级#374151；普通至二级文字#374151，三级白字。深浅只表达成交活跃等级，避免和价格方向颜色混淆。字段tooltip保留实际值、参考均值、样本数量和窗口。
+价格、量能与未读的共同外观只在 [Symbol row template](#symbol-row-template) 与 [Color palette](#color-palette) 维护；业务阈值见 [Intraday State](intraday-state.md)。ADR以↑/↓加倍数表达方向，tooltip保留两项数值。量能以 Volume Base / Low / Medium / High 表示等级，普通至二级文字用 Volume High，三级用 White，不与价格方向混色。

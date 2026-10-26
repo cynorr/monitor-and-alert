@@ -2,9 +2,12 @@ import type { ISeriesPrimitive, IPrimitivePaneRenderer, IPrimitivePaneView, Seri
 import type { Panel } from './chart.js';
 import { $ } from './types.js';
 import { post } from './api.js';
+import { palette } from './palette.js';
 
 export type PriceAlert = { id: string; symbol: string; price_cents: number; generation: number; state: 'active' | 'triggered'; expires_at: number };
-export type AlertState = { revision: number; alerts: PriceAlert[]; unread: string[]; eligible_symbols: string[]; scope_known: boolean; error: string | null; sound: { enabled: boolean; error: string | null; playing: string[] } };
+export type AlertNotice = { symbol: string; direction: 'up' | 'down'; level: 1 | 2; fired_at: number };
+export type AlertPlayback = { symbol: string; fired_at: number; pulse_at: number };
+export type AlertState = { revision: number; alerts: PriceAlert[]; unread: AlertNotice[]; eligible_symbols: string[]; scope_known: boolean; error: string | null; sound: { enabled: boolean; error: string | null; playing: AlertPlayback[] } };
 export const alertPrice = (cents: number) => (cents / 100).toFixed(2);
 const previewCents = (price: number) => {
     const [digits, exponent = '0'] = price.toString().split('e');
@@ -20,7 +23,7 @@ class AlertPrimitive implements ISeriesPrimitive {
         for (const alert of this.layer.rows()) {
             const y = this.layer.coordinate(alert);
             if (y == null || y < 0 || y > mediaSize.height) continue;
-            const color = alert.state === 'active' ? '#000000' : '#9ca3af';
+            const color = alert.state === 'active' ? palette.ink : palette.muted;
             ctx.strokeStyle = ctx.fillStyle = color;
             ctx.lineWidth = 1;
             // Match Lightweight Charts' 1px LargeDashed crosshair: 6px on / 6px off.
@@ -33,7 +36,7 @@ class AlertPrimitive implements ISeriesPrimitive {
         for (const alert of this.layer.rows()) {
             const y = this.layer.coordinate(alert);
             if (y == null || y < 0 || y > mediaSize.height) continue;
-            ctx.fillStyle = alert.state === 'active' ? '#000000' : '#9ca3af';
+            ctx.fillStyle = alert.state === 'active' ? palette.ink : palette.muted;
             // x=0 is the price-axis canvas edge and the native price-label edge.
             ctx.beginPath(); ctx.moveTo(0, y - 3); ctx.lineTo(6, y); ctx.lineTo(0, y + 3); ctx.closePath(); ctx.fill();
         }
@@ -201,7 +204,7 @@ export class AlertController {
         }
     }
     async read(symbol: string) {
-        if (this.value?.unread.includes(symbol)) await this.mutate({ action: 'read', symbol });
+        if (this.value?.unread.some(notice => notice.symbol === symbol)) await this.mutate({ action: 'read', symbol });
     }
     private render() {
         const message = this.error || this.value?.error || this.value?.sound.error || '';

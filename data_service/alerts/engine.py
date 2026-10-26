@@ -47,13 +47,13 @@ class AlertEngine:
                 generation INTEGER NOT NULL, state TEXT NOT NULL,
                 created_at REAL NOT NULL, updated_at REAL NOT NULL, expires_at REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS unread (
-                symbol TEXT PRIMARY KEY, direction TEXT NOT NULL, fired_at REAL NOT NULL);
+                symbol TEXT PRIMARY KEY, direction TEXT NOT NULL, level INTEGER NOT NULL, fired_at REAL NOT NULL);
         ''')
-        # One-time migration: keep the latest unread symbol, then remove card history.
-        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='events'").fetchone():
+        if 'level' not in {row['name'] for row in self.db.execute('PRAGMA table_info(unread)')}:
             with self.db:
-                self.db.execute('INSERT OR REPLACE INTO unread SELECT symbol,direction,fired_at FROM events WHERE handled_at IS NULL ORDER BY fired_at,rowid')
-                self.db.execute('DROP TABLE events')
+                self.db.execute('ALTER TABLE unread ADD COLUMN level INTEGER NOT NULL DEFAULT 1')
+                # Old urgent notices did not retain a direction; do not invent one.
+                self.db.execute("DELETE FROM unread WHERE direction='urgent'")
         self.calendar, self.now, self.sound = calendar, clock, sound
         self.alerts = {row['id']: dict(row) for row in self.db.execute('SELECT * FROM alerts')}
         self.by_symbol = {}
@@ -175,7 +175,7 @@ class AlertEngine:
         if changed:
             self._signal()
 
-    def notify(self, symbol, direction, *, alert=None):
+    def notify(self, symbol, direction, level=1, *, alert=None):
         """Shared entry for manual crossings and Intraday State transitions."""
         if symbol not in self.allowed:
             return False
@@ -184,7 +184,8 @@ class AlertEngine:
             with self.db:
                 if alert:
                     self.db.execute("UPDATE alerts SET state='triggered', updated_at=? WHERE id=?", (now, alert['id']))
-                self.db.execute('INSERT OR REPLACE INTO unread VALUES (?,?,?)', (symbol, direction, now))
+                self.db.execute('INSERT OR REPLACE INTO unread (symbol,direction,level,fired_at) VALUES (?,?,?,?)',
+                                (symbol, direction, level, now))
         except sqlite3.Error:
             self.error = 'Could not save alert trigger'
             self._signal()
@@ -193,7 +194,7 @@ class AlertEngine:
             self.alerts[alert['id']] = dict(alert, state='triggered', updated_at=now)
         self._changed()
         if self.sound:
-            self.sound.play(symbol, direction)
+            self.sound.play(symbol, direction, level, now)
         return True
 
     def quote(self, symbol, quote):
@@ -230,7 +231,7 @@ class AlertEngine:
     def state(self):
         self._clean_unread(self.now())
         return {'revision': self.revision, 'alerts': list(self.alerts.values()),
-                'unread': [row['symbol'] for row in self.db.execute('SELECT symbol FROM unread ORDER BY fired_at DESC')],
+                'unread': [dict(row) for row in self.db.execute('SELECT symbol,direction,level,fired_at FROM unread ORDER BY fired_at DESC')],
                 'eligible_symbols': sorted(self.allowed), 'scope_known': self.scope_known,
                 'sound': self.sound.state() if self.sound else {'enabled': False, 'error': None, 'playing': []}, 'error': self.error}
 

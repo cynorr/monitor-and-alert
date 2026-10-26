@@ -4,6 +4,7 @@ import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey } from './board.js';
 import { attentionState, attentionAppearance } from './attention.js';
+import { symbolRow } from './symbol-row.js';
 import { rankedRows, stateAppearance, adrText, adrTitle, volumeBadge } from './intraday-state.js';
 export class Watchlist {
     onSelect;
@@ -580,6 +581,15 @@ export class Watchlist {
             }
             row.append(cell);
         }
+        const priceEnd = columns.findIndex(column => ['cum-vol', 'tags'].includes(column.field));
+        row.style.setProperty('--price-end', String(priceEnd + 1));
+        row.querySelectorAll('[data-field]').forEach((cell, index) => {
+            cell.style.gridColumn = String(index + 1);
+            cell.style.gridRow = '1';
+            if (index < priceEnd)
+                cell.classList.add('price-cell');
+        });
+        symbolRow(row);
         this.rows.set(ticker.symbol, row);
         return row;
     }
@@ -604,17 +614,16 @@ export class Watchlist {
     updateRow(ticker, row, scan) {
         const state = this.stateVisible ? this.intraday.symbols[ticker.symbol] : undefined;
         stateAppearance(row, state);
-        row.classList.toggle('price-block', !scan && !!state);
         attentionAppearance(row, ticker.symbol, this.attention);
         const adr = row.querySelector('[data-field="state-adr"]');
         if (adr) {
-            adr.textContent = adrText(state);
+            adr.textContent = adrText(state, true);
             adr.title = adrTitle(state);
         }
         for (const [field, value] of [['cum-vol', state?.cum_vol], ['local-vol', state?.local_vol]]) {
             const cell = row.querySelector(`[data-field="${field}"]`);
             if (cell)
-                volumeBadge(cell, value);
+                volumeBadge(cell, value, true);
         }
         row.classList.toggle('active', ticker.symbol === this.selected);
         row.querySelector('.ticker').setAttribute('aria-pressed', String(ticker.symbol === this.selected));
@@ -629,8 +638,10 @@ export class Watchlist {
                 return;
             cell.textContent = text;
             cell.title = title;
-            if (field === 'change' || field === 'ext')
-                cell.className = change == null ? '' : change >= 0 ? 'positive' : 'negative';
+            if (field === 'change' || field === 'ext') {
+                cell.classList.toggle('positive', change != null && change > 0);
+                cell.classList.toggle('negative', change != null && change < 0);
+            }
         };
         if (scan) {
             value('price', money(ticker.close));

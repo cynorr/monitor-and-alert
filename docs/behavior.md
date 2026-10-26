@@ -1,16 +1,16 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-23。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-10-26。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## Alert 与入选规则
 
-Alert 的范围、Regular 触发、Scan/Monitor 共用、持久化、图表操作、统一未读边框与后台声音只在 [alert.md](alert.md) 维护。手动及 Alert 移入 Focus 的重新分类与 section 首位规则只在 [list-design.md](list-design.md#统一移入-focus) 维护。两项已接入现有后台；实际验证范围见 [validation.md](validation.md)。
+Alert 的范围、Regular 触发、Scan/Monitor 共用、持久化、图表操作、统一未读提醒与后台声音只在 [alert.md](alert.md) 维护。手动及 Alert 移入 Focus 的重新分类与 section 首位规则只在 [list-design.md](list-design.md#统一移入-focus) 维护。两项已接入现有后台；实际验证范围见 [validation.md](validation.md)。
 
 Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互](alert.md#图表交互)；图表统一线段虚线、横纵独立的自由十字线和 Vol 显示只在 [Chart UI](chart-ui.md) 维护。
 
 ## Intraday State
 
-盘中状态是现有后台中的独立监控，Focus候选与当前余仓共享symbol计算，手动Alert生命周期保持独立。Regular颜色表达当前事实，声音只随规则进入/升级发出，降级和恢复不补报。持仓未进入预警时，ADR数值仍按较强的上下行方向显示，不固定为上行；数值方向不等于报警等级。In Play自动聚集只改变展示顺序，不改workspace、section或Tag；全部报警共享仅显示于symbol row的未读边框，section与Holdings标题不参与闪烁或驻留，任何方式选图或更新当前chart都标记该symbol已读，不区分主动/自动或等待加载，灰线不变。未读仅在所属Regular内有效，实际收盘即失效，睡眠跨收盘在唤醒后清理；不依赖Massive或Refresh。Focus/Holdings未读导航见[List交互](list-interactions.md#未读-alert-导航)。当前Scan Focus共用同一份Longbridge状态，历史Scan不显示当前状态。完整公式、参数、范围、量比与排序规则只在 [intraday-state.md](intraday-state.md) 维护。
+盘中状态是现有后台中的独立监控，Focus候选与当前余仓共享symbol计算，手动Alert生命周期保持独立。已读时Regular底色表达当前事实，未读时以最新一次报警方向／等级的边缘波浪提示；新报警覆盖旧记录，不保存通知历史。声音只随规则进入/升级发出，降级和恢复不补报。持仓未进入预警时，ADR数值仍按较强的上下行方向显示，不固定为上行；数值方向不等于报警等级。In Play自动聚集只改变展示顺序，不改workspace、section或Tag；全部报警共享仅显示于symbol row的未读提醒，section与Holdings标题不参与闪烁或驻留，任何方式选图或更新当前chart都标记该symbol已读，不区分主动/自动或等待加载，灰线不变。未读仅在所属Regular内有效，实际收盘即失效，睡眠跨收盘在唤醒后清理；不依赖Massive或Refresh。Focus/Holdings未读导航见[List交互](list-interactions.md#未读-alert-导航)。当前Scan Focus共用同一份Longbridge状态，历史Scan不显示当前状态。完整公式、参数、范围、量比与排序规则只在 [intraday-state.md](intraday-state.md) 维护。
 
 ## 启动与接收
 

@@ -1,6 +1,6 @@
 # Holdings UI
 
-更新：2026-10-23。本文件是独立持仓表的唯一UI规范；[ui.md](ui.md) 是总入口。账户刷新、价格来源、会计、Days与P/L Day计算只在 [holdings-data.md](holdings-data.md) 维护，图案与操作含义见 [Logo / Icon](ui.md#logo--icon)。产品界面仅使用英文。
+更新：2026-10-26。本文件是独立持仓表的唯一UI规范；[ui.md](ui.md) 是总入口。账户刷新、价格来源、会计、Days与P/L Day计算只在 [holdings-data.md](holdings-data.md) 维护，图案与操作含义见 [Logo / Icon](ui.md#logo--icon)。产品界面仅使用英文。
 
 ## 位置、折叠与宽度
 
@@ -13,7 +13,7 @@
 
 ## 列与格式
 
-列为 **Symbol、Net Liq、Days、P/L %、P/L、Sold、Chg%、Ext、P/L Day**；当前Regular启用 [Intraday State](intraday-state.md) 时在右侧增加ADR、CumVol、LocalVol，其他时刻整组隐藏。余仓主行同步价格状态底色与量能Badge，明细及当日清仓保持原样；这些派生值不加入Total。regular 时段隐藏整列 Ext，包括列头、主行、明细和 Total 占位；取消该列排序并回收测量宽度。离开 regular 后恢复。使用已有服务端时段状态，不新增前端日历或请求。
+列为 **Symbol、Net Liq、Days、P/L %、P/L、Sold、Chg%、Ext、P/L Day**；当前Regular启用 [Intraday State](intraday-state.md) 时在右侧增加ADR、CumVol、LocalVol，其他时刻整组隐藏。余仓主行从Symbol至ADR的全部非量能字段构成连续价格／财务胶囊，保持现有列顺序；CumVol、LocalVol独立使用各自灰阶胶囊。共用[Symbol模板](ui.md#symbol-row-template)的整行选择、缩进、状态与未读效果；明细及当日清仓保持原样；这些派生值不加入Total。regular 时段隐藏整列 Ext，包括列头、主行、明细和 Total 占位；取消该列排序并回收测量宽度。离开 regular 后恢复。使用已有服务端时段状态，不新增前端日历或请求。
 
 - 主行单行，单元格上下 padding **3px**，适度压缩行间距；表格下方不单独画 Holdings/List 分割线，常规 List 列名位于自己的底部分割线上方。ticker 统一对齐，左侧独立保留展开箭头空隙；不增加副标题或主行 Trade Price。
 - 当日建仓主行在ticker旁显示NEW，直接复用List的`symbol-flag new`样式与蓝色，规则由后端`is_new`提供；清仓行本身保持灰色，若当日建仓则NEW仍为共用蓝色。次日标记移除，不增加列或副行。
@@ -35,7 +35,7 @@
 - 列头只在降序/默认之间切换；换列替换当前排序。Symbol 按 Z–A；数值按原值，缺失/非有限值置后，同值稳定排序。排序只影响本页面显示，重开恢复默认。
 - 当日清仓主行固定在所有余仓之后，主行/明细为灰色；任意排序及取消排序均不改变清仓相对顺序。信息正常显示、Sold为100%，仍可展开和选图，不新增标题或分组控件。Total P/L Day包含清仓日盈亏，其他余仓Total不含这些复盘记录；计算只在Holdings数据需求维护。
 - 报价更新保留排序、选择和展开明细。仅顺序变化时保留既有行结构与焦点，不重新选图。
-- 仅持仓主行显示 [Alert未读边框](alert.md#统一未读边框)，Holdings标题不显示该边框或闪烁。所有选图/当前图表更新统一标记symbol已读，灰线不受影响；未读收盘失效。Command+U逐只查看未读的范围和导航规则只在 [List交互](list-interactions.md#未读-alert-导航) 维护。
+- 仅持仓主行显示 [Alert未读提醒](alert.md#统一未读提醒)，Holdings标题不显示该边框或闪烁。所有选图/当前图表更新统一标记symbol已读，灰线不受影响；未读收盘失效。Command+U逐只查看未读的范围和导航规则只在 [List交互](list-interactions.md#未读-alert-导航) 维护。
 - 点击和上下方向键选择现有图表对。同 ticker 的 Holdings 使用独立实时选择来源；名单刷新、筛选、折叠或删除同 ticker 不抢走持仓选择。
 - 选中批次消失时改选首条持仓；再无持仓才回到名单。
 - 刷新失败保留上次表格与成功时间；达到上述延迟门槛后时间显示为失败色，旁边出现可点击的圆圈感叹号，图形与暖黄色样式只在 [Logo / Icon](ui.md#操作与状态图标) 维护，与Chart数据警告共用绘制规则。尚无成功数据时错误入口直接可见；仅延迟但没有已知错误时不显示感叹号，不推断失败原因。

@@ -1,4 +1,5 @@
 import { attentionState, attentionAppearance } from './attention.js';
+import { symbolRow } from './symbol-row.js';
 import { $ } from './types.js';
 import { compareRank, stateAppearance, adrText, adrTitle, volumeBadge, type IntradayState, type SymbolState } from './intraday-state.js';
 
@@ -63,6 +64,7 @@ export class HoldingsList {
 
     constructor(private onSelect: (symbol: string, key: string) => void, private isActive: () => boolean,
         private onWidth: (width: number) => void) {
+        new ResizeObserver(() => this.measurePriceWidth()).observe($('holdings-table'));
         try { this.collapsed = localStorage.getItem('holdings-collapsed') === 'true'; } catch { /* Optional storage. */ }
         $('holdings-warning').addEventListener('click', () => {
             const details = $('holdings-error-details');
@@ -229,6 +231,7 @@ export class HoldingsList {
                         flag.textContent = 'NEW'; label.append(flag);
                     }
                     for (let column = 1; column < 12; column++) this.cell(row, '');
+                    symbolRow(row, label);
                     body.append(row); this.rows.set(key, row);
                     const group = [row]; this.groups.set(key, group);
                     if (this.expanded.has(key) && Number(sequence.sold_percent) > 0) {
@@ -255,7 +258,7 @@ export class HoldingsList {
             const key = sequence.buy_ids.join(':'), row = this.rows.get(key)!;
             const state = showState && !sequence.closed_today ? this.intraday.symbols[symbolFor(holding.ticker)] : undefined;
             stateAppearance(row, state);
-            attentionAppearance(row, symbolFor(holding.ticker), this.attention);
+            attentionAppearance(row, sequence.closed_today ? '' : symbolFor(holding.ticker), this.attention);
             row.cells[9].textContent = adrText(state); row.cells[9].title = adrTitle(state);
             volumeBadge(row.cells[10], state?.cum_vol); volumeBadge(row.cells[11], state?.local_vol);
             row.classList.toggle('active', key === this.selected);
@@ -329,6 +332,14 @@ export class HoldingsList {
             this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + scroll.offsetWidth - scroll.clientWidth);
         }
         this.onWidth(this.minimumWidth);
+        this.measurePriceWidth();
+    }
+
+    private measurePriceWidth() {
+        const table = $('holdings-table') as HTMLTableElement;
+        const headers = table.tHead!.rows[0].cells;
+        const end = headers[this.intraday.enabled && this.regularSession ? 9 : 8];
+        table.style.setProperty('--holding-price-width', `${end.getBoundingClientRect().right - headers[0].getBoundingClientRect().left}px`);
     }
 
 }

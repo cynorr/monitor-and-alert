@@ -1,5 +1,6 @@
 import { $ } from './types.js';
 import { post } from './api.js';
+import { palette } from './palette.js';
 export const alertPrice = (cents) => (cents / 100).toFixed(2);
 const previewCents = (price) => {
     const [digits, exponent = '0'] = price.toString().split('e');
@@ -19,7 +20,7 @@ class AlertPrimitive {
                 const y = this.layer.coordinate(alert);
                 if (y == null || y < 0 || y > mediaSize.height)
                     continue;
-                const color = alert.state === 'active' ? '#000000' : '#9ca3af';
+                const color = alert.state === 'active' ? palette.ink : palette.muted;
                 ctx.strokeStyle = ctx.fillStyle = color;
                 ctx.lineWidth = 1;
                 // Match Lightweight Charts' 1px LargeDashed crosshair: 6px on / 6px off.
@@ -36,7 +37,7 @@ class AlertPrimitive {
                 const y = this.layer.coordinate(alert);
                 if (y == null || y < 0 || y > mediaSize.height)
                     continue;
-                ctx.fillStyle = alert.state === 'active' ? '#000000' : '#9ca3af';
+                ctx.fillStyle = alert.state === 'active' ? palette.ink : palette.muted;
                 // x=0 is the price-axis canvas edge and the native price-label edge.
                 ctx.beginPath();
                 ctx.moveTo(0, y - 3);
@@ -279,7 +280,7 @@ export class AlertController {
         }
     }
     async read(symbol) {
-        if (this.value?.unread.includes(symbol))
+        if (this.value?.unread.some(notice => notice.symbol === symbol))
             await this.mutate({ action: 'read', symbol });
     }
     render() {
