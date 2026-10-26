@@ -226,14 +226,18 @@ document.querySelectorAll('[data-tf]').forEach(button => button.addEventListener
         void select(symbol, button.dataset.tf);
 }));
 document.addEventListener('keydown', event => {
-    if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
+    if (event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
         event.target.closest('input,textarea,select,[contenteditable="true"]'))
         return;
-    if (event.key.toLowerCase() === 'g') {
+    const key = event.metaKey ? event.key.toLowerCase()
+        : event.key === 'Home' ? 'u' : event.key === 'End' ? 'g' : '';
+    if (!event.metaKey && key)
+        event.preventDefault();
+    if (key === 'g') {
         event.preventDefault();
         void watchlist.jumpUnread();
     }
-    if (event.key.toLowerCase() === 'u' && appMode === 'monitor') {
+    if (key === 'u' && appMode === 'monitor') {
         event.preventDefault();
         holdings.jumpUnread();
     }

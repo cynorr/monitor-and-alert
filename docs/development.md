@@ -74,7 +74,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 - GET /v1/alerts及WS alerts包含revision/alerts/unread/eligible_symbols/scope_known/sound/error；unread为最新提醒对象数组，sound包含enabled/error/playing，字段如上。POST接受create/rearm/delete/read，read仅携带symbol；没有通知历史、事件ack或跳转API。
 - 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
 - ui/src/symbol-row.ts为Grid名单和Table持仓创建同一price-surface/price-wave；attention.ts仅应用最新提醒方向／等级及本次pulse_at，通过Web Animations短暂改变同一波浪亮度，不聚合标题。main.ts所有select及当前chart更新仍直接read。列表表面用Grid列范围定位；持仓表面挂在首个td，宽度由现有列几何计算，table ResizeObserver只同步这一个范围。选中轮廓、状态底色与提醒独立。
-- Command+G/U在main.ts路由到各名单jumpUnread。Watchlist.sections同时供render与完整Focus导航使用；ScanControls.visible可指定Focus并忽略显示筛选，showList可保留Tag草稿。Watchlist.update仅在成员退出当前List或转入Holdings时自动候补，Tag遮住的已选chart不因后台推送跳走；用户主动修改筛选仍沿用原反馈。Holdings复用ordered与choose，不增加已访问集合。
+- End/Home与Command+G/U在main.ts归一后路由到原名单jumpUnread，单键Home/End取消原生页面滚动，文本编辑不拦截。Watchlist.sections同时供render与完整Focus导航使用；ScanControls.visible可指定Focus并忽略显示筛选，showList可保留Tag草稿。Watchlist.update仅在成员退出当前List或转入Holdings时自动候补，Tag遮住的已选chart不因后台推送跳走；用户主动修改筛选仍沿用原反馈。Holdings复用ordered与choose，不增加已访问集合。
 
 ## 模式与上游数据
 

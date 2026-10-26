@@ -184,10 +184,13 @@ function connect() {
 document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => button.addEventListener('click', () => { if (symbol)
     void select(symbol, button.dataset.tf!); }));
 document.addEventListener('keydown', event => {
-    if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
+    if (event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
         (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
-    if (event.key.toLowerCase() === 'g') { event.preventDefault(); void watchlist.jumpUnread(); }
-    if (event.key.toLowerCase() === 'u' && appMode === 'monitor') { event.preventDefault(); holdings.jumpUnread(); }
+    const key = event.metaKey ? event.key.toLowerCase()
+        : event.key === 'Home' ? 'u' : event.key === 'End' ? 'g' : '';
+    if (!event.metaKey && key) event.preventDefault();
+    if (key === 'g') { event.preventDefault(); void watchlist.jumpUnread(); }
+    if (key === 'u' && appMode === 'monitor') { event.preventDefault(); holdings.jumpUnread(); }
 });
 document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button => button.addEventListener('click', async () => {
     if (button.dataset.appMode === appMode || modePending) return;

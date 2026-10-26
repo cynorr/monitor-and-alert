@@ -1,5 +1,10 @@
 # 验证记录
 
+## 2026-10-26：Home / End 未读导航快捷键
+
+- Home / End 在现有 main.ts 键盘入口归一为 Command+U/G，继续调用原 jumpUnread，没有改查找、排序、选图和已读逻辑。非编辑区域拦截单键原生滚动；Scan 的 Home 不跳 Holdings。
+- `npm run build --prefix ui` 与 `git diff --check` 通过。Node VM 加载实际生成的 main.js，定向验证单键及原组合键路由、Monitor/Scan范围、阻止滚动、编辑内容／输入法和修饰键保留；脚本 `/tmp/alert-home-end-check-2026-10-26.mjs`。未运行全项目测试、重启后端或创建真实报警；未覆盖浏览器实按键盘，本轮只增加按键别名。
+
 ## 2026-10-26：Symbol 模板、未读波浪与统一声音节奏
 
 环境：本机 macOS、Python 3.13.1、TypeScript 5.9.3；现有正式 Monitor、Longbridge 与 Holdings 数据。只验证本次模板、显示阈值和提醒契约，没有运行全项目测试。

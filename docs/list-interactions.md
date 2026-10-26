@@ -16,8 +16,8 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | --- | --- | --- |
 | Scan / Monitor | ↑ / ↓ | 按当前可见顺序选上一只／下一只，跳过折叠组，不循环 |
 | Scan / Monitor | Page Up / Page Down | 跳到前／后一个非空 section 的第一只，不循环 |
-| Scan / Monitor | Command + G | 查看完整Focus中按当前排列最上方的未读Alert symbol |
-| Monitor | Command + U | 查看Holdings中按当前排列最上方的未读Alert symbol |
+| Scan / Monitor | End / Command + G | 查看完整Focus中按当前排列最上方的未读Alert symbol |
+| Monitor | Home / Command + U | 查看Holdings中按当前排列最上方的未读Alert symbol |
 | Scan / Monitor | Shift + ↑ / ↓ | 同 section 内向上／下移动一位，保留选中；边界不动 |
 | Scan / Monitor | Shift + Command + ↑ / ↓ | 置顶／取消置顶，明确设置，不是 toggle |
 | Scan · Discover | Delete / Backspace | 移入 Hidden |
@@ -37,8 +37,9 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 ## 未读 Alert 导航
 
 - 每次按键从当前排列找第一只未读symbol；选图即按 [Alert统一已读](alert.md#统一未读提醒) 清除未读，再按就找到下一只。没有未读时保持原选择，不弹提示；不保存遍历游标、队列或另一套排序。
-- Command+G覆盖完整Focus，不含被Holdings接管显示的symbols；顺序与列表共用Pinned、In Play、原分组及组内顺序。包含折叠组，命中时展开；Scan当前在Discover/Excluded时切到Focus，保持原Tag与Filter。即使目标被Tag筛选隐藏，仍展示其chart，普通后台名单更新保留该选择；目标行可见时滚动定位，不修改筛选、Tag、名单归属或排序。
-- Command+U按当前Holdings主行顺序查找，同symbol多批次选第一条主行，共享symbol已读；整体折叠时展开。Scan不处理该快捷键、不切模式。两个快捷键均不受当前选择来源限制；输入框、搜索与可编辑内容保留原键盘行为。
+- End与Command+G共用完整Focus导航，不含被Holdings接管显示的symbols；顺序与列表共用Pinned、In Play、原分组及组内顺序。包含折叠组，命中时展开；Scan当前在Discover/Excluded时切到Focus，保持原Tag与Filter。即使目标被Tag筛选隐藏，仍展示其chart，普通后台名单更新保留该选择；目标行可见时滚动定位，不修改筛选、Tag、名单归属或排序。
+- Home与Command+U共用当前Holdings主行顺序，同symbol多批次选第一条主行，共享symbol已读；整体折叠时展开。Scan不跳Holdings、不切模式。这两组快捷键均不受当前选择来源限制；输入框、搜索与可编辑内容保留原键盘行为。
+- Home/End仅单键生效，在Scan/Monitor均取消原生页面翻页／滚动，即使没有未读目标也不滚动。带修饰键的Home/End不映射；文本编辑中的行首／行尾行为保留。
 
 ## 单只名单操作
 
