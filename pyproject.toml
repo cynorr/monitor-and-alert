@@ -19,7 +19,7 @@ longbridge-data = "data_service.__main__:main"
 include = ["data_service*"]
 
 [tool.setuptools.package-data]
-"data_service.alerts" = ["sounds/*.wav"]
+"data_service.alerts" = ["sounds/*.wav", "sounds/*.txt", "sounds/SOURCES.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

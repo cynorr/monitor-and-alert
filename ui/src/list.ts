@@ -6,8 +6,11 @@ import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import type { HoldingsState } from './holdings.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey, type ListColumn, type ListSection } from './board.js';
+import { attentionState, attentionAppearance } from './attention.js';
+import { symbolRow } from './symbol-row.js';
+import { rankedRows, stateAppearance, adrText, adrTitle, volumeBadge, type IntradayState } from './intraday-state.js';
 
-export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null; holding_symbols?: string[]; current_regular_session?: boolean; massive?: MassiveState | null; scan_running?: boolean };
+export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null; holding_symbols?: string[]; current_regular_session?: boolean; massive?: MassiveState | null; scan_running?: boolean; intraday?: IntradayState };
 
 type Candidate = { ticker: string; name: string };
 type Search = { list: string; section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };
@@ -29,10 +32,15 @@ export class Watchlist {
     private lookupTimer?: number;
     private lookupController?: AbortController;
     private busy = false;
+    private advancing?: { symbol: string; list: string; scan: boolean; order: string[] };
     private dragStart: { ticker: string; x: number; y: number } | null = null;
     private suppressClick = false;
     private regularSession = false;
     private columnsKey = '';
+    private intraday: IntradayState = { enabled: false, symbols: {} };
+    attention = attentionState();
+    private get stateVisible() { return this.intraday.enabled && this.regularSession && (!this.scan?.enabled || this.scan.activeList === 'focus'); }
+    private get inPlayActive() { return this.stateVisible && !this.search; }
 
     constructor(private onSelect: (symbol: string) => void, private onUpdate: (data: ListState) => void) {
         this.input.addEventListener('focus', () => { if (!this.search) this.beginSearch(); });
@@ -64,20 +72,17 @@ export class Watchlist {
             }
             const row = target.closest<HTMLElement>('[data-symbol]');
             if (!row) return;
-            if (target.matches('[data-check]')) { this.scan?.toggle(row.dataset.symbol!); return; }
-            if (target.closest('.hide-ticker,.release-ticker')) {
+            if (target.closest('[data-list-action]')) {
                 const item = this.tickers.find(t => t.symbol === row.dataset.symbol)!;
-                if (target.closest('.release-ticker'))
-                    void this.mutate({ action: 'move', tickers: [item.ticker], source: 'excluded', target: 'discover' });
-                else void this.mutate({ action: 'hide', ticker: item.ticker });
-            } else if (this.search) this.endSearch(row.dataset.symbol!);
+                void this.actOnTicker(item, target.closest<HTMLElement>('[data-list-action]')!.dataset.listAction as 'remove' | 'focus');
+            } else if (this.search) { this.endSearch(); this.onSelect(row.dataset.symbol!); }
             else this.onSelect(row.dataset.symbol!);
         });
         $('symbols').addEventListener('pointerdown', event => {
             const target = event.target as HTMLElement;
             const row = target.closest<HTMLElement>('[data-symbol]');
             if (!row || target.closest('button:not(.ticker),input,.manual-tag-editor') || !this.editable || this.busy || event.button !== 0 ||
-                (row.dataset.pinned !== 'true' && (!this.scan?.manualOrder || row.dataset.list === 'excluded'))) return;
+                (row.dataset.pinned !== 'true' && (row.dataset.inPlay === 'true' || !this.scan?.manualOrder || row.dataset.list === 'excluded'))) return;
             this.dragStart = { ticker: row.dataset.ticker!, x: event.clientX, y: event.clientY };
         });
         $('symbols').addEventListener('pointermove', event => {
@@ -126,31 +131,91 @@ export class Watchlist {
             void this.mutate(pinned ? { action: 'pin_move', ticker, index } : { action: 'move', ticker, list_name: list, section, index });
         });
         $('symbols').addEventListener('pointercancel', () => this.endDrag());
-        document.addEventListener('keydown', event => {
-            if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
-            if (event.key === '/') {
-                event.preventDefault(); this.beginSearch(); return;
-            }
-            if (event.key === ' ' && this.scan?.enabled && this.selected && this.editable && !(event.target as HTMLElement).closest('input,textarea,select,button')) {
-                event.preventDefault(); this.scan.toggle(this.selected); return;
-            }
-            if (this.search && ['Escape', 'Enter'].includes(event.key)) {
-                event.preventDefault();
-                if (event.key === 'Escape') this.endSearch(); else void this.commitSearch();
-                return;
-            }
-            if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]') ||
-                !this.keyboardEnabled || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        document.addEventListener('keydown', event => this.handleKey(event));
+    }
+
+    private handleKey(event: KeyboardEvent) {
+        if (event.ctrlKey || event.altKey || event.isComposing) return;
+        const arrow = event.key === 'ArrowUp' || event.key === 'ArrowDown';
+        const pin = event.metaKey && event.shiftKey && arrow;
+        if (event.metaKey && !pin) return;
+        if (event.key === '/') { event.preventDefault(); this.beginSearch(); return; }
+        if (this.search && ['Escape', 'Enter'].includes(event.key)) {
             event.preventDefault();
-            const direction = event.key === 'ArrowDown' ? 1 : -1;
-            if (event.shiftKey) { void this.swapSelected(direction); return; }
-            const rows = [...this.rows.values()];
-            if (!rows.length) return;
-            const index = rows.findIndex(row => row.dataset.symbol === this.selected);
-            const next = Math.max(0, Math.min(rows.length - 1, index + direction));
-            this.onSelect(rows[next].dataset.symbol!);
-            rows[next].scrollIntoView({ block: 'nearest' });
-        });
+            if (event.key === 'Escape') this.endSearch(); else void this.commitSearch();
+            return;
+        }
+        if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]') ||
+            !this.keyboardEnabled || this.search) return;
+        if (['PageUp', 'PageDown'].includes(event.key) && !event.shiftKey) {
+            event.preventDefault(); this.jumpSection(event.key === 'PageDown' ? 1 : -1); return;
+        }
+        const ticker = this.tickers.find(t => t.symbol === this.selected);
+        const canEdit = this.editable && !this.busy && !this.scan?.busy;
+        if (pin) {
+            event.preventDefault();
+            if (canEdit && ticker) void this.togglePin(ticker, event.key === 'ArrowUp');
+            return;
+        }
+        if (this.scan?.enabled && ['Delete', 'Backspace'].includes(event.key) && !event.shiftKey) {
+            event.preventDefault();
+            if (canEdit && ticker) void this.actOnTicker(ticker, 'remove');
+            return;
+        }
+        if (this.scan?.enabled && event.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+            event.preventDefault();
+            if (canEdit && ticker && ((ticker.status === 'discover' && event.key === 'ArrowRight') ||
+                (ticker.status === 'excluded' && event.key === 'ArrowLeft'))) void this.actOnTicker(ticker, 'focus');
+            return;
+        }
+        if (!arrow) return;
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        if (event.shiftKey) { if (canEdit) void this.swapSelected(direction); return; }
+        const rows = [...this.rows.values()];
+        if (!rows.length) return;
+        const index = rows.findIndex(row => row.dataset.symbol === this.selected);
+        const next = Math.max(0, Math.min(rows.length - 1, index + direction));
+        this.onSelect(rows[next].dataset.symbol!);
+        rows[next].scrollIntoView({ block: 'nearest' });
+    }
+
+    private jumpSection(direction: number) {
+        const sections = Array.from($('symbols').querySelectorAll<HTMLElement>('[data-section]'));
+        const current = this.rows.get(this.selected)?.closest('[data-section]');
+        const index = sections.findIndex(section => section === current);
+        const target = sections[index < 0 ? 0 : index + direction];
+        if (!target) return;
+        this.collapsed.delete(target.querySelector<HTMLElement>('[data-toggle]')!.dataset.toggle!);
+        const symbol = target.dataset.firstSymbol!;
+        this.render(); this.onSelect(symbol);
+        this.rows.get(symbol)?.scrollIntoView({ block: 'nearest' });
+    }
+
+    async jumpUnread() {
+        const rows = this.scan?.visible(this.tickers, 'focus', false) ?? this.tickers.filter(t => t.status === 'focus');
+        const sections = this.sections(rows, 'focus', this.intraday.enabled && this.regularSession);
+        for (const { group, items } of sections) {
+            const next = items.find(t => this.attention.unread.has(t.symbol));
+            if (!next) continue;
+            this.collapsed.delete(collapseKey(this.scan?.enabled === true, group.key));
+            this.onSelect(next.symbol);
+            if (this.scan?.enabled && this.scan.activeList !== 'focus') await this.scan.showList('focus', false);
+            this.render();
+            this.rows.get(next.symbol)?.scrollIntoView({ block: 'nearest' });
+            return;
+        }
+    }
+
+    private async actOnTicker(item: Ticker, action: 'remove' | 'focus') {
+        if (!this.editable || this.busy || this.scan?.busy) return;
+        if (action === 'focus') {
+            if (item.status === 'focus') return;
+            await this.mutate({ action: 'move', ticker: item.ticker, target: 'focus' }, item);
+        } else if (item.status === 'excluded' && item.section !== 'hidden') return;
+        else if (item.section === 'hidden' || (this.scan?.enabled && item.status === 'focus'))
+            await this.mutate({ action: 'move', ticker: item.ticker, target: 'discover' }, this.scan?.enabled ? item : undefined);
+        else await this.mutate({ action: 'hide', ticker: item.ticker }, this.scan?.enabled ? item : undefined);
     }
 
     private query() { return this.input.value.trim().toUpperCase(); }
@@ -241,8 +306,9 @@ export class Watchlist {
     private async swapSelected(direction: number) {
         if (!this.editable || this.busy || this.search) return;
         const ticker = this.tickers.find(t => t.symbol === this.selected);
-        if (!ticker || (!ticker.pinned && (ticker.status === 'excluded' || !this.scan?.manualOrder))) return;
-        const items = this.visible().filter(t => ticker.pinned ? t.pinned && t.status === ticker.status : !t.pinned && sectionKey(t) === sectionKey(ticker));
+        if (!ticker || (!ticker.pinned && ((this.inPlayActive && (this.intraday.symbols[ticker.symbol]?.rank[0] ?? 0) > 0) || ticker.status === 'excluded' || !this.scan?.manualOrder))) return;
+        const items = this.visible().filter(t => ticker.pinned ? t.pinned && t.status === ticker.status :
+            !t.pinned && sectionKey(t) === sectionKey(ticker) && !(this.inPlayActive && (this.intraday.symbols[t.symbol]?.rank[0] ?? 0) > 0));
         const neighbor = items[items.indexOf(ticker) + direction];
         if (!neighbor) return;
         const full = this.tickers.filter(t => t.ticker !== ticker.ticker && (ticker.pinned ? t.pinned && t.status === ticker.status : sectionKey(t) === sectionKey(ticker)))
@@ -257,11 +323,13 @@ export class Watchlist {
         this.tickers = data.board; this.preferences = data.preferences ?? this.preferences;
         this.editable = data.editable;
         this.regularSession = data.current_regular_session === true;
+        this.intraday = data.intraday ?? { enabled: false, symbols: {} };
         $('symbol-count').textContent = String(this.visible().length);
         $('simulation').hidden = data.mode !== 'simulation';
         $('workspace-error').textContent = data.workspace_error ?? '';
         const visible = this.visible();
-        if (maintainSelection && !visible.some(t => t.symbol === this.selected) && (this.selected || visible.length))
+        const members = (this.scan?.available(this.tickers) ?? this.tickers).filter(t => t.status === (this.scan?.activeList ?? 'focus'));
+        if (maintainSelection && !this.isAdvancing() && !members.some(t => t.symbol === this.selected) && (this.selected || visible.length))
             this.onSelect(visible[0]?.symbol ?? '');
         this.render();
     }
@@ -271,6 +339,7 @@ export class Watchlist {
     }
 
     private canDrop(group: HTMLElement) {
+        if (group.dataset.section === 'in-play') return false;
         const ticker = this.tickers.find(t => t.ticker === this.dragged);
         return ticker?.pinned ? group.dataset.pinned === 'true' && group.dataset.list === ticker.status :
             group.dataset.pinned !== 'true' && group.dataset.list !== 'excluded';
@@ -281,21 +350,34 @@ export class Watchlist {
         document.querySelector('.dragging')?.classList.remove('dragging');
     }
 
-    private async togglePin(item: Ticker) {
-        const selected = this.selected, symbols = [...this.rows.keys()], index = symbols.indexOf(selected);
-        const next = !item.pinned && index >= 0 ?
-            [...symbols.slice(index + 1), ...symbols.slice(0, index)].find(symbol => symbol !== item.symbol) : undefined;
-        const section = item.pinned ? sectionKey(item) : `${item.status}:pinned`;
+    private async togglePin(item: Ticker, pinned = !item.pinned) {
+        if (!this.editable || this.busy || this.scan?.busy || !!item.pinned === pinned) return;
+        const section = pinned ? `${item.status}:pinned` : sectionKey(item);
         this.collapsed.delete(collapseKey(this.scan?.enabled === true, section));
-        if (await this.mutate({ action: 'pin', ticker: item.ticker, pinned: !item.pinned }) && next && this.selected === selected) {
-            this.onSelect(next);
-            this.rows.get(next)?.scrollIntoView({ block: 'nearest' });
-        }
+        await this.mutate({ action: 'pin', ticker: item.ticker, pinned }, item);
     }
 
-    private async mutate(payload: object): Promise<ListState | null> {
+    private isAdvancing() {
+        return this.advancing && this.keyboardEnabled && this.selected === this.advancing.symbol &&
+            (this.scan?.activeList ?? 'focus') === this.advancing.list &&
+            (this.scan?.enabled === true) === this.advancing.scan;
+    }
+
+    private advanceSelection() {
+        if (!this.isAdvancing()) return;
+        const { symbol, order } = this.advancing!;
+        const after = order.slice(order.indexOf(symbol) + 1);
+        const next = after.find(symbol => this.rows.has(symbol)) ?? [...this.rows.keys()].at(-1) ?? '';
+        this.onSelect(next);
+        this.rows.get(next)?.scrollIntoView({ block: 'nearest' });
+    }
+
+    private async mutate(payload: object, advance?: Ticker): Promise<ListState | null> {
         if (this.busy) return null;
         this.busy = true;
+        if (advance?.symbol === this.selected && this.keyboardEnabled && this.rows.has(this.selected))
+            this.advancing = { symbol: this.selected, list: this.scan?.activeList ?? 'focus',
+                scan: this.scan?.enabled === true, order: [...this.rows.keys()] };
         const search = this.search;
         if (search) search.message = 'Saving…';
         $('list-notice').textContent = '';
@@ -303,6 +385,7 @@ export class Watchlist {
         try {
             const data = await post<ListState>('list', payload);
             this.onUpdate(data);
+            this.advanceSelection();
             if (!this.search) $('list-notice').textContent = data.notice ?? '';
             return data;
         } catch (error) {
@@ -311,12 +394,13 @@ export class Watchlist {
             else $('list-notice').textContent = message;
             return null;
         } finally {
-            this.busy = false; this.render();
+            this.advancing = undefined; this.busy = false; this.render();
         }
     }
 
     private createRow(ticker: Ticker, columns: ListColumn[], scan: boolean) {
         const row = document.createElement('div'); row.className = 'symbol-row';
+        row.dataset.renderKey = this.rowKey(ticker);
         row.dataset.symbol = ticker.symbol; row.dataset.ticker = ticker.ticker; row.dataset.list = ticker.status;
         row.dataset.pinned = String(!!ticker.pinned);
         const tags = this.preferences?.tags ?? [];
@@ -326,18 +410,13 @@ export class Watchlist {
             cell.dataset.field = column.field;
             if (column.field === 'symbol') {
                 cell.className = 'scan-symbol';
-                if (scan) {
-                    const check = document.createElement('input'); check.type = 'checkbox'; check.dataset.check = ticker.symbol;
-                    check.setAttribute('aria-label', `Select ${ticker.ticker} for move`); cell.append(check);
-                }
                 const name = document.createElement('button'); name.className = 'ticker'; name.textContent = ticker.ticker;
                 name.setAttribute('aria-label', `Select ${ticker.ticker}`);
                 const mark = document.createElement('span'); mark.className = 'warn'; mark.textContent = '!'; mark.hidden = true;
                 name.append(mark); cell.append(name);
-                const label = ticker.is_new ? 'NEW' : ticker.is_returned ? 'RETURNED' : '';
-                if (label) {
-                    const flag = document.createElement('span'); flag.className = 'symbol-flag' + (ticker.is_new ? ' new' : '');
-                    flag.textContent = label; cell.append(flag);
+                if (ticker.is_new) {
+                    const flag = document.createElement('span'); flag.className = 'symbol-flag new';
+                    flag.textContent = 'NEW'; cell.append(flag);
                 }
             } else if (column.field === 'growth') {
                 cell.className = 'growth-cell'; cell.title = '1M / 3M / 6M return from low';
@@ -364,11 +443,17 @@ export class Watchlist {
                 pin.setAttribute('aria-label', pin.title); pin.setAttribute('aria-pressed', String(!!ticker.pinned));
                 pin.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16${ticker.pinned ? 'M12 8v12M6 14l6 6 6-6' : 'M12 20V8M6 14l6-6 6 6'}"/></svg>`;
                 cell.append(pin);
+                if (scan && ticker.status !== 'focus') {
+                    const focus = document.createElement('button'); focus.className = 'focus-ticker icon-button';
+                    focus.dataset.listAction = 'focus'; focus.textContent = ticker.status === 'discover' ? '→' : '←';
+                    focus.title = `Add ${ticker.ticker} to Focus`; focus.setAttribute('aria-label', focus.title); cell.append(focus);
+                }
                 if (ticker.status !== 'excluded' || ticker.section === 'hidden') {
                     const action = document.createElement('button');
-                    if (ticker.section === 'hidden') {
+                    action.dataset.listAction = 'remove';
+                    if (ticker.section === 'hidden' || (scan && ticker.status === 'focus')) {
                         action.className = 'release-ticker icon-button';
-                        action.textContent = '↩'; action.title = `Release ${ticker.ticker} to Discover`;
+                        action.textContent = '↩'; action.title = `Release ${ticker.ticker} to automatic classification`;
                     } else {
                         action.className = 'hide-ticker icon-button';
                         action.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
@@ -379,6 +464,13 @@ export class Watchlist {
             }
             row.append(cell);
         }
+        const priceEnd = columns.findIndex(column => ['cum-vol', 'tags'].includes(column.field));
+        row.style.setProperty('--price-end', String(priceEnd + 1));
+        row.querySelectorAll<HTMLElement>('[data-field]').forEach((cell, index) => {
+            cell.style.gridColumn = String(index + 1); cell.style.gridRow = '1';
+            if (index < priceEnd) cell.classList.add('price-cell');
+        });
+        symbolRow(row);
         this.rows.set(ticker.symbol, row);
         return row;
     }
@@ -396,6 +488,15 @@ export class Watchlist {
     }
 
     private updateRow(ticker: Ticker, row: HTMLElement, scan: boolean) {
+        const state = this.stateVisible ? this.intraday.symbols[ticker.symbol] : undefined;
+        stateAppearance(row, state);
+        attentionAppearance(row, ticker.symbol, this.attention);
+        const adr = row.querySelector<HTMLElement>('[data-field="state-adr"]');
+        if (adr) { adr.textContent = adrText(state, true); adr.title = adrTitle(state); }
+        for (const [field, value] of [['cum-vol', state?.cum_vol], ['local-vol', state?.local_vol]] as const) {
+            const cell = row.querySelector<HTMLElement>(`[data-field="${field}"]`);
+            if (cell) volumeBadge(cell, value, true);
+        }
         row.classList.toggle('active', ticker.symbol === this.selected);
         row.querySelector('.ticker')!.setAttribute('aria-pressed', String(ticker.symbol === this.selected));
         const errors = [...(ticker.errors ?? []), ...(ticker.quote?.error ? ['Quote: ' + ticker.quote.error] : [])];
@@ -405,11 +506,12 @@ export class Watchlist {
             const cell = row.querySelector<HTMLElement>(`[data-field="${field}"]`);
             if (!cell) return;
             cell.textContent = text; cell.title = title;
-            if (field === 'change' || field === 'ext') cell.className = change == null ? '' : change >= 0 ? 'positive' : 'negative';
+            if (field === 'change' || field === 'ext') {
+                cell.classList.toggle('positive', change != null && change > 0);
+                cell.classList.toggle('negative', change != null && change < 0);
+            }
         };
         if (scan) {
-            const check = row.querySelector('[data-check]') as HTMLInputElement;
-            check.checked = this.scan!.selected.has(ticker.symbol); check.disabled = !this.editable || this.scan!.busy;
             value('price', money(ticker.close));
             value('adr', ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%');
             value('adv', ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20));
@@ -425,12 +527,35 @@ export class Watchlist {
         value('ext', percent(ext, ''), extended ? `${extended.trade_session}: change from regular close` : '', ext);
     }
 
+    private rowKey(ticker: Ticker) {
+        return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.manual_tags, ticker.is_new]);
+    }
+
+    private sections(original: Ticker[], list = this.scan?.activeList ?? 'focus', inPlay = this.inPlayActive) {
+        const visible = inPlay ? rankedRows(original, this.intraday.symbols) : original;
+        const extracted = new Set(inPlay ? visible.filter(t => !t.pinned && (this.intraday.symbols[t.symbol]?.rank[0] ?? 0) > 0).map(t => t.symbol) : []);
+        const seen = new Set<string>();
+        const sections: ListSection[] = listSections(this.scan?.enabled === true, list, this.preferences?.tags ?? []).flatMap(group => {
+            const pinned = !seen.has(group.list) && visible.some(t => t.pinned && t.status === group.list);
+            seen.add(group.list);
+            return pinned ? [{ list: group.list, id: 'pinned', key: `${group.list}:pinned`, name: 'Pinned', pinned: true }, group] : [group];
+        });
+        if (extracted.size) sections.splice(sections[0]?.pinned ? 1 : 0, 0,
+            { list: 'focus', id: 'in-play', key: 'focus:in-play', name: 'In Play', inPlay: true });
+        return sections.map(group => ({ group, items: visible.filter(t => group.pinned ? t.pinned && t.status === group.list :
+            group.inPlay ? extracted.has(t.symbol) : !t.pinned && !extracted.has(t.symbol) && sectionKey(t) === group.key) }))
+            .filter(section => section.items.length);
+    }
+
     render() {
-        const visible = this.search ? this.matches() : this.visible();
+        const original = this.search ? this.matches() : this.visible();
+        const sections = this.sections(original);
+        const visible = sections.flatMap(section => section.items);
         $('symbol-count').textContent = String(visible.length);
         const scan = this.scan?.enabled === true;
-        const columns = listColumns(scan, this.regularSession);
+        const columns = listColumns(scan, this.regularSession, this.stateVisible);
         const columnsKey = JSON.stringify(columns);
+        const previousColumnsKey = this.columnsKey;
         if (columnsKey !== this.columnsKey) {
             this.columnsKey = columnsKey;
             document.querySelector<HTMLElement>('.watchlist')!.style.setProperty('--list-columns', columns.map(column => column.width).join(' '));
@@ -446,17 +571,15 @@ export class Watchlist {
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.scan?.isHolding(candidate.ticker + '.US') && !this.tickers.some(t => t.ticker === candidate.ticker);
         const tags = this.preferences?.tags ?? [];
-        const seen = new Set<string>();
-        const sections: ListSection[] = listSections(scan, this.scan?.activeList ?? 'focus', tags).flatMap(group => {
-            const pinned = !seen.has(group.list) && visible.some(t => t.pinned && t.status === group.list);
-            seen.add(group.list);
-            return pinned ? [{ list: group.list, id: 'pinned', key: `${group.list}:pinned`, name: 'Pinned', pinned: true }, group] : [group];
-        });
+        const extracted = new Set(sections.filter(section => section.group.inPlay).flatMap(section => section.items.map(t => t.symbol)));
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search) $('list-notice').textContent = this.search.message;
-        const key = JSON.stringify([visible.map(t => [t.symbol, t.status, t.section, t.pinned, rowTags(t), t.manual_tags, t.is_new, t.is_returned]), columnsKey,
+        const key = JSON.stringify([visible.map(t => [this.rowKey(t), extracted.has(t.symbol)]), columnsKey,
             [...this.collapsed], this.editable, tags, this.manualEditor, this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
+            const scroller = $('symbols').parentElement!, top = scroller.scrollTop, left = scroller.scrollLeft;
+            const focused = document.activeElement as HTMLElement | null;
+            const oldRows = new Map(this.rows), reuse = this.key && columnsKey === previousColumnsKey;
             this.key = key; this.rows.clear();
             const fragment = document.createDocumentFragment();
             if (showCandidate) {
@@ -466,11 +589,9 @@ export class Watchlist {
                 const company = document.createElement('span'); company.className = 'security-name'; company.textContent = candidate.name;
                 result.append(name, action, company); fragment.append(result);
             }
-            for (const group of sections) {
-                const items = visible.filter(t => group.pinned ? t.pinned && t.status === group.list : !t.pinned && sectionKey(t) === group.key);
-                if (this.search && !items.length) continue;
+            for (const { group, items } of sections) {
                 const section = document.createElement('section'); section.dataset.section = group.id; section.dataset.list = group.list;
-                section.dataset.pinned = String(!!group.pinned);
+                section.dataset.pinned = String(!!group.pinned); section.dataset.firstSymbol = items[0].symbol;
                 const heading = document.createElement('div'); heading.className = 'group';
                 const foldKey = collapseKey(scan, group.key);
                 const toggle = document.createElement('button'); toggle.dataset.toggle = foldKey;
@@ -482,19 +603,24 @@ export class Watchlist {
                 const add = document.createElement('button'); add.dataset.add = group.id; add.dataset.list = group.list; add.textContent = '+';
                 add.className = 'add-button';
                 add.setAttribute('aria-label', `Add ticker to ${group.name}`); add.disabled = !this.editable;
-                add.hidden = group.list !== 'focus' || !!group.pinned;
+                add.hidden = group.list !== 'focus' || !!group.pinned || !!group.inPlay;
                 heading.append(toggle, add); section.append(heading);
                 if (!collapsed) {
                     for (const ticker of items) {
-                        section.append(this.createRow(ticker, columns, scan)); this.appendManualEditor(section, ticker);
-                    }
-                    if (!items.length) {
-                        const empty = document.createElement('div'); empty.className = 'empty-list'; empty.textContent = 'No symbols'; section.append(empty);
+                        const old = oldRows.get(ticker.symbol);
+                        const row = reuse && old?.dataset.renderKey === this.rowKey(ticker) ? old : this.createRow(ticker, columns, scan);
+                        row.dataset.inPlay = String(!!group.inPlay);
+                        this.rows.set(ticker.symbol, row); section.append(row); this.appendManualEditor(section, ticker);
                     }
                 }
                 fragment.append(section);
             }
             $('symbols').replaceChildren(fragment);
+            if (!visible.length && !showCandidate) {
+                const empty = document.createElement('div'); empty.className = 'empty-list'; empty.textContent = 'No symbols'; $('symbols').append(empty);
+            }
+            if (focused?.isConnected) focused.focus({ preventScroll: true });
+            scroller.scrollTop = top; scroller.scrollLeft = left;
         }
         const result = $('symbols').querySelector<HTMLButtonElement>('[data-candidate]');
         if (result) result.disabled = this.busy;

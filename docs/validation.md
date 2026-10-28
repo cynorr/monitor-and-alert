@@ -1,29 +1,161 @@
 # 验证记录
 
+## 2026-10-26：Home / End 未读导航快捷键
+
+- Home / End 在现有 main.ts 键盘入口归一为 Command+U/G，继续调用原 jumpUnread，没有改查找、排序、选图和已读逻辑。非编辑区域拦截单键原生滚动；Scan 的 Home 不跳 Holdings。
+- `npm run build --prefix ui` 与 `git diff --check` 通过。Node VM 加载实际生成的 main.js，定向验证单键及原组合键路由、Monitor/Scan范围、阻止滚动、编辑内容／输入法和修饰键保留；脚本 `/tmp/alert-home-end-check-2026-10-26.mjs`。未运行全项目测试、重启后端或创建真实报警；未覆盖浏览器实按键盘，本轮只增加按键别名。
+
+## 2026-10-26：Symbol 模板、未读波浪与统一声音节奏
+
+环境：本机 macOS、Python 3.13.1、TypeScript 5.9.3；现有正式 Monitor、Longbridge 与 Holdings 数据。只验证本次模板、显示阈值和提醒契约，没有运行全项目测试。
+
+- `npm run build --prefix ui` 通过；Alert、Intraday State 与声音模块共 51 项相关后端用例通过，21 项相关 UI 用例通过。HTTP/WS 用例首次受沙箱端口绑定限制，允许本机绑定后单独通过。覆盖最新方向／等级覆盖和恢复、旧无方向 urgent 清理而不改变价格线、播放并行及退出清理、旧播放不能恢复已读提醒、节拍去重，以及 Focus 原始量比阈值与 Holdings 原显示不变。
+- 临时页面直接使用正式构建的 Watchlist、HoldingsList、Symbol 模板与 attention 模块，数据使用 Mock。浏览器检查两表 Symbol 对齐、完整 Holdings 价格区域、独立量能胶囊、整行选中、低值留白、强底色文字、同时未读、最新颜色覆盖及点击已读。修正价格区域末端留白，避免半圆裁切 ADR。截图 `/tmp/symbol-row-2026-10-26.png`；临时页面已删除，没有新增正式预览入口。
+- 三种完整 WAV 经实际后台 `afplay` 播放成功；上行 4、下行 6、紧急 8 次节拍反馈，无播放错误。最终下行及紧急音色替换后仅重验这两种。播放命令与节拍成功不代表用户已完成主观听辨；音画使用同一节奏，未承诺采样级同步。
+- 正式服务按原 Monitor 命令重启，Quote 为 CONNECTED、Massive 为 Ready；浏览器只读确认真实图表、Holdings、Focus 和新选中外观，检查后恢复原 CAI 选择。未创建正式 Alert、改变名单、手动 Refresh 或增加券商连接。既有 TJGC 六周期最新 closed 缺失与重启前一致；启动任务按原规则更新 Massive 缓存及 `splits.json`，未修改数据准备逻辑。
+- UI 唯一入口维护 Symbol 模板和颜色名称；Alert、Holdings、Intraday State、behavior/development、README 与各 AGENTS 同步。删除旧虚线／闪烁样式与重复价格区域实现，声音不再循环播放旧短文件，未读不叠加或保存历史。`git diff --check` 通过。
+
+未覆盖：真实 Regular 市场事件触发、多 symbol 实时音画同步及最终音色主观确认。正式页面检查发生在 Regular 之外，动态外观以实际组件的 Mock 状态验证，不作为真实市场触发证据。
+
+## 2026-10-23：Alert Regular 未读生命周期与键盘导航
+
+环境：本机macOS、Python3.13.1、TypeScript/Node。当前09:06 ET检查时8765服务未运行，本轮不启动正式后台或触发任何行情/账户下载；只覆盖本次清理、已读和未读导航。
+
+- 后端定向`tests/test_alerts.py -k 'unread or read_only or scope_removal or reaches_or_crosses or old_card'`15项通过；HTTP/WS定向`-k 'alert_http_origin'`1项通过。覆盖正常/提前收盘准确失效、同Regular重启保留、跨夜/周末/下一Regular清理、scope尚未就绪也清理、state首次输出前清理、灰线/Active线逐字段与期限不变、不补播。HTTP用例首次因沙箱禁止临时端口失败，允许本机临时绑定后通过，未修改用例绕过权限。
+- 前端`ui/tests/list-interactions.test.mjs ui/tests/scan.test.mjs`22项通过；新增覆盖完整Focus共用分组顺序、Pinned/In Play/原分组、折叠目标、Tag隐藏但不改筛选、后台更新保留隐藏选图、持仓按当前主行排序与同symbol多批次只跳一次、全部读完无操作。`npm run build --prefix ui`与`git diff --check`通过。
+- 实际生成的main.js以Node VM加载，图表/DOM/网络使用轻量替身，直接验证连续选图尚无响应也立即read、持仓及切周期同入口、零bar图表更新仍read、G/U不依赖当前选择来源、输入/修饰键保留及Scan不处理U。证据`/tmp/alert-main-check-2026-10-23.mjs`；这是主界面接线检查，不是浏览器视觉或实际按键验收。
+- 09:06 ET只读备份当前真实`runtime/alerts/alerts.sqlite3`到临时目录后运行实际AlertEngine：原16条价格线逐字段不变，3条已过所属Regular的未读变为0；无scope准备依赖、无新表、无播放。正式库未写入，副本已删除，结果`/tmp/alert-session-audit-2026-10-23.json`。
+- README、Alert、List交互、Holdings/UI、behavior/development及模块AGENTS同步；没有新增viewed/已读等待状态、遍历游标、期限字段或服务依赖。未跑全项目测试，未覆盖本轮浏览器实按G/U、真实市场收盘瞬间推送或物理睡眠唤醒，也未重测未修改的声音/图表拖动。
+
+## 2026-10-23：List 单只操作与 Refresh 统一清理
+
+环境：macOS、Python 3.13.1、TypeScript 5.9.3；本机已有真实 Massive 截面/名单与 SQLite、现有 8765 服务。仅本次相关验证，不运行全项目测试。
+
+- TypeScript build 及 git diff --check 通过。6 个定向 UI 用例通过：Scan 删除/左右入选、两模式组内移动与 Command 置顶的按键分流、机器释放禁止、重复置顶不跳、保存成功/失败选择、末尾不循环、跨 section 展开与搜索仍选中目标。
+- 17 个相关后端用例通过。真实截面测试仅编辑临时 workspace 副本：同日 Refresh 与新日首次分类的 statuses/orders 一致，清除 Pin/人工 Tag/section/Discover/排序，Focus 恢复自动淘汰，Hidden 不延期；同日 carried 不伪装成新日。重复 Refresh 幂等，Ready 数据不重新 build，准备失败保留人工名单。单只入选继续与 Alert 共用重新匹配，Hidden 释放和机器禁止释放沿用既有规则。
+- 正式服务页面仅做显示/导航检查：Monitor Page Down 到下一组首只，在末组不循环；Scan 不再显示勾选框/Move to，显示单只 Add to Focus，Page Up 展开折叠 Bounce-20 并选中 PDSB。检查后恢复 Monitor，未提交正式名单移动、置顶、删除或 Refresh，也未更改真实 Alert。
+- 原 Monitor 服务按原配置重启加载后端改动，确认 Quote CONNECTED、27 个完整行情 symbol、Massive Ready；不新增测试券商连接或扩大订阅范围。重启前已存在的 TJGC 历史缺失不属于本次改动，不以启动时 errors 为空宣称解决该问题。
+- 未覆盖：真实账户上的名单修改/Alert 删除、所有键盘硬件、全天运行及其他模块全流程。真实数据副本验证不冒充正式名单实操；样式仅做当前页面检查。
+
+
 本文件只记录各次验证事实，不定义 UI 要求；当前规范统一见 [ui.md](ui.md)。
 
-## 2026-10-16：Scan 报价按当前交易时段互斥显示
 
-环境：本机macOS、Python3.13.1、TypeScript5.9.3，以及现有localhost:8765的Monitor服务。本轮仅修复Scan报价显示，不修改订阅、Alert、名单或Massive数据。
+## 2026-10-23：三名单最新报价与 Overnight
 
-- 原实现只按报价日期过滤，Regular时也会返回当天Pre与上一交易日Post。现在由服务时钟与XNYS日历选择唯一报价窗口，并验证报价时间戳属于该窗口；缺失/旧报价、休市和历史Scan不返回实时标记，保留原Quote缓存。
-- 16项定向Python用例通过、35项未运行，覆盖04:00、Regular开收盘、20:00、提前收盘、夏令时、周末/休市、旧值/缺值、历史日隐藏及已有Scan范围切换。`npm run build --prefix ui`通过；1项图表定向用例通过，验证单个标签的Pre/Regular/Post价格与颜色切换、旧标签清除、原收盘价标签显隐、自动缩放和Massive candle不变。
-- 美东10:46:58只读现有服务一只Focus股票CAI.US的缓存报价：Pre时间戳为当日09:30:00，Post为上一交易日19:39:52。把真实响应交给本轮`scan_quote`过滤后，仅保留Regular价格31.01，extended为空。仅验证该样本后结束，不建立新券商连接、不读取凭证、不触发下载或账户刷新。
-- 同步Longbridge、Chart UI、UI总入口、behavior/development与简要入口说明；`git diff --check`通过。
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0、TypeScript5.9.3；真实美东10月23日00点后夜盘。重启原正式Monitor服务加载Overnight配置，复用一条行情context；未创建另一条券商连接、测试报警或模拟行情。验证结束恢复Monitor模式。
 
-未覆盖：真实盘前/盘后推送与浏览器实际绘制；没有执行全链路或全量测试。正式服务未重启，本轮真实样本验证的是新函数对现有缓存响应的处理，不能冒充已运行服务加载了修复；运行中服务需重启后端并刷新页面生效。
+- 正式服务收到Overnight推送，推送计数由初始98增长至121；随后30秒Monitor/Scan有界WS观察又增长5。当前有效范围按真实名单与持仓去重为27只完整行情、73只Quote-only；服务CONNECTED，切模式前后started_at一致，日志无连接重建。
+- Monitor的MRNA.US共74份view，夜盘价200.70→200.21→200.20；Scan额外成员ASST.US共71份view，夜盘价29.44→29.43。所有latest均等于同份响应中各时段报价的最大timestamp项；两轮观察中candle active和indicator_preview保持不变，Scan没有active candle。
+- 真实PAYS.US没有Overnight报价，latest保留Post15.00；原始快照的JBDI.US latest为Overnight2.30。将这两份真实响应送入实际Panel.setQuotePrice，分别得到蓝色#2962ff与黑色#000000，价格正确，candle/volume序列不变。此检查复用既有UI测试的绘图库替身，只验证应用公开API调用，不冒充浏览器像素验收。
+- 97项相关后端回归通过，覆盖最新值/缺值/历史Scan、常驻批量订阅、完整与Quote-only范围、前收盘基准、图表、持仓、模拟器、Alert及Intraday State。TypeScript构建与20项相关UI用例通过，覆盖来源颜色、价格轴替换/清理、自动缩放和原生candle标签。未新增Mock数据源、恢复机制或历史下载入口。
+- 当前需求统一维护在Longbridge及Chart UI，README、behavior/development、UI总入口、List说明及AGENTS同步契约；移除被替代的时钟/日期报价过滤、前端二次选价、旧SDK字段别名、时段文字及相关旧规则验证段落。报价只在内存；Quote、Trade、candle共用原连接与恢复流程。
+- 正式服务重启按既有流程完成下一日Massive准备，更新运行缓存及splits.json；未修改Massive逻辑。
 
-## 2026-10-16：Scan Pre/Post 与搜索加入 Discover
+未覆盖：真实Regular/Pre/Post逐跳推送、断网/休眠、周末连续运行及浏览器实际视觉验收。本轮夜盘真实推送与静态快照样本不替代这些场景。
 
-环境：本机 macOS，Python 3.13.1、TypeScript 5.9.3。真实输入为2026-10-15的Massive SQLite与已生成截面/名单（全市场12,651只、自动候选82只）。本轮没有启动/重启正式服务，不读取券商凭证、不调用真实行情/账户接口或播放声音。
+## 2026-10-23：后端目录与模块命名整理
 
-- 27项定向Python用例通过，61项未运行。覆盖完整行情/Quote白名单与等待请求额度后的重检、模式切换和Focus升降级复用同一context、不扩大六周期任务、Holdings去重、25只额外Quote按两批获取、单只不可用隔离、Pre/Post日期过滤与历史日隐藏，以及原有Quote重连/名单规则相关场景。
-- `npm run build --prefix ui`通过；仅运行2项UI定向用例：Pre/Post轴标签颜色、隐藏横线、分别更新/清除与公开自动缩放API；Scan Search沿用add并切到Discover置顶、已有Discover置顶选择，显式Focus section和Monitor搜索目标保留。未运行浏览器或全链路测试。
-- 真实日库只读验证在临时runtime复制最近两份名单/截面和偏好：AAPL原非候选，加入当日Discover置顶并补齐均线/RFL约0.229s；仍非candidate，不扩大完整行情范围，新日继承移除该成员及Pin。日图有真实历史、无active candle；正式SQLite、名单、偏好与split的大小/mtime保持不变。
-- 该临时环境的订阅验证使用明确的Broker替身：145个Quote标的中只有29个完整行情标的及174个candle订阅；Scan→Monitor→Scan共用一个替身context，保留全部原SyncState。这个结果验证调度范围，不冒充真实SDK连接/行情实测。临时业务库和目录已清理。
-- 同步Longbridge/Massive/List/UI及行为、职责和AGENTS入口；204个本地Markdown链接与`git diff --check`检查通过。既有正式split修改与.DS_Store未处理。
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0；北京时间10月23日，对应美东10月22日Regular。仅调整代码归属、导入和类名，正式运行目录、SQLite路径、请求额度与调度规则保持原状。
 
-未覆盖：真实Longbridge订阅与盘前/盘后推送、浏览器价格轴实际绘制和人工搜索交互、Alert实时穿越及账户链路。本轮只读获取现有服务状态未成功，没有为验证另建真实行情连接；以上未覆盖项不能视为已验收。
+- Longbridge收拢为client/realtime/history三个模块；历史读取检查合入history。Massive准备流程归入massive包，证券目录归入additional_info并保持独立CLI。共用Bar、持久化、序列化和OHLC诊断集中于storage，图表缓存与Monitor编排分别使用chart_cache、monitor。未保留旧模块转发，后端Python文件总数42→42。
+- 对照改名前HEAD的174个原有函数/类，归一化四个类名和导入后，语法树函数体全部相同。42个内部模块的82条顶层导入依赖无环，41个后端子模块在新解释器中全部导入成功；Scan单独导入不加载Longbridge SDK。保留既有函数内延迟导入，未为目录调整改写业务依赖。
+- 正式CLI、live_check、证券目录获取、附加信息获取、Massive获取、Scan Mock生成器及模拟器共7个help入口通过。新路径成功读取现有真实证券目录13,289只；没有触发目录或历史重新下载。
+- 现有311项后端用例中308项通过、3项失败，另11个subtest通过。3项均为Scan旧断言：要求继承机器Excluded身份或将机器Excluded保存到workspace。将改名前HEAD的代码与原用例提取到临时目录，三项出现完全相同失败；本轮保留现有产品规则，仅更新导入与符号，不修改这些断言来制造通过。未新增Mock数据源或测试框架。
+- 原服务停止后以原Monitor模式恢复，真实范围仍为28个symbol。短时HTTP核对Quote为CONNECTED，推送计数3秒内1,127→1,151；AMC Daily/15m均含实时active及历史，持仓任务运行，Massive为Ready，附加信息缓存无错误并正常返回。既有TJGC六周期官方最新closed缺失继续独立重试，未因迁移增加其他错误。
+- README、开发职责、数据入口及AGENTS同步新结构；脚本、模拟器、测试中的直接导入和字符串patch/sys.modules路径已更新。未改TypeScript，不重复前端构建。
+
+未覆盖：浏览器视觉与声音听辨、真实断网/休眠、拆股日及首次无缓存的全量下载。本轮是目录与依赖迁移，没有再次进行行情算法或启动性能对照。
+
+## 2026-10-23：Longbridge 同日缓存复用与启动分级
+
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0、TypeScript5.9.3；北京时间10月23日零点后，对应美东10月22日Regular。停止原服务后，直接使用正式SQLite、当前Focus/Holdings与真实接口做两次35秒/55秒有界启动，分别始于12:42:03、12:43:13 ET；随后恢复普通Monitor服务。测量钩子仅在临时脚本内记录耗时和请求，不进入正式代码，没有额外并行行情context、Mock数据源或测试报警。
+
+- 两轮完整行情均为28个symbol。初始25个Focus共150个周期中，144个同日成功批次直接恢复；Holdings补入的有效缓存也逐周期复用。第一轮仅JBDI缺一根5m，执行一次count2；第二轮同一5m窗口内，有效symbol没有历史查询。两轮均只有TJGC六周期因官方最新closed缺失各尝试4次，返回码2明确表示该缺失，没有以SDK值冒充历史成功。
+- 从进入启动脚本计时，两轮全部Quote在4.8–5.4秒可用；25个具备有效状态输入的symbol同时得到ADR，无需等待SDK Daily。第一轮CumVol首次6.1秒、24个可用样本最晚28.0秒，LocalVol为6.4–20.3秒；第二轮25个可用状态的CumVol为5.8–20.5秒、LocalVol为7.0–20.1秒。暂缺某根或历史区间的symbol独立等待，未填零或阻塞其他股票。两轮28只的5m/15m SDK均在约20秒内完成初始化。
+- 正式服务恢复后跨过12:45闭合点：只读SQLite确认JBDI/AMC/TEAM的5m、15m批次在12:45:02至12:45:13提交，30m/1h仍为12:30批次，Daily/2h沿用此前有效批次；未重复全量。随后health为CONNECTED、Quote推送计数继续增长、Holdings任务运行；当前盘中状态范围25只，其中24只ADR/CumVol/LocalVol均可用，TJGC三项缺失与官方历史错误一致。
+- 161项后端定向回归通过；最后补强零点/周末与EMA首值用例后相关61项再次通过。覆盖同日逐周期恢复、缺一/多闭合边界、1h开盘对齐、SDK不能推进权威水位、连续运行跨零点及周末、9:25不重复刷新、恢复期间在途成功复用、Quote OHL同日保留/跨日清除、ADR不等Daily、价格与量比分开就绪、首个价格/EMA静默及既有Chart/Alert/Scan/Holdings消费契约。TypeScript构建与6项状态UI用例通过。
+- 清除盘前刷新标记及其调度，恢复不再无条件重拉六份历史窗口；未增加数据库表、额外水位或操作系统解锁监听。文档以Longbridge与Intraday State唯一规范为准，并同步职责、行为、UI及AGENTS入口。
+
+未覆盖：真实美东零点、系统断网/休眠/解锁、真实拆股日、首次无缓存的全名单启动，以及浏览器视觉与声音听辨。零点、周末、恢复和EMA首值由既有真实SQLite/交易日历定向用例覆盖，不作为上述真实事件的实测证据。量比仍需官方SDK逐symbol/周期初始化，不能承诺整个列表秒级齐备。
+
+## 2026-10-22：Longbridge 当天 SDK 序列与官方历史统一读取
+
+环境：本机macOS、Python3.13.1、Longbridge SDK5.0.0；真实接口范围为当前Focus内AMC/MRNA及正式服务现有Focus/Holdings。先停止旧服务，使用两只股票的临时SQLite做有界初始化/恢复验证，再恢复正式Monitor；全程没有第二条并行券商连接，不创建测试报警，不注入断网或进行录屏。
+
+- 两symbol六周期初始化5.142秒，12个官方历史窗口各1000根，12个SDK周期注册。随后主动执行一次既有recover：原context与Quote callback代次不变，Quote推送计数3→5，无Quote/Trade退订或重订；六周期各重新取得SDK起点及官方历史，全部成功。含3秒后续观察的总用时12.988秒。
+- 正式服务09:25盘前全量刷新：MRNA Daily09:25:06、15m09:25:12、30m09:25:18、1h09:25:24、2h09:25:31完成；09:30开盘没有重启这些任务。09:30:07只读chart已同时包含Regular Quote、SDK Daily及5m，Daily volume465,301、5m volume18,470，各自保留官方口径。
+- 09:35:02官方5m增量以count2成功提交，缓存从1000自然增加到1001根，其他周期仍为09:25成功窗口，未在每5m重拉未闭合的大周期。
+- 153项定向回归通过：统一读取及权威覆盖、迟到SDK不能改回权威值、换桶无需等待REST、超过1000根、新日/开盘/恢复、限流与优先级、同秒历史修正后的量比/ADR失效、既有Manual Alert、SDK/Scan订阅范围、模拟器及持仓/Scan消费契约。只更新既有SDK测试替身的契约与旧周期数量，没有新建Mock数据源。未改TypeScript。
+- 最终版09:36:31启动，仍有120个历史任务pending时，Quote已CONNECTED且push_count为68；约09:37:48变为815，仅TJGC的六周期缺目标继续独立报错。MRNA的SDK Daily/分钟数据与列表状态在各自可用后持续显示。
+- 只读WS观察MRNA至09:40:15：09:35–09:40桶结束后0.142秒，closed序列已包含SDK根，volume338,866；2.822秒后同根被官方volume339,131覆盖，差265（约0.078%），OHLC均为233.95/237.29/233.035/236.66。557次开放volume数值变化；首次数据出现后Daily active消失、末根时间倒退、盘中状态消失均为0。旧一次观察因页面切Scan而中断，没有将其计作完整边界证据。
+- 重写Longbridge唯一说明，清除旧等待/清空/重建逻辑说明，同步README、behavior/development、Chart/UI、Intraday State及三处AGENTS。204个相关本地链接与git diff --check通过。正式Monitor服务已恢复；重启时既有Massive任务正常更新了运行缓存和splits.json，未改Massive处理逻辑。
+- 最后health核对：Monitor、Quote CONNECTED、push_count2,911、Holdings后台运行。TJGC六周期与PSIG当根5m的官方最新目标缺失，按既有有界回补独立报错/重试，保留可用SDK及旧历史，不填造权威根。
+
+未覆盖：真实断网/系统休眠、真实拆股日、1h/2h/Daily收盘、全部symbol逐根SDK/历史对照、浏览器视觉与声音听辨。边界连续性证据来自后端WS及只读SQLite，没有录屏或故障注入；SDK暂定误差与官方历史修正的产品前置条件保持不变。
+
+## 2026-10-21：自动排除改为当天派生结果
+
+环境：本机macOS、Python3.13.1、TypeScript5.9.3；使用现有真实Daily SQLite、28份dated workspace、真实Scan截面及preferences。未建立Mock或另建行情连接，测试中的名单编辑只发生在真实数据的临时副本。
+
+- 跨日只继承Focus及有效Hidden，保留Focus每日负面淘汰；淘汰的非候选退出名单。自动Excluded成员身份、section和机器Tag不再写入workspace，读取时从当天截面/规则重建。原Pin与人工Tag仍按当天保存，文件watcher比较同一持久投影；NEW保留，旧恢复标记及其字段/显示链路清除。
+- 8项真实数据定向用例通过，覆盖候选范围、跨日继承、真实Focus淘汰、AVAH七个自然日Hidden到期、规则修改、机器成员Pin/人工Tag、Hidden/Release/Focus操作、保存/重读、发布与feature scope，以及搜索Discover仅当日保留。`npm run build --prefix ui`通过；未运行Mock、全项目或全链路测试。
+- 停止旧进程后直接清理28份workspace，共799个旧机器身份、87个废弃字段，无备份或兼容恢复分支。仅从本地SQLite重算2026-10-19：12,638只证券、88个candidate，筛选4.731秒、完整特征2.060秒、总计6.791秒，完整feature scope为94只。当前Focus和Hidden的保存状态与清理前一致；落盘所有Excluded成员均为Hidden。
+- 正式服务恢复为原先正在使用的Scan模式，PID23703。只读`/v1/scan`和health确认：2026-10-19的页面Excluded由96降至42，其中Under-50为23、Extended为10、Broken为7、Hidden为2；Discover24、Focus23（已屏蔽持仓）保持不变。所有机器成员均为当天candidate，接口无废弃字段，workspace_error为空、Quote为CONNECTED、Holdings后台任务运行。启动时Massive仍按既有规则准备下一个成熟日，本轮不等待或验收其完整网络流程。
+- 同步List/Massive/UI唯一规范、behavior/development、README与三处AGENTS入口；194个本地文档链接和`git diff --check`通过。既有splits.json修改未处理。
+
+未覆盖：浏览器实际点击/绘制、全周期行情Ready、实时报警播放与账户交易链路。真实接口核对仅用于确认本次名单契约与服务恢复，未扩展为全链路验收。
+
+## 2026-10-20：报警边框仅作用于 symbol row
+
+环境：本机macOS、TypeScript/Node；仅调整前端边框作用范围，未修改后台或重启服务。
+
+- 删除名单section与Holdings标题的报警聚合调用及section成员缓存；源码和生成JS的边框调用均只剩名单row、持仓row两处，辅助函数简化为单symbol入参。
+- `npm run build --prefix ui`通过；`node --test --test-name-pattern='symbol unread' ui/tests/intraday-state.test.mjs`定向1项通过，覆盖多symbol同时闪烁、点击已读清除、播放结束后静态驻留。`git diff --check`通过。
+- 同步Alert、UI、Holdings及维护入口。未运行全量测试、浏览器视觉验收或真实报警播放；页面刷新后加载新前端。
+
+## 2026-10-20：In Play 与统一未读边框
+
+环境：本机macOS、Python3.13、TypeScript；北京时间00:46起为美东10月19日Regular。本轮仅覆盖自动聚集、价格列外观、统一报警/已读与独立声音，不跑全项目回归。
+
+- 后端定向 `tests/test_alerts.py tests/test_alert_sound.py tests/test_intraday_state.py` 41项通过。包括原手动穿越/精度/恢复、read不改灰线及重新设置、同symbol最新未读覆盖、恢复不播放、旧events迁移移除、HTTP同源与WS未读推送、自动规则接入同一notify、并行四遍/失败/退出清理。首次HTTP用例因沙箱禁止临时端口失败；允许本机绑定后全组通过，未改测试行为绕过限制。
+- 前端定向 `ui/tests/intraday-state.test.mjs ui/tests/holdings.test.mjs ui/tests/scan.test.mjs` 26项通过；`npm run build --prefix ui`通过。覆盖离散稳定排序/Pin、持仓批次尾部及统一边框：多symbol同时ringing、read后剩余播放不恢复该次边框、结束后保持静态未读。没有新增全项目或样式数值测试。
+- 当前真实Alert SQLite只读备份到临时目录迁移，5条价格线逐字段一致，旧卡片表移除，未处理记录按symbol合并。本轮正式服务从原Monitor命令平稳重启，PID15882；`/health`为running/CONNECTED。正式库仅alerts/unread两表，5条价格线与重启前完全一致；现场有27个盘中状态、4个未读symbol，仍有原行情初始化待处理项，不据此声称全名单Ready。证据`/tmp/alert-refactor-live-report.json`，日志`runtime/alert-refactor-live.log`。
+- Chrome正式页面只读确认：Grouped/Dynamic及卡片DOM不存在，In Play在Pinned下自动生成，真实成员NOWL/OABI/IOVA等跨原分组聚集；NAUT已由用户置顶，保持Pinned且只出现一次，HTFL位于独立Holdings。Monitor价格底色实际覆盖grid第1至4列，Tags仍为正常深色。Safari Charts已刷新加载核心界面并恢复原CMCT选择。没有为验证修改正式Pin/Tags/名单或创建正式价格线。
+- 临时UI服务localhost:8767使用本轮正式服务的真实名单/行情/图表快照，提醒库隔离、播放状态替身静音，不读凭证/新建券商连接。临时NAUT手动线与HTFL自动提醒同时显示ringing；当前已经选中NAUT不会自动read。刷新后两者静态虚线恢复；点击NAUT成功选图后仅其边框消失，HTFL保留，灰线实际超过10秒仍存在。重新设置后Active且其他symbol未读不变。把临时排序等级置空后In Play整个消失，22个symbol均只显示一次，原分组恢复；浏览器无JavaScript error。截图`/tmp/alert-in-play-unread.png`为该真实行情快照/隔离提醒验收页；临时页、服务及数据库已清理。
+- 实际声音另用独立AlertSound同时播放TEST_UP/TEST_DOWN，各原声四遍，无插入间隔；两者playing状态重叠，afplay均成功退出，最终无遗留播放任务或错误。证据`/tmp/alert-parallel-sound.json`。本轮没有新增人工听辨确认，不把命令成功表述为用户已听到。
+- 需求、职责、UI图形及各AGENTS入口同步；Markdown相对链接/锚点和`git diff --check`通过。未覆盖整个Regular日持续运行、真实市场同时触发多symbol的音画同步、macOS27或物理休眠；未对未修改的图表拖动手势重做全量验收。
+
+## 2026-10-19：MRNA 当日日内成交手工归零
+
+环境：本机macOS、Python3.13、原正式Monitor进程PID1587及localhost:8765。用户确认MRNA当天多次买卖均已完成、当前持仓为0，授权合并关联。只修改`runtime/holdings/sequences.txt`与现有`merge_buys.txt`，未重启或另起服务，未修改账户、Python/TypeScript实现及其他股票关联。
+
+- 初始现有服务报MRNA卖出订单`0459A5…6C56`归属歧义，成功快照停在本日21:58:53。依据该已接受快照先关联首轮买入200股与卖出200股后，现有轮询越过第一笔错误并报告后续卖出歧义。失败轮原始数据不提交缓存，因此仅额外读取一次SnapTrade executed orders（沿用现有端点/参数），只核对当日MRNA；没有调用付费连接refresh或另行获取持仓/行情。
+- 真实订单共5笔BUY与5笔SELL，双方累计均700股、净数量0。按用户授权，沿用现有人工合并买入机制将5笔BUY归到一个批次，sequences明确关联全部5笔SELL；真实成交标量经原sequences/performance函数核对，余仓0、已实现盈亏-427.99。未伪造成交或改变原始缓存。
+- 23:52:33（Asia/Shanghai）只读确认原服务已自动重读规则：最后成功时间23:52:26、error=null、error_kind=null；MRNA为5买/5卖、买卖各700股、余仓0。现有规则保留一条灰色当日清仓复盘记录，次日自动移除，不为此次操作新增临时隐藏ticker机制。成功后结束接口验证并删除临时MRNA订单摘录。
+
+本轮只验证人工关联、真实数量对账及服务恢复；未运行全项目测试、前端构建或浏览器交互，也未验证后续新成交。其他模块现有未提交改动保持原样。
+
+## 2026-10-17：Holdings 中性状态 ADR 方向
+
+环境：本机 macOS、当前正式 Monitor 服务 localhost:8765；北京时间02:31–02:34（美东10月16日Regular）。本轮只修复前端ADR格式化，未重启后台、修改阈值、名单或账户，不使用mock，不跑全量测试。
+
+- 直接读取现有接口中的LIFE.US、MU.US、PBF.US及其Daily缓存。三者role均为holding、state为neutral；首次读取Up/Down分别为0.05994/0.54667、0.06982/0.42837、0.30510/0.59742。用真实last/high/low/ADR20独立复算，两项结果均匹配。原因是Down尚低于预警阈值时，旧格式化只检查state前缀，所有neutral都显示Up。
+- 新格式化在holding neutral时显示较大的ADR方向，有预警等级时仍显示主状态方向；只影响数值和箭头。`npm run build --prefix ui`通过。构建后函数直接消费当前真实状态，三只均输出Down，另核对当前五个余仓symbol的格式化一致性；证据`/tmp/adr-direction-live-check.json`。
+- Chrome正式页面实际显示LIFE、MU、PBF均为↓，tooltip保留Up/Down两项，中性底色保持；TEAM/CDNA已有回撤等级仍显示↓。截图时三者分别约0.48×、0.41×、0.64×，与之前读取的差别来自实时行情更新。截图`/tmp/adr-direction-live-ui.png`；浏览器无JavaScript error，验证页已关闭。原有用户页面需刷新加载新JS。
+- 独立需求、behavior与development同步；`git diff --check`通过。本轮未重新验证声音、排序、账户获取或全交易日规则穿越；这些逻辑没有修改。
+
+## 2026-10-17：Intraday State 盘中状态
+
+环境：本机 macOS、Python 3.13、项目虚拟环境、TypeScript；浏览器验证使用 Chrome 的临时模拟页。唯一需求见 [intraday-state.md](intraday-state.md)。本轮只覆盖新增状态、量比、Dynamic 展示及共用声音的改动，未跑全项目回归。
+
+- 后端定向 `tests/test_intraday_state.py tests/test_alert_sound.py tests/test_alerts.py`：41 项通过。覆盖候选 open 门槛、上下行阈值与再次穿越、持仓回撤优先且降级静默、EMA 重穿、冻结 ADR、首次/恢复静默、范围清理、5m 延后降级与量能边界更新、连续大窗口覆盖、历史尾部插值、缺失/半日/DST、配置校验、真实回调接入及手动 Alert 兼容。HTTP 用例仅使用临时库。
+- 前端定向 `ui/tests/intraday-state.test.mjs ui/tests/holdings.test.mjs ui/tests/scan.test.mjs`：25 项通过；`npm run build --prefix ui` 通过。验证离散等级与人工 Pin 稳定顺序、不修改输入名单、持仓批次与清仓尾部、格式化及新增列。Markdown 相对目标检查及 `git diff --check` 通过。
+- 隔离 UI：既有 FakeLongbridgeClient、临时 workspace/SQLite、真实状态引擎与模拟有效 Quote/SDK candle，localhost:8767，不读凭证。确认候选蓝色、持仓黄/红色、ADR 与两个圆角量比格，Dynamic 跨组排列、Pin 优先、无重复成员及空 section 隐藏；Grouped 恢复原 Surf/Bounce。NVDA 保持选中，状态从浅蓝升级亮蓝后图表与操作焦点保留；同档相对顺序稳定。截图 `/tmp/intraday-state-ui.png` 为模拟数据，量比缺失用 `—`；最终临时页、服务与数据库已清理。浏览器无 JavaScript error。
+- 声音直接使用新后台播放器依次播放上行、下行、紧急，每组原声四遍；afplay 均成功，用户确认“都听到，紧急声音能区分”。优先级用定向用例验证，不额外合成或施加时长上限。
+- 本轮只读真实 Longbridge 缓存 ABCL.US、EFOR.US：冻结 ADR20 分别 6.3545%、4.9475%，26 分钟历史累计基准各有五个样本，分别 331721.76、12663.56。没有额外供应商查询或写正式数据；证据 `/tmp/intraday-real-cache-check.json`。
+- 正式后台按原 Monitor 展示模式重启，PID 20306；`/health` 为 running / CONNECTED，`/v1/intraday-state` 已启用。现场读取 CAI.US 的真实 Regular 状态、CumVol 与 15m LocalVol，两者都有五个历史样本。重启前后原有七条手动 Alert 内容相同，未处理事件均为零；没有向正式进程注入模拟行情。结束前状态已覆盖30个symbol，待处理窗口从118降至6；服务启动仍按原流程初始化行情窗口，本轮不将这些样本表述为全名单Ready。证据 `/tmp/intraday-live-check.json`，日志 `runtime/intraday-state-live.log`。
+- 未覆盖：整个 Regular 交易日运行、真实盘中所有规则穿越、物理断网/休眠、全部名单行情初始化、macOS 27、触屏。离线用例和本轮短时现场读取不替代这些证据。
 
 ## 2026-10-16：Holdings 轻量错误详情与统一圆圈感叹号
 
@@ -130,7 +262,7 @@
 - `.venv/bin/python -m pytest -q tests/test_alert_sound.py tests/test_alerts.py`：28 项通过。覆盖新事件提交后才播放、同条不重复播放、失败写入不播放、恢复/处理卡片不重播、Mock默认静音、任务启动/退出，以及串行音频、播放错误和后续新事件恢复。localhost 用例在沙箱外运行，所有数据写临时目录。
 - `npm run build --prefix ui`、改动 Python 编译、文档链接和 `git diff --check` 通过。离线构建 wheel 确认包含两个 WAV 及 sound.py，不含旧 macos.py 或原生通知依赖；刷新本地 editable 安装后 `pip check` 通过。
 - 明确启用实际声音，用 CHECK.US 的临时 Regular 最新价经 AlertEngine 依次触发上穿和下穿，间隔约两秒，两个事件均持久化、声音状态 error=null。用户确认“两次都听到，声音不同”。没有读取行情凭证或在正式 Alert 中制造触发，临时库已清理。
-- Chrome 使用 Scan Mock 副本、临时库和既有 FakeBroker，localhost:8767 限时120秒。两张未处理卡片在刷新前后均存在，原通知按钮为0个，页面无 console error。完整截图保存在 `/tmp/alert-cards-refresh-2026-10-07.png`；临时服务、目录与页面已关闭。
+- Chrome 使用 Scan Mock 副本、临时库和既有 FakeLongbridgeClient，localhost:8767 限时120秒。两张未处理卡片在刷新前后均存在，原通知按钮为0个，页面无 console error。完整截图保存在 `/tmp/alert-cards-refresh-2026-10-07.png`；临时服务、目录与页面已关闭。
 - 正常退出旧原生进程，实际删除 `dist/Market Monitor.app`、macos 构建目录、launcher/setup/build脚本及 PyObjC/py2app 和其专用依赖；原 WAV 移入 Alert 模块。正式 runtime 改用现有 Python CLI 启动，/health 为 running、Quote 为 CONNECTED；Alert sound 为 enabled=true、error=null。切换前后正式库均为3条 Alert、2条历史事件、0条未处理事件。Safari Charts 已刷新，恢复 Monitor 与 PLSE 选择。
 - Alert 需求、职责/契约、产品行为、UI 总入口、README 与模块 AGENTS 已同步为后台声音和持久卡片。
 
@@ -174,7 +306,7 @@
 
 环境：本机项目工作树；本轮仅修改 Markdown 与 AGENTS.md，不修改 Python/TypeScript、运行数据或凭证，不启动/重启服务，不调用真实行情或账户接口。
 
-- 对照本轮用户修订、quotes.py、workspace.py、list_rules.py、workbench.py、现有 List/Chart/UI/开发文档，建立独立 alert.md 和 data_service/alerts/AGENTS.md，并同步总入口及局部维护约束。新需求和新入选规则均明确标为已确认待实现。
+- 对照本轮用户修订、longbridge/realtime.py、workspace.py、list_rules.py、workbench.py、现有 List/Chart/UI/开发文档，建立独立 alert.md 和 data_service/alerts/AGENTS.md，并同步总入口及局部维护约束。新需求和新入选规则均明确标为已确认待实现。
 - 核对 Regular-only、鼠标水平线价格、到达算触发、无停机补报、symbol 共用身份、Scan Discover/全部 Excluded 创建先入 Focus，以及手动/Alert 共用清理来源 Tag、重新匹配与组首插入规则；清除旧入口中禁止开发 Alert 的过时约束。
 - 进行文档差异、相对链接/锚点与入口一致性检查。未修改 TypeScript，未运行 npm build 或产品测试；这些文档检查不是运行功能验收。
 
@@ -314,7 +446,7 @@
 环境：同日本机 macOS，Chrome 与正式 Safari Charts 窗口；Lightweight Charts 5.2.0、TypeScript 5.9.3。仅修改前端交互/显示，Alert Engine、行情、名单与通知契约保持原有实现。
 
 - `npm run build --prefix ui` 通过，22 项 UI 用例通过。既有双图/成交量用例补充验证鼠标价格双向传递、成交量 pane 使用对应 series、programmatic 更新不回传覆盖鼠标价格；Vol 的悬停保持、刷新与清空继续通过。
-- 使用 Scan Mock 副本、临时 SQLite 与既有 FakeBroker，localhost:8767 最长300秒。PAYS 验证细线段虚线、箭头紧贴价格轴边缘、无 Alert 价格轴标签；悬停价格胶囊包含两位小数与线性垃圾桶，拖动11.40→11.74重新激活，垃圾桶立即删除。Monitor 验证 Command+Option 创建66.45、双图共用横线、悬停胶囊与 Backspace 删除。未修改正式 Alert/名单，也未投递系统通知；临时服务、目录与浏览器页已清理。
+- 使用 Scan Mock 副本、临时 SQLite 与既有 FakeLongbridgeClient，localhost:8767 最长300秒。PAYS 验证细线段虚线、箭头紧贴价格轴边缘、无 Alert 价格轴标签；悬停价格胶囊包含两位小数与线性垃圾桶，拖动11.40→11.74重新激活，垃圾桶立即删除。Monitor 验证 Command+Option 创建66.45、双图共用横线、悬停胶囊与 Backspace 删除。未修改正式 Alert/名单，也未投递系统通知；临时服务、目录与浏览器页已清理。
 - Monitor 实际绘制确认 Daily→Intraday 两侧十字线显示67.33，独立于对应 candle close；超出 peer 价格范围时不吸附到可见 candle。所有图使用内置1px LargeDashed及匹配的Alert primitive线段；两张图的Vol显示正确。
 - 正式 Safari Charts 窗口已刷新加载构建，恢复刷新前 BAND 选择，确认 Daily/Intraday 均显示 Vol。没有重启或扩大真实行情订阅。
 - 需求分别同步 alert.md（悬停/删除）、chart-ui.md（共用虚线/十字线/Vol）、ui.md（图形），职责与入口同步 development.md、behavior.md。相对链接/锚点及git diff --check通过；vendor未修改。
@@ -325,7 +457,7 @@
 环境：本机 macOS、Chrome 离线验证页和正式 Safari Charts；Lightweight Charts 5.2.0、TypeScript 5.9.3。本轮只修改 UI 与相应文档。
 
 - `npm run build --prefix ui` 通过，23 项 UI 用例通过。新增定向用例覆盖无对应日期时水平线保留与复用、重新匹配日期时切回原生十字线、价格超出范围时仍传递时间、成交量 pane、离开与清空后的移除；程序更新不回传覆盖鼠标值的既有用例继续通过。
-- 浏览器使用 Scan Mock 副本、临时 SQLite 与现有 FakeBroker，localhost:8767 限时300秒，不读取凭证或投递系统通知。Scan 验证胶囊位于绘图区约2/3处、无重复上下箭头、右箭头左侧竖边对齐原生价格标签左缘并进入价格轴。
+- 浏览器使用 Scan Mock 副本、临时 SQLite 与现有 FakeLongbridgeClient，localhost:8767 限时300秒，不读取凭证或投递系统通知。Scan 验证胶囊位于绘图区约2/3处、无重复上下箭头、右箭头左侧竖边对齐原生价格标签左缘并进入价格轴。
 - Monitor 实际验证：Daily 悬停旧日期（Intraday 无该日数据），两图仍显示67.33水平线，Intraday不显示虚构时间线；同一Alert在两图可见。Intraday拖动66.46→66.68，Daily同步；Daily继续拖动66.68→67.12，Intraday同步，悬停胶囊显示相同已保存价格。另用同样临时环境限时60秒保存完整截图 `/tmp/alert-ui-final.png`，显示旧日期的Daily胶囊与Intraday独立水平线。
 - 正式 Charts 窗口已刷新加载构建并恢复刷新前BTGO选择；未重启真实服务或修改正式Alert。临时页已关闭，验证服务按时结束并清除临时库。
 - 需求和职责同步 alert.md、chart-ui.md、ui.md、development.md、behavior.md；相对链接/锚点及 `git diff --check` 通过。未修改 vendor。未重新覆盖真实Regular触发、macOS通知、全部周期/价格轴缩放/pane resize或macOS27；离线UI证据不替代这些验收。

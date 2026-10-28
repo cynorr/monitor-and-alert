@@ -1,13 +1,13 @@
+"""Official candle conversion, history downloads and read-only window checks."""
 from __future__ import annotations
 
-import json
 import logging
 import math
 import time
 from datetime import datetime
 
-from .calendar import ET, TradingCalendar, timestamp
-from .store import Bar, BarStore
+from ..calendar import PHASES, TradingCalendar, timestamp
+from ..storage import Bar, BarStore, ohlc_comparison, append_ohlc_log
 
 log = logging.getLogger(__name__)
 
@@ -31,27 +31,6 @@ def parse_candle(item, symbol, timeframe, calendar, as_of, *, closed=True):
               float(item.low), float(item.close), item.volume, turnover)
     bar.validate(calendar, as_of, closed=closed)
     return bar
-
-
-def ohlc_comparison(bar, calendar, as_of, session, ohlcv):
-    end = calendar.bar_end(bar.ts, bar.timeframe)
-    return {'symbol': bar.symbol, 'timeframe': bar.timeframe, 'session': session,
-            'start': bar.ts, 'end': end,
-            'start_et': datetime.fromtimestamp(bar.ts, ET).isoformat(),
-            'end_et': datetime.fromtimestamp(end, ET).isoformat(),
-            'fetched_at': as_of, 'fetched_at_et': datetime.fromtimestamp(as_of, ET).isoformat(),
-            'ohlcv': ohlcv}
-
-
-def append_ohlc_log(path, anomalies):
-    if not anomalies:
-        return
-    try:
-        with path.open('a') as file:
-            for anomaly in anomalies:
-                file.write(json.dumps(anomaly, allow_nan=False) + '\n')
-    except OSError as exc:
-        log.warning('Could not append OHLC comparison log: %s', exc)
 
 
 class BarDownloader:
@@ -91,11 +70,11 @@ class BarDownloader:
         session = self.calendar.window_session(int(self.now()))
         if count != 1000:
             batch = self.store.batch(symbol, timeframe)
-            if batch is None or tuple(batch['session']) != session:
+            if batch is None or batch['session'][0] != session[0]:
                 return None
         raw = await self.broker.candles(symbol, timeframe, count, background=background)
         as_of = int(self.now())
-        if self.calendar.window_session(as_of) != session:
+        if self.calendar.window_session(as_of)[0] != session[0]:
             return None
         bars, rejected, forming = self._parse(raw, symbol, timeframe, as_of)
         target = self.calendar.latest_closed(timeframe, as_of)
@@ -111,3 +90,41 @@ class BarDownloader:
                  'forming_count': forming, 'rejected': rejected}
         self.store.upsert(bars, as_of, batch, replace=count == 1000)
         return batch
+
+
+class HistoryValidator:
+    def __init__(self, store, calendar):
+        self.store, self.calendar = store, calendar
+        self.cache = {}
+
+    def check(self, symbol, tf, now):
+        target = self.calendar.latest_closed(tf, now)
+        key = (symbol, tf)
+        session = self.calendar.window_session(now)
+        signature = (self.store.revisions.get(key, 0), target, session)
+        if key in self.cache and self.cache[key][0] == signature:
+            return self.cache[key][1]
+        batch = self.store.batch(symbol, tf)
+        rows = self.store.window(symbol, tf)
+        present, errors = set(), []
+        for row in rows:
+            try:
+                row.validate(self.calendar, now)
+                present.add(row.ts)
+            except ValueError as exc:
+                errors.append(f'{row.ts}: {exc}')
+        # Historical holes are accepted, including within the returned recent window.
+        # Only the current closed target must exist; never bridge old gaps.
+        missing = [] if target in present else [target]
+        if batch and batch['session'][0] != session[0]:
+            errors.append('Waiting for current trading-day refresh')
+        if missing:
+            errors.insert(0, f'Missing {len(missing)} bars; first timestamp {missing[0]}')
+        result = {'complete': bool(batch) and not errors, 'target': target,
+                  'latest': max(present) if present else None, 'count': len(present),
+                  'missing': missing, 'errors': errors}
+        self.cache[key] = (signature, result)
+        return result
+
+    def validate(self, symbol, now):
+        return {tf: self.check(symbol, tf, now) for tf in PHASES}

@@ -5,12 +5,12 @@ import time
 
 import pytest
 
-from data_service.broker import Broker, RateLimiter
+from data_service.longbridge.client import LongbridgeClient, RateLimiter
 from data_service.calendar import PHASES
 from data_service.config import Ticker
-from data_service.downloader import BarDownloader
-from data_service.service import DataService
-from data_service.validator import DataValidator
+from data_service.longbridge.history import BarDownloader
+from data_service.monitor import MonitorService
+from data_service.longbridge.history import HistoryValidator
 from test_data_service import cal, store, at, bar, raw, install_batch
 
 
@@ -26,7 +26,7 @@ def test_range_contradiction_is_retained_logged_and_never_retried(tmp_path, cal,
             self.calls.append(count)
             return [item, raw(ts + 300)]
     broker = Fake()
-    service = DataService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, broker, cal, lambda: now)
+    service = MonitorService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, broker, cal, lambda: now)
     try:
         state = service.sync['PAYS.US', '5m']
         asyncio.run(service._execute(('PAYS.US', '5m')))
@@ -61,7 +61,7 @@ def test_unplottable_response_preserves_old_window(store, cal, kind):
     with pytest.raises(ValueError):
         asyncio.run(BarDownloader(Fake(), store, cal, lambda: now).fetch('PAYS.US', '5m'))
     assert store.bars('PAYS.US', '5m') == [bar(ts)]
-    assert not DataValidator(store, cal).check('PAYS.US', '5m', now)['complete']
+    assert not HistoryValidator(store, cal).check('PAYS.US', '5m', now)['complete']
     assert not (store.path.parent / 'invalid_ohlc.jsonl').exists()
 
 
@@ -73,7 +73,7 @@ def test_full_refresh_forgets_old_gap_and_normal_two_does_not_flip_readiness(tmp
             self.calls.append(count)
             target = cal.latest_closed(tf, now[0])
             return [raw(target), raw(target + 300)]
-    broker = Fake(); service = DataService([Ticker('PAYS.US','PAYS','focus')], tmp_path, broker, cal, lambda: now[0])
+    broker = Fake(); service = MonitorService([Ticker('PAYS.US','PAYS','focus')], tmp_path, broker, cal, lambda: now[0])
     key = ('PAYS.US','5m')
     try:
         old = at('2025-09-18T09:30')
@@ -104,7 +104,7 @@ def test_retry_rounds_are_bounded_until_next_five_minute_boundary(tmp_path, cal)
             self.calls.append(count)
             if self.fail: raise TimeoutError('Request failed')
             return [raw(cal.latest_closed(tf, now[0]))]
-    broker = Fake(); service = DataService([Ticker('PAYS.US','PAYS','focus')],tmp_path,broker,cal,lambda:now[0])
+    broker = Fake(); service = MonitorService([Ticker('PAYS.US','PAYS','focus')],tmp_path,broker,cal,lambda:now[0])
     key = ('PAYS.US','5m'); state = service.sync[key]
     try:
         for i in range(4):
@@ -130,7 +130,7 @@ def test_missing_latest_closed_target_triggers_full_retry(tmp_path, cal):
         async def candles(self, symbol, tf, count, **kwargs):
             self.calls.append(count)
             return [raw(start), raw(start+300)]
-    broker=Fake(); service=DataService([Ticker('PAYS.US','PAYS','focus')],tmp_path,broker,cal,lambda:now)
+    broker=Fake(); service=MonitorService([Ticker('PAYS.US','PAYS','focus')],tmp_path,broker,cal,lambda:now)
     try:
         key=('PAYS.US','5m')
         asyncio.run(service._execute(key))
@@ -140,23 +140,23 @@ def test_missing_latest_closed_target_triggers_full_retry(tmp_path, cal):
     finally: service.store.close()
 
 
-def test_recovery_during_inflight_request_is_not_lost(tmp_path, cal):
+def test_recovery_reuses_successful_inflight_history_request(tmp_path, cal):
     now=at('2026-09-18T10:01')
     class Fake:
         async def candles(self, symbol, tf, count, **kwargs):
             service.recover()
             return [raw(cal.latest_closed(tf,now))]
-    service=DataService([Ticker('PAYS.US','PAYS','focus')],tmp_path,Fake(),cal,lambda:now)
+    service=MonitorService([Ticker('PAYS.US','PAYS','focus')],tmp_path,Fake(),cal,lambda:now)
     try:
         asyncio.run(service._execute(('PAYS.US','5m')))
         state=service.sync['PAYS.US','5m']
-        assert state.pending and state.refresh and not state.complete
+        assert not state.pending and not state.refresh and state.complete
     finally: service.store.close()
 
 
 def test_partial_and_full_status_and_no_redundant_price_revision(tmp_path, cal):
     now=at('2026-09-18T10:01')
-    service=DataService([Ticker('PAYS.US','PAYS','focus')],tmp_path,object(),cal,lambda:now)
+    service=MonitorService([Ticker('PAYS.US','PAYS','focus')],tmp_path,object(),cal,lambda:now)
     try:
         assert service.status('PAYS.US',now)['stage']=='loading'
         for tf in ('1d','5m'): service.sync['PAYS.US',tf].complete=True
@@ -170,6 +170,82 @@ def test_partial_and_full_status_and_no_redundant_price_revision(tmp_path, cal):
     finally: service.store.close()
 
 
+def test_opening_does_not_reset_stream_or_loaded_windows(tmp_path, cal):
+    now = [at('2026-09-18T09:29')]
+    service = MonitorService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: now[0])
+    try:
+        for tf, state in ((key[1], state) for key, state in service.sync.items()):
+            state.pending = state.refresh = False
+            state.complete = True
+            state.target = cal.latest_closed(tf, now[0])
+        now[0] = at('2026-09-18T09:30')
+        service._schedule(now[0])
+        assert not service.quotes.candle_refresh and not service.quotes.changed.is_set()
+        assert all(state.complete and not state.pending for state in service.sync.values())
+    finally:
+        service.store.close()
+
+
+@pytest.mark.parametrize('restart, pending, refresh', [
+    ('2026-09-18T10:04:59', (), ()),
+    ('2026-09-18T10:05:02', ('5m',), ()),
+    ('2026-09-18T10:20:02', ('5m', '15m'), ('5m',)),
+    ('2026-09-18T10:30:02', ('5m', '15m', '30m', '1h'), ('5m', '15m')),
+])
+def test_restart_restores_each_official_window_and_only_schedules_missing_boundaries(tmp_path, cal, restart, pending, refresh):
+    initial = at('2026-09-18T10:01')
+    service = MonitorService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: initial)
+    for tf in PHASES:
+        install_batch(service.store, cal, initial, tf=tf)
+    service.store.close()
+    service = MonitorService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: at(restart))
+    try:
+        assert all(state.complete for state in service.sync.values())
+        assert {tf for (_, tf), state in service.sync.items() if state.pending} == set(pending)
+        assert {tf for (_, tf), state in service.sync.items() if state.refresh} == set(refresh)
+        # A newer SDK provisional bar cannot advance the official repair watermark.
+        service.charts.apply_candle('PAYS.US', '5m', {'time': cal.latest_closed('5m', at(restart)),
+            'open': 10, 'high': 12, 'low': 9, 'close': 11, 'volume': 20})
+        assert service.cached_state('PAYS.US', '5m').target == cal.latest_closed('5m', initial)
+        service.recover()
+        assert {tf for (_, tf), state in service.sync.items() if state.pending} == set(pending)
+    finally:
+        service.store.close()
+
+
+def test_midnight_preload_runs_without_unlock_and_no_extra_preopen_refresh(tmp_path, cal):
+    now = [at('2026-09-17T23:59:59')]
+    service = MonitorService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, object(), cal, lambda: now[0])
+    try:
+        for tf in PHASES:
+            install_batch(service.store, cal, now[0], tf=tf)
+            service.sync['PAYS.US', tf] = service.cached_state('PAYS.US', tf)
+        now[0] = at('2026-09-18T00:00:00')
+        service._schedule(now[0])
+        assert all(state.pending and state.refresh and not state.complete for state in service.sync.values())
+        for tf in PHASES:
+            install_batch(service.store, cal, now[0], tf=tf)
+            service.sync['PAYS.US', tf] = service.cached_state('PAYS.US', tf)
+        now[0] = at('2026-09-18T09:25')
+        service._schedule(now[0])
+        assert all(state.complete and not state.pending for state in service.sync.values())
+        now[0] = at('2026-09-18T16:00:02')
+        for tf in PHASES:
+            install_batch(service.store, cal, now[0], tf=tf)
+            service.sync['PAYS.US', tf] = service.cached_state('PAYS.US', tf)
+        for stamp in ('2026-09-19T10:00', '2026-09-20T10:00'):
+            now[0] = at(stamp)
+            service._schedule(now[0])
+            assert service.session[0] == '2026-09-18'
+            assert all(state.complete and not state.pending for state in service.sync.values())
+        now[0] = at('2026-09-21T00:00')
+        service._schedule(now[0])
+        assert all(state.refresh and state.pending and not state.complete for state in service.sync.values())
+        assert service.store.latest('PAYS.US', '5m') == at('2026-09-18T15:55')
+    finally:
+        service.store.close()
+
+
 def test_reserved_rate_and_concurrency_admit_two_interactive_requests():
     async def scenario():
         limiter=RateLimiter(10,.08)
@@ -179,7 +255,7 @@ def test_reserved_rate_and_concurrency_admit_two_interactive_requests():
         await asyncio.wait_for(asyncio.gather(limiter.wait(),limiter.wait()),.03)
         assert not waiting.done()
         await waiting
-        broker=object.__new__(Broker)
+        broker=object.__new__(LongbridgeClient)
         broker.timeout,broker.secrets=2,()
         broker.limiter,broker.inflight,broker.background=RateLimiter(),asyncio.Semaphore(5),asyncio.Semaphore(3)
         gate=asyncio.Event(); started=[]
@@ -208,7 +284,7 @@ def test_scheduler_selection_priority_and_bad_symbol_isolation(tmp_path,cal):
                 if symbol=='BLSH.US': raise TimeoutError('unavailable')
                 return [raw(cal.latest_closed(tf,now))]
             finally: self.active-=1
-    broker=Fake();service=DataService([Ticker('PAYS.US','PAYS','focus'),Ticker('BLSH.US','BLSH','wait')],tmp_path,broker,cal,lambda:now)
+    broker=Fake();service=MonitorService([Ticker('PAYS.US','PAYS','focus'),Ticker('BLSH.US','BLSH','wait')],tmp_path,broker,cal,lambda:now)
     for state in service.sync.values(): state.limit=1
     try:
         asyncio.run(asyncio.wait_for(service.reconcile(),2))
@@ -218,7 +294,8 @@ def test_scheduler_selection_priority_and_bad_symbol_isolation(tmp_path,cal):
         assert len(service.status('BLSH.US',now)['errors'])==len(PHASES)
         service.recover()
         service.select('BLSH.US','2h')
-        assert service.priority(('BLSH.US','5m'))<service.priority(('PAYS.US','5m'))
+        assert not service.sync['PAYS.US', '5m'].pending
+        assert service.priority(('BLSH.US','5m'))<service.priority(('BLSH.US','15m'))
     finally: service.store.close()
 
 
@@ -226,7 +303,7 @@ def test_historical_gaps_inside_recent_response_are_accepted(tmp_path, cal):
     now = at('2026-09-18T09:45:02'); start = at('2026-09-18T09:30')
     class Fake:
         async def candles(self, *args, **kwargs): return [raw(start), raw(start+600)]
-    service = DataService([Ticker('PAYS.US','PAYS','focus')], tmp_path, Fake(), cal, lambda:now)
+    service = MonitorService([Ticker('PAYS.US','PAYS','focus')], tmp_path, Fake(), cal, lambda:now)
     try:
         key = ('PAYS.US','5m')
         asyncio.run(service._execute(key))

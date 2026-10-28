@@ -3,12 +3,21 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { matchesFilters, sliderValues } from '../public/filters.js';
 import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
-import { scanProgress, selectionRequest } from '../public/types.js';
+import { scanProgress, selectionRequest, extendedQuote } from '../public/types.js';
 import { collapseKey, growthValue, listSections, sectionKey } from '../public/board.js';
 import { matchesTag, ScanControls } from '../public/scan.js';
 import { Watchlist } from '../public/list.js';
 import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
+
+test('extended prices use the same server-selected latest quote as the chart', () => {
+    const pre = { last_price: 11, timestamp: 100, trade_session: 'Pre' };
+    const post = { last_price: 12, timestamp: 99, trade_session: 'Post' };
+    const overnight = { last_price: 2.3, timestamp: 1792727736, trade_session: 'Overnight' };
+    for (const latest of [pre, post, overnight]) assert.equal(extendedQuote({ latest }), latest);
+    assert.equal(extendedQuote({ latest: { last_price: 10, trade_session: 'Intraday' } }), undefined);
+    assert.equal(extendedQuote({ latest: null }), undefined);
+});
 
 test('Scan global search reuses add into Discover; explicit Focus section targets remain unchanged', async () => {
     const list = Object.create(Watchlist.prototype);

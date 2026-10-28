@@ -8,11 +8,11 @@ import pytest
 from data_service.calendar import TradingCalendar
 from data_service.massive import daily, splits, build
 from data_service.paths import RuntimePaths
-from data_service import pipeline
-from data_service.pipeline import MassivePipeline
+from data_service.massive import pipeline
+from data_service.massive.pipeline import MassivePipeline
 from data_service.scan import build_day, publish_day
-from data_service.store import atomic_json
-from data_service.symbol_directory import make_snapshot
+from data_service.storage import atomic_json
+from data_service.additional_info.symbol_directory import make_snapshot
 
 TARGET = date(2026, 10, 1)
 

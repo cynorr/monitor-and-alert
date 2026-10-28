@@ -10,13 +10,13 @@ import time
 
 import aiohttp
 
-from .calendar import TradingCalendar
-from .massive import daily, splits, build
-from .massive.settings import load_config
-from .symbol_directory import read_directory
-from .network import create_session, proxy_url, read_massive_token
-from .scan import build_day, publish_day, workspace_scope
-from .store import atomic_json
+from ..calendar import TradingCalendar
+from . import daily, splits, build
+from .settings import load_config, read_massive_token
+from ..additional_info.symbol_directory import read_directory
+from ..network import create_session, proxy_url
+from ..scan import build_day, publish_day, workspace_scope
+from ..storage import atomic_json
 
 RETRY_DELAYS = (2, 5, 10)
 REQUEST_INTERVAL = 15

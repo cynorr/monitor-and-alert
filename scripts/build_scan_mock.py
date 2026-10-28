@@ -12,8 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from data_service.calendar import TradingCalendar
 from data_service.scan import build_day, publish_day, workspace_scope
-from data_service.store import BAR_SCHEMA, atomic_json
-from data_service.symbol_directory import make_snapshot
+from data_service.storage import BAR_SCHEMA, atomic_json
+from data_service.additional_info.symbol_directory import make_snapshot
 
 
 def build_mock(root, end='2026-09-30', count=48):

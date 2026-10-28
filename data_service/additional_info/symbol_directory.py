@@ -6,8 +6,8 @@ from pathlib import Path
 
 import aiohttp
 
-from .network import create_session, proxy_url
-from .store import atomic_json
+from ..network import create_session, proxy_url
+from ..storage import atomic_json
 
 SOURCES = {
     'nasdaqlisted.txt': 'https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt',

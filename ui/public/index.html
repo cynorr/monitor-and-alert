@@ -21,7 +21,7 @@
   <div class="divider" id="divider-0" role="separator" aria-orientation="vertical" aria-label="Resize Daily and Intraday" tabindex="0"></div>
   <article class="chart-panel" id="intraday-panel" aria-label="Intraday chart">
     <div class="chart-header">
-      <div class="chart-toolbar"><strong class="last-price">—</strong><div class="market-clock"><span class="session pill" hidden></span><time class="clock"></time></div><button id="intraday-latest" class="latest icon-button" aria-label="Intraday: go to latest" title="Go to latest">↦</button></div>
+      <div class="chart-toolbar"><strong class="last-price">—</strong><div class="market-clock"><time class="clock"></time></div><button id="intraday-latest" class="latest icon-button" aria-label="Intraday: go to latest" title="Go to latest">↦</button></div>
       <div class="period-row"><div class="timeframes" role="group" aria-label="Intraday period"><button data-tf="5m" class="active" aria-pressed="true">5m</button><button data-tf="15m" aria-pressed="false">15m</button><button data-tf="30m" aria-pressed="false">30m</button><button data-tf="1h" aria-pressed="false">1h</button><button data-tf="2h" aria-pressed="false">2h</button></div></div>
       <div class="intraday-details"><span id="intraday-market-cap" hidden></span><div class="spread" hidden><span class="bid"></span><span class="ask"></span></div></div>
       <div class="header-bottom"><div id="intraday-legend" class="legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma65">SMA 65</span></div><span id="intraday-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
@@ -53,7 +53,6 @@
         </div>
         <div id="filter-rules" class="filter-rules"></div>
       </section>
-      <div id="scan-move" class="scan-move"><span>Move to</span><button data-target="discover">Discover</button><button data-target="focus">Focus</button><button data-target="hidden" title="Move to Hidden for 7 days">Hidden</button></div>
       <div id="scan-error" class="list-message" role="alert"></div>
     </section>
     <div id="workspace-error" class="list-message" role="alert"></div>
@@ -87,9 +86,10 @@
               <th scope="col" aria-sort="none" title="Regular price change from previous daily close"><button data-holdings-sort="change_percent">Chg%</button></th>
               <th scope="col" aria-sort="none" title="Latest extended price change from regular close"><button data-holdings-sort="extended_percent">Ext</button></th>
               <th scope="col" aria-sort="none" title="Remaining shares: today's buys use entry cost, older shares use previous regular close; closed rows show realized daily profit"><button data-holdings-sort="day_pnl">P/L Day</button></th>
+              <th scope="col">ADR</th><th scope="col">CumVol</th><th scope="col">LocalVol</th>
             </tr></thead>
             <tbody id="holdings-rows"></tbody>
-            <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td></tr></tfoot>
+            <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td><td></td><td></td><td></td></tr></tfoot>
           </table>
         </div>
         <div id="holdings-empty" class="empty-list">Loading…</div>
@@ -101,8 +101,5 @@
     </div>
   </aside>
 </main>
-<aside id="alert-stack" class="alert-stack" aria-label="Price alerts">
-  <div id="alert-error" class="alert-error" role="alert" hidden><span id="alert-error-message"></span><button id="alert-error-close" aria-label="Dismiss error">×</button></div>
-  <div id="alert-cards" class="alert-cards" aria-live="polite" aria-relevant="additions"></div>
-</aside>
+<div id="alert-error" class="alert-error" role="alert" hidden><span id="alert-error-message"></span><button id="alert-error-close" aria-label="Dismiss error">×</button></div>
 </body></html>

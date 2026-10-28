@@ -68,6 +68,10 @@ def create_app(service, cors_origin=None):
         request_id = 0
         revisions = {}
         context = service.run_id
+        alert_changed = asyncio.Event()
+        alert_engine = getattr(service, 'alerts', None)
+        if alert_engine:
+            alert_engine.watchers.add(alert_changed)
 
         async def publish():
             nonlocal revisions, context
@@ -76,6 +80,7 @@ def create_app(service, cors_origin=None):
             last_additional = None
             try:
                 while not ws.closed:
+                    alert_changed.clear()
                     if context != service.run_id:
                         context, revisions = service.run_id, {}
                     if asyncio.get_running_loop().time() - last_board >= 1:
@@ -102,7 +107,10 @@ def create_app(service, cors_origin=None):
                         await ws.send_json(message, dumps=lambda v: json.dumps(v, allow_nan=False))
                     else:
                         revisions = {}
-                    await asyncio.sleep(0.2)
+                    try:
+                        await asyncio.wait_for(alert_changed.wait(), 0.2)
+                    except TimeoutError:
+                        pass
             except (ConnectionError, RuntimeError):
                 await ws.close()
             except Exception:
@@ -132,6 +140,8 @@ def create_app(service, cors_origin=None):
                 elif msg.type == WSMsgType.ERROR:
                     break
         finally:
+            if alert_engine:
+                alert_engine.watchers.discard(alert_changed)
             sockets.discard(ws)
             sender.cancel()
             await asyncio.gather(sender, return_exceptions=True)

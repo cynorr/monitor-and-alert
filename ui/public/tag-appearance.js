@@ -1,3 +1,4 @@
+import { palette } from './palette.js';
 export const TAG_ICONS = [
     ['surf', 'Surf'], ['bounce', 'Bounce'], ['prior-run', 'Prior-run'],
     ['orderly-pullback', 'Orderly-pullback'], ['extended', 'Extended'], ['broken', 'Broken'], ['under50', 'Under-50'], ['label', 'Label'],
@@ -21,8 +22,8 @@ export function tagAppearance(tag) {
         name === 'priorrun' ? 'prior-run' : name === 'orderlypullback' ? 'orderly-pullback' :
             name === 'extended' ? 'extended' : name === 'broken' ? 'broken' : 'label';
     const ma = /(?:surf|bounce)(10|20|50)$/.exec(name)?.[1];
-    return { icon, color: ma === '10' ? '#2962ff' : ma === '20' ? '#e4b400' : ma === '50' || icon === 'under50' ? '#e53935' : '#64748b',
-        background: 'frosted', backgroundColor: '#e5e7eb' };
+    return { icon, color: ma === '10' ? palette.blue : ma === '20' ? palette.yellow : ma === '50' || icon === 'under50' ? palette.red : palette.tagNeutral,
+        background: 'frosted', backgroundColor: palette.volumeLow };
 }
 export function tagLogo(tag, manual = false) {
     const appearance = tagAppearance(tag);

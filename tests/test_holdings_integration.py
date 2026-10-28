@@ -10,10 +10,10 @@ import pytest
 from aiohttp import ClientSession, web
 
 from data_service.config import Ticker
-from data_service.calendar import TradingCalendar
+from data_service.calendar import PHASES, TradingCalendar
 from data_service.holdings import Holdings, build, value_positions
 from data_service.http_api import create_app
-from data_service.service import DataService
+from data_service.monitor import MonitorService
 from data_service.snaptrade import SnapTrade
 from data_service.workbench import Workbench
 from data_service.workspace import Workspace
@@ -394,11 +394,11 @@ def test_bad_cache_does_not_block_startup_and_http_error_never_exposes_request(t
 
 
 def test_independent_membership_shares_market_state_and_never_changes_workspace(tmp_path, cal):
-    service = DataService([Ticker('XYZ.US', 'XYZ', 'focus')], tmp_path, calendar=cal)
+    service = MonitorService([Ticker('XYZ.US', 'XYZ', 'focus')], tmp_path, calendar=cal)
     try:
         existing = service.sync['XYZ.US', '5m']
         service.update_holdings(['XYZ.US', 'OTHER.US'])
-        assert service.symbols == ['XYZ.US', 'OTHER.US'] and len(service.sync) == 10
+        assert service.symbols == ['XYZ.US', 'OTHER.US'] and len(service.sync) == 2 * len(PHASES)
         assert service.sync['XYZ.US', '5m'] is existing
         assert [row['ticker'] for row in service.board()] == ['XYZ']
         service.update_tickers([])

@@ -15,7 +15,7 @@ from data_service.indicators import daily_summary
 from data_service.preferences import INITIAL_PREFERENCES, validate_preferences
 from data_service.scan import build_day, daily_chart, publish_day, read_snapshot, candidates
 from data_service.workbench import Workbench
-from data_service.service import DataService
+from data_service.monitor import MonitorService
 from data_service.list_rules import apply_rules
 from data_service.workspace import Workspace, derive_day_view, inherit_workspace
 from scripts.build_scan_mock import build_mock
@@ -57,41 +57,25 @@ def test_source_contract_date_cutoff_and_shared_metrics(app_data):
         build_day(path, '2026-09-29', cal, now)
 
 
-def test_hidden_calendar_boundary_inheritance_and_carried():
-    data = {'carried':['CARRY'], 'statuses': {'A': {'status':'hidden','status_at':'2026-09-23'},
-            'CARRY': {'status':'focus','status_at':'2026-09-23'}},
-            'orders': {'focus':['CARRY'], 'wait':[], 'hidden':['A']}}
-    hidden = derive_day_view('2026-09-29', {'A','NEW'}, {'A'}, data)
-    assert hidden.excluded == ('A',) and hidden.new == {'NEW'}
-    inherited = inherit_workspace(data, {'A'}, {'A'}, '2026-09-30')
-    assert 'A' in inherited['statuses']
-    classified = apply_rules(inherited, {'date': '2026-09-30', 'rows': [{'symbol': 'A.US', 'candidate': True}]}, {'tags': []})
-    returned = derive_day_view('2026-09-30', {'A'}, {'A'}, classified)
-    assert returned.returned == {'A'} and 'A' in returned.discover and not returned.excluded
-    inherited = inherit_workspace(data, {'A'}, {'A'}, '2026-10-01')
-    assert set(inherited['statuses']) == {'CARRY', 'A'} and inherited['carried'] == ['CARRY']
-    assert 'A' in inherit_workspace(data, set(), {'A'}, '2026-09-29')['statuses']
-
-
-def test_batch_move_once_and_same_day_generation_keeps_manual_state(app_data):
+def test_single_move_once_and_same_day_publication_keeps_manual_state(app_data):
     ws = Workspace(root=app_data / 'days')
     snapshot = read_snapshot(ws.root, ws.date)
     members = candidates(snapshot)
     view = derive_day_view(ws.date, members, set(), ws.data)
-    moving = list(view.discover[:2])
+    moving = view.discover[0]
     events = []
     ws.on_change = lambda: events.append(True)
-    ws.move_members(moving, 'discover', 'focus', members, set())
-    assert ws.data['orders']['focus'][:2] == moving and len(events) == 1
+    ws.move_member(moving, 'focus', members)
+    assert ws.data['orders']['focus'][0] == moving and len(events) == 1
     before = ws.path.read_bytes()
     with pytest.raises(ValueError, match='destination'):
-        ws.move_members(moving, 'discover', 'wait', members, set())
+        ws.move_member(moving, 'wait', members)
     assert ws.path.read_bytes() == before
     publish_day(ws.root, snapshot)
     assert ws.path.read_bytes() == before
-    ws.move_members(['PAYS'], 'focus', 'hidden', members, set())
+    ws.hide_ticker('PAYS')
     assert 'PAYS' in derive_day_view(ws.date, members, set(), ws.data).excluded
-    ws.move_members(['PAYS'], 'excluded', 'discover', members, set())
+    ws.move_member('PAYS', 'discover', members)
     assert 'PAYS' not in ws.data['statuses'] and 'PAYS' not in ws.data['orders']['discover']
 
 
@@ -106,6 +90,7 @@ class FakeBroker:
         return self
 
     def set_on_quote(self, callback): self.callback = callback
+    def set_on_candlestick(self, callback): self.candle_callback = callback
     def check(self, symbols):
         assert set(symbols) <= self.allowed
 
@@ -119,6 +104,12 @@ class FakeBroker:
         self.calls.append(('subscribe_quote' if quote_only else 'subscribe',tuple(symbols)))
 
     async def unsubscribe(self, ctx, symbols, *, quote_only=False): self.calls.append(('unsubscribe_quote' if quote_only else 'unsubscribe',tuple(symbols)))
+    async def subscribe_candles(self, ctx, symbol, tf):
+        self.check([symbol])
+        self.calls.append(('candle', symbol, tf))
+        return []
+
+    async def unsubscribe_candles(self, ctx, symbol, tf): self.calls.append(('remove_candle', symbol, tf))
     async def snapshot(self, ctx, symbols):
         self.check(symbols)
         return [SimpleNamespace(symbol=symbol, timestamp=datetime.now(timezone.utc), last_done=10, volume=100) for symbol in symbols]
@@ -139,7 +130,7 @@ def make_app(root, *, mock=True, pipeline=None):
     return app, brokers
 
 
-def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
+def test_quote_scope_keeps_all_lists_in_both_modes_and_keeps_monitor_windows(app_data):
     async def scenario():
         app, brokers = make_app(app_data, mock=False)
         focus = {t.symbol for t in app.workspace.tickers()}
@@ -147,17 +138,22 @@ def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
                                        state=lambda quotes, as_of: {})
         core = focus | {'HOLD.US'}
         broker = app.broker_factory(core)
-        app.monitor = DataService(app.workspace.tickers(), app_data, broker, app.calendar)
+        app.monitor = MonitorService(app.workspace.tickers(), app_data, broker, app.calendar)
         app.workspace_changed()
         all_scan = {row['symbol'] for row in app.scan_board()}
         assert broker.allowed == core | all_scan
         assert broker.candle_allowed == core
         windows = dict(app.monitor.sync)
+        extra = list(app.monitor.quotes.extra_symbols)
+        app.monitor.quotes.changed.clear()
         await app.switch_mode('monitor')
-        assert broker.allowed == core and not app.monitor.scan_symbols
+        assert broker.allowed == core | all_scan
+        assert set(app.monitor.quote_symbols) == all_scan
         assert app.monitor.sync == windows
+        assert app.monitor.quotes.extra_symbols == extra and not app.monitor.quotes.changed.is_set()
         await app.switch_mode('scan')
         assert broker.allowed == core | all_scan and app.monitor.sync == windows
+        assert app.monitor.quotes.extra_symbols == extra and not app.monitor.quotes.changed.is_set()
         from data_service.calendar import ET
         now = datetime(2026, 10, 1, 8, tzinfo=ET)
         app.monitor.now = lambda: int(now.timestamp())
@@ -165,11 +161,11 @@ def test_scan_quote_scope_uses_all_lists_and_keeps_monitor_windows(app_data):
         for session, stamp in [('Pre', now), ('Post', datetime(2026, 9, 30, 18, tzinfo=ET))]:
             app.monitor.quotes.apply(symbol, SimpleNamespace(timestamp=stamp, last_done=15, volume=100),
                                      snapshot=True, session_override=session)
-        assert set(app.view(symbol, '5m')['quote']['extended']) == {'Pre'}
+        assert app.view(symbol, '5m')['quote']['latest']['trade_session'] == 'Pre'
         app.monitor.quotes.values[symbol]['Pre']['timestamp'] -= 86400
-        assert not app.scan_quote(symbol)['extended']
+        assert app.scan_quote(symbol)['latest']['trade_session'] == 'Post'
         await app.action('scan', {'date': '2026-09-29'})
-        assert not app.view(symbol, '5m')['quote']['extended']
+        assert app.view(symbol, '5m')['quote']['latest'] is None
         assert not broker.calls  # No context, subscription or candle request is created by the reads.
         await app.close()
     asyncio.run(scenario())
@@ -192,11 +188,11 @@ def test_search_adds_non_candidate_to_pinned_discover_until_next_day(app_data):
         restored = Workspace(root=app_data / 'days')
         assert ticker in derive_day_view(restored.date, candidates(app.snapshot()), set(), restored.data).discover
         assert restored.data['pinned'][0] == ticker
-        new_day = inherit_workspace(restored.data, candidates(app.snapshot()), set(), '2026-10-01')
+        new_day = inherit_workspace(restored.data, '2026-10-01')
         assert ticker not in new_day['statuses'] and not new_day['pinned']
         assert ranks == {row['symbol']: {k: v for k, v in row.items() if k.endswith('_rank')} for row in app.snapshot()['rows']}
-        await app.list_action({'action': 'move', 'source': 'discover', 'target': 'focus', 'tickers': [ticker]})
-        carried = inherit_workspace(app.workspace.data, set(), set(), '2026-10-01')
+        await app.list_action({'action': 'move', 'target': 'focus', 'ticker': ticker})
+        carried = inherit_workspace(app.workspace.data, '2026-10-01')
         assert carried['statuses'][ticker]['status'] == 'focus'
         assert 'manual_discover_date' not in carried['statuses'][ticker]
         assert not brokers
@@ -211,7 +207,7 @@ def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):
         row = next(row for row in app.scan_board() if row['status'] == 'discover')
         app.select(row['symbol'],'5m')
         assert set(app.view(row['symbol'],'5m')['charts']) == {'1d'}
-        await app.list_action({'action':'move','source':'discover','target':'focus','tickers':[row['ticker']]})
+        await app.list_action({'action':'move','target':'focus','ticker': row['ticker']})
         assert not brokers
         await app.switch_mode('monitor')
         await asyncio.sleep(.1)
@@ -223,7 +219,7 @@ def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):
         assert app.monitor is None and app.monitor_task is None and task.done() and first.closed
         before = len(first.calls)
         app.view(row['symbol'],'5m')
-        await app.list_action({'action':'move','source':'focus','target':'hidden','tickers':[row['ticker']]})
+        await app.list_action({'action':'hide','ticker': row['ticker']})
         await asyncio.sleep(.05)
         assert len(first.calls) == before
         await app.switch_mode('monitor')
@@ -399,13 +395,13 @@ def test_refresh_skips_completed_scan_and_opens_latest_date(app_data, monkeypatc
             monkeypatch.setattr(pipeline, 'run', ready_run)
         app, brokers = make_app(app_data, mock=not with_pipeline, pipeline=pipeline)
         monkeypatch.setattr('data_service.workbench.build_day', lambda *a, **kw: pytest.fail('Completed scan must not be rebuilt'))
-        before = {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/*.json')}
+        before = {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/scan.json')}
         await app.action('scan', {'date': '2026-09-29'})
         run_id = app.run_id
         result = await app.action('scan', {'generate': True})
         assert result['date'] == '2026-09-30' and app.run_id != run_id
         await app.action('scan', {'generate': True})
-        assert before == {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/*.json')}
+        assert before == {path: path.stat().st_mtime_ns for path in (app_data / 'days').glob('*/scan.json')}
         if pipeline:
             assert pipeline.calls == [False, False]
         with pytest.raises(ValueError, match='scan --date'):
@@ -430,7 +426,7 @@ def test_real_scan_keeps_background_market_and_preparation_does_not_lock_modes_o
         row = next(row for row in app.scan_board() if row['status'] == 'discover')
         app.select(row['symbol'], '5m')
         assert row['symbol'] not in monitor.symbols  # Scan selection alone never expands subscriptions.
-        await app.list_action({'action': 'move', 'source': 'discover', 'target': 'focus', 'tickers': [row['ticker']]})
+        await app.list_action({'action': 'move', 'target': 'focus', 'ticker': row['ticker']})
         assert row['symbol'] in monitor.symbols and row['symbol'] in brokers[0].allowed
         await app.action('scan', {'date': '2026-09-29'})
         pipeline.release.set()
@@ -580,7 +576,7 @@ def test_massive_cli_works_without_workspace_or_longbridge_credentials(tmp_path,
             calls.append('closed')
     def forbidden(*args, **kwargs):
         raise AssertionError('Massive CLI must not load workspace or construct a broker')
-    monkeypatch.setitem(sys.modules, 'data_service.pipeline', SimpleNamespace(MassivePipeline=ReadyPipeline))
+    monkeypatch.setitem(sys.modules, 'data_service.massive.pipeline', SimpleNamespace(MassivePipeline=ReadyPipeline))
     monkeypatch.setattr(cli, 'load_tickers', forbidden)
     monkeypatch.setattr(cli, 'resolve_latest_workspace', forbidden)
     monkeypatch.setattr(cli, 'run', forbidden)
@@ -595,7 +591,25 @@ def test_massive_cli_uses_the_same_runtime_lock(tmp_path, monkeypatch):
     from data_service import __main__ as cli
     def forbidden(*args, **kwargs):
         raise AssertionError('A busy runtime must not start another pipeline')
-    monkeypatch.setitem(sys.modules, 'data_service.pipeline', SimpleNamespace(MassivePipeline=forbidden))
+    monkeypatch.setitem(sys.modules, 'data_service.massive.pipeline', SimpleNamespace(MassivePipeline=forbidden))
     with (tmp_path / 'service.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert cli.main(['massive', '--runtime', str(tmp_path)]) == 1
+
+
+def test_failed_refresh_keeps_manual_list_state(app_data, monkeypatch):
+    async def scenario():
+        pipeline = FakePipeline(app_data)
+        async def failed_run(**kwargs):
+            pipeline.value['features'].update(status='error', error='Preparation failed')
+        monkeypatch.setattr(pipeline, 'run', failed_run)
+        app, brokers = make_app(app_data, mock=False, pipeline=pipeline)
+        item = next(iter(app.workspace.data['statuses']))
+        app.workspace.pin_ticker(item, True)
+        before = app.workspace.path.read_bytes()
+        state = await app.action('scan', {'generate': True})
+        assert state['massive']['features']['status'] == 'error'
+        assert app.workspace.path.read_bytes() == before
+        assert not brokers
+        await app.close()
+    asyncio.run(scenario())

@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pytest
 from aiohttp import ClientSession, web
 
-from data_service.broker import Broker, RateLimiter
+from data_service.longbridge.client import LongbridgeClient, RateLimiter
 from data_service.http_api import create_app
-from data_service.quotes import QuoteService
-from data_service.service import DataService
+from data_service.longbridge.realtime import RealtimeFeed
+from data_service.monitor import MonitorService
 from data_service.workspace import Workspace, normalize_ticker, resolve_latest_workspace
 from test_data_service import cal, at
 
@@ -99,7 +99,7 @@ def test_broker_rechecks_whitelist_after_waiting_for_request_budget():
         gate = asyncio.Event()
         class Limiter:
             async def wait(self, background=False): await gate.wait()
-        broker = object.__new__(Broker)
+        broker = object.__new__(LongbridgeClient)
         broker.allowed = frozenset({'PAYS.US'})
         broker.timeout, broker.secrets = 2, ()
         broker.limiter, broker.inflight = Limiter(), asyncio.Semaphore(5)
@@ -156,7 +156,7 @@ def test_native_events_reload_and_switch_new_day_without_writing(tmp_path):
 def test_dynamic_universe_retains_existing_state_cancels_removed_and_supports_empty(tmp_path, cal):
     async def scenario():
         ws = Workspace(write(tmp_path / 'workspace.json', document()))
-        service = DataService(ws.tickers(), tmp_path, calendar=cal)
+        service = MonitorService(ws.tickers(), tmp_path, calendar=cal)
         service.attach_workspace(ws)
         try:
             state = service.sync['PAYS.US', '5m']
@@ -186,7 +186,7 @@ def test_static_info_uses_same_context_and_does_not_authorize_market_data():
         async def static_info(self, symbols):
             assert symbols == ['NVDA.US']
             return [SimpleNamespace(symbol='NVDA.US', name_en='NVIDIA')]
-    broker = object.__new__(Broker)
+    broker = object.__new__(LongbridgeClient)
     broker.allowed = frozenset()
     broker._context = Context()
     broker.timeout, broker.secrets = 2, ()
@@ -221,7 +221,7 @@ def test_quote_membership_add_remove_retry_and_empty(cal):
     async def scenario():
         broker = Fake()
         recovered = []
-        q = QuoteService(broker, ['PAYS.US'], cal, on_reconnect=lambda: recovered.append(1))
+        q = RealtimeFeed(broker, ['PAYS.US'], cal, on_reconnect=lambda: recovered.append(1))
         await q.connect()
         broker.fail = True
         q.set_symbols(['PAYS.US', 'NVDA.US'])
@@ -250,7 +250,7 @@ def test_list_http_mutations_validation_failure_origin_and_empty_stream(tmp_path
             return {'name': 'Validated stock'}
     async def scenario():
         wsfile = Workspace(write(tmp_path / 'workspace.json', document([], [])))
-        service = DataService([], tmp_path, Fake(), calendar=cal, clock=lambda: at('2026-09-18T13:44:45'))
+        service = MonitorService([], tmp_path, Fake(), calendar=cal, clock=lambda: at('2026-09-18T13:44:45'))
         service.attach_workspace(wsfile)
         runner = web.AppRunner(create_app(service))
         await runner.setup()

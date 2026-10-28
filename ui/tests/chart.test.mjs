@@ -72,12 +72,12 @@ const row = (time, volume) => ({ time, open: 10, high: 12, low: 9, close: 11, vo
 const snapshot = (bars, active = null) => ({ revision: 1, bars, active, indicators: {}, indicator_preview: {} });
 const label = panel => node(panel.id + '-volume').textContent;
 
-test('Scan price axis switches Pre/Regular/Post without retaining other session labels', () => {
+test('Scan price axis follows the latest quote source without changing candles', () => {
     const panel = new Panel('sessions', true);
     panel.render(snapshot([row(first, 100)]));
     const bars = panel.candles.data();
-    const pre = { regular: null, extended: { Pre: { last_price: 16.5 } } };
-    panel.setSessionPrices(pre);
+    const pre = { latest: { last_price: 16.5, trade_session: 'Pre' } };
+    panel.setQuotePrice(pre);
     const [marker] = panel.candles.priceLines;
     assert.equal(panel.candles.priceLines.length, 1);
     assert.equal(marker.options.axisLabelColor, '#e4b400');
@@ -87,20 +87,20 @@ test('Scan price axis switches Pre/Regular/Post without retaining other session 
     assert.equal(panel.candles.options.lastValueVisible, false);
     assert.deepEqual(panel.candles.options.autoscaleInfoProvider(() => ({ priceRange: { minValue: 10, maxValue: 12 } })),
         { priceRange: { minValue: 10, maxValue: 16.5 } });
-    pre.extended.Pre.last_price = 17;
-    panel.setSessionPrices(pre);
+    pre.latest.last_price = 17;
+    panel.setQuotePrice(pre);
     assert.equal(marker.options.price, 17);
-    panel.setSessionPrices({ regular: { last_price: 13, prev_close: 12 }, extended: {} });
+    panel.setQuotePrice({ latest: { last_price: 13, prev_close: 12, trade_session: 'Intraday' } });
     assert.deepEqual(panel.candles.priceLines, [marker]);
     assert.equal(marker.options.price, 13);
     assert.equal(marker.options.axisLabelColor, '#26a69a');
     assert.equal(marker.options.axisLabelTextColor, '#ffffff');
-    panel.setSessionPrices({ regular: { last_price: 11, prev_close: 12 }, extended: {} });
+    panel.setQuotePrice({ latest: { last_price: 11, prev_close: 12, trade_session: 'Intraday' } });
     assert.equal(marker.options.axisLabelColor, '#ef5350');
-    panel.setSessionPrices({ regular: null, extended: {} });
+    panel.setQuotePrice({ latest: null });
     assert.equal(panel.candles.priceLines.length, 0);
     assert.equal(panel.candles.options.lastValueVisible, true);
-    panel.setSessionPrices({ regular: null, extended: { Post: { last_price: 8.75 } } });
+    panel.setQuotePrice({ latest: { last_price: 8.75, trade_session: 'Post' } });
     const [post] = panel.candles.priceLines;
     assert.equal(post.options.axisLabelColor, '#2962ff');
     assert.equal(post.options.axisLabelTextColor, '#ffffff');
@@ -110,6 +110,34 @@ test('Scan price axis switches Pre/Regular/Post without retaining other session 
     panel.reset('another-symbol');
     assert.equal(panel.candles.priceLines.length, 0);
     assert.equal(panel.candles.options.lastValueVisible, true);
+});
+
+test('Monitor Daily and Intraday use the latest extended quote without replacing candles or volume', () => {
+    for (const daily of [true, false]) {
+        const panel = new Panel(daily ? 'monitor-daily-session' : 'monitor-intraday-session', daily);
+        panel.render(snapshot([row(first, 100)]));
+        const candles = panel.candles.data(), volume = panel.volume.data();
+        const quote = { latest: { last_price: 16.5, trade_session: 'Pre' } };
+        panel.setQuotePrice(quote, true);
+        const [marker] = panel.candles.priceLines;
+        assert.equal(marker.options.price, 16.5);
+        assert.equal(marker.options.axisLabelColor, '#e4b400');
+        panel.setQuotePrice({ latest: { last_price: 9, trade_session: 'Post' } }, true);
+        assert.equal(marker.options.price, 9);
+        assert.equal(marker.options.axisLabelColor, '#2962ff');
+        panel.setQuotePrice({ latest: { last_price: 2.3, trade_session: 'Overnight' } }, true);
+        assert.equal(marker.options.price, 2.3);
+        assert.equal(marker.options.axisLabelColor, '#000000');
+        assert.equal(marker.options.axisLabelTextColor, '#ffffff');
+        panel.setQuotePrice({ latest: { last_price: 11, trade_session: 'Intraday' } }, true);
+        assert.equal(panel.candles.priceLines.length, 0);
+        assert.equal(panel.candles.options.lastValueVisible, true);
+        panel.setQuotePrice(quote, true);
+        panel.setQuotePrice({ latest: null }, true);
+        assert.equal(panel.candles.priceLines.length, 0);
+        assert.deepEqual(panel.candles.data(), candles);
+        assert.deepEqual(panel.volume.data(), volume);
+    }
 });
 
 test('hovered closed volume survives quote updates and refreshes from the same candle', () => {

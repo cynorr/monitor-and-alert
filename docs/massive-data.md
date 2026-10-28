@@ -14,11 +14,11 @@
 | adv20_min_usd | 5000000 | ADV20 至少 $5M |
 | rfl_top_n | 50 | RFL 1m / 3m / 6m 分别取前 50，取并集 |
 
-顺序：当日有 bar → 目录确认非 ETF → 有效历史门槛 → ADR/ADV → RFL 计算与全市场排名 → 候选及保留成员的完整特征。被挡住的证券不占 RFL 名次；属于已有 Focus 或 Excluded 的证券仍按下述范围计算完整特征。目录未知不当作非 ETF；公司资料不参与资格判断。未增加 Price、Test Issue、权证、优先股或 ADR 类别规则。
+顺序：当日有 bar → 目录确认非 ETF → 有效历史门槛 → ADR/ADV → RFL 计算与全市场排名 → 候选及保留成员的完整特征。被挡住的证券不占 RFL 名次；属于 Focus 或有效 Hidden 的证券仍按下述范围计算完整特征。目录未知不当作非 ETF；公司资料不参与资格判断。未增加 Price、Test Issue、权证、优先股或 ADR 类别规则。
 
 “50 日”采用实际日 K 根数，目的为确保 SMA50 有样本；不是上市后的 50 个自然日，也不查询或推测 IPO 日期。停牌/缺数据按实际记录计数，未来 bar 不计入；即使名义上市已很久但本地不足 50 根，也暂不成为候选。价格正数有限、volume 非负整数、时间及闭合边界有效；仅 OHLC 上下界矛盾仍保留官方原值并记录日志，继续采用项目共用校验规则。
 
-上述门槛只决定自动扫描候选。Focus 和全部 Excluded（含 Hidden）继续用本地数据计算完整特征，不因未入选候选或 RFL 前 50 而省略。Hidden 七天内跳过名单规则判断，仍计算特征；归属与期限见 [list-design.md](list-design.md#每日规则)。Holdings 独立，不根据扫描资格删持仓，也不扩大 Longbridge 订阅。
+上述门槛只决定自动扫描候选。Focus 和有效 Hidden 继续用本地数据计算完整特征，不因未入选候选或 RFL 前 50 而省略。Hidden 七天内跳过名单规则判断，仍计算特征；归属与期限见 [list-design.md](list-design.md#每日规则)。Holdings 独立，不根据扫描资格删持仓，也不扩大 Longbridge 订阅。
 
 ## Nasdaq Trader ETF 筛查目录
 
@@ -50,7 +50,7 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 
 ### 名单完整特征范围
 
-完整特征计算范围为当日候选 ∪ 当日人工 Discover ∪ Focus ∪ 全部 Excluded，包括 Broken、Extended、Under-50 和 Hidden。新日首次生成读取最近前一日名单，将其 Focus 和 Excluded 合并到特征计算范围；同日重算使用已保存的当日名单，包括当日搜索加入的人工 Discover。搜索新增仅本地补齐该股完整特征，不重跑全市场排名；新日不继承人工 Discover。继承成员不需要重新满足候选资格、ADR/ADV 门槛或进入任一 RFL 前 50，仍按截至扫描日的本地历史计算均线、ATR、原子特征及 `rfl1m` / `rfl3m` / `rfl6m` 数值。Growth 显示使用这三个 RFL 数值，不新增另一套公式或字段。
+完整特征计算范围为当日候选 ∪ 当日人工 Discover ∪ Focus ∪ 有效 Hidden。自动 Excluded 是候选分类结果，不额外扩展范围。新日首次生成仅从前日名单保留 Focus 和未到期 Hidden；同日重算纳入当日人工 Discover。过期 Hidden 和历史机器 Excluded 非候选不再计算。搜索新增仅本地补齐该股完整特征，不重跑排名；新日不继承人工 Discover。保留的 Focus/Hidden 即使未通过候选资格或 RFL 前 50，仍使用截至扫描日的本地历史计算均线、ATR、原子特征和三种 RFL 数值；Growth 不另建公式或字段。
 
 继承名单不另行排名。已参加候选筛选的成员保留该阶段产生的全市场名次；未参加排名的成员名次保持空缺。补全完整特征和 RFL 数值不改变 `eligible`、`candidate` 或已有名次，也不沿用昨日的特征结论。Hidden 的屏蔽期限只影响名单规则判断，不减少特征计算范围；数据不足的字段继续保留缺失，不编造历史或据此判为 Broken。
 
@@ -74,4 +74,4 @@ metadata最终写completed_date、input_revision、split_adjusted、half_up、so
 
 正式启动、普通massive命令和页面Refresh共用Daily → split → bars → features；四阶段目标统一为最新成熟交易日，逐步跳过已完成产物，全部Ready直接跳过。失败后重试仅执行尚未完成或输入已变化的阶段。Daily/split网络获取保持既有有界重试；bars/features本地失败只报错，不自动重试。缺目录/坏配置先于Massive请求检查。Ready只核对完成日与既有行情input_revision；候选配置和目录在生成时读取。强制重算仅由CLI显式执行；`massive --force`重新获取split并生成特征，已有raw保留，SQLite按现有规则跳过/追加/重建。
 
-状态为runtime/pipeline-status.json的daily/splits/bars/features。失败显示错误；同日名单按既有人工状态维护，新日继承Focus和全部Excluded。切页、选图及GET均不下载。开发遵循 [开发准则](development-principles.md)，仅验证本次功能，优先用真实数据和现有服务。
+状态为runtime/pipeline-status.json的daily/splits/bars/features。失败显示错误；同日保留人工状态，新日只继承Focus和有效Hidden，机器Excluded不作为持久成员保存。切页、选图及GET均不下载。开发遵循 [开发准则](development-principles.md)，仅验证本次功能，优先用真实数据和现有服务。

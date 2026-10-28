@@ -10,8 +10,8 @@ import pytest
 from data_service import scan
 from data_service.calendar import TradingCalendar
 from data_service.massive.settings import load_config
-from data_service.store import BAR_SCHEMA, atomic_json
-from data_service.symbol_directory import make_snapshot
+from data_service.storage import BAR_SCHEMA, atomic_json
+from data_service.additional_info.symbol_directory import make_snapshot
 from data_service.workbench import Workbench
 from data_service.workspace import Workspace
 from scripts.build_scan_mock import build_mock
@@ -250,7 +250,7 @@ def test_refresh_uses_completed_metadata_and_selects_new_day(tmp_path):
         state = await app.action('scan', {'generate': True})
         assert state['date'] == app.workspace.date == '2026-10-01'
         assert state['editable'] and '2026-10-01' in state['dates']
-        assert app.workspace.data['orders']['focus'] == ['PAYS', 'NVDA']
+        assert app.workspace.data['orders']['focus'] == ['NVDA', 'PAYS']
         assert 'wait' not in app.workspace.data['orders']
         assert previous.read_bytes() == before
         new_before = app.workspace.path.read_bytes()

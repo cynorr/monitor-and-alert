@@ -1,12 +1,15 @@
-import { $, money, compact, nyTime, extendedQuote, defaultTimeframe, scanProgress, selectionRequest, type View } from './types.js';
+import { attentionState } from './attention.js';
+import { installPalette } from './palette.js';
+import { $, money, compact, nyTime, defaultTimeframe, scanProgress, selectionRequest, type View } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist, type ListState } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
 import { post } from './api.js';
 import { HoldingsList } from './holdings.js';
-import { AlertController, type AlertEvent, type AlertState } from './alerts.js';
+import { AlertController, type AlertState } from './alerts.js';
 import { AdditionalInfoDisplay, acceptsAdditional, type AdditionalMessage } from './additional-info.js';
+installPalette();
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
@@ -16,34 +19,20 @@ let socket: WebSocket | null = null;
 let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, currentView: View | null = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource: 'watchlist' | 'holdings' = 'watchlist', holdingKey = '';
-const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist'), applyList);
+const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList);
 const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
 let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
-let waitingJump: { symbol: string; resolve: () => void } | null = null;
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async selected => {
     const tf = timeframe;
     if (appMode === 'scan' && scan.activeList !== 'focus') await scan.showList();
     applyList(await (await fetch('/v1/scan')).json() as ListState);
     if (selected) select(selected, tf, selectionSource, holdingKey);
-}, jumpToAlert);
-
-async function jumpToAlert(event: AlertEvent) {
-    if (!alerts.value?.eligible_symbols.includes(event.symbol)) throw new Error('Symbol is no longer in Focus or Holdings');
-    applyList(await post<ListState>('mode', { mode: 'monitor' }));
-    await scan.showList();
-    if (socket?.readyState !== WebSocket.OPEN) throw new Error('Chart connection unavailable');
-    const holding = holdings.forSymbol(event.symbol);
-    if (!watchlist.tickers.some(row => row.symbol === event.symbol && row.status === 'focus') && !holding)
-        throw new Error('Symbol is no longer available');
-    if (!holding) watchlist.showSymbol(event.symbol);
-    select(event.symbol, timeframe, holding ? 'holdings' : 'watchlist', holding?.key ?? '');
-    await new Promise<void>((resolve, reject) => {
-        const timeout = window.setTimeout(() => { waitingJump = null; reject(new Error('Could not open chart')); }, 8000);
-        waitingJump = { symbol: event.symbol, resolve: () => { clearTimeout(timeout); waitingJump = null; resolve(); } };
-    });
-}
+}, value => {
+    watchlist.attention = holdings.attention = attentionState(value);
+    watchlist.render(); holdings.render();
+});
 
 function applyList(data: ListState) {
     const nextMode = data.app_mode ?? 'monitor';
@@ -67,7 +56,7 @@ function applyList(data: ListState) {
     }
     scan.update(data);
     if (changed) { symbol = ''; watchlist.selected = ''; selectionSource = 'watchlist'; holdingKey = ''; holdings.selected = ''; ++epoch; }
-    holdings.update(data.holdings ?? null, data.current_regular_session === true);
+    holdings.update(data.holdings ?? null, data.current_regular_session === true, data.intraday);
     watchlist.update(data, selectionSource === 'watchlist');
     if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
         const first = holdings.first();
@@ -110,11 +99,14 @@ function apply(view: View) {
         return;
     currentView = view;
     daily.render(view.charts['1d']);
-    daily.setSessionPrices(appMode === 'scan' ? view.quote : undefined);
-    if (appMode === 'monitor') { intraday.render(view.charts[timeframe]); dayLink.restore(); }
-    const extended = appMode === 'scan' ? undefined : extendedQuote(view.quote), quote = appMode === 'scan' ? null : extended ?? view.quote.regular;
+    daily.setQuotePrice(view.quote, appMode === 'monitor');
+    if (appMode === 'monitor') {
+        intraday.render(view.charts[timeframe]);
+        intraday.setQuotePrice(view.quote, true);
+        dayLink.restore();
+    }
+    const quote = appMode === 'scan' ? null : view.quote.latest;
     document.querySelectorAll<HTMLElement>('.last-price').forEach(node => node.textContent = money(quote?.last_price));
-    document.querySelectorAll<HTMLElement>('.session').forEach(node => { node.hidden = !extended; node.textContent = extended?.trade_session.toUpperCase() ?? ''; });
     document.querySelectorAll<HTMLElement>('.clock').forEach(node => node.textContent = nyTime.format(new Date(view.server_time * 1000)) + ' ET');
     const bid = quote?.bid_price, ask = quote?.ask_price;
     document.querySelectorAll<HTMLElement>('.spread').forEach(node => { node.hidden = !bid && !ask; const sell = node.querySelector<HTMLElement>('.bid')!, buy = node.querySelector<HTMLElement>('.ask')!; sell.hidden = !bid; buy.hidden = !ask; sell.textContent = `Sell ${money(bid)}`; buy.textContent = `Buy ${money(ask)}`; });
@@ -123,9 +115,10 @@ function apply(view: View) {
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
     alerts.redraw();
-    if (waitingJump?.symbol === view.symbol && view.charts['1d'] && daily.rows.length) waitingJump.resolve();
+    void alerts.read(view.symbol);
 }
 function select(next: string, tf: string, source: 'watchlist' | 'holdings' = selectionSource, key = holdingKey) {
+    void alerts.read(next);
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
@@ -140,7 +133,7 @@ function select(next: string, tf: string, source: 'watchlist' | 'holdings' = sel
     document.querySelectorAll<HTMLElement>('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
     additional.update(null);
     document.querySelectorAll<HTMLElement>('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
-    document.querySelectorAll<HTMLElement>('.session,.spread,.quality').forEach(node => node.hidden = true);
+    document.querySelectorAll<HTMLElement>('.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
     watchlist.selected = source === 'watchlist' ? symbol : '';
     watchlist.keyboardEnabled = source === 'watchlist';
@@ -190,6 +183,15 @@ function connect() {
 }
 document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => button.addEventListener('click', () => { if (symbol)
     void select(symbol, button.dataset.tf!); }));
+document.addEventListener('keydown', event => {
+    if (event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
+        (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
+    const key = event.metaKey ? event.key.toLowerCase()
+        : event.key === 'Home' ? 'u' : event.key === 'End' ? 'g' : '';
+    if (!event.metaKey && key) event.preventDefault();
+    if (key === 'g') { event.preventDefault(); void watchlist.jumpUnread(); }
+    if (key === 'u' && appMode === 'monitor') { event.preventDefault(); holdings.jumpUnread(); }
+});
 document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button => button.addEventListener('click', async () => {
     if (button.dataset.appMode === appMode || modePending) return;
     modePending = true;

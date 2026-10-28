@@ -1,14 +1,19 @@
+"""Shared bars, serialization, diagnostics and local persistence."""
 from __future__ import annotations
 
 import json
 import math
+import logging
 import os
 import sqlite3
 import tempfile
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 
-from .calendar import PHASES, TradingCalendar
+from .calendar import ET, PHASES, TradingCalendar
+
+log = logging.getLogger(__name__)
 
 BAR_SCHEMA = '''CREATE TABLE bars (
     symbol TEXT NOT NULL, timeframe TEXT NOT NULL, ts INTEGER NOT NULL,
@@ -135,6 +140,11 @@ class BarStore:
     def window(self, symbol: str, timeframe: str) -> list[Bar]:
         return self.bars(symbol, timeframe)
 
+    def latest(self, symbol: str, timeframe: str) -> int | None:
+        self.check(symbol)
+        return self.db.execute('SELECT MAX(ts) FROM bars WHERE symbol=? AND timeframe=?',
+                               (symbol, timeframe)).fetchone()[0]
+
     def close(self) -> None:
         self.db.close()
 
@@ -149,3 +159,29 @@ def read_bars(db, symbol, timeframe, start=0, end=2**62, limit=1000):
     if limit is not None:
         rows.reverse()
     return [Bar(**dict(row)) for row in rows]
+
+
+def ohlc_comparison(bar, calendar, as_of, session, ohlcv):
+    end = calendar.bar_end(bar.ts, bar.timeframe)
+    return {'symbol': bar.symbol, 'timeframe': bar.timeframe, 'session': session,
+            'start': bar.ts, 'end': end,
+            'start_et': datetime.fromtimestamp(bar.ts, ET).isoformat(),
+            'end_et': datetime.fromtimestamp(end, ET).isoformat(),
+            'fetched_at': as_of, 'fetched_at_et': datetime.fromtimestamp(as_of, ET).isoformat(),
+            'ohlcv': ohlcv}
+
+
+def append_ohlc_log(path, anomalies):
+    if not anomalies:
+        return
+    try:
+        with path.open('a') as file:
+            for anomaly in anomalies:
+                file.write(json.dumps(anomaly, allow_nan=False) + '\n')
+    except OSError as exc:
+        log.warning('Could not append OHLC comparison log: %s', exc)
+
+
+def bar_row(bar):
+    return {'time': bar.ts, 'open': bar.open, 'high': bar.high, 'low': bar.low,
+            'close': bar.close, 'volume': bar.volume, 'turnover': bar.turnover}

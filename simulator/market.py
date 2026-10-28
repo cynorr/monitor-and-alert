@@ -144,7 +144,7 @@ class SimulatedQuotes:
         self.candle_errors = {}
         self.tick()
 
-    def restart(self):
+    def recover(self):
         self.tick()
 
     def set_symbols(self, symbols):
@@ -162,7 +162,7 @@ class SimulatedQuotes:
             price = float(raw['last_done'])
             value = {'last_price':price, 'timestamp':now, 'trade_session':'Intraday',
                      'cumulative_volume':raw['volume'], 'bid_price':price-.01, 'ask_price':price+.01,
-                     'source':'simulation'}
+                     'source':'simulation', **{key: float(raw[key]) for key in ('open', 'high', 'low')}}
             self.raw[symbol], self.values[symbol] = raw, value
             day = datetime.fromtimestamp(now, ET).date()
             for tf in PHASES:
@@ -178,7 +178,7 @@ class SimulatedQuotes:
 
     def output(self, symbol, now):
         self.market.check([symbol])
-        return {'symbol':symbol, 'regular':self.values.get(symbol), 'extended':{},
+        return {'symbol':symbol, 'regular':self.values.get(symbol), 'extended':{}, 'latest':self.values.get(symbol),
                 'connection_health':self.connection_health, 'error':None}
 
     async def run(self):

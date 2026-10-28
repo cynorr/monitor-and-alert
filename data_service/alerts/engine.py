@@ -46,34 +46,54 @@ class AlertEngine:
                 id TEXT PRIMARY KEY, symbol TEXT NOT NULL, price_cents INTEGER NOT NULL,
                 generation INTEGER NOT NULL, state TEXT NOT NULL,
                 created_at REAL NOT NULL, updated_at REAL NOT NULL, expires_at REAL NOT NULL);
-            CREATE TABLE IF NOT EXISTS events (
-                id TEXT PRIMARY KEY, alert_id TEXT NOT NULL, generation INTEGER NOT NULL,
-                symbol TEXT NOT NULL, direction TEXT NOT NULL, price_cents INTEGER NOT NULL,
-                actual_price REAL NOT NULL, quote_time INTEGER NOT NULL,
-                fired_at REAL NOT NULL, handled_at REAL);
+            CREATE TABLE IF NOT EXISTS unread (
+                symbol TEXT PRIMARY KEY, direction TEXT NOT NULL, level INTEGER NOT NULL, fired_at REAL NOT NULL);
         ''')
+        if 'level' not in {row['name'] for row in self.db.execute('PRAGMA table_info(unread)')}:
+            with self.db:
+                self.db.execute('ALTER TABLE unread ADD COLUMN level INTEGER NOT NULL DEFAULT 1')
+                # Old urgent notices did not retain a direction; do not invent one.
+                self.db.execute("DELETE FROM unread WHERE direction='urgent'")
         self.calendar, self.now, self.sound = calendar, clock, sound
         self.alerts = {row['id']: dict(row) for row in self.db.execute('SELECT * FROM alerts')}
         self.by_symbol = {}
         self.baselines, self.latest = {}, {}
         self.allowed, self.scope_known = set(), False
         self.revision, self.error = 0, None
+        self.watchers = set()
+        if self.sound:
+            self.sound.on_change = self._signal
         self.heartbeat = self.now()
         self._index()
+        self._clean_unread(self.heartbeat)
 
     def _index(self):
         self.by_symbol = {}
         for alert in self.alerts.values():
             self.by_symbol.setdefault(alert['symbol'], []).append(alert)
 
-    def _changed(self):
+    def _signal(self):
         self.revision += 1
+        for watcher in self.watchers:
+            watcher.set()
+
+    def _changed(self):
         self.error = None
         self._index()
+        self._signal()
 
     def reset(self):
         self.baselines.clear()
         self.latest.clear()
+
+    def _clean_unread(self, now):
+        stale = [row['symbol'] for row in self.db.execute('SELECT symbol,fired_at FROM unread')
+                 if not self._regular_day(now, row['fired_at']) or
+                 (self.scope_known and row['symbol'] not in self.allowed)]
+        if stale:
+            with self.db:
+                self.db.executemany('DELETE FROM unread WHERE symbol=?', [(symbol,) for symbol in stale])
+            self._signal()
 
     def maintain(self, allowed, scope_known):
         now = self.now()
@@ -84,6 +104,7 @@ class AlertEngine:
         if allowed != self.allowed or scope_known != self.scope_known:
             self.revision += 1
         self.allowed, self.scope_known = allowed, scope_known
+        self._clean_unread(now)
         removed = [a['id'] for a in self.alerts.values() if a['expires_at'] <= now or
                    (scope_known and a['symbol'] not in allowed)]
         if removed:
@@ -147,20 +168,34 @@ class AlertEngine:
         self.baselines.pop(key, None)
         self._changed()
 
-    def acknowledge(self, event_id):
-        event = self.db.execute('SELECT * FROM events WHERE id=? AND handled_at IS NULL', (event_id,)).fetchone()
-        if not event:
-            return
-        alert = self.alerts.get(event['alert_id'])
-        delete = alert and alert['generation'] == event['generation'] and alert['state'] == 'triggered'
+    def read(self, symbol):
+        symbol = symbol_key(symbol)
         with self.db:
-            self.db.execute('UPDATE events SET handled_at=? WHERE id=?', (self.now(), event_id))
-            if delete:
-                self.db.execute('DELETE FROM alerts WHERE id=?', (alert['id'],))
-        if delete:
-            self.alerts.pop(alert['id'])
-            self.baselines.pop(alert['id'], None)
+            changed = self.db.execute('DELETE FROM unread WHERE symbol=?', (symbol,)).rowcount
+        if changed:
+            self._signal()
+
+    def notify(self, symbol, direction, level=1, *, alert=None):
+        """Shared entry for manual crossings and Intraday State transitions."""
+        if symbol not in self.allowed:
+            return False
+        now = self.now()
+        try:
+            with self.db:
+                if alert:
+                    self.db.execute("UPDATE alerts SET state='triggered', updated_at=? WHERE id=?", (now, alert['id']))
+                self.db.execute('INSERT OR REPLACE INTO unread (symbol,direction,level,fired_at) VALUES (?,?,?,?)',
+                                (symbol, direction, level, now))
+        except sqlite3.Error:
+            self.error = 'Could not save alert trigger'
+            self._signal()
+            return False
+        if alert:
+            self.alerts[alert['id']] = dict(alert, state='triggered', updated_at=now)
         self._changed()
+        if self.sound:
+            self.sound.play(symbol, direction, level, now)
+        return True
 
     def quote(self, symbol, quote):
         now = self.now()
@@ -190,28 +225,15 @@ class AlertEngine:
             threshold = alert['price_cents'] / 100
             direction = 'up' if baseline[1] < threshold <= price else 'down' if baseline[1] > threshold >= price else None
             if direction:
-                event = dict(id=uuid.uuid4().hex, alert_id=alert['id'], generation=alert['generation'],
-                             symbol=symbol, direction=direction, price_cents=alert['price_cents'],
-                             actual_price=price, quote_time=ts, fired_at=now, handled_at=None)
-                try:
-                    with self.db:
-                        self.db.execute("UPDATE alerts SET state='triggered', updated_at=? WHERE id=?", (now, alert['id']))
-                        self.db.execute('INSERT INTO events VALUES (:id,:alert_id,:generation,:symbol,:direction,:price_cents,:actual_price,:quote_time,:fired_at,:handled_at)', event)
-                except sqlite3.Error:
+                if not self.notify(symbol, direction, alert=alert):
                     self.baselines[alert['id']] = baseline
-                    self.error = 'Could not save alert trigger'
-                    self.revision += 1
-                    continue
-                self.alerts[alert['id']] = dict(alert, state='triggered', updated_at=now)
-                self._changed()
-                if self.sound:
-                    self.sound.play(direction)
 
     def state(self):
+        self._clean_unread(self.now())
         return {'revision': self.revision, 'alerts': list(self.alerts.values()),
-                'events': [dict(row) for row in self.db.execute('SELECT * FROM events WHERE handled_at IS NULL ORDER BY fired_at DESC, rowid DESC')],
+                'unread': [dict(row) for row in self.db.execute('SELECT symbol,direction,level,fired_at FROM unread ORDER BY fired_at DESC')],
                 'eligible_symbols': sorted(self.allowed), 'scope_known': self.scope_known,
-                'sound': self.sound.state() if self.sound else {'enabled': False, 'error': None}, 'error': self.error}
+                'sound': self.sound.state() if self.sound else {'enabled': False, 'error': None, 'playing': []}, 'error': self.error}
 
     def close(self):
         self.db.close()

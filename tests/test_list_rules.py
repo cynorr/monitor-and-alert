@@ -1,247 +1,223 @@
-import copy
+"""List regression checks using the installed real Daily snapshots and workspace."""
+from copy import deepcopy
+from datetime import date, timedelta
 import json
+from pathlib import Path
 
 import pytest
 
-from data_service.config import workspace_tickers
-from data_service.list_rules import apply_rules, matches_filters
-from data_service.preferences import validate_preferences
-from data_service.workspace import Workspace, derive_day_view, empty_workspace, inherit_workspace, migrate_workspace
+from data_service.list_rules import apply_rules, focus_classification, matched_tags, NEGATIVE_ROLES
+from data_service.preferences import tag_role, validate_preferences
+from data_service.scan import candidates, publish_day, workspace_scope
+from data_service.workspace import Workspace, inherit_workspace, is_hidden, persistent_workspace
+
+RUNTIME = Path(__file__).resolve().parents[1] / 'runtime'
 
 
-def preferences():
-    return {'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': [
-        {'id': 'ext', 'name': 'Extended', 'filters': {'extended_k': {'min': 1.5}}},
-        {'id': 'broken-tag', 'name': 'Broken', 'filters': {'broken_k': {'min': 1}, 'below_days': {'min': 2}}},
-        {'id': 'surf', 'name': 'Surf-10', 'filters': {'ema10_touch_days_5d': {'min': 3}}},
-        {'id': 'body-label', 'name': 'Large body', 'role': 'label', 'filters': {'adr20': {'min': 5}}},
-        {'id': 'empty', 'name': 'Empty', 'filters': {}},
-        {'id': 'under-tag', 'name': 'Under-50', 'filters': {'ma_arrangement': {'values': ['under50']}}},
-    ]}
+@pytest.fixture(scope='module')
+def real_data():
+    files = sorted((RUNTIME / 'days').glob('*/scan.json'))
+    if not files:
+        pytest.skip('Real Scan data is required')
+    folder = files[-1].parent
+    return (json.loads((folder / 'workspace.json').read_text()),
+            json.loads((folder / 'scan.json').read_text()),
+            validate_preferences(json.loads((RUNTIME / 'preferences.json').read_text())))
 
 
-def snapshot(day='2026-10-01', **tickers):
-    return {'date': day, 'rows': [{'symbol': ticker + '.US', 'candidate': True, 'extended_k': 0, 'broken_k': 0, 'below_days': 0, 'ma_arrangement': 'ema10_lead', **fields} for ticker, fields in tickers.items()]}
+@pytest.fixture
+def saved_real_workspace(tmp_path, real_data):
+    data, snapshot, preferences = real_data
+    folder = tmp_path / 'days' / snapshot['date']
+    folder.mkdir(parents=True)
+    (folder / 'workspace.json').write_text(json.dumps(data))
+    (folder / 'scan.json').write_text(json.dumps(snapshot))
+    (tmp_path / 'preferences.json').write_text(json.dumps(preferences))
+    ws = Workspace(folder / 'workspace.json', root=folder.parent)
+    ws.reclassify(snapshot, preferences)
+    return ws
 
 
-def excluded(ticker, section, at='2026-10-01'):
-    data = empty_workspace()
-    data['statuses'][ticker] = {'status': 'excluded', 'section': section, 'status_at': at, 'excluded_at': at, 'tags': []}
-    data['orders']['excluded'] = [ticker]
-    return data
+def test_machine_exclusions_belong_only_to_current_real_candidates(real_data):
+    data, snapshot, preferences = real_data
+    before = deepcopy(data)
+    result = apply_rules(data, snapshot, preferences)
+    current = candidates(snapshot)
+    for ticker, state in result['statuses'].items():
+        if state['status'] == 'excluded' and state['section'] != 'hidden':
+            assert ticker in current
+    assert data == before
+    assert apply_rules(result, snapshot, preferences) == result
+    saved = persistent_workspace(result)
+    assert all(s['section'] == 'hidden' for s in saved['statuses'].values() if s.get('status') == 'excluded')
 
 
-def test_manual_discover_survives_same_day_rules_but_is_not_carried():
-    data = empty_workspace()
-    data['statuses']['MANUAL'] = {'status': 'discover', 'section': 'unclassified', 'manual_discover_date': '2026-10-01'}
-    data['orders']['discover'] = ['MANUAL']
-    data['pinned'] = ['MANUAL']
-    scan = snapshot(MANUAL={'candidate': False, 'extended_k': 3})
-    result = apply_rules(data, scan, validate_preferences(preferences()))
-    assert result['statuses']['MANUAL']['status'] == 'discover'
-    assert 'ext' in result['statuses']['MANUAL']['tags']
-    assert result['pinned'] == ['MANUAL']
-    assert derive_day_view(scan['date'], set(), set(), result).discover == ('MANUAL',)
-    following = inherit_workspace(result, set(), set(), '2026-10-02')
-    assert not following['statuses'] and not following['pinned']
+def test_new_date_inherits_only_focus_and_unexpired_hidden(real_data):
+    data, snapshot, _ = real_data
+    day = (date.fromisoformat(snapshot['date']) + timedelta(days=1)).isoformat()
+    inherited = inherit_workspace(data, day)
+    expected = {t for t, s in data['statuses'].items() if s['status'] == 'focus' or is_hidden(s, day)}
+    assert set(inherited['statuses']) == expected
+    assert inherited['pinned'] == []
+    assert all(not any(k in s for k in ('manual_focus_date', 'manual_discover_date', 'manual_tags'))
+               for s in inherited['statuses'].values())
 
 
-def test_matching_finite_missing_and_inclusive_bounds():
-    rule = {'x': {'min': 1, 'max': 2}, 'category': {'values': ['good', 'fine']}}
-    assert matches_filters({'x': 1, 'category': 'fine'}, rule)
-    assert matches_filters({'x': 2, 'category': 'good'}, rule)
-    assert not matches_filters({'x': 2}, rule)
-    for value in (None, True, float('nan'), float('inf')):
-        assert not matches_filters({'x': value, 'category': 'good'}, rule)
-    assert not matches_filters({'x': 2}, {'x': {'max': 2, 'maxExclusive': True}})
+def test_real_focus_daily_elimination_keeps_candidate_scope(real_data):
+    _, _, preferences = real_data
+    source = json.loads((RUNTIME / 'days/2026-10-09/workspace.json').read_text())
+    snapshot = json.loads((RUNTIME / 'days/2026-10-12/scan.json').read_text())
+    inherited = inherit_workspace(source, snapshot['date'])
+    rows = {r['symbol'].removesuffix('.US'): r for r in snapshot['rows']}
+    negative = {t for t, s in inherited['statuses'].items() if s['status'] == 'focus' and any(
+        tag_role(tag) in NEGATIVE_ROLES for tag in matched_tags(rows.get(t, {}), preferences['tags']))}
+    assert negative and 'AXTI' in negative and 'AXTI' not in candidates(snapshot)
+    result = apply_rules(inherited, snapshot, preferences)
+    for ticker in negative:
+        if ticker in candidates(snapshot):
+            assert result['statuses'][ticker]['status'] == 'excluded'
+        else:
+            assert ticker not in result['statuses']
+    for ticker, state in inherited['statuses'].items():
+        if state['status'] == 'focus' and ticker not in negative:
+            assert result['statuses'][ticker]['status'] == 'focus'
 
 
-def test_discover_and_focus_negative_rules_broken_priority_and_tag_roles():
-    data = empty_workspace()
-    data['statuses']['FOCUS'] = {'status': 'focus', 'section': 'unclassified'}
-    prefs = validate_preferences(preferences())
-    prefs['tags'][0]['name'] = 'Stretched'  # Stable role survives a rename.
-    result = apply_rules(data, snapshot(FOCUS={'extended_k': 2}, DISC={'extended_k': 2, 'broken_k': 2, 'below_days': 3},
-                                        AUX={'adr20': 7}, POT={'ema10_touch_days_5d': 4, 'adr20': 7}), prefs)
-    assert result['statuses']['FOCUS']['section'] == 'extended'
-    assert result['statuses']['DISC']['section'] == 'broken'
-    assert result['statuses']['POT']['tags'] == ['surf', 'body-label']
-    assert result['statuses']['POT']['section'] == 'surf'
-    assert result['statuses']['AUX']['section'] == 'unclassified'
-    assert all('empty' not in state['tags'] for state in result['statuses'].values())
-    assert workspace_tickers(result) == []
-    assert data['statuses']['FOCUS']['status'] == 'focus'
+def test_real_hidden_expires_after_seven_calendar_days(real_data):
+    _, _, preferences = real_data
+    source = json.loads((RUNTIME / 'days/2026-10-08/workspace.json').read_text())
+    assert source['statuses']['AVAH']['excluded_at'] == '2026-10-08'
+    assert 'AVAH' in inherit_workspace(source, '2026-10-14')['statuses']
+    assert 'AVAH' not in inherit_workspace(source, '2026-10-15')['statuses']
+    snapshot = json.loads((RUNTIME / 'days/2026-10-15/scan.json').read_text())
+    assert 'AVAH' not in candidates(snapshot)
+    result = apply_rules(source, snapshot, preferences)
+    assert 'AVAH' not in result['statuses']
 
 
-def test_hidden_skips_all_matching_and_survives_candidate_gaps_until_day_seven():
-    data = excluded('HID', 'hidden')
-    inherited = inherit_workspace(data, {'HID'}, set(), '2026-10-05')
-    result = apply_rules(inherited, snapshot('2026-10-05', HID={'candidate': False, 'ema10_touch_days_5d': 5, 'extended_k': 3, 'ma_arrangement': 'under50'}), preferences())
-    assert result['statuses']['HID']['section'] == 'hidden'
-    assert result['statuses']['HID']['tags'] == []
-    result = apply_rules(result, snapshot('2026-10-08', HID={'ema10_touch_days_5d': 5}), preferences())
-    assert result['statuses']['HID']['status'] == 'discover'
-    assert result['statuses']['HID']['section'] == 'surf'
-    assert result['statuses']['HID']['released_at'] == '2026-10-08'
-    view = derive_day_view('2026-10-08', {'HID'}, set(), result)
-    assert view.returned == {'HID'}
+def test_saved_rules_recompute_machine_sections_without_old_identity(real_data):
+    data, snapshot, preferences = real_data
+    preferences = deepcopy(preferences)
+    preferences['tags'] = [t for t in preferences['tags'] if tag_role(t) not in NEGATIVE_ROLES]
+    result = apply_rules(data, snapshot, preferences)
+    assert not any(s['status'] == 'excluded' and s['section'] != 'hidden' for s in result['statuses'].values())
 
 
-@pytest.mark.parametrize('section,fields', [
-    ('extended', {'extended_k': 2}),
-    ('broken', {'broken_k': 2, 'below_days': 3}),
-    ('under50', {'ma_arrangement': 'under50'}),
-])
-def test_machine_exclusions_have_no_deadline_and_reassign_on_each_scan(section, fields):
-    result = apply_rules(excluded('EXT', section), snapshot('2026-10-02', EXT=fields), preferences())
-    assert result['statuses']['EXT']['section'] == section
-    assert 'excluded_at' not in result['statuses']['EXT']
-    assert apply_rules(result, snapshot('2026-10-02', EXT=fields), preferences()) == result
-    result = apply_rules(result, snapshot('2026-10-03', EXT={'ma_arrangement': 'under50'}), preferences())
-    assert result['statuses']['EXT']['section'] == 'under50'
+def test_real_machine_pin_hidden_release_and_focus_round_trip(saved_real_workspace, real_data):
+    ws = saved_real_workspace
+    _, snapshot, preferences = real_data
+    ticker = next(t for t, s in ws.data['statuses'].items() if s['status'] == 'excluded' and s['section'] != 'hidden')
+    original_rows = deepcopy(snapshot['rows'])
+    ws.pin_ticker(ticker, True)
+    saved = json.loads(ws.path.read_text())
+    assert ticker not in saved['statuses'] and ticker in saved['pinned']
+    tag = next(t['id'] for t in preferences['tags'] if tag_role(t) in ('setup', 'label'))
+    ws.set_manual_tags(ticker, [tag])
+    ws.reclassify(snapshot, preferences)
+    annotation = json.loads(ws.path.read_text())['statuses'][ticker]
+    assert annotation == {'manual_tags': [tag], 'manual_tags_date': ws.date}
+    before = deepcopy(ws.data)
+    ws.reload()
+    assert ws.data == before  # Own file writes must not discard the in-memory projection.
+    restored = Workspace(ws.path, root=ws.root)
+    restored.reclassify(snapshot, preferences)
+    assert ticker in restored.data['pinned']
+    assert restored.section(ticker) == 'excluded'
+    assert tag in restored.data['statuses'][ticker]['tags']
+    restored.hide_ticker(ticker)
+    restored.reclassify(snapshot, preferences)
+    assert json.loads(ws.path.read_text())['statuses'][ticker]['section'] == 'hidden'
+    restored.move_member(ticker, 'discover', candidates(snapshot))
+    restored.reclassify(snapshot, preferences)
+    assert restored.section(ticker) == 'excluded'
+    row = next(r for r in snapshot['rows'] if r['symbol'] == ticker + '.US')
+    restored.add_ticker(ticker, classification=focus_classification(row, preferences))
+    restored.reclassify(snapshot, preferences)
+    assert restored.section(ticker) == 'focus'  # Explicit same-day admission wins.
+    assert json.loads(ws.path.read_text())['statuses'][ticker]['manual_focus_date'] == ws.date
+    assert snapshot['rows'] == original_rows
 
 
-@pytest.mark.parametrize('section', ['broken', 'extended', 'under50'])
-@pytest.mark.parametrize('candidate', [True, False])
-@pytest.mark.parametrize('setup', [True, False])
-def test_recovery_immediately_returns_only_today_candidates_and_never_enters_focus(section, candidate, setup):
-    result = apply_rules(excluded('POT', section), snapshot('2026-10-02', POT={
-        'candidate': candidate, 'ema10_touch_days_5d': 4 if setup else 0}), preferences())
-    if candidate:
-        assert result['statuses']['POT']['status'] == 'discover'
-        assert result['statuses']['POT']['section'] == ('surf' if setup else 'unclassified')
-        assert result['statuses']['POT']['released_at'] == '2026-10-02'
-        assert 'excluded_at' not in result['statuses']['POT']
-    else:
-        assert 'POT' not in result['statuses']
-    assert not result['orders']['focus']
+def test_real_publication_and_feature_scope(saved_real_workspace, real_data):
+    ws = saved_real_workspace
+    _, snapshot, preferences = real_data
+    expected = {t for t, s in ws.data['statuses'].items() if s['status'] == 'focus' or is_hidden(s, ws.date) or
+                (s['status'] == 'discover' and s.get('manual_discover_date') == ws.date)}
+    assert workspace_scope(ws.root, ws.date) == expected
+    publish_day(ws.root, snapshot)
+    saved = json.loads(ws.path.read_text())
+    assert saved == persistent_workspace(ws.data)
+    assert all(s['section'] == 'hidden' for s in saved['statuses'].values() if s.get('status') == 'excluded')
+    loaded = Workspace(ws.path, root=ws.root)
+    loaded.reclassify(snapshot, preferences)
+    assert {t: (s['status'], s['section'], s['tags']) for t, s in loaded.data['statuses'].items()} == {
+        t: (s['status'], s['section'], s['tags']) for t, s in ws.data['statuses'].items()}
+    assert persistent_workspace(loaded.data) == saved
 
 
-def test_missing_negative_features_keep_machine_exclusion_but_known_false_and_condition_can_release():
-    data = excluded('OLD', 'broken')
-    unknown = snapshot('2026-10-02', OLD={'below_days': 3, 'broken_k': None})
-    result = apply_rules(data, unknown, preferences())
-    assert result['statuses']['OLD']['section'] == 'broken'
-    result = apply_rules(result, snapshot('2026-10-02', OLD={'below_days': 0, 'broken_k': None}), preferences())
-    assert result['statuses']['OLD']['status'] == 'discover'
-    absent = apply_rules(excluded('GONE', 'extended'), snapshot('2026-10-02'), preferences())
-    assert absent['statuses']['GONE']['section'] == 'extended'
+def test_real_search_discover_is_same_day_only(saved_real_workspace, real_data):
+    ws = saved_real_workspace
+    _, snapshot, preferences = real_data
+    ticker = next(r['symbol'].removesuffix('.US') for r in snapshot['rows'] if not r['candidate'] and
+                  r['symbol'].removesuffix('.US') not in ws.data['statuses'])
+    ws.add_ticker(ticker, 'discover')
+    ws.reclassify(snapshot, preferences)
+    restored = Workspace(ws.path, root=ws.root)
+    restored.reclassify(snapshot, preferences)
+    assert restored.section(ticker) == 'discover' and ticker in restored.data['pinned']
+    assert ticker in workspace_scope(ws.root, ws.date)
+    tomorrow = (date.fromisoformat(ws.date) + timedelta(days=1)).isoformat()
+    assert ticker not in inherit_workspace(restored.data, tomorrow)['statuses']
 
 
-def test_under50_classifies_all_lists_with_stable_role_and_priority():
-    data = excluded('EXT', 'extended')
-    data['statuses'].update({
-        'FOC': {'status': 'focus', 'section': 'unclassified'},
-        'HID': {'status': 'excluded', 'section': 'hidden', 'excluded_at': '2026-10-01'},
-    })
-    prefs = validate_preferences(preferences())
-    prefs['tags'][-1]['name'] = 'Below long MA'
-    rows = snapshot(FOC={'candidate': False, 'ma_arrangement': 'under50'}, DISC={'ma_arrangement': 'under50'},
-                    EXT={'candidate': False, 'ma_arrangement': 'under50'}, HID={'ma_arrangement': 'under50'},
-                    BOTH={'ma_arrangement': 'under50', 'extended_k': 2},
-                    ALL={'ma_arrangement': 'under50', 'extended_k': 2, 'broken_k': 2, 'below_days': 3})
-    result = apply_rules(data, rows, prefs)
-    for ticker in ('FOC', 'DISC', 'EXT'):
-        assert result['statuses'][ticker]['status'] == 'excluded'
-        assert result['statuses'][ticker]['section'] == 'under50'
-        assert result['statuses'][ticker]['tags'] == ['under-tag']
-    assert result['statuses']['HID']['section'] == 'hidden'
-    assert result['statuses']['HID']['tags'] == []
-    assert result['statuses']['BOTH']['section'] == 'extended'
-    assert result['statuses']['ALL']['section'] == 'broken'
-    assert result['statuses']['ALL']['tags'] == ['ext', 'broken-tag', 'under-tag']
-    assert workspace_tickers(result) == []
+def test_explicit_refresh_resets_real_manual_state_like_new_day(saved_real_workspace, real_data, monkeypatch):
+    """Reuse real cached data; only the copied workspace may change."""
+    import asyncio
+    from data_service.workbench import Workbench
+    ws = saved_real_workspace
+    _, snapshot, preferences = real_data
+    machine = next(t for t, s in ws.data['statuses'].items() if s['status'] == 'excluded' and s['section'] != 'hidden')
+    hidden = next(t for t in candidates(snapshot) if t != machine)
+    extra = next(r['symbol'].removesuffix('.US') for r in snapshot['rows']
+                 if not r['candidate'] and r['symbol'].removesuffix('.US') not in ws.data['statuses'])
+    rows = {r['symbol'].removesuffix('.US'): r for r in snapshot['rows']}
+    ws.move_member(machine, 'focus', candidates(snapshot), classification=focus_classification(rows[machine], preferences))
+    ws.hide_ticker(hidden)
+    ws.add_ticker(extra, 'discover')
+    ws.pin_ticker(machine, True)
+    setup = next(t['id'] for t in preferences['tags'] if tag_role(t) == 'setup')
+    ws.set_manual_tags(machine, [setup])
+    ws.move_ticker(machine, setup, 0)
+    ws.reclassify(snapshot, preferences)
+    expiry = ws.data['statuses'][hidden]['excluded_at']
+    before = deepcopy(ws.data)
+    expected = apply_rules(inherit_workspace(before, ws.date), snapshot, preferences)
+    cached = (ws.path.parent / 'scan.json').read_bytes()
+    app = Workbench(ws, ws.root.parent, RUNTIME / 'massive/daily.sqlite3',
+                    lambda *_: pytest.fail('No broker is needed for List Refresh'))
+    monkeypatch.setattr('data_service.workbench.latest_completed_date', lambda _: ws.date)
+    monkeypatch.setattr('data_service.workbench.build_day', lambda *a, **kw: pytest.fail('Do not rebuild ready data'))
 
-
-@pytest.mark.parametrize('candidate', [True, False])
-def test_expired_hidden_is_inherited_until_prepared_features_classify_it(candidate):
-    data = excluded('OLD', 'hidden')
-    inherited = inherit_workspace(data, set(), set(), '2026-10-08')
-    assert inherited['statuses']['OLD']['section'] == 'hidden'
-    result = apply_rules(inherited, snapshot('2026-10-08', OLD={'candidate': candidate}), preferences())
-    assert ('OLD' in result['statuses']) == candidate
-    if candidate:
-        assert result['statuses']['OLD']['status'] == 'discover'
-    negative = apply_rules(inherited, snapshot('2026-10-08', OLD={'candidate': False, 'extended_k': 2}), preferences())
-    assert negative['statuses']['OLD']['section'] == 'extended'
-    assert 'excluded_at' not in negative['statuses']['OLD']
-
-
-def test_manual_negative_tags_cannot_keep_an_exclusion():
-    data = excluded('OLD', 'extended')
-    data['statuses']['OLD'].update(manual_tags=['ext', 'surf'], manual_tags_date='2026-10-02')
-    result = apply_rules(data, snapshot('2026-10-02', OLD={}), preferences())
-    assert result['statuses']['OLD']['status'] == 'discover'
-    assert result['statuses']['OLD']['tags'] == ['surf']
-    assert result['statuses']['OLD']['manual_tags'] == ['surf']
-
-
-@pytest.mark.parametrize('fields,tag', [({'extended_k': 2}, 'ext'), ({'ma_arrangement': 'under50'}, 'under-tag')])
-def test_manual_focus_and_tags_only_current_day_and_new_section_members_lead(tmp_path, fields, tag):
-    folder = tmp_path / '2026-10-01'
-    folder.mkdir()
-    path = folder / 'workspace.json'
-    data = empty_workspace()
-    data['statuses'] = {'OLD': {'status': 'focus', 'section': 'surf', 'tags': ['surf']},
-                        'NEXT': {'status': 'focus', 'section': 'surf', 'tags': ['surf']}}
-    data['orders']['focus'] = ['NEXT', 'OLD']
-    path.write_text(json.dumps(data))
-    ws = Workspace(path)
-    ws.add_ticker('NEW')
-    ws.set_manual_tags('NEW', ['surf'])
-    ws.reclassify(snapshot(OLD={'ema10_touch_days_5d': 4}, NEXT={'ema10_touch_days_5d': 4}, NEW=fields), preferences())
-    assert ws.data['orders']['focus'] == ['NEW', 'NEXT', 'OLD']
-    assert ws.data['statuses']['NEW']['section'] == 'surf'
-    assert set(ws.data['statuses']['NEW']['tags']) == {tag, 'surf'}
-    inherited = inherit_workspace(ws.data, {'OLD', 'NEW', 'NEXT'}, {'OLD', 'NEW', 'NEXT'}, '2026-10-02')
-    result = apply_rules(inherited, snapshot('2026-10-02', OLD={'ema10_touch_days_5d': 4}, NEXT={'ema10_touch_days_5d': 4}, NEW=fields), preferences())
-    assert result['statuses']['NEW']['status'] == 'excluded'
-    assert result['statuses']['NEW']['tags'] == [tag]
-    assert result['orders']['focus'] == ['NEXT', 'OLD']
-
-
-def test_reclassification_save_failure_rolls_back_and_retry_is_not_noop(tmp_path, monkeypatch):
-    path = tmp_path / 'workspace.json'
-    path.write_text(json.dumps(empty_workspace()))
-    ws = Workspace(path)
-    original = copy.deepcopy(ws.data)
-    current = snapshot(ws.date, AAA={'extended_k': 2})
-    with monkeypatch.context() as patch:
-        patch.setattr(type(path), 'write_text', lambda *args, **kwargs: (_ for _ in ()).throw(PermissionError('read only')))
-        with pytest.raises(PermissionError):
-            ws.reclassify(current, preferences())
-    assert ws.data == original
-    assert ws.reclassify(current, preferences())
-    assert not ws.reclassify(current, preferences())
-
-
-@pytest.mark.parametrize('edit', ['delete', 'label'])
-def test_deleted_or_repurposed_tag_clears_same_day_manual_section(edit):
-    data = empty_workspace()
-    data['statuses']['AAA'] = {'status': 'focus', 'section': 'surf', 'tags': ['surf'], 'manual_section_date': '2026-10-01'}
-    prefs = preferences()
-    if edit == 'delete':
-        prefs['tags'] = [tag for tag in prefs['tags'] if tag['id'] != 'surf']
-    else:
-        next(tag for tag in prefs['tags'] if tag['id'] == 'surf')['role'] = 'label'
-    result = apply_rules(data, snapshot(AAA={'ema10_touch_days_5d': 4}), prefs)
-    state = result['statuses']['AAA']
-    assert state['status'] == 'focus'
-    assert state['section'] == 'unclassified'
-    assert 'manual_section_date' not in state
-    assert result['orders']['focus'] == ['AAA']
-
-
-def test_migration_combines_focus_wait_and_preferences_without_candidate_carry():
-    old = {'version': 2, 'statuses': {'A': {'status': 'focus'}, 'B': {'status': 'wait'}, 'H': {'status': 'hidden', 'status_at': '2026-10-01'}},
-           'orders': {'focus': ['A'], 'wait': ['B'], 'hidden': ['H']}, 'carried': ['NOTCAND']}
-    result = migrate_workspace(old, '2026-10-02')
-    assert result['orders']['focus'] == ['A', 'B']
-    assert result['orders']['excluded'] == ['H']
-    assert all(ticker.status == 'focus' for ticker in workspace_tickers(old))
-    view = derive_day_view('2026-10-02', {'C'}, set(), result)
-    assert view.as_dict()['lists'] == {'discover': ['C'], 'focus': ['A', 'B'], 'excluded': ['H']}
-    prefs = preferences()
-    prefs['activeList'] = 'hidden'
-    assert validate_preferences(prefs)['activeList'] == 'excluded'
-    assert prefs['tags'][0]['role'] == 'extended'
+    async def scenario():
+        try:
+            state = await app.action('scan', {'generate': True})
+            assert state['date'] == ws.date
+            assert ws.data['statuses'] == expected['statuses']
+            assert ws.data['orders'] == expected['orders']
+            assert ws.data['carried'] == before['carried']  # Same-day Refresh is not a new trading date.
+            assert ws.data['pinned'] == []
+            assert machine not in ws.data['orders']['focus']  # Manual same-day immunity is gone.
+            assert extra not in ws.data['statuses']
+            assert ws.data['statuses'][hidden]['excluded_at'] == expiry
+            assert all(not any(k.startswith('manual_') for k in s) for s in ws.data['statuses'].values())
+            assert (ws.path.parent / 'scan.json').read_bytes() == cached
+            first = ws.path.read_bytes()
+            await app.action('scan', {'generate': True})
+            assert ws.path.read_bytes() == first
+            with pytest.raises(ValueError, match='Machine exclusions'):
+                await app.list_action({'action': 'move', 'ticker': machine, 'target': 'discover'})
+            await app.list_action({'action': 'move', 'ticker': machine, 'target': 'focus'})
+            assert ws.section(machine) == 'focus'
+        finally:
+            await app.close()
+    asyncio.run(scenario())

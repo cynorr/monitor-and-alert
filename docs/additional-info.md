@@ -1,8 +1,10 @@
 # Additional Info
 
-更新：2026-10-07。本文件是附加信息定位、数据源、处理和刷新规则的唯一维护入口。模块入口为 [data_service/additional_info/AGENTS.md](../data_service/additional_info/AGENTS.md)，实现契约见 [development.md](development.md)，具体图表排版只在 [chart-ui.md](chart-ui.md#headers-and-information) 维护。
+更新：2026-10-23。本文件是附加信息定位、数据源、处理和刷新规则的唯一维护入口。模块入口为 [data_service/additional_info/AGENTS.md](../data_service/additional_info/AGENTS.md)，实现契约见 [development.md](development.md)，具体图表排版只在 [chart-ui.md](chart-ui.md#headers-and-information) 维护。
 
 ## 定位
+
+代码集中在`data_service/additional_info/`：`nasdaq.py`负责公司资料/财报接口，`service.py`负责对应业务缓存与刷新；同目录`symbol_directory.py`管理证券目录与ETF属性，其独立数据要求见 [Massive数据要求](massive-data.md)。目录归并不改变两条获取流程、调用时机或运行数据路径。
 
 公司名、行业大类/小类、市值和财报日期都是可缺失的当前参考信息。独立缓存于 `runtime/additional-info/info.sqlite3`，不绑定 Massive 截面、Monitor 行情、Holdings 或 Workspace，不参与筛选、排名、订阅、估值、Alert 或 Ready。
 

@@ -1,19 +1,18 @@
 import type { ISeriesPrimitive, IPrimitivePaneRenderer, IPrimitivePaneView, SeriesAttachedParameter, PrimitiveHoveredItem } from 'lightweight-charts';
 import type { Panel } from './chart.js';
-import { $, dayKey, nyTime } from './types.js';
+import { $ } from './types.js';
 import { post } from './api.js';
+import { palette } from './palette.js';
 
 export type PriceAlert = { id: string; symbol: string; price_cents: number; generation: number; state: 'active' | 'triggered'; expires_at: number };
-export type AlertEvent = { id: string; alert_id: string; generation: number; symbol: string; direction: 'up' | 'down'; price_cents: number; actual_price: number; quote_time: number; fired_at: number };
-export type AlertState = { revision: number; alerts: PriceAlert[]; events: AlertEvent[]; eligible_symbols: string[]; scope_known: boolean; error: string | null; sound: { enabled: boolean; error: string | null } };
+export type AlertNotice = { symbol: string; direction: 'up' | 'down'; level: 1 | 2; fired_at: number };
+export type AlertPlayback = { symbol: string; fired_at: number; pulse_at: number };
+export type AlertState = { revision: number; alerts: PriceAlert[]; unread: AlertNotice[]; eligible_symbols: string[]; scope_known: boolean; error: string | null; sound: { enabled: boolean; error: string | null; playing: AlertPlayback[] } };
 export const alertPrice = (cents: number) => (cents / 100).toFixed(2);
 const previewCents = (price: number) => {
     const [digits, exponent = '0'] = price.toString().split('e');
     return Math.round(Number(`${digits}e${Number(exponent) + 2}`));
 };
-export const eventTime = (event: AlertEvent) => `${dayKey(event.quote_time)} ${nyTime.format(new Date(event.quote_time * 1000))} ET`;
-export const crossingIcon = (direction: 'up' | 'down') => `<svg viewBox="0 0 24 24" aria-hidden="true" data-icon="alert-cross-${direction}" class="crossing-icon ${direction}"><path d="M3 12h18M12 ${direction === 'up' ? '21V3m-5 5 5-5 5 5' : '3v18m-5-5 5 5 5-5'}"/></svg>`;
-
 class AlertPrimitive implements ISeriesPrimitive {
     requestUpdate = () => {};
     constructor(private layer: AlertChart) {}
@@ -24,7 +23,7 @@ class AlertPrimitive implements ISeriesPrimitive {
         for (const alert of this.layer.rows()) {
             const y = this.layer.coordinate(alert);
             if (y == null || y < 0 || y > mediaSize.height) continue;
-            const color = alert.state === 'active' ? '#000000' : '#9ca3af';
+            const color = alert.state === 'active' ? palette.ink : palette.muted;
             ctx.strokeStyle = ctx.fillStyle = color;
             ctx.lineWidth = 1;
             // Match Lightweight Charts' 1px LargeDashed crosshair: 6px on / 6px off.
@@ -37,7 +36,7 @@ class AlertPrimitive implements ISeriesPrimitive {
         for (const alert of this.layer.rows()) {
             const y = this.layer.coordinate(alert);
             if (y == null || y < 0 || y > mediaSize.height) continue;
-            ctx.fillStyle = alert.state === 'active' ? '#000000' : '#9ca3af';
+            ctx.fillStyle = alert.state === 'active' ? palette.ink : palette.muted;
             // x=0 is the price-axis canvas edge and the native price-label edge.
             ctx.beginPath(); ctx.moveTo(0, y - 3); ctx.lineTo(6, y); ctx.lineTo(0, y + 3); ctx.closePath(); ctx.fill();
         }
@@ -172,21 +171,20 @@ export class AlertController {
     preview?: { id: string; cents: number };
     private layers: AlertChart[];
     private error = '';
-    private pending = new Set<string>();
     constructor(panels: Panel[], public symbol: () => string, private mode: () => 'scan' | 'monitor',
-                private created: (symbol: string) => Promise<void>, private jump: (event: AlertEvent) => Promise<void>) {
+                private created: (symbol: string) => Promise<void>, private changed: (value: AlertState) => void) {
         this.layers = panels.map(panel => new AlertChart(panel, this));
         document.addEventListener('keydown', event => {
             if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
             if (event.key === 'Escape') { this.layers.forEach(layer => layer.cancel()); this.choose(''); }
-            if (event.key === 'Backspace' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
+            if (event.key === 'Backspace' && this.mode() === 'monitor' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
         }, true);
         $('alert-error-close').addEventListener('click', () => { this.error = ''; this.render(); });
     }
     update(value: AlertState) {
         this.value = value;
         if (!value.alerts.some(alert => alert.id === this.selected)) this.selected = '';
-        this.redraw(); this.render();
+        this.redraw(); this.render(); this.changed(value);
     }
     choose(id: string) { this.selected = id; this.redraw(); }
     changeSymbol() { this.layers.forEach(layer => layer.cancel()); this.choose(''); }
@@ -205,41 +203,12 @@ export class AlertController {
             try { await this.created(target); } catch (error) { this.error = (error as Error).message; this.render(); }
         }
     }
-    async open(event: AlertEvent) {
-        if (this.pending.has(event.id)) return;
-        this.pending.add(event.id); this.render();
-        try {
-            await this.jump(event);
-            await this.mutate({ action: 'acknowledge', event_id: event.id });
-        } catch (error) { this.error = (error as Error).message; }
-        finally { this.pending.delete(event.id); this.render(); }
+    async read(symbol: string) {
+        if (this.value?.unread.some(notice => notice.symbol === symbol)) await this.mutate({ action: 'read', symbol });
     }
     private render() {
-        const value = this.value;
-        const error = $('alert-error');
-        const message = this.error || value?.error || value?.sound.error || '';
-        error.hidden = !message;
+        const message = this.error || this.value?.error || this.value?.sound.error || '';
+        $('alert-error').hidden = !message;
         $('alert-error-message').textContent = message;
-        const stack = $('alert-cards');
-        const focused = (document.activeElement as HTMLElement)?.dataset.alertAction;
-        const focusEvent = (document.activeElement as HTMLElement)?.dataset.event;
-        stack.replaceChildren(...(value?.events ?? []).map(event => {
-            const card = document.createElement('article'); card.className = 'alert-card';
-            card.setAttribute('aria-label', `${event.symbol.replace('.US', '')} ${event.direction === 'up' ? 'crossed up' : 'crossed down'} ${alertPrice(event.price_cents)}`);
-            const open = document.createElement('button'); open.className = 'alert-open'; open.dataset.alertAction = 'open'; open.dataset.event = event.id;
-            open.innerHTML = crossingIcon(event.direction);
-            const info = document.createElement('span'), title = document.createElement('strong'), stamp = document.createElement('time');
-            title.textContent = `${event.symbol.replace('.US', '')}  ${alertPrice(event.price_cents)}`;
-            stamp.textContent = eventTime(event); info.append(title, stamp); open.append(info);
-            const jump = document.createElement('span'); jump.textContent = '↗'; jump.setAttribute('aria-hidden', 'true'); open.append(jump);
-            open.title = `Open chart · Last ${event.actual_price}`;
-            open.disabled = this.pending.has(event.id) || !value?.eligible_symbols.includes(event.symbol);
-            open.addEventListener('click', () => { void this.open(event); });
-            const close = document.createElement('button'); close.className = 'alert-close'; close.textContent = '×'; close.setAttribute('aria-label', 'Close alert'); close.dataset.alertAction = 'close'; close.dataset.event = event.id;
-            close.disabled = this.pending.has(event.id);
-            close.addEventListener('click', async () => { this.pending.add(event.id); this.render(); await this.mutate({ action: 'acknowledge', event_id: event.id }); this.pending.delete(event.id); this.render(); });
-            card.append(open, close); return card;
-        }));
-        if (focused && focusEvent) stack.querySelector<HTMLButtonElement>(`[data-alert-action="${focused}"][data-event="${focusEvent}"]`)?.focus();
     }
 }

@@ -15,14 +15,14 @@ from .calendar import TradingCalendar, ET
 from .paths import RuntimePaths
 from .preferences import INITIAL_PREFERENCES, validate_preferences
 from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot, day_start
-from .service import DataService
+from .monitor import MonitorService
 from .workspace import derive_day_view, normalize_ticker
-from .store import atomic_json
+from .storage import atomic_json
 from .additional_info import AdditionalInfo
 from .alerts import AlertEngine, price_cents
 from .alerts.engine import symbol_key
 from .alerts.sound import AlertSound
-from .list_rules import focus_classification
+from .list_rules import apply_rules, focus_classification
 
 log = logging.getLogger(__name__)
 
@@ -51,31 +51,34 @@ class Workbench:
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(INITIAL_PREFERENCES))
         self.list_context = self._list_context()
         self.sound = sound if sound is not None else AlertSound() if not mock and only is None else None
-        self.sound_task = None
         self.alerts = AlertEngine(RuntimePaths(runtime).alerts_db, self.calendar, sound=self.sound) if only is None else None
-        self.refresh_alert_scope()
-        self.refresh_scan_quotes()
         workspace.on_change = self.workspace_changed
+        self.workspace_changed()
 
-    def refresh_scan_quotes(self):
+    def refresh_list_quotes(self):
         if self.monitor:
             symbols = [row['symbol'] for row in self.scan_board(self.workspace.date)] if (
-                self.mode == 'scan' and not self.mock and self.only is None) else []
-            self.monitor.update_scan_symbols(symbols)
+                not self.mock and self.only is None) else []
+            self.monitor.update_quote_symbols(symbols)
 
     def refresh_alert_scope(self):
         day = datetime.fromtimestamp(time.time(), ET).date().isoformat()
         symbols = self.holdings.symbols_for(day) if self.holdings else []
         if self.monitor:
             self.monitor.update_holdings(symbols)
+            if self.monitor.intraday:
+                open_symbols = {symbol_key(h['ticker']) for h in self.holdings.base['holdings']
+                                if any(not s['closed_today'] for s in h['sequences'])} if self.holdings and self.holdings.base else set()
+                # Retained closed-today holdings stay in market scope, but do not alarm.
+                self.monitor.intraday.scope({t.symbol for t in self.workspace.tickers()} - set(symbols), open_symbols)
         if self.alerts:
             allowed = {t.symbol for t in self.workspace.tickers()} | set(symbols)
             known = self.holdings_factory is None or (self.holdings is not None and self.holdings.base is not None)
             self.alerts.maintain(allowed, known)
 
     def alert_state(self):
-        return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'events': [], 'eligible_symbols': [],
-                'scope_known': True, 'sound': {'enabled': False, 'error': None}, 'error': None}
+        return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'unread': [], 'eligible_symbols': [],
+                'scope_known': True, 'sound': {'enabled': False, 'error': None, 'playing': []}, 'error': None}
 
     def focus_classifications(self, tickers):
         rows = {row['symbol'].removesuffix('.US'): row for row in self.snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
@@ -105,6 +108,8 @@ class Workbench:
             self.workspace.reclassify(snapshot, self.preferences)
 
     def workspace_changed(self):
+        if self.only is None and self.has_snapshot(self.workspace.date) and self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences):
+            return  # The save callback publishes the completed classification.
         context = self._list_context()
         if context != self.list_context:
             self.list_context = context
@@ -119,7 +124,7 @@ class Workbench:
                 tickers = [ticker for ticker in tickers if ticker.symbol in wanted]
             self.monitor.update_tickers(tickers)
         self.refresh_alert_scope()
-        self.refresh_scan_quotes()
+        self.refresh_list_quotes()
 
     async def switch_mode(self, mode):
         if mode not in ('scan', 'monitor'):
@@ -136,7 +141,7 @@ class Workbench:
                 # Mock Scan stays offline; only an explicit Monitor switch may connect.
                 await self.stop_monitor()
             self.mode = mode
-            self.refresh_scan_quotes()
+            self.refresh_list_quotes()
             self.run_id = uuid.uuid4().hex
             self.focus = (self.symbols[0] if self.symbols else '', self.focus[1])
             return self.list_state()
@@ -151,7 +156,8 @@ class Workbench:
             wanted = {s if s.endswith('.US') else s + '.US' for s in self.only}
             tickers = [t for t in tickers if t.symbol in wanted]
         broker = self.broker_factory({ticker.symbol for ticker in tickers})
-        self.monitor = DataService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path, alerts=self.alerts)
+        self.monitor = MonitorService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path,
+                                   alerts=self.alerts, intraday=self.only is None)
         self.workspace_changed()
         self.monitor_task = asyncio.create_task(self.monitor.run())
         if self.holdings_factory:
@@ -161,8 +167,6 @@ class Workbench:
             self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
 
     async def start_background(self):
-        if self.sound and self.sound_task is None:
-            self.sound_task = asyncio.create_task(self.sound.run())
         if self.only is None:
             try:
                 await self.prepare_lists()
@@ -184,7 +188,7 @@ class Workbench:
         self.previous_cache.clear()
         if self.has_snapshot(self.workspace.date):
             self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences)
-        self.refresh_scan_quotes()
+        self.refresh_list_quotes()
         self.run_id = uuid.uuid4().hex
 
     async def stop_monitor(self):
@@ -216,10 +220,6 @@ class Workbench:
         return self.holdings.state(quotes, as_of=datetime.fromtimestamp(now, ET).date().isoformat())
 
     async def close(self):
-        if self.sound_task:
-            self.sound_task.cancel()
-            await asyncio.gather(self.sound_task, return_exceptions=True)
-            self.sound_task = None
         if self.additional_task:
             self.additional_task.cancel()
             await asyncio.gather(self.additional_task, return_exceptions=True)
@@ -231,13 +231,15 @@ class Workbench:
         if self.pipeline:
             await self.pipeline.close()
         await self.stop_monitor()
+        if self.sound:
+            await self.sound.close()
         if self.alerts:
             self.alerts.close()
 
     async def run(self):
         while True:
             self.refresh_alert_scope()
-            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task), ('Alert sound', self.sound_task)):
+            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task)):
                 if task and task.done():
                     task.result()
                     raise RuntimeError(f'{name} task stopped unexpectedly')
@@ -265,7 +267,8 @@ class Workbench:
         if not self.has_snapshot(value):
             return []
         snapshot = self.snapshot(value)
-        data = self.workspace.data if value == self.workspace.date else json.loads((self.workspace.root / value / 'workspace.json').read_text())
+        data = self.workspace.data if value == self.workspace.date else apply_rules(
+            json.loads((self.workspace.root / value / 'workspace.json').read_text()), snapshot, self.preferences)
         prior = previous_candidates(self.workspace.root, value) if value != self.selected_date else self.previous()
         view = derive_day_view(value, candidates(snapshot), prior, data)
         rows = {row['symbol']: row for row in snapshot['rows']}
@@ -279,7 +282,7 @@ class Workbench:
                 result.append({**rows.get(symbol, {}), **state, 'symbol': symbol, 'ticker': ticker,
                                'status': group, 'order_index': index, 'discover_priority': priority.get(ticker),
                                'pinned': ticker in pins, 'pin_index': pins.get(ticker),
-                               'is_new': ticker in view.new, 'is_returned': ticker in view.returned})
+                               'is_new': ticker in view.new})
         return result
 
     def monitor_board(self):
@@ -318,8 +321,14 @@ class Workbench:
                 'dates': sorted((p.parent.name for p in self.workspace.root.glob('*/scan.json')), reverse=True),
                 'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False,
                 'holdings': self.holdings_state(), 'massive': massive,
+                'intraday': self.intraday_state(),
                 'holding_symbols': holding_symbols, 'current_regular_session': self.calendar.is_open(now),
                 'scan_running': self.generating or bool(massive and massive['running'])}
+
+    def intraday_state(self):
+        if self.monitor and self.monitor.intraday and (self.mode == 'monitor' or self.selected_date == self.workspace.date):
+            return self.monitor.intraday.state()
+        return {'enabled': False, 'symbols': {}}
 
     def select(self, symbol, timeframe, source='watchlist'):
         if self.mode == 'monitor':
@@ -346,31 +355,11 @@ class Workbench:
                 'quote': self.scan_quote(symbol)}
 
     def scan_quote(self, symbol):
-        result = {'regular': None, 'extended': {}, 'connection_health': 'OFFLINE', 'error': None}
         if (self.selected_date != self.workspace.date or self.mock or not self.monitor or
                 symbol not in self.monitor.quotes.all_symbols):
-            return result
-        now = int(self.monitor.now())
-        result = self.monitor.quotes.output(symbol, now)
-        regular, extended = result['regular'], result['extended']
-        result['regular'], result['extended'] = None, {}
-        local = datetime.fromtimestamp(now, ET)
-        session = self.calendar.session(local.date())
-        if not session:
-            return result
-        opened, closed = session
-        pre = int(local.replace(hour=4, minute=0, second=0, microsecond=0).timestamp())
-        post = int(local.replace(hour=20, minute=0, second=0, microsecond=0).timestamp())
-        for name, start, end in (('Pre', pre, opened), ('Intraday', opened, closed), ('Post', closed, post)):
-            if start <= now < end:
-                value = regular if name == 'Intraday' else extended.get(name)
-                if value and start <= value['timestamp'] < end:
-                    if name == 'Intraday':
-                        result['regular'] = value
-                    else:
-                        result['extended'][name] = value
-                break
-        return result
+            return {'regular': None, 'extended': {}, 'latest': None,
+                    'connection_health': 'OFFLINE', 'error': None}
+        return self.monitor.quotes.output(symbol, int(self.monitor.now()))
 
     def additional_info(self, symbol):
         return self.additional.info(symbol)
@@ -419,17 +408,17 @@ class Workbench:
             if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags'] if tag['role'] in ('setup', 'label')}:
                 raise ValueError('Manual Tags must be Setup or Label')
             self.workspace.set_manual_tags(normalize_ticker(payload['ticker']), payload['tags'])
-        elif action == 'move' and not payload.get('tickers'):
+        elif action == 'move' and 'target' in payload:
+            ticker = normalize_ticker(payload['ticker'])
+            classification = self.focus_classifications([ticker])[ticker] if payload['target'] == 'focus' else None
+            self.workspace.move_member(ticker, payload['target'], candidates(self.snapshot(self.workspace.date)),
+                                       classification=classification)
+        elif action == 'move':
             sections = {'unclassified', 'focus', 'wait'} | {tag['id'] for tag in self.preferences['tags'] if tag['role'] == 'setup'}
             if payload['section'] not in sections:
                 raise ValueError('Unknown setup section')
             self.workspace.move_ticker(normalize_ticker(payload['ticker']), payload['section'], payload['index'],
                                       list_name=payload.get('list_name', 'focus'))
-        elif action == 'move':
-            snapshot = self.snapshot(self.workspace.date)
-            self.workspace.move_members(payload['tickers'], payload['source'], payload['target'], candidates(snapshot),
-                                        previous_candidates(self.workspace.root, snapshot['date']),
-                                        classifications=self.focus_classifications(payload['tickers']))
         else:
             raise ValueError('Unknown list action')
         await self.prepare_lists()
@@ -468,8 +457,8 @@ class Workbench:
                 self.alerts.rearm(payload['id'], payload['price'], payload['generation'])
             elif action == 'delete':
                 self.alerts.delete(payload['id'])
-            elif action == 'acknowledge':
-                self.alerts.acknowledge(payload['event_id'])
+            elif action == 'read':
+                self.alerts.read(payload['symbol'])
             else:
                 raise ValueError('Unknown alert action')
             return self.alert_state()
@@ -504,6 +493,10 @@ class Workbench:
                                                                 directory_path=RuntimePaths(self.runtime).symbol_directory)
                             publish_day(self.workspace.root, snapshot)
                             self.scan_published()
+                    # Ready data stays cached; explicit Refresh still resets the daily manual layer.
+                    self.workspace.reload()
+                    if value == self.workspace.date and (not self.pipeline or self.pipeline.state()['ready']):
+                        self.workspace.reclassify(self.snapshot(value), self.preferences, reset=True)
                     if value and value != self.selected_date:
                         self.selected_date = value
                         self.run_id = uuid.uuid4().hex
@@ -519,6 +512,8 @@ class Workbench:
         raise ValueError('Unknown action')
 
     async def api(self, path, query):
+        if path == '/v1/intraday-state':
+            return self.intraday_state()
         if path == '/v1/additional-info':
             return self.additional_info(query['symbol'][0]) if 'symbol' in query else self.additional.state()
         if path == '/v1/alerts':

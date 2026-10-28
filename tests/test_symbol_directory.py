@@ -3,9 +3,9 @@ import asyncio
 
 import pytest
 
-from data_service import symbol_directory as directory
+from data_service.additional_info import symbol_directory as directory
 from data_service.paths import RuntimePaths
-from data_service.store import atomic_json
+from data_service.storage import atomic_json
 from scripts.pull_symbol_directory import main
 
 NASDAQ_HEADER = 'Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares'

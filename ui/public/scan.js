@@ -10,15 +10,12 @@ export class ScanControls {
     updateList;
     changed;
     enabled = false;
-    selected = new Set();
     sortControl = document.createElement('select');
     preferences;
     draft;
     baseline;
     rows = [];
     savedKey = '';
-    date = '';
-    editable = false;
     panel;
     pending = false;
     serverRunning = false;
@@ -36,7 +33,6 @@ export class ScanControls {
                 return; // The standalone simulator has no Scan endpoints.
             this.panel = new FilterPanel($('filter-rules'), catalog, filters => {
                 this.draft.filters = filters;
-                this.selected.clear();
                 this.render();
                 this.changed();
             });
@@ -46,7 +42,6 @@ export class ScanControls {
             const group = event.target.closest('[data-list]')?.dataset.list;
             if (group && this.preferences) {
                 this.preferences.activeList = group;
-                this.selected.clear();
                 this.render();
                 this.changed();
                 void this.persist(this.preferences);
@@ -65,14 +60,13 @@ export class ScanControls {
         });
         $('scan-date').addEventListener('change', event => { void this.action('scan', { date: event.target.value }); });
         $('scan-refresh').addEventListener('click', () => { void this.action('scan', { generate: true }); });
-        $('scan-refresh').title = 'Prepare and open the latest completed trading date; skip completed steps';
+        $('scan-refresh').title = 'Refresh latest lists from automatic rules; clear daily manual adjustments; reuse prepared data';
         $('scan-tags').addEventListener('click', event => {
             const id = event.target.closest('[data-tag]')?.dataset.tag;
             if (id)
                 this.protectDraft(() => {
                     this.preferences.activeTag = this.preferences.activeTag === id ? null : id;
                     this.resetDraft();
-                    this.selected.clear();
                     this.render();
                     this.changed();
                     void this.persist(this.preferences);
@@ -113,12 +107,7 @@ export class ScanControls {
             void this.persist(preferences, true);
         });
         $('tag-discard').addEventListener('click', () => { const proceed = this.discard; this.discard = undefined; proceed?.(); });
-        $('clear-filters').addEventListener('click', () => { this.draft.filters = {}; this.selected.clear(); this.render(); this.changed(); });
-        $('scan-move').addEventListener('click', event => {
-            const target = event.target.closest('[data-target]')?.dataset.target;
-            if (target)
-                void this.move(target);
-        });
+        $('clear-filters').addEventListener('click', () => { this.draft.filters = {}; this.render(); this.changed(); });
         window.addEventListener('beforeunload', event => { if (this.dirty()) {
             event.preventDefault();
             event.returnValue = '';
@@ -146,13 +135,11 @@ export class ScanControls {
     update(data) {
         this.enabled = data.app_mode === 'scan';
         this.rows = data.board;
-        this.editable = data.editable;
         this.holdingSymbols = new Set(data.holding_symbols ?? []);
         this.serverRunning = data.scan_running === true;
         $('scan-controls').hidden = !data.preferences;
         $('list-tools').hidden = !data.preferences;
-        for (const id of ['scan-navigation', 'scan-move'])
-            $(id).hidden = !this.enabled;
+        $('scan-navigation').hidden = !this.enabled;
         if (!data.preferences)
             return;
         const preferences = { ...data.preferences, tags: data.preferences.tags.map(tag => ({ ...tag, appearance: tagAppearance(tag) })) };
@@ -164,26 +151,20 @@ export class ScanControls {
             this.preferences = structuredClone(preferences);
             if (!keepDraft) {
                 this.resetDraft();
-                this.selected.clear();
             }
-        }
-        if (this.date !== data.date) {
-            this.date = data.date;
-            this.selected.clear();
         }
         const select = $('scan-date');
         if (JSON.stringify(Array.from(select.options).map(option => option.value)) !== JSON.stringify(data.dates))
             select.replaceChildren(...(data.dates ?? []).map(date => new Option(date, date)));
-        select.value = this.date;
-        this.selected = new Set([...this.selected].filter(symbol => this.available(data.board).some(row => row.symbol === symbol)));
+        select.value = data.date ?? '';
         this.render();
     }
-    visible(rows) {
+    visible(rows, list = this.activeList, filtered = true) {
         rows = this.available(rows);
         const sort = this.enabled ? this.preferences?.sort ?? 'default' : 'default';
-        const inList = (row) => this.enabled ? row.status === this.activeList : row.status === 'focus';
+        const inList = (row) => this.enabled ? row.status === list : row.status === 'focus';
         const useTags = this.preferences ? this.useAssignedTags() : false;
-        return rows.filter(row => inList(row) && (!this.draft || matchesTag(row, this.draft, useTags)))
+        return rows.filter(row => inList(row) && (!filtered || !this.draft || matchesTag(row, this.draft, useTags)))
             .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) ||
             (a.pinned && b.pinned ? rank(a, 'pin_index') - rank(b, 'pin_index') :
                 (sort === 'default' ? 0 : rank(a, sort + '_rank') - rank(b, sort + '_rank')) || rank(a, 'order_index') - rank(b, 'order_index')));
@@ -191,22 +172,19 @@ export class ScanControls {
     isHolding(symbol) { return this.holdingSymbols.has(symbol); }
     available(rows) { return rows.filter(row => !this.isHolding(row.symbol)); }
     get activeList() { return this.enabled ? this.preferences?.activeList ?? 'discover' : 'focus'; }
-    async showList(list = 'focus') {
+    async showList(list = 'focus', resetTag = true) {
         if (!this.preferences)
             return;
         this.preferences.activeList = list;
-        this.preferences.activeTag = null;
-        this.selected.clear();
-        this.resetDraft();
+        if (resetTag) {
+            this.preferences.activeTag = null;
+            this.resetDraft();
+        }
         this.render();
         await this.persist(this.preferences);
     }
     get busy() { return this.pending; }
     get manualOrder() { return !this.enabled || this.preferences?.sort === 'default'; }
-    toggle(symbol) { if (this.selected.has(symbol))
-        this.selected.delete(symbol);
-    else
-        this.selected.add(symbol); this.render(); this.changed(); }
     async persist(preferences, fold = false) {
         this.pending = true;
         $('scan-error').textContent = '';
@@ -256,20 +234,12 @@ export class ScanControls {
             this.render();
         }
     }
-    async move(target) {
-        const tickers = this.visible(this.rows).filter(row => this.selected.has(row.symbol)).map(row => row.ticker);
-        if (await this.action('list', { action: 'move', source: this.activeList, target, tickers }))
-            this.selected.clear();
-        this.render();
-        this.changed();
-    }
     render() {
         if (!this.preferences || !this.draft)
             return;
         $('filter-editor').hidden = !this.editorOpen;
         $('filter-toggle').setAttribute('aria-expanded', String(this.editorOpen));
         const available = this.available(this.rows);
-        const filtered = this.visible(this.rows);
         $('scan-lists').querySelectorAll('[data-list]').forEach(button => {
             const group = button.dataset.list, count = available.filter(row => row.status === group && matchesTag(row, this.draft, this.useAssignedTags())).length;
             button.replaceChildren(group[0].toUpperCase() + group.slice(1), countBadge(count));
@@ -307,14 +277,6 @@ export class ScanControls {
         $('filter-rules').querySelectorAll('input,button').forEach(node => { node.disabled = this.pending; });
         this.panel?.render(this.draft.filters, available);
         $('filter-count').replaceChildren(countBadge(Object.keys(this.draft.filters).length));
-        const selected = filtered.filter(row => this.selected.has(row.symbol));
-        const count = selected.length;
-        $('scan-move').querySelectorAll('[data-target]').forEach(button => {
-            const target = button.dataset.target;
-            button.disabled = !this.editable || this.pending || !count || target === this.activeList ||
-                (target === 'hidden' && selected.every(row => row.section === 'hidden')) ||
-                (target === 'discover' && this.activeList === 'excluded' && selected.some(row => row.section !== 'hidden'));
-        });
         $('scan-refresh').disabled = this.pending || this.serverRunning;
         for (const id of ['scan-date', 'tag-name', 'tag-cancel', 'tag-delete', 'clear-filters', 'tag-icon', 'tag-color', 'tag-background'])
             $(id).disabled = this.pending;

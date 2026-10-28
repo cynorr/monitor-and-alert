@@ -1,6 +1,6 @@
 # List 模块设计
 
-本文件定义归属与分类逻辑；显示、布局和操作细则只在 [ui.md 的 List UI 章节](ui.md#list-ui) 维护。
+本文件定义归属与分类逻辑；显示与布局在 [List UI](ui.md#list-ui)，快捷键、单只操作和选择反馈只在 [List 交互](list-interactions.md) 维护。
 
 ## 背景与目的
 
@@ -18,28 +18,28 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 
 同一 symbol 在三个列表中只有一个归属。Holdings 独立，不改变名单归属；同 ticker 底层行情去重。常规名单前端屏蔽 Holdings 已有 ticker，后端成员与规则结果保留。
 
-Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为当日人工 Discover，并加入已有 Pinned 区首位、选中日 K。人工 Discover 当天刷新、重新分类和重启后仍保留，Setup/负面 Tag 如实计算，但当天不因候选门槛或负面规则被移走；不伪造 candidate 或市场排名。新完成日继承时删除人工 Discover 与全部 Pin，无跨日保留要求；需要长期关注时使用现有移入 Focus 操作。已有 Discover 搜索结果可置顶并选中，已有 Focus/Excluded 只选中、不改归属；Focus section 的显式新增保留原用途。
+Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为当日人工 Discover，并加入已有 Pinned 区首位、选中日 K。人工 Discover 在普通重新分类和同日重启后保留，点击 Refresh Scan 后清除人工保留资格，Setup/负面 Tag 如实计算，在显式 Refresh 前不因候选门槛或负面规则被移走；不伪造 candidate 或市场排名。新完成日或显式 Refresh 清理时删除人工 Discover 与全部 Pin，无跨日保留要求；需要长期关注时使用现有移入 Focus 操作。已有 Discover 搜索结果可置顶并选中，已有 Focus/Excluded 只选中、不改归属；Focus section 的显式新增保留原用途。
 
 ## 每日规则
 
-新完成交易日 Daily 和 feature 准备成功后，按 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 为候选及全部继承的 Focus、Excluded（含 Hidden）计算完整 feature 和 Growth 数值。继承成员即使掉出候选或 RFL 前 50 也继续计算，不另行排名。统一计算最终归属后一次保存，不先释放再逐只移回，不增加定时器或实时 Quote 分类。
+新完成交易日只继承 Focus 与未满七个自然日的 Hidden。 用户点击 Refresh Scan 使用同一清理与分类逻辑：只保留这些成员作为输入，清除人工 Discover、人工 Focus 当日豁免、人工 Setup/Label、人工主 section、全部 Pin 与人工排序，随后重新匹配；Focus 仍接受下表自动淘汰。Hidden 保留原 excluded_at，不重新计时。已有数据准备状态继续复用，不重复下载或构建；保存的 Tag 定义与显示 Filter 不清除。同日 Refresh 不更改交易日期或将当天新成员伪装成跨日 carried。Discover 与自动 Excluded 每日按当天 candidate 和保存的 Tag 规则生成，不维护跨日机器排除成员名单。完整 feature 和 Growth 范围只在 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 维护。
 
-| 当前归属 | 完成日判断 | 最终归属 |
+| 输入 | 完成日判断 | 最终归属 |
 | --- | --- | --- |
-| Discover / Focus / 机器 Excluded | 匹配负面条件 | Excluded 对应机器 section |
-| 机器 Excluded | 确认不匹配任何负面条件，仍是当天候选 | Discover，按 Setup 分组，否则 Unclassified |
-| 机器 Excluded | 确认不匹配任何负面条件，不是当天候选 | 退出当前名单，不在 Discover 显示 |
+| 当天 candidate | 匹配负面条件，且不属于保留的 Focus/Hidden | Excluded 对应机器 section |
+| 当天 candidate | 不匹配负面条件，且不属于 Focus/Hidden | Discover，按 Setup 分组，否则 Unclassified |
+| Focus | 匹配负面条件 | 淘汰出 Focus；仍是当天 candidate 则显示机器 Excluded，否则退出当前名单 |
 | Focus | 不匹配负面条件 | 继续 Focus，失去 Setup 或候选资格不影响归属 |
 | Hidden | 未满七个自然日 | 保留 Hidden，跳过名单规则判断 |
-| Hidden | 满七个自然日 | 参与同一分类；负面匹配进机器 section，否则仅当天候选回 Discover |
+| Hidden | 满七个自然日 | 解除屏蔽；仅当天 candidate 重新参与普通分类，否则退出当前名单 |
 
-机器 section 优先级为 Broken → Extended → Under-50；保留全部实际匹配 Tag。机器排除没有屏蔽期限，每份完成日截面重新判断，可直接换到另一个机器 section。Setup（Surf/Bounce 等）只负责分组，匹配 Setup 不会自动进入 Focus。
+机器 section 优先级为 Broken → Extended → Under-50，保留全部实际匹配 Tag。机器结果只属于当天候选，可从同一份截面和当前规则重建；不保存其成员身份、section 或机器 Tag 结论。增加负面规则不增加持久名单。Setup 只负责分组，不会自动进入 Focus。
 
-缺少数据不表示条件已经恢复，也不推断为 Broken。没有已确认的负面匹配、且仍有启用的负面规则无法确定时，保留原机器 section；AND 条件中只要有已知条件不成立，该规则即可确定不匹配。已有 Focus 不因缺少特征或 Setup 自动淘汰。
+缺失特征不视为已确认的负面匹配，也不推断为 Broken；已有 Focus 不因特征或 Setup 缺失自动淘汰。无历史机器 section 需要保留或恢复。
 
-Hidden 是明确的人工屏蔽，只有它保留七个自然日期限。新日继承先保留到期 Hidden，完整特征准备后才决定最终归属，避免它掉出扫描范围；期限内仍计算完整特征，只跳过分类判断。可以提前手动释放或明确加入 Focus。
+Hidden 保留七个自然日，期间即使不在 candidate 中也保留并计算完整特征，可以提前 Release 或加入 Focus。到期的非候选无需继续计算特征或追踪。
 
-人工加入 / 保留 Focus 当天优先，次日重新接受规则；机器标签仍如实显示。人工 Setup/Label 补充和主 section 调整仅当天有效，Tag 定义和 Focus 成员长期保留。
+人工加入 / 保留 Focus 当天优先，显式 Refresh 或次日首次分类重新接受规则；机器标签仍如实显示。当日人工 Discover 沿用搜索新增约定。人工 Setup/Label、主 section、Pin 与顺序在显式 Refresh 或新日清理前按当日规则保存；这些人工信息不因自动 section 仅存在于内存而丢失。
 
 ## Tag、Section 与 Filter
 
@@ -57,11 +57,11 @@ Filter 仅改变显示，不移动名单、不改变实时订阅。自动分类�
 
 ## 当日置顶
 
-置顶是独立的当日软状态，不是保存的规则 Tag，也不改变 List、主 section 或原有 section 顺序。每个 List 可置顶多个 ticker，置顶区顺序独立，Scan/Monitor 共用；取消置顶回到自己的 section。同一交易日保存、重分类与服务重启保留置顶；同 List 内换 section 保留，跨 List 移动（含规则导致的移动）取消。新完成交易日继承名单时清空全部置顶，和当天重新计算 Tag/section 的发布流程一致。Filter 与持仓屏蔽只影响可见结果，不取消置顶。
+置顶是独立的当日软状态，不是保存的规则 Tag，也不改变 List、主 section 或原有 section 顺序。每个 List 可置顶多个 ticker，置顶区顺序独立，Scan/Monitor 共用；取消置顶回到自己的 section。同一交易日普通保存、重分类与服务重启保留置顶；显式 Refresh 清空；同 List 内换 section 保留，跨 List 移动（含规则导致的移动）取消。新完成交易日继承名单时清空全部置顶，和当天重新计算 Tag/section 的发布流程一致。Filter 与持仓屏蔽只影响可见结果，不取消置顶。
 
 ## Scan 与 Monitor
 
-Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，盘前/盘后报价按 [Longbridge 范围](longbridge-data.md#定位与范围) 共用连接。Monitor 展示 Focus 和独立 Holdings；只有 Focus/Holdings 使用完整 Monitor 行情和 Alert，Scan 的额外 Quote 不扩大这两个范围。
+Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，最新报价（含盘前/盘后/夜盘）按 [Longbridge 范围](longbridge-data.md#定位与范围) 共用连接。Monitor 展示 Focus 和独立 Holdings；只有 Focus/Holdings 使用完整 Monitor 行情和 Alert，Scan 的额外 Quote 不扩大这两个范围。
 
 因此 Excluded 的盘中恢复不被实时发现；每日完成日扫描发现恢复。仍希望当天实时关注的股票，应明确留在 Focus。切换模式不停止后台 Focus 行情或 Holdings 刷新。
 
@@ -76,12 +76,12 @@ Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，盘前/�
 
 这是手动与 Alert 入选 Focus 的唯一分类规则入口。实现：workspace._focus 清理来源结果，Workbench.focus_classifications 通过 list_rules.focus_classification 重新匹配，手动与 Alert 共用并一次保存。
 
-- 从 Discover 或任一 Excluded section 移入 Focus，都使用同一流程，包括手动 Add to Focus、单个/批量 Move to Focus，以及 [Alert 创建引起的入选](alert.md#创建时的名单处理)。
-- 丢弃来源保存的 `tags`、`manual_tags`、`manual_tags_date`、原主 section 与 `manual_section_date`，解除排除/释放状态；不复制 Discover/Excluded 的分类结果。只清该 symbol 的成员结果，不删除或修改 Tag 定义。
+- 从 Discover 或任一 Excluded section 移入 Focus，都使用同一流程，包括手动 Add to Focus、单只 Move to Focus，以及 [Alert 创建引起的入选](alert.md#创建时的名单处理)。
+- 丢弃来源保存的 `tags`、`manual_tags`、`manual_tags_date`、原主 section 与 `manual_section_date`，解除排除状态；不复制 Discover/Excluded 的分类结果。只清该 symbol 的成员结果，不删除或修改 Tag 定义。
 - 使用当前有效 workspace 对应的本地特征和当前已保存的 Tag 定义，复用 Focus 现有匹配逻辑重新计算全部匹配 Tag；不使用来源已保存的 Tag 列表、未保存编辑草稿或历史 Scan 的分类结果。
 - 主 section 仅从重新匹配的 Setup Tag 中选取，多个匹配按当前保存的 Setup 顺序选择第一个，例如 Surf、Bounce；没有匹配则为 Unclassified。缺失特征沿用现有 Missing 匹配语义，不猜测、不为入选触发网络下载。
-- 显式入选沿用当前的当日人工 Focus 优先：当天保留 Focus，重新算出的负面 Tag 可显示，但不会因本次入选立即回到 Excluded；次日恢复现有名单规则。这不新增 Alert 策略或新的 Tag 判定条件。
-- 分类完成后，将新成员放到对应 Focus section 的第一个；批量操作按提交顺序将同 section 新成员作为一块置前，原有成员的相对顺序不变。
+- 显式入选沿用当前的当日人工 Focus 优先：当天保留 Focus，重新算出的负面 Tag 可显示，但不会因本次入选立即回到 Excluded；显式 Refresh 或次日首次分类恢复自动名单规则。这不新增 Alert 策略或新的 Tag 判定条件。
+- 分类完成后，将新成员放到对应 Focus section 的第一个，原有成员的相对顺序不变。
 - 清理、重新匹配、section 与顺序在同一次名单操作中完成并同步保存，不先发布保留旧 Tag 或临时 section 的中间状态。
 - 已经在 Focus 的 symbol 继续新增 Alert，不重算其入选状态、不清人工结果、不置顶。Focus 内手动跨 section、Shift 换序或组内拖动仍按现有人工调整规则，不被这次入选规则覆盖。
 - Search/section `+` 将已有 Discover/Excluded symbol 明确加入 Focus 时，也按上述规则重新分类，不用入口预设 section 覆盖自动入选结果；全新 symbol 的 Search/section `+` 入口仍按现有新增契约处理。
@@ -92,3 +92,7 @@ Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，盘前/�
 继续使用 workspace.json、现有截面和 preferences.json。旧 Focus / Wait 合并为 Focus；旧 Hidden 转为 Excluded / Hidden 并保留剩余期限。共享后台规则计算结果，不新增服务、通用规则框架或每日提醒；Quote 范围统一见 Longbridge 数据要求。
 
 更新规则时重评已有本地截面；GET 和切页不触发下载。新 Daily / feature 成功后后台发布分类；失败保留完整旧结果并显示其日期。
+
+## 盘中 In Play 展示
+
+[Intraday State](intraday-state.md#展示与-in-play)提供当前Focus的In Play section，位于Pinned之后；原分组和Tags继续保留，价格和量能仅改变展示状态/顺序，不改真实三名单、每日Tag、主section、人工顺序或Pin。筛选/折叠不缩减后台监控，空section整个隐藏。完整聚集、稳定排序和编辑边界只在独立需求维护。

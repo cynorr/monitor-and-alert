@@ -16,8 +16,7 @@ from pathlib import Path
 
 from .daily import read_day
 from .splits import read_existing
-from ..downloader import append_ohlc_log, ohlc_comparison
-from ..store import BAR_SCHEMA, Bar
+from ..storage import BAR_SCHEMA, Bar, append_ohlc_log, ohlc_comparison
 
 LOGGER = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ import pytest
 
 from data_service.additional_info import AdditionalInfo
 from data_service.http_api import create_app
-from data_service.store import atomic_json
+from data_service.storage import atomic_json
 from data_service.workbench import Workbench
 from data_service.workspace import Workspace
 
