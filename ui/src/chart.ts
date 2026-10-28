@@ -41,6 +41,7 @@ export class Panel {
     fitted = false;
     hoveredTime?: number;
     precision = 2;
+    tradePrices: number[] = [];
     private linkedPrice?: { series: ISeriesApi<'Candlestick'> | ISeriesApi<'Histogram'>; line: IPriceLine };
     private quotePrice?: { line: IPriceLine; price: number };
     onHover: (row?: Row, price?: number, paneIndex?: number, time?: number) => void = () => { };
@@ -59,8 +60,9 @@ export class Panel {
             autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
                 const info = original();
                 if (!info?.priceRange) return info;
-                if (!this.quotePrice) return info;
-                return { ...info, priceRange: { minValue: Math.min(info.priceRange.minValue, this.quotePrice.price), maxValue: Math.max(info.priceRange.maxValue, this.quotePrice.price) } };
+                const prices = [...this.tradePrices, ...(this.quotePrice ? [this.quotePrice.price] : [])];
+                if (!prices.length) return info;
+                return { ...info, priceRange: { minValue: Math.min(info.priceRange.minValue, ...prices), maxValue: Math.max(info.priceRange.maxValue, ...prices) } };
             } });
         const colors = { ema10: palette.blue, ema20: palette.yellow, [daily ? 'sma50' : 'sma65']: palette.red };
         for (const [name, color] of Object.entries(colors))

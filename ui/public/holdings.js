@@ -1,5 +1,6 @@
 import { attentionState, attentionAppearance } from './attention.js';
 import { symbolRow } from './symbol-row.js';
+import { HoldingsLayout } from './holdings-layout.js';
 import { $ } from './types.js';
 import { compareRank, stateAppearance, adrText, adrTitle, volumeBadge } from './intraday-state.js';
 export function holdingsErrorAdvice(kind) {
@@ -53,8 +54,7 @@ export class HoldingsList {
     groups = new Map();
     order = '';
     sort = null;
-    widthSignature = '';
-    minimumWidth = 0;
+    layout;
     collapsed = false;
     regularSession = false;
     intraday = { enabled: false, symbols: {} };
@@ -64,7 +64,7 @@ export class HoldingsList {
         this.onSelect = onSelect;
         this.isActive = isActive;
         this.onWidth = onWidth;
-        new ResizeObserver(() => this.measurePriceWidth()).observe($('holdings-table'));
+        this.layout = new HoldingsLayout($('holdings-table'), () => this.intraday.enabled && this.regularSession ? 9 : 8, onWidth);
         try {
             this.collapsed = localStorage.getItem('holdings-collapsed') === 'true';
         }
@@ -213,13 +213,11 @@ export class HoldingsList {
         const showState = this.intraday.enabled && this.regularSession;
         if (table.classList.contains('holdings-state') !== showState) {
             table.classList.toggle('holdings-state', showState);
-            this.minimumWidth = 0;
-            this.widthSignature = '';
+            this.layout.reset();
         }
         if (table.classList.contains('holdings-regular') !== this.regularSession) {
             table.classList.toggle('holdings-regular', this.regularSession);
-            this.minimumWidth = 0;
-            this.widthSignature = '';
+            this.layout.reset();
         }
         if (this.regularSession && this.sort === 'extended_percent')
             this.sort = null;
@@ -240,7 +238,7 @@ export class HoldingsList {
             this.rows.clear();
             this.groups.clear();
             this.order = '';
-            this.widthSignature = '';
+            this.layout.invalidate();
             const body = document.createDocumentFragment();
             for (const holding of data?.holdings ?? []) {
                 for (const sequence of holding.sequences) {
@@ -362,41 +360,10 @@ export class HoldingsList {
                 (tradesFocus ? row.querySelector('[data-trades]') : row).focus({ preventScroll: true });
         }
         if (!this.data) {
-            this.minimumWidth = 0;
+            this.layout.reset();
             this.onWidth(260);
         }
         else if (data)
-            this.measureWidth();
-    }
-    measureWidth() {
-        const table = $('holdings-table');
-        // Numeric fonts are tabular: measure again only when content gains digits
-        // or the row structure changes, rather than cloning on each quote update.
-        const lengths = Array.from({ length: table.tHead.rows[0].cells.length }, (_, index) => Math.max(0, ...Array.from(table.rows, row => {
-            const cell = row.cells[index];
-            return cell && getComputedStyle(cell).display !== 'none' ? Math.max(...Array.from(cell.childNodes, node => node.textContent?.length ?? 0)) : 0;
-        })));
-        const signature = JSON.stringify(lengths);
-        if (signature !== this.widthSignature) {
-            this.widthSignature = signature;
-            const copy = table.cloneNode(true);
-            copy.removeAttribute('id');
-            copy.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
-            copy.classList.add('holdings-measure');
-            copy.setAttribute('aria-hidden', 'true');
-            document.body.append(copy);
-            const intrinsic = Math.ceil(copy.getBoundingClientRect().width);
-            copy.remove();
-            const scroll = table.closest('.holdings-scroll');
-            this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + scroll.offsetWidth - scroll.clientWidth);
-        }
-        this.onWidth(this.minimumWidth);
-        this.measurePriceWidth();
-    }
-    measurePriceWidth() {
-        const table = $('holdings-table');
-        const headers = table.tHead.rows[0].cells;
-        const end = headers[this.intraday.enabled && this.regularSession ? 9 : 8];
-        table.style.setProperty('--holding-price-width', `${end.getBoundingClientRect().right - headers[0].getBoundingClientRect().left}px`);
+            this.layout.measure();
     }
 }

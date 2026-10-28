@@ -297,3 +297,70 @@ button:disabled { cursor: default; opacity: .45; }
 .volume-badge[data-level="2"] { background:var(--color-volume-medium); }
 .volume-badge[data-level="3"] { background:var(--color-volume-high); color:var(--color-white); }
 .holdings-table:not(.holdings-state) tr > :nth-child(n+10) { display:none; }
+
+/* Trade shares the mode/timeframe capsules and leaves the clock toolbar intact. */
+[data-mode="trade"] { --header-height: 192px; }
+[data-mode="trade"] #intraday-panel .chart-header { position: relative; }
+[data-mode="trade"] #intraday-panel .header-bottom { position: absolute; left: 0; bottom: 0; }
+[data-mode="trade"] #intraday-panel .state { position: absolute; left: 12px; bottom: 24px; margin-left: 0; }
+[data-mode="trade"] #intraday-panel .state.full { display: none; }
+.trade-ticket { position: absolute; right: 12px; bottom: var(--label-rule-gap); width: min(64%, 380px); display: grid; grid-template-rows: 34px 22px 36px 35px; row-gap: 4px; font-size: var(--font-small); font-variant-numeric: tabular-nums; }
+.trade-quotes, .trade-size, .trade-preview, .trade-actions { display: flex; align-items: center; }
+.trade-quotes { justify-content: flex-end; gap: 10px; }
+#trade-ask, #trade-bid { width: 4.4em; text-align: right; font-size: 21px; line-height: 30px; font-weight: 400; letter-spacing: -.3px; }
+#trade-ask { color: var(--color-blue); } #trade-bid { color: var(--color-red); }
+#trade-spread { display: grid; grid-template-rows: repeat(2, 14px); min-width: 5em; text-align: center; white-space: nowrap; color: var(--color-ink); }
+#trade-spread-percent.spread-wide { color: var(--color-red); font-weight: 700; }
+.trade-inactive { visibility: hidden; pointer-events: none; }
+.trade-size { gap: 10px; min-height: 22px; }
+.trade-size label { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+#trade-qty { min-width: 3.5em; font-size: var(--font-row); color: var(--color-ink); }
+.trade-ruler-axis { position: relative; flex: 1; min-width: 0; height: 22px; display: flex; align-items: center; }
+.trade-ruler-axis::before { content: ""; position: absolute; left: 3px; right: 3px; height: 3px; top: 11px; background: repeating-linear-gradient(to right, var(--color-muted) 0 1px, transparent 1px 10%); pointer-events: none; }
+#trade-ruler { appearance: none; -webkit-appearance: none; position: relative; width: 100%; height: 22px; padding: 0; margin: 0; background: transparent; cursor: ew-resize; }
+#trade-ruler::-webkit-slider-runnable-track { height: 1px; background: var(--color-ink); }
+#trade-ruler::-moz-range-track { height: 1px; background: var(--color-ink); }
+#trade-ruler::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 4px; height: 9px; margin-top: -4px; border: 0; border-radius: 999px; background: var(--color-ink); }
+#trade-ruler::-moz-range-thumb { width: 4px; height: 9px; border: 0; border-radius: 999px; background: var(--color-ink); }
+@media (min-resolution: 2dppx) {
+    #trade-ruler::-webkit-slider-runnable-track { height: .5px; }
+    #trade-ruler::-moz-range-track { height: .5px; }
+}
+.trade-preview { justify-content: flex-end; gap: 12px; min-height: 36px; color: var(--color-ink); }
+#trade-estimate { font-size: var(--font-title); font-weight: 400; line-height: 34px; }
+#trade-risk { font-size: var(--font-detail); white-space: nowrap; }
+.trade-actions { justify-content: flex-end; gap: 10px; min-height: 34px; }
+.trade-side { display: flex; align-items: stretch; border-radius: 999px; overflow: hidden; background: var(--surface-muted); }
+.trade-buy-side { display: flex; flex-direction: column; text-align: center; }
+.trade-buy-side > span { font-size: var(--font-row); line-height: 14px; padding-top: 2px; }
+.trade-buy-side > div { display: flex; }
+.trade-side button { white-space: nowrap; padding: 2px 8px 4px; font-size: var(--font-small); }
+.trade-buy-side button + button, .trade-sell-side { border-left: 2px solid white; }
+.trade-side .trade-sell-side { padding: 5px 10px; font-size: var(--font-row); }
+.trade-side button.active { color: white; background: #242c38; }
+.trade-side button:not(:disabled):not(.active):hover { background: #dfe4eb; }
+.trade-auto-pill { margin-left: 4px; }
+#trade-auto { color: var(--color-blue); }
+#trade-auto:disabled { color: var(--color-muted); opacity: 1; }
+.trade-send-pill { flex-shrink: 0; }
+.trade-feedback { position: absolute; right: 0; bottom: calc(100% + 4px); display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 6px; border-radius: 8px; background: white; box-shadow: var(--panel-shadow); }
+#trade-message { font-size: 10px; color: var(--color-negative); max-height: 36px; overflow: auto; }
+#trade-message.unknown { color: var(--color-yellow-text); }
+[data-editing="stop"] #trade-message { color: var(--color-ink); }
+.trade-feedback button { font-size: 10px; padding: 3px 6px; border-radius: 999px; background: var(--surface-muted); white-space: nowrap; }
+#schwab-toggle { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; padding: 5px 0; }
+#schwab-arrow { width: 16px; font-size: 18px; }
+#schwab-holdings:not([hidden]) { padding-bottom: 8px; }
+#schwab-holdings:has(#schwab-content[hidden]) { padding-bottom: 0; }
+.schwab-table[data-regular="true"] [data-field="extended_percent"],
+.schwab-table:not(.holdings-state) [data-field="adr"],
+.schwab-table:not(.holdings-state) [data-field="cum"],
+.schwab-table:not(.holdings-state) [data-field="local"] { display: none; }
+.holding-tags .symbol-flag.entry { color: var(--color-blue); }
+.holdings-detail-grid { display: grid; grid-template-columns: 46px minmax(44px, .8fr) repeat(2, minmax(52px, 1fr)) minmax(68px, 1.2fr) minmax(45px, .8fr) minmax(55px, 1fr) 20px; gap: 8px; align-items: center; min-height: 18px; }
+.holdings-detail-grid > span { text-align: right; white-space: nowrap; }
+.holdings-detail-grid [data-part="kind"] { text-align: left; }
+.holdings-detail-grid [data-part="stop"] { color: var(--color-red); }
+.holding-cancel { width: 18px; height: 18px; font-size: 15px; font-weight: 400; line-height: 18px; }
+.holding-cancel:hover { background: #dfe4eb; }
+.schwab-table tfoot { font-variant-numeric: tabular-nums; }

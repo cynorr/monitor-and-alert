@@ -442,7 +442,9 @@ def test_workbench_http_ws_holdings_only_selection_duplicate_and_scan_background
             await asyncio.sleep(.05)
         assert app.monitor.view('XYZ.US', '2h')['charts']['1d']['bars']
         assert app.monitor.view('XYZ.US', '2h')['charts']['2h']['bars']
-        app.monitor.update_tickers([Ticker('XYZ.US', 'XYZ', 'focus')])
+        # Add a Focus duplicate without silently removing workspace members
+        # behind Workbench's back while their candle tasks are still running.
+        app.monitor.update_tickers([*app.monitor.tickers, Ticker('XYZ.US', 'XYZ', 'focus')])
         assert app.symbols.count('XYZ.US') == 1
         runner = web.AppRunner(create_app(app))
         await runner.setup()

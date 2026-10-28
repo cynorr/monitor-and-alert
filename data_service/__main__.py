@@ -24,7 +24,7 @@ def parser():
     result.add_argument('--massive-credentials', type=Path, default=Path('massive-token.txt'))
     result.add_argument('--holdings-rules', type=Path, help='Buy/sell rules; defaults to runtime/holdings')
     result.add_argument('--runtime', type=Path, default=Path('runtime'))
-    result.add_argument('--mode', choices=('monitor','scan'), default='monitor')
+    result.add_argument('--mode', choices=('monitor','scan','trade'), default='monitor')
     result.add_argument('--daily-db', type=Path, help='Read-only external daily SQLite; disables the built-in Massive pipeline')
     result.add_argument('--date', help='Completed trading date; scan defaults to upstream metadata.completed_date')
     result.add_argument('--force', action='store_true', help='Force the Massive splits/bars/features refresh; existing raw daily files are kept')
@@ -56,17 +56,21 @@ async def run(args, tickers):
             return Holdings(SnapTrade(*read_snaptrade_credentials(args.holdings_credentials),
                                       paths.holdings_dir / 'latest.json'),
                             args.holdings_rules or paths.holdings_dir)
+        from .trade import SchwabTrade
         workspace = Workspace(args.workspace, root=args.days)
         service = Workbench(workspace, args.runtime, args.daily_db,
                             lambda allowed: LongbridgeClient(args.credentials, allowed, args.runtime, args.region),
                             mock=args.mock_scan, only=args.symbols,
                             holdings_factory=holdings_factory if args.holdings_credentials.exists() else None,
-                            pipeline=pipeline, bars_path=paths.bars_db,
+                            pipeline=pipeline, bars_path=paths.bars_db, trade_factory=SchwabTrade,
                             additional_info=AdditionalInfo(paths.additional_info_dir,
                                                            enabled=not args.mock_scan and args.symbols is None))
         server = None
         try:
+            if args.mode == "trade" and service.trade is None:
+                raise ValueError("Trade is unavailable for mock or symbol-subset sessions")
             service.mode = args.mode
+            service.account_mode = "trade" if args.mode == "trade" else "monitor"
             workspace.start_watcher()
             server = await start_http(service, args.port, args.cors_origin)
             await service.start_background()

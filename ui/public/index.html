@@ -25,6 +25,20 @@
       <div class="period-row"><div class="timeframes" role="group" aria-label="Intraday period"><button data-tf="5m" class="active" aria-pressed="true">5m</button><button data-tf="15m" aria-pressed="false">15m</button><button data-tf="30m" aria-pressed="false">30m</button><button data-tf="1h" aria-pressed="false">1h</button><button data-tf="2h" aria-pressed="false">2h</button></div></div>
       <div class="intraday-details"><span id="intraday-market-cap" hidden></span><div class="spread" hidden><span class="bid"></span><span class="ask"></span></div></div>
       <div class="header-bottom"><div id="intraday-legend" class="legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma65">SMA 65</span></div><span id="intraday-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
+      <section id="trade-ticket" class="trade-ticket" aria-label="Trade ticket" hidden>
+        <div class="trade-quotes"><span id="trade-ask" aria-label="Schwab Ask">—</span><span id="trade-spread" aria-label="Bid ask spread"><span id="trade-spread-percent"></span><span id="trade-spread-value"></span></span><span id="trade-bid" aria-label="Schwab Bid">—</span></div>
+        <div id="trade-size" class="trade-size trade-inactive" aria-hidden="true"><label for="trade-ruler">Qty <output id="trade-qty"></output></label><div class="trade-ruler-axis"><input id="trade-ruler" type="range" min="0" max="1000" step="1" value="0" aria-label="Order quantity"></div></div>
+        <div id="trade-preview" class="trade-preview trade-inactive" aria-hidden="true"><span id="trade-estimate"></span><span id="trade-risk"></span></div>
+        <div class="trade-actions">
+          <div class="trade-side" role="group" aria-label="Order type">
+            <div class="trade-buy-side"><span>Buy</span><div><button type="button" data-trade-mode="breakout-buy" aria-label="Buy with stop" aria-pressed="false">with stop</button><button type="button" data-trade-mode="market-buy" aria-label="Buy market" aria-pressed="false">market</button></div></div>
+            <button type="button" class="trade-sell-side" data-trade-mode="market-sell" aria-label="Sell market" aria-pressed="false">Sell</button>
+          </div>
+          <div class="timeframes trade-auto-pill"><button id="trade-auto" type="button" disabled>Auto</button></div>
+          <div class="mode-switch trade-send-pill"><button id="trade-submit" class="active" type="button" disabled>Send</button></div>
+        </div>
+        <div id="trade-feedback" class="trade-feedback" hidden><span id="trade-message" role="status"></span><button id="trade-refresh" type="button" hidden>Refresh orders</button><button id="trade-checked" type="button" hidden>Checked in Schwab</button></div>
+      </section>
     </div>
     <div id="intraday-ohlc" class="ohlc">—</div>
     <div class="chart-host" id="intraday-chart"><div class="volume-label" id="intraday-volume">V —</div></div><div class="chart-empty" id="intraday-empty">Loading</div>
@@ -32,7 +46,7 @@
   <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
   <aside class="watchlist" aria-label="Watchlist">
     <div class="list-header">
-    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
+    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button><button data-app-mode="trade">Trade</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
     <div id="list-tools" class="list-tools" hidden><button id="filter-toggle" aria-expanded="false" aria-controls="filter-editor">Filters <span id="filter-count"></span></button><div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div></div><button id="tag-add" class="add-button" aria-label="Create Tag">+</button></div>
     </div>
@@ -57,6 +71,10 @@
     </section>
     <div id="workspace-error" class="list-message" role="alert"></div>
     <div id="list-notice" class="list-message" role="status"></div>
+    <section id="schwab-holdings" class="holdings-list" aria-label="Schwab holdings and orders" hidden>
+      <div class="holdings-heading"><button id="schwab-toggle" type="button" aria-expanded="true"><span id="schwab-arrow">▾</span>Holdings <span id="schwab-count" class="count-badge"></span></button><div class="holdings-meta"><time id="schwab-updated"></time><b id="schwab-account" aria-label="Schwab account value">—</b></div></div>
+      <div id="schwab-content"><div class="holdings-scroll"><table id="schwab-table" class="holdings-table schwab-table" aria-label="Schwab holdings and orders"><thead><tr id="schwab-head"></tr></thead><tbody id="schwab-rows"></tbody><tfoot><tr><td>Total</td><td id="schwab-total-value"></td><td id="schwab-total-percent"></td><td id="schwab-total-pnl"></td><td></td><td data-field="extended_percent"></td><td id="schwab-total-day" title="Schwab current-position day P/L; excludes realized sales"></td><td data-field="adr"></td><td data-field="cum"></td><td data-field="local"></td></tr></tfoot></table></div><div id="schwab-empty" class="list-message"></div></div>
+    </section>
     <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
       <div class="holdings-heading">
         <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count" class="count-badge"></span></button>

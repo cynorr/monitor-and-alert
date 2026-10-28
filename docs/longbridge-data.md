@@ -13,7 +13,7 @@
 
 ## 定位与范围
 
-Longbridge 服务 Monitor 的 Daily / Intraday、名单、持仓行情、Alert 和 Intraday State，以及 Scan 的最新价格标记。完整行情范围为当前 Focus 与当前 Holdings 的并集，含仅保留当天的已清仓批次；这些 symbol 请求 Quote、Trade 和六周期行情，并进入既有 Alert 白名单。当前余仓的自动风险监控范围另见 Intraday State，不把已清仓批次加入风险监控。
+Longbridge 服务 Monitor 的 Daily / Intraday、名单、持仓行情、Alert 和 Intraday State，以及 Scan 的最新价格标记。完整行情范围为当前 Focus、SnapTrade 当前 Holdings（含当天清仓批次）及 Schwab 当前持仓、活动订单和 Sold Today 的并集，symbol 去重；只从当前账户/订单快照派生，不使用其他历史成交扩大范围。Trade 的账户与订单范围见 [Schwab Trade](schwab-trade.md)。这些 symbol 请求 Quote、Trade 和六周期行情，并进入既有 Alert 白名单。当前余仓的自动风险监控范围另见 Intraday State，不把已清仓批次加入风险监控。Schwab 的 Entries 和 Sold Today 只提供图表，持仓角色仅取真实余仓；模式切换与风险身份规则见 Intraday State。
 
 正式服务在Scan与Monitor两种模式都订阅有效workspace完整Discover / Focus / Excluded（含Hidden）的Quote，不随模式、折叠、Filter或选中股票缩减。Focus / Holdings仍保留完整行情，其余成员仅Quote，不请求Trade/candle或历史、不写bars、不加入Alert。全部按symbol去重，名单变化按差集增删；切模式复用已有订阅和缓存。三名单通常少于200只，沿用官方批量订阅及快照，不新增分批上限。
 

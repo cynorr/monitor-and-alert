@@ -1,6 +1,7 @@
 import { $ } from './types.js';
 import { post } from './api.js';
 import { palette } from './palette.js';
+import { horizontalLines, nearPriceLine, panePoint, priceAtPointer } from './price-lines.js';
 export const alertPrice = (cents) => (cents / 100).toFixed(2);
 const previewCents = (price) => {
     const [digits, exponent = '0'] = price.toString().split('e');
@@ -15,23 +16,7 @@ class AlertPrimitive {
     attached(parameter) { this.requestUpdate = parameter.requestUpdate; }
     detached() { this.requestUpdate = () => { }; }
     updateAllViews() { this.layer.updateControls(); }
-    renderer = { draw: target => target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-            for (const alert of this.layer.rows()) {
-                const y = this.layer.coordinate(alert);
-                if (y == null || y < 0 || y > mediaSize.height)
-                    continue;
-                const color = alert.state === 'active' ? palette.ink : palette.muted;
-                ctx.strokeStyle = ctx.fillStyle = color;
-                ctx.lineWidth = 1;
-                // Match Lightweight Charts' 1px LargeDashed crosshair: 6px on / 6px off.
-                ctx.setLineDash([6, 6]);
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(mediaSize.width, y);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-        }) };
+    renderer = horizontalLines(() => this.layer.rows().map(alert => ({ y: this.layer.coordinate(alert), color: alert.state === 'active' ? palette.ink : palette.muted })), true);
     arrowRenderer = { draw: target => target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
             for (const alert of this.layer.rows()) {
                 const y = this.layer.coordinate(alert);
@@ -106,7 +91,7 @@ export class AlertChart {
     rows() { return this.controller.value?.alerts.filter(alert => alert.symbol === this.controller.symbol()) ?? []; }
     cents(alert) { return this.controller.preview?.id === alert.id ? this.controller.preview.cents : alert.price_cents; }
     coordinate(alert) { return this.panel.candles.priceToCoordinate(this.cents(alert) / 100); }
-    hits(y) { return this.rows().filter(alert => { const point = this.coordinate(alert); return point != null && Math.abs(point - y) <= 6; }); }
+    hits(y) { return this.rows().filter(alert => nearPriceLine(this.coordinate(alert), y)); }
     updateControls() {
         const alert = this.rows().find(alert => alert.id === (this.drag?.alert.id ?? this.hovered));
         const pane = this.panel.chart.panes()[0].getHTMLElement();
@@ -129,19 +114,11 @@ export class AlertChart {
         this.hovered = id;
         this.primitive.requestUpdate();
     }
-    point(event) {
-        const pane = this.panel.chart.panes()[0].getHTMLElement();
-        if (!pane)
-            return null;
-        const bounds = pane.getBoundingClientRect(), size = this.panel.chart.paneSize(0);
-        const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
-        return x >= 0 && x < size.width && y >= 0 && y < size.height ? { x, y } : null;
-    }
     stop(event) { event.preventDefault(); event.stopImmediatePropagation(); this.suppressed = true; }
     down(event) {
         if (event.button !== 0 || !this.controller.symbol())
             return;
-        const point = this.point(event);
+        const point = panePoint(this.panel, event);
         if (!point)
             return;
         // Pointerdown precedes the chart's mouse listeners, so alert gestures own this press.
@@ -178,7 +155,7 @@ export class AlertChart {
         if (!this.drag) {
             if (this.controls.contains(event.target))
                 return;
-            const point = this.point(event), hits = point ? this.hits(point.y) : [];
+            const point = panePoint(this.panel, event), hits = point ? this.hits(point.y) : [];
             const alert = hits.find(alert => alert.id === this.controller.selected) ?? hits.find(alert => alert.id === this.hovered) ?? hits[0];
             this.hover(alert?.id ?? '');
             return;
@@ -186,8 +163,7 @@ export class AlertChart {
         if (event.pointerId !== this.drag.pointer)
             return;
         this.stop(event);
-        const pane = this.panel.chart.panes()[0].getHTMLElement();
-        const price = this.panel.candles.coordinateToPrice(event.clientY - pane.getBoundingClientRect().top);
+        const price = priceAtPointer(this.panel, event);
         if (price != null && Number.isFinite(price) && price > 0)
             this.drag.price = price;
         this.controller.preview = { id: this.drag.alert.id, cents: previewCents(this.drag.price) };
@@ -232,7 +208,7 @@ export class AlertController {
                 this.layers.forEach(layer => layer.cancel());
                 this.choose('');
             }
-            if (event.key === 'Backspace' && this.mode() === 'monitor' && this.selected) {
+            if (event.key === 'Backspace' && this.mode() !== 'scan' && this.selected) {
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 void this.mutate({ action: 'delete', id: this.selected });

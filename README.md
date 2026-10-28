@@ -1,8 +1,8 @@
 # Market Monitor
 
-个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘。两个页面共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
+个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘，Trade 在同一工作台使用 Schwab 交易。三个模式共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
 
-[开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [List 交互](docs/list-interactions.md) · [Alert 需求](docs/alert.md) · [Chart UI](docs/chart-ui.md) · [Holdings 数据](docs/holdings-data.md) · [Holdings UI](docs/holdings-ui.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Longbridge 数据要求](docs/longbridge-data.md)** · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
+[Schwab Trade MVP](docs/schwab-trade.md) · [开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [List 交互](docs/list-interactions.md) · [Alert 需求](docs/alert.md) · [Chart UI](docs/chart-ui.md) · [Holdings 数据](docs/holdings-data.md) · [Holdings UI](docs/holdings-ui.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Longbridge 数据要求](docs/longbridge-data.md)** · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
 
 Alert 与统一移入 Focus 已实现；完整需求分别见 [Alert](docs/alert.md) 与 [List 入选规则](docs/list-design.md#统一移入-focus)，模块维护入口为 [data_service/alerts/AGENTS.md](data_service/alerts/AGENTS.md)。
 
@@ -22,11 +22,12 @@ python3 -m venv .venv
 | 启动方式 | 命令 | 数据 |
 | --- | --- | --- |
 | Monitor（默认） | `.venv/bin/python -m data_service serve` | 当前 Focus 与 Holdings 的 Longbridge 行情，runtime/longbridge/bars.sqlite3 |
+| Trade | `.venv/bin/python -m data_service serve --mode trade` | 同一 Longbridge 图表，独立 Schwab Holdings 与交易；不拼接 SnapTrade |
 | Scan | `.venv/bin/python -m data_service serve --mode scan` | 后台准备全市场 runtime/massive/daily.sqlite3 和最新完成日特征 |
 | Scan Mock | `.venv/bin/python -m data_service serve --mode scan --runtime runtime/scan-mock --mock-scan` | 独立合成日 K 和测试名单，MOCK 标记 |
 | Monitor 模拟器 | `./simulator/start.command --speed 30` | 临时库/名单，SIM 标记 |
 
-前三种在 http://127.0.0.1:8765/ 打开；模拟器在 http://127.0.0.1:18765/ 。命令同时启动后端和网页，不需另起前端。停止使用 Ctrl+C，关闭网页不停止后端。同一 runtime 只允许一个实例。
+正式服务与 Scan Mock 在 http://127.0.0.1:8765/ 打开；模拟器在 http://127.0.0.1:18765/ 。命令同时启动后端和网页，不需另起前端。停止使用 Ctrl+C，关闭网页不停止后端。同一 runtime 只允许一个实例。
 
 需要临时合成 Scan 数据时，先生成 Mock：
 
@@ -150,3 +151,9 @@ reconcile是有界真实近期窗口初始化，verify不联网。live验收需�
 WS选择含`type=select`、symbol、timeframe、request_id、mode。模式/日期切换及重连发送完整快照；日 K未变时只发预览/状态。状态包含loading/basic/full、errors与refreshing。
 
 UI构建产物和Lightweight Charts已随仓库提供，正常启动无需npm/CDN。模拟器详见 [simulator/README.md](simulator/README.md)。Alert 以独立需求文档为准；不增加下单、消息中间件或通用适配框架。
+
+## Schwab Trade
+
+使用现有 Monitor / Scan / Trade 三模式入口；Trade 使用原生 Schwab 持仓、订单和券商原值盈亏，展开为汇总 Buy、当天 Sold 和活动 Entry/Stop。两套账户独立取数与计算，只复用视觉和纯 UI 测宽。交易区位于 Intraday 右下，双图可拖动参考价和真实止损，新单与止损改单均由同一个 Send 明确提交。价差阈值在 config/trade-ui.json，修改后构建 UI。原五个交易函数与零写重试规则保留；完整范围、Sold Today 限制、数据字段及认证见 [Schwab Trade MVP](docs/schwab-trade.md)。
+
+凭证沿用原 macOS Keychain，重新授权运行 `.venv/bin/python -m data_service.schwab_backend auth`。旧 5678 独立服务应停用，不与集成 Runtime 同时运行。原项目 [后端设计](schwab-minimum-trader/backend-design.md) 已保留并统一风控值。Mock、模拟器和 --symbols 不开放真实交易。

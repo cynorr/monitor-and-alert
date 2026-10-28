@@ -18,8 +18,9 @@
 ## 身份、价格与图表模式
 
 - 每条 Alert 有独立 `alert_id`，按规范化的 `symbol`（例如 `AAPL.US`）归属和查询。同一 symbol 可以有多个 Alert，包括相同价格；symbol 不是唯一行主键。
-- 不以 Scan/Monitor、图表来源、日期、周期或 Holdings 批次区分 Alert。模式或周期切换不创建副本，Daily 与 Intraday 共用同一组 Alert。
-- Scan 与 Monitor 都允许设置、显示、选中、拖动和删除 Alert。Scan 使用 Daily，Monitor 使用 Daily/Intraday。
+- 不以 Scan/Monitor/Trade、图表来源、日期、周期或 Holdings 批次区分 Alert。模式或周期切换不创建副本，Daily 与 Intraday 共用同一组 Alert。
+- Scan、Monitor 与 Trade 都允许设置、显示、选中、拖动和删除 Alert。Scan 使用 Daily，Monitor/Trade 使用 Daily/Intraday。Trade 横线的拖动独立处理，不触发 Alert 拖动；Command+Option 创建 Alert 保留优先权；Backspace 不撤交易订单。
+- Sold Today 不参与自动余仓风险报警，但不禁用已保存的手动价格线；手动线继续按 symbol 共用。同 symbol 同时持有和当天卖出，不复制检测、声音或未读。
 - 创建价格就是按下鼠标左键时，鼠标纵坐标所对应水平线的价格；通过当前图表公开坐标 API 转换，不取 candle close、最高价、最低价或后台最新价，也不吸附 candle。
 - 后端把设置价格用 Decimal `ROUND_HALF_UP` 归一到两位小数，持久化为整数 cents；显示始终两位小数。价格必须有限且归一后大于零。
 - 直接保存点击得到的价格，不比较、不转换、不校正 Scan 与 Monitor 两种数据的价格口径。跨模式仍显示同一个数值。

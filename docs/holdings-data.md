@@ -1,5 +1,7 @@
 # Holdings 数据需求
 
+本文件维护原 SnapTrade 持仓口径。Trade 使用独立 Schwab 账户字段，唯一规范见 [Schwab Trade MVP](schwab-trade.md)，不读取本模块历史缓存或人工归属。
+
 更新：2026-10-16。这是 Holdings 数据与计算的唯一需求入口。显示交互只在 [holdings-ui.md](holdings-ui.md) 维护，实现契约见 [development.md](development.md)，开发遵循 [development-principles.md](development-principles.md)。
 
 ## 获取、归属与范围

@@ -106,10 +106,12 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
+| Schwab 活动订单 | 浅灰圆形按钮内 `×` | 取消指定订单；Entry/Stop 的目标规则见 Schwab Trade |
 | Daily / Intraday | `↦` | Go to latest，回到最新可用交易日 |
 | 图表 / 名单 / Holdings 错误 | 轮廓圆圈内的 `!`，暖黄色 | 提供当前错误详情，不扩展错误判断范围；Holdings 点击详情见独立 UI 规范 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
+- Schwab 订单取消复用 icon-button 的浅灰圆形底，Web 大小18px、×字号15px；不增加文字按钮或图标库。
 - 错误感叹号复用当前Chart警告的极简圆形轮廓：Web图形16×16px、1px边框，边框#b58722、文字#a47614，圆角50%；Chart与Holdings共用一份CSS绘制声明。交互按各模块要求，状态独立，Chart刷新不得改变Holdings错误入口。
 - 置顶箭头位于原有行操作左侧，按钮之间留 **10px** 空隙；Web 置顶/垃圾桶按钮为 **24×24px**，图形 **16×16px**。未置顶时 hover/键盘 focus 可见，置顶后持续显示蓝色，并提供 Unpin 名称和 pressed 状态。
 - 操作使用完整的英文说明和可访问名称，不能仅靠垃圾桶或 `+` 猜测结果。Tag 定义的 Delete 当前是文字按钮，与名单行的垃圾桶操作不同。
@@ -231,3 +233,13 @@ Run `npm run build --prefix ui` after TypeScript edits and only the related offl
 ### Intraday State 图形与颜色
 
 价格、量能与未读的共同外观只在 [Symbol row template](#symbol-row-template) 与 [Color palette](#color-palette) 维护；业务阈值见 [Intraday State](intraday-state.md)。ADR以↑/↓加倍数表达方向，tooltip保留两项数值。量能以 Volume Base / Low / Medium / High 表示等级，普通至二级文字用 Volume High，三级用 White，不与价格方向混色。
+
+## Trade UI
+
+第三模式与独立持仓/交易交互唯一规范见 [Schwab Trade MVP](schwab-trade.md)。保留当前布局、共用 Symbol row template、palette 和表格风格；Scan/Monitor 原有显示不变。Trade 的 Net Liq 沿券商字段，Avg Price 仅展开详情显示。
+
+### Trade 图形
+
+Buy 使用 Blue、Stop 使用 Red，Daily/Intraday 均在 K 线和指标下方绘制细实线；使用公开 primitive 的 bottom 层，实线宽度为一个物理像素（Retina 也不增粗），右轴原生标签只显示价格。横线上不常驻 Buy/Stop、数量、Auto/Draft/Awaiting 或把手。直接命中横线后显示上下调整光标；重合线可再次点击轮换。手动 Alert 保留原虚线与悬停胶囊，双方共用坐标换算、命中范围和横线 renderer，编辑/提交规则独立。多个真实订单分别绘制；未激活或不可编辑订单不可拖动。绘制与命中使用公开 API，不修改 vendor。
+
+交易区报价只显示蓝色 Ask、上下排列的价差比例/差值、红色 Bid，不重复文字标签。宽价差比例按 Schwab Trade 配置使用红色粗体；其他报价正常字重。Buy/Sell 为整体胶囊：Buy 上方标题、下方 with stop / market 两个直接操作，Sell 位于右侧，以白色分隔。Auto 复用 timeframe 胶囊，自动时灰色不可点、手动后蓝字可点；Send 复用模式切换胶囊，与新单/真实止损改价共用同一个入口。数量为细黑轴线、短刻度和简洁滑柄，Qty 数值无输入框。浏览时隐藏内容但固定位置不变。Schwab 明细沿用 Holdings 行高与字体，每条 Buy/Sold/Entry/Stop 单行排列；Entry/Trim 使用现有小号 symbol-flag 文字风格，不增加色块。订单取消沿用 Logo / Icon 的圆形 ×。字号、头部位置与最小宽度只在 [Chart UI](chart-ui.md#trade-mode) 维护。

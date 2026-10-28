@@ -10,7 +10,7 @@ import { attentionState, attentionAppearance } from './attention.js';
 import { symbolRow } from './symbol-row.js';
 import { rankedRows, stateAppearance, adrText, adrTitle, volumeBadge, type IntradayState } from './intraday-state.js';
 
-export type ListState = { type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null; holding_symbols?: string[]; current_regular_session?: boolean; massive?: MassiveState | null; scan_running?: boolean; intraday?: IntradayState };
+export type ListState = { trade?: import('./schwab-data.js').TradeState | null; trade_enabled?: boolean; type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor' | 'trade'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null; holding_symbols?: string[]; current_regular_session?: boolean; massive?: MassiveState | null; scan_running?: boolean; intraday?: IntradayState };
 
 type Candidate = { ticker: string; name: string };
 type Search = { list: string; section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };

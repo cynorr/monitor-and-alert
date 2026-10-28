@@ -1,5 +1,6 @@
 import { attentionState, attentionAppearance } from './attention.js';
 import { symbolRow } from './symbol-row.js';
+import { HoldingsLayout } from './holdings-layout.js';
 import { $ } from './types.js';
 import { compareRank, stateAppearance, adrText, adrTitle, volumeBadge, type IntradayState, type SymbolState } from './intraday-state.js';
 
@@ -54,8 +55,7 @@ export class HoldingsList {
     private groups = new Map<string, HTMLTableRowElement[]>();
     private order = '';
     private sort: HoldingSort | null = null;
-    private widthSignature = '';
-    private minimumWidth = 0;
+    private layout: HoldingsLayout;
     private collapsed = false;
     private regularSession = false;
     private intraday: IntradayState = { enabled: false, symbols: {} };
@@ -64,7 +64,7 @@ export class HoldingsList {
 
     constructor(private onSelect: (symbol: string, key: string) => void, private isActive: () => boolean,
         private onWidth: (width: number) => void) {
-        new ResizeObserver(() => this.measurePriceWidth()).observe($('holdings-table'));
+        this.layout = new HoldingsLayout($('holdings-table') as HTMLTableElement, () => this.intraday.enabled && this.regularSession ? 9 : 8, onWidth);
         try { this.collapsed = localStorage.getItem('holdings-collapsed') === 'true'; } catch { /* Optional storage. */ }
         $('holdings-warning').addEventListener('click', () => {
             const details = $('holdings-error-details');
@@ -190,11 +190,11 @@ export class HoldingsList {
         const showState = this.intraday.enabled && this.regularSession;
         if (table.classList.contains('holdings-state') !== showState) {
             table.classList.toggle('holdings-state', showState);
-            this.minimumWidth = 0; this.widthSignature = '';
+            this.layout.reset();
         }
         if (table.classList.contains('holdings-regular') !== this.regularSession) {
             table.classList.toggle('holdings-regular', this.regularSession);
-            this.minimumWidth = 0; this.widthSignature = '';
+            this.layout.reset();
         }
         if (this.regularSession && this.sort === 'extended_percent') this.sort = null;
         for (const button of Array.from($('holdings-table').querySelectorAll<HTMLButtonElement>('[data-holdings-sort]'))) {
@@ -210,7 +210,7 @@ export class HoldingsList {
         $('holdings-empty').textContent = data ? 'No holdings' : this.data?.error ? 'Holdings unavailable' : 'Loading…';
         const structure = JSON.stringify([data?.holdings.map(h => [h.ticker, h.sequences.map(s => [s.buy_ids, s.opened_on, s.closed_today, s.is_new, s.sold_percent, s.buys, s.sells])]), [...this.expanded]]);
         if (structure !== this.structure) {
-            this.structure = structure; this.rows.clear(); this.groups.clear(); this.order = ''; this.widthSignature = '';
+            this.structure = structure; this.rows.clear(); this.groups.clear(); this.order = ''; this.layout.invalidate();
             const body = document.createDocumentFragment();
             for (const holding of data?.holdings ?? []) {
                 for (const sequence of holding.sequences) {
@@ -307,39 +307,8 @@ export class HoldingsList {
             const row = focusKey ? this.rows.get(focusKey) : null;
             if (row) (tradesFocus ? row.querySelector<HTMLButtonElement>('[data-trades]')! : row).focus({ preventScroll: true });
         }
-        if (!this.data) { this.minimumWidth = 0; this.onWidth(260); }
-        else if (data) this.measureWidth();
-    }
-
-    private measureWidth() {
-        const table = $('holdings-table') as HTMLTableElement;
-        // Numeric fonts are tabular: measure again only when content gains digits
-        // or the row structure changes, rather than cloning on each quote update.
-        const lengths = Array.from({ length: table.tHead!.rows[0].cells.length }, (_, index) => Math.max(0, ...Array.from(table.rows, row => {
-            const cell = row.cells[index];
-            return cell && getComputedStyle(cell).display !== 'none' ? Math.max(...Array.from(cell.childNodes, node => node.textContent?.length ?? 0)) : 0;
-        })));
-        const signature = JSON.stringify(lengths);
-        if (signature !== this.widthSignature) {
-            this.widthSignature = signature;
-            const copy = table.cloneNode(true) as HTMLTableElement;
-            copy.removeAttribute('id'); copy.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
-            copy.classList.add('holdings-measure'); copy.setAttribute('aria-hidden', 'true');
-            document.body.append(copy);
-            const intrinsic = Math.ceil(copy.getBoundingClientRect().width);
-            copy.remove();
-            const scroll = table.closest<HTMLElement>('.holdings-scroll')!;
-            this.minimumWidth = Math.max(this.minimumWidth, intrinsic + 18 + scroll.offsetWidth - scroll.clientWidth);
-        }
-        this.onWidth(this.minimumWidth);
-        this.measurePriceWidth();
-    }
-
-    private measurePriceWidth() {
-        const table = $('holdings-table') as HTMLTableElement;
-        const headers = table.tHead!.rows[0].cells;
-        const end = headers[this.intraday.enabled && this.regularSession ? 9 : 8];
-        table.style.setProperty('--holding-price-width', `${end.getBoundingClientRect().right - headers[0].getBoundingClientRect().left}px`);
+        if (!this.data) { this.layout.reset(); this.onWidth(260); }
+        else if (data) this.layout.measure();
     }
 
 }

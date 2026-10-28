@@ -79,3 +79,5 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 - 未找到 ticker 保持空结果，查询/保存失败保留行内错误。只支持美股正股，不新增模糊查询和其他市场入口。
 - 上述指定 section 新增针对全新 symbol。已有 Discover/Excluded symbol 明确加入 Focus 时，分类以 [统一入选](list-design.md#统一移入-focus) 为准，不由 Search/section `+` 保留来源结果或强制目标组。
 
+
+Trade 复用 Monitor 的 Focus 操作与快捷键；Holdings 未读导航切入独立 Schwab 表，只在真实持仓行查找未读，Entries/Sold Today 不增加提醒游标。同 symbol 的图表和手动 Alert 身份不随账户显示来源复制。

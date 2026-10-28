@@ -3,6 +3,7 @@ import type { Panel } from './chart.js';
 import { $ } from './types.js';
 import { post } from './api.js';
 import { palette } from './palette.js';
+import { horizontalLines, nearPriceLine, panePoint, priceAtPointer } from './price-lines.js';
 
 export type PriceAlert = { id: string; symbol: string; price_cents: number; generation: number; state: 'active' | 'triggered'; expires_at: number };
 export type AlertNotice = { symbol: string; direction: 'up' | 'down'; level: 1 | 2; fired_at: number };
@@ -19,19 +20,7 @@ class AlertPrimitive implements ISeriesPrimitive {
     attached(parameter: SeriesAttachedParameter) { this.requestUpdate = parameter.requestUpdate; }
     detached() { this.requestUpdate = () => {}; }
     updateAllViews() { this.layer.updateControls(); }
-    private renderer: IPrimitivePaneRenderer = { draw: target => target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-        for (const alert of this.layer.rows()) {
-            const y = this.layer.coordinate(alert);
-            if (y == null || y < 0 || y > mediaSize.height) continue;
-            const color = alert.state === 'active' ? palette.ink : palette.muted;
-            ctx.strokeStyle = ctx.fillStyle = color;
-            ctx.lineWidth = 1;
-            // Match Lightweight Charts' 1px LargeDashed crosshair: 6px on / 6px off.
-            ctx.setLineDash([6, 6]);
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mediaSize.width, y); ctx.stroke();
-            ctx.setLineDash([]);
-        }
-    }) };
+    private renderer = horizontalLines(() => this.layer.rows().map(alert => ({ y: this.layer.coordinate(alert), color: alert.state === 'active' ? palette.ink : palette.muted })), true);
     private arrowRenderer: IPrimitivePaneRenderer = { draw: target => target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
         for (const alert of this.layer.rows()) {
             const y = this.layer.coordinate(alert);
@@ -83,7 +72,7 @@ export class AlertChart {
     rows() { return this.controller.value?.alerts.filter(alert => alert.symbol === this.controller.symbol()) ?? []; }
     cents(alert: PriceAlert) { return this.controller.preview?.id === alert.id ? this.controller.preview.cents : alert.price_cents; }
     coordinate(alert: PriceAlert) { return this.panel.candles.priceToCoordinate(this.cents(alert) / 100); }
-    hits(y: number) { return this.rows().filter(alert => { const point = this.coordinate(alert); return point != null && Math.abs(point - y) <= 6; }); }
+    hits(y: number) { return this.rows().filter(alert => nearPriceLine(this.coordinate(alert), y)); }
     updateControls() {
         const alert = this.rows().find(alert => alert.id === (this.drag?.alert.id ?? this.hovered));
         const pane = this.panel.chart.panes()[0].getHTMLElement();
@@ -101,17 +90,10 @@ export class AlertChart {
         if (this.hovered === id) return;
         this.hovered = id; this.primitive.requestUpdate();
     }
-    private point(event: PointerEvent) {
-        const pane = this.panel.chart.panes()[0].getHTMLElement();
-        if (!pane) return null;
-        const bounds = pane.getBoundingClientRect(), size = this.panel.chart.paneSize(0);
-        const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
-        return x >= 0 && x < size.width && y >= 0 && y < size.height ? { x, y } : null;
-    }
     private stop(event: PointerEvent) { event.preventDefault(); event.stopImmediatePropagation(); this.suppressed = true; }
     private down(event: PointerEvent) {
         if (event.button !== 0 || !this.controller.symbol()) return;
-        const point = this.point(event);
+        const point = panePoint(this.panel, event);
         if (!point) return;
         // Pointerdown precedes the chart's mouse listeners, so alert gestures own this press.
         if (event.metaKey && event.altKey) {
@@ -139,15 +121,14 @@ export class AlertChart {
     private move(event: PointerEvent) {
         if (!this.drag) {
             if (this.controls.contains(event.target as Node)) return;
-            const point = this.point(event), hits = point ? this.hits(point.y) : [];
+            const point = panePoint(this.panel, event), hits = point ? this.hits(point.y) : [];
             const alert = hits.find(alert => alert.id === this.controller.selected) ?? hits.find(alert => alert.id === this.hovered) ?? hits[0];
             this.hover(alert?.id ?? '');
             return;
         }
         if (event.pointerId !== this.drag.pointer) return;
         this.stop(event);
-        const pane = this.panel.chart.panes()[0].getHTMLElement()!;
-        const price = this.panel.candles.coordinateToPrice(event.clientY - pane.getBoundingClientRect().top);
+        const price = priceAtPointer(this.panel, event);
         if (price != null && Number.isFinite(price) && price > 0) this.drag.price = price;
         this.controller.preview = { id: this.drag.alert.id, cents: previewCents(this.drag.price) };
         this.drag.moved ||= Math.abs(event.clientY - this.drag.startY) >= 3;
@@ -171,13 +152,13 @@ export class AlertController {
     preview?: { id: string; cents: number };
     private layers: AlertChart[];
     private error = '';
-    constructor(panels: Panel[], public symbol: () => string, private mode: () => 'scan' | 'monitor',
+    constructor(panels: Panel[], public symbol: () => string, private mode: () => 'scan' | 'monitor' | 'trade',
                 private created: (symbol: string) => Promise<void>, private changed: (value: AlertState) => void) {
         this.layers = panels.map(panel => new AlertChart(panel, this));
         document.addEventListener('keydown', event => {
             if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
             if (event.key === 'Escape') { this.layers.forEach(layer => layer.cancel()); this.choose(''); }
-            if (event.key === 'Backspace' && this.mode() === 'monitor' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
+            if (event.key === 'Backspace' && this.mode() !== 'scan' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
         }, true);
         $('alert-error-close').addEventListener('click', () => { this.error = ''; this.render(); });
     }

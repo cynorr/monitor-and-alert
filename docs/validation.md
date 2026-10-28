@@ -461,3 +461,22 @@
 - Monitor 实际验证：Daily 悬停旧日期（Intraday 无该日数据），两图仍显示67.33水平线，Intraday不显示虚构时间线；同一Alert在两图可见。Intraday拖动66.46→66.68，Daily同步；Daily继续拖动66.68→67.12，Intraday同步，悬停胶囊显示相同已保存价格。另用同样临时环境限时60秒保存完整截图 `/tmp/alert-ui-final.png`，显示旧日期的Daily胶囊与Intraday独立水平线。
 - 正式 Charts 窗口已刷新加载构建并恢复刷新前BTGO选择；未重启真实服务或修改正式Alert。临时页已关闭，验证服务按时结束并清除临时库。
 - 需求和职责同步 alert.md、chart-ui.md、ui.md、development.md、behavior.md；相对链接/锚点及 `git diff --check` 通过。未修改 vendor。未重新覆盖真实Regular触发、macOS通知、全部周期/价格轴缩放/pane resize或macOS27；离线UI证据不替代这些验收。
+
+## 2026-10-27 — Schwab 交易后端接入
+
+环境：本机 macOS、Python 3.13.1。原交易网关 143 项测试通过，相关后端回归共 266 项通过，覆盖 Trade 投影/路由、SnapTrade、Scan/Monitor/Trade 身份、Alert、Intraday State 和模拟器。测试使用假凭证、MockTransport 与临时库，没有真实金融写入。
+
+当日只读确认真实授权、REST/Streaming 正常；当前原生持仓市值、持仓盈亏及日盈亏有值，实际 limits 为 45000 / 2000 / 0.15。Sold Today 的订单树去重、余仓与当天卖出同 symbol 场景由定向用例覆盖。未执行实盘交易、新单成交/拒绝、Replace/Cancel、部分成交、跨日与睡眠恢复验证；该记录不替代后续 live 验收。
+
+## 2026-10-28 — Trade 原生数据与前端统一收拢
+
+环境：本机 macOS、TypeScript 5.9.3、Lightweight Charts 5.2.0、127.0.0.1:8765 现有正式服务与 in-app browser；当前 Regular，真实 Schwab / Longbridge 连接。不重启后台，不改网关或账户 API。
+
+- `npm run build --prefix ui` 与 `git diff --check` 通过；定向运行 Trade、Schwab 原生数据、共用持仓几何、Monitor Holdings、Chart 共 31 项前端用例通过。覆盖父子单去重及只取消 Entry 母单、多组风险分别配对、唯一原生均价 Buy、缺成本跳过、多笔 Sold/Stop、Entry/Trim 与清仓无标记、市价缺价格留空、价差严格阈值、固定占位、交易写入不重发及双图拖价。请求全部使用内存 fetch 替身，未发真实金融写请求。
+- 新增测宽回归：连续 80 次改变已分配宽度不改变内容最小宽度；禁止读取原表 scrollWidth，价格背景排除出自然宽度副本，几何扣除首 td 的 1px 边框。Monitor 与 Schwab 共同调用该纯 DOM 工具，各自原生数据、会计、刷新和渲染保持独立。
+- 本轮真实页面 15:22:23 至 15:27:55 UTC（上海 23:22 至 23:27）连续刷新：Trade List 均为 680px、table/scrollWidth 均为 664px，无逐步扩宽。模式切换后 Monitor List 同为 680px、仅显示 SnapTrade；Scan 隐藏 Intraday/Trade/Schwab，恢复 Trade 仍为 680px。
+- 页面测量浏览与 Buy 模式的 Ask、Bid、Qty、预览、Auto、Send 六组矩形坐标/尺寸完全相同。报价21px、weight=400；SKYA 真实价差0.68%时百分比红色加粗，HTFL真实较窄价差为正常字重；阈值来自构建发布的 config/trade-ui.json。Qty 仅隐藏内容、不移除布局行，轨道/刻度/滑柄已精简。
+- 两个只读快照入口与前端原生整理核对：auth=valid、REST/Streaming=connected，8个 symbol，1个 Entry、7个余仓 Buy 汇总、7个独立 Stop；Buy 数量/平均成本与 position 完全相同，Entry 取消目标均为母单。数据仅在内存传递，不保存账户/订单快照，不打印凭证或内部订单 ID。
+- 真实 ODD 展开只显示一条 Entry 及一个圆形 ×；HTFL 展开为汇总 Buy 与 Stop，各字段单行，Stop 独立一个 ×。未点击任何 × 或 Send；最终 console 无 error/warn。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-mvp-final.png`。
+- 清除被替代的测宽函数、跨列多行订单文字、SOLD/+ENTRY/ORDER 标记及文字 Cancel 样式；原独立前端源码和前端设计/开发文档移出维护源码，导入原文件保留在忽略的本机备份目录。原网关设计与协议测试保留；当前唯一规范同步 Trade、UI、Chart UI、Holdings UI、行为及开发职责。
+- 未覆盖：真实新单/改单/撤单、真实成交、全部周期/移动触屏、跨日及非 Regular 长时运行。当前真实快照没有 Sold/Trim 或多 Stop 同 symbol，相关展示使用定向数据用例验证；没有将历史验证作为本轮 live 证据。
