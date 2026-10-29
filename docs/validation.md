@@ -1,5 +1,15 @@
 # 验证记录
 
+## 2026-10-29：Schwab 导入目录与集成遗留文件清理
+
+环境：本机 macOS、Python 3.13.1；仅文件迁移、文档与一处测试时钟修正。正式服务没有重启，未读取凭证、调用真实券商或发送任何交易写请求。
+
+- 原独立项目目录不被正式运行链引用。后端设计迁入 docs/schwab-backend.md，25 个章节全部保留；交易函数/固定参数/风控/OTO/Replace/Cancel/响应/写入安全（第 8–15 节）与冻结原则（第 25 节）逐段 SHA-256 比对一致。旧前端展示、交互说明已从参考文档移除；兼容 FastAPI/SSE 协议明确标为网关参考，正式接入仍由 Schwab Trade 唯一文档维护。
+- 原网关测试迁入 tests/test_schwab_backend.py，仅修改模块导入；其余测试内容逐字比对一致。现在由根项目默认 tests 路径收集。原集成用例的 Sold Today 日期写死为 10 月 26 日，却读取当前真实时间；独立重跑也失败，现仅固定该用例 monitor.now 与成交日期一致，未改生产逻辑。
+- 删除旧独立项目（含其虚拟环境、锁文件、部署示例、包元数据和缓存）、runtime/import-backups 下的旧 Git/前端/交互文档备份、无引用的 build、空 dist 和旧 pytest 缓存；合计约 185 MiB 文件内容。实际账户/行情缓存、根项目虚拟环境和现用 UI 构建产物保留。
+- 删除后 `.venv/bin/python -m pytest -q tests/test_schwab_backend.py tests/test_trade.py -p no:cacheprovider` 150 项通过。两个根项目 CLI 的 --help 可正常加载；交易内核 SHA-256 与清理前一致，Keychain service 名保持原值。旧 5678 端口检查无监听者；没有重启或连接另一份 Runtime。
+- README、AGENTS、开发与 Trade 入口已指向迁移后的文档和测试；当前文档本地链接检查、遗留引用检查、git diff --check 通过。未运行无关全项目测试或前端构建，未做真实交易验收。
+
 ## 2026-10-29：Buy 类型文字的底部留白
 
 本机 CSS 静态检查：仅将 Buy 内 stop/market 的文字 span 相对上移 2px，保留同一基线、按钮尺寸、标题/分界线和点击区域；不修改 padding、字号或行高。git diff --check 通过。纯样式微调，按用户要求不截图或扩大测试，最终视觉由用户查看。
@@ -35,7 +45,7 @@
 
 环境：本机 macOS、TypeScript 5.9.3、Python 3.13；正式 8765 服务，真实美东 10 月 28 日约 22:20–22:47，Regular 之外。仅本次定向验证，不运行全项目测试。
 
-- `npm run build --prefix ui` 通过；`node --test ui/tests/trade.test.mjs ui/tests/schwab-data.test.mjs` 24 项通过；`.venv/bin/python -m pytest -q schwab-minimum-trader/test_trading.py -k replace` 39 项通过。覆盖 Buy 明细两项盈亏为空、Sold/Stop 按当前均价估算及缺均价留空、PENDING_ACTIVATION 在 editable 为 true/false 时的单次 PUT、原数量/有效期/NORMAL 保留、其他不支持状态继续拒绝，以及新 ID 仍待激活时结束旧改单预览。
+- `npm run build --prefix ui` 通过；`node --test ui/tests/trade.test.mjs ui/tests/schwab-data.test.mjs` 24 项通过；网关 Replace 定向用例 39 项通过（测试文件现已迁至 `tests/test_schwab_backend.py`）。覆盖 Buy 明细两项盈亏为空、Sold/Stop 按当前均价估算及缺均价留空、PENDING_ACTIVATION 在 editable 为 true/false 时的单次 PUT、原数量/有效期/NORMAL 保留、其他不支持状态继续拒绝，以及新 ID 仍待激活时结束旧改单预览。
 - 正式只读订单显示六张普通 SELL STOP 均为 PENDING_ACTIVATION，其中五张 editable=false，另一张为 true；原前后端状态限制共同阻止拖动/提交。仅放开这一状态的本地门禁，其他校验保留。原服务按原入口重启，账户/订单初始化成功、REST connected、认证有效。
 - 实际浏览器显示百分比 25px、蓝 Ask/红 Bid 各 12px 上下排列；Buy 全背景激活、未选 type 隐藏。真实 GTLB 七列盘外表格中，Buy 的 P/L% 与 P/L 完全留空，Stop 显示参考盈亏、数量、价格和红色取消按钮，未增加虚列。
 - 对真实 GTLB 止损线只做本地拖动，确认进入 stop 编辑且 Send 可用，再按 Esc 回到 browse；未点击 Send、取消订单或发送任何真实券商写请求。数量轴实际按住时 cursor=none，松手后立即恢复 default；取消/失焦等清理路径由定向 UI 用例覆盖。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-spread-focus.png`。

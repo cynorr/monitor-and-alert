@@ -128,6 +128,7 @@ def test_trade_mode_scope_and_sold_today_do_not_duplicate_holding_role(app_data)
         app = Workbench(ws, app_data, app_data / 'daily.sqlite3', lambda allowed: FakeBroker(allowed, app.calendar), trade_factory=lambda: trade)
         try:
             app.start_monitor()
+            app.monitor.now = lambda: int(datetime(2026, 10, 26, 15, tzinfo=timezone.utc).timestamp())
             value.state.positions = [position()]
             value.state.orders = [order(), order('3', symbol='SOLD')]
             await app.switch_mode('trade')

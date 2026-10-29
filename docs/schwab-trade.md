@@ -1,6 +1,6 @@
 # Schwab Trade MVP
 
-更新：2026-10-29。本文件是 Schwab Trade 产品范围、账户数据、交易交互及接入契约的唯一入口。开发遵循 [development-principles.md](development-principles.md)。[原交易后端设计](../schwab-minimum-trader/backend-design.md) 保留为交易网关协议与安全规则参考，不删除；当前集成方式以本文件为准。
+更新：2026-10-29。本文件是 Schwab Trade 产品范围、账户数据、交易交互及接入契约的唯一入口。开发遵循 [development-principles.md](development-principles.md)。[后端网关设计](schwab-backend.md) 维护认证、内存、恢复、协议及安全规则；当前集成方式以本文件为准。
 
 ## 范围与模式
 
@@ -18,7 +18,7 @@
 .venv/bin/python -m data_service.schwab_backend auth
 ```
 
-配置维护在 data_service/schwab_backend.py。旧项目 schwab_backend.py 只转入同一实现，避免维护两份网关。旧 5678 进程必须停用，不能与集成 Runtime 同时刷新同一份 OAuth 凭证。认证失效不影响网页和 Longbridge，重新授权后沿用原后台恢复机制。
+配置和唯一网关实现维护在 data_service/schwab_backend.py。Keychain service 名沿用既有值，不随源码目录清理而修改。正式服务只运行一份集成 Runtime，不另起 5678 服务刷新同一份 OAuth 凭证。认证失效不影响网页和 Longbridge，重新授权后沿用原后台恢复机制。
 
 ## 账户字段与持仓表
 
@@ -108,4 +108,4 @@ Trade 在 Intraday header 右侧使用固定行列显示交易区，报价与左
 
 本地入口为 GET /v1/trade、GET /v1/trade/quote?symbol=…、GET /v1/trade/orders，以及 POST /v1/trade/orders/{market-buy|market-sell|breakout-buy}、PUT /v1/trade/orders/{id}/stop、DELETE /v1/trade/orders/{id}。读取 chart/list/trade 状态不触发账户历史下载。交易写入只在正式 Trade 模式接受，Mock / 模拟器不可启用。
 
-原项目导入时携带的 Git 元数据已完整备份到本机 `runtime/import-backups/schwab-minimum-trader-2026-10-27.git`；网关兼容入口、测试和 backend-design 保留为主仓库普通文件。已被替代的独立前端源码及其设计/开发文档移出维护源码，原导入文件保存在忽略的 runtime/import-backups/schwab-original-ui-2026-10-28，不由应用读取。
+网关协议测试位于 tests/test_schwab_backend.py，集成测试位于 tests/test_trade.py；均使用假凭证与 MockTransport，不连接真实账户或发送真实写请求。运行：`.venv/bin/python -m pytest -q tests/test_schwab_backend.py tests/test_trade.py`。原独立项目及其前端、部署模板、依赖环境和导入备份不再保留。
