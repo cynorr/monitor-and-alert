@@ -156,4 +156,4 @@ UI构建产物和Lightweight Charts已随仓库提供，正常启动无需npm/CD
 
 使用现有 Monitor / Scan / Trade 三模式入口；Trade 使用原生 Schwab 持仓、订单和券商原值盈亏，展开为汇总 Buy、当天 Sold 和活动 Entry/Stop。两套账户独立取数与计算，只复用视觉和纯 UI 测宽。交易区位于 Intraday 右下，双图可拖动参考价和真实止损，新单与止损改单均由同一个 Send 明确提交。价差阈值在 config/trade-ui.json，修改后构建 UI。原五个交易函数与零写重试规则保留；完整范围、Sold Today 限制、数据字段及认证见 [Schwab Trade MVP](docs/schwab-trade.md)。
 
-凭证沿用原 macOS Keychain，重新授权运行 `.venv/bin/python -m data_service.schwab_backend auth`。旧 5678 独立服务应停用，不与集成 Runtime 同时运行。原项目 [后端设计](schwab-minimum-trader/backend-design.md) 已保留并统一风控值。Mock、模拟器和 --symbols 不开放真实交易。
+凭证沿用原 macOS Keychain，重新授权运行 `.venv/bin/python -m data_service.schwab_backend auth`。[后端网关设计](docs/schwab-backend.md) 维护认证、内存、恢复、协议和风控；网关定向测试为 `tests/test_schwab_backend.py`，集成测试为 `tests/test_trade.py`。Mock、模拟器和 --symbols 不开放真实交易。

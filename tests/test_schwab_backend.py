@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 
-import schwab_backend as backend
+from data_service import schwab_backend as backend
 
 
 class MemoryStore:

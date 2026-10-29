@@ -1,13 +1,11 @@
-
-
 # Schwab Local Trading Backend
 ## V1.2 后端设计与 API 规范
 
-**状态：保留的交易网关设计文档；2026-10-27 统一风控值。当前 Market Monitor 集成入口见 [Schwab Trade MVP](../docs/schwab-trade.md)，代码维护于 `data_service/schwab_backend.py`，旧脚本为兼容入口。下文独立端口/SSE 部分为原项目运行方式。**  
+**状态：已迁入 Market Monitor 的后端网关设计与协议参考。当前产品和集成入口见 [Schwab Trade](schwab-trade.md)。认证、内存状态、恢复、订单规范、风控和零写重试规则继续维护于本文；保留的 FastAPI/SSE 协议用于网关兼容及离线协议测试，正式服务使用现有 8765 HTTP/WebSocket，不启动 5678 独立服务。**  
 **语言：Python 3.12+**  
 **运行环境：macOS / Mac mini**  
-**主程序：`schwab_backend.py`**  
-**监听地址：`127.0.0.1:5678`**
+**主程序：`data_service/schwab_backend.py`；网关测试：`tests/test_schwab_backend.py`**  
+**正式服务：`127.0.0.1:8765`；启动和授权命令见 [Schwab Trade](schwab-trade.md)**
 
 ---
 
@@ -171,9 +169,9 @@ Mac mini 可以锁屏、睡眠、关机或断网。
 
 客户端不能接触 Schwab Token。
 
-### 3.3 本地端口
+### 3.3 保留的本地协议层
 
-固定：
+以下为 `create_app()` 保留的 FastAPI/SSE 协议，不是正式工作台的启动配置。正式接入和路由只在 [Schwab Trade](schwab-trade.md) 维护。
 
 ```text
 Host: 127.0.0.1
@@ -257,7 +255,7 @@ OAuth 正常刷新由 Token Manager 统一处理，避免 REST 和 WebSocket 同
 CLI：
 
 ```bash
-python schwab_backend.py auth
+.venv/bin/python -m data_service.schwab_backend auth
 ```
 
 流程：
@@ -1065,7 +1063,9 @@ ORDER_RESULT_UNKNOWN
 
 ---
 
-# Part 3 — REST 与 SSE 接口契约
+# Part 3 — 保留的 REST 与 SSE 协议
+
+以下描述 `create_app()` 的兼容协议和原生字段映射；正式集成的 `/v1/trade` 路由及 WebSocket 接入见 [Schwab Trade](schwab-trade.md)，不另起服务。
 
 ## 16. 通用规范
 
@@ -1179,7 +1179,7 @@ Response：
 | `intraday_buying_power` | `currentBalances.intradayBuyingPowerAmount` |
 | `stock_buying_power` | `projectedBalances.stockBuyingPower` |
 
-`day_trading_buying_power` 继续返回旧字段 `currentBalances.dayTradingBuyingPower`，不替代新的 Intraday BP。`cash_balance` 和 `margin_balance` 独立返回，不合成为 Cash & Sweep。前端保留负号、使用中性显示，可悬停查看字段来源。
+`day_trading_buying_power` 继续返回旧字段 `currentBalances.dayTradingBuyingPower`，不替代新的 Intraday BP。`cash_balance` 和 `margin_balance` 独立返回，不合成为 Cash & Sweep。
 
 缺失字段返回 `null`。
 
@@ -1209,7 +1209,7 @@ Response：
 }
 ```
 
-`open_profit_loss` 直接映射 `positions[].longOpenProfitLoss`；`day_profit_loss` 与 `day_profit_loss_percent` 保留当日口径。前端使用平均价 × 股数为分母计算持仓浮盈百分比，不拼接历史买单。缺失字段仍为 null，REST/SSE 共用相同映射。
+`open_profit_loss` 直接映射 `positions[].longOpenProfitLoss`；`day_profit_loss` 与 `day_profit_loss_percent` 保留当日口径。缺失字段仍为 null，REST/SSE 共用相同映射。
 
 ### 17.3 Orders
 
@@ -1272,7 +1272,7 @@ Response：
 
 保留 Schwab 原始订单状态及父子关系。
 
-#### 逐笔成交与 Sold Today
+#### 逐笔成交
 
 每个订单包含 `executions` 数组，从股票订单的 `orderActivityCollection` 中提取 `activityType=EXECUTION`、`executionType=FILL` 的全部 `executionLegs`。未成交时返回 `[]`，父子订单分别保留各自的成交明细。
 
@@ -1287,12 +1287,6 @@ Response：
 ```
 
 `activity_id` 和 `leg_id` 来自券商并转为字符串，所属订单 ID 为外层 `order_id`。数量、价格为十进制字符串，时间转为 UTC ISO 8601。保留数量、价格和时间相同的独立成交，不以该三元组去重；活动 ID 和腿 ID 不被当作全局唯一成交 ID。
-
-前端 Sold Today 使用同一订单快照：递归包含子单，以订单 ID 去除重复出现的订单，只选 `SELL` 且 `FILLED` 的股票订单。最后一笔实际成交时间落在 `America/New_York` 当天时，整笔订单计入当天；数量取 `filled_quantity`，成交总额为逐笔数量乘价格之和，均价为总额除股数。按股票汇总，展开保留逐笔明细；总额未扣费用，不计算已实现盈亏。未提供成交明细时不以委托时间、报价或止损价推测成交。
-
-范围按用户交易习惯限定：订单几秒内全部成交，不处理跨日分批成交或部分成交后撤单；止损单最多两周更新一次，位于现有 59 天查询窗口内。卖出部分持仓后剩余持仓仍在 Holdings，当天买回也不隐藏 Sold Today。
-
-不新增 `/api/v1/closed-trades` 或其他 Endpoint，不调用 transactions，不增加轮询、数据库或对账状态；后端仅规范化成交明细，前端从首次 GET 和后续 SSE 完整快照恢复当日记录。`order_filled` 仅用于短暂提示，不承担历史恢复。
 
 ### 17.4 单个订单
 
@@ -1328,7 +1322,7 @@ Response：
 
 报价缺失时，对应字段返回 `null`。
 
-`last_price`、`close_price` 分别映射 quote.lastPrice、quote.closePrice；原有报价请求参数保持 `fields=quote`，不增加数据组或请求次数。前端仅按纽约工作日 09:30–16:00 与正值 High/Low 选择默认价，其他时间或缺失时依次参考 Ask/Bid、Last、Close，并标记来源；原建议价格字段语义不变。
+`last_price`、`close_price` 分别映射 quote.lastPrice、quote.closePrice；原有报价请求参数保持 `fields=quote`，不增加数据组或请求次数。
 
 Price Guide 不提供独立 Endpoint。
 
@@ -1610,8 +1604,10 @@ Streaming 断线不意味着整个 Backend 不可用。
 采用：
 
 ```text
-schwab_backend.py
-test_trading.py
+data_service/schwab_backend.py
+data_service/trade.py
+tests/test_schwab_backend.py
+tests/test_trade.py
 ```
 
 单个 Backend 文件内部按职责分区：
