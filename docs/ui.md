@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-26. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-29. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -25,7 +25,7 @@ ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，
 
 ## Color palette
 
-共享颜色速查，2026-10-26 对照当前 CSS、Chart 与 Tag 默认值整理。英文名用于需求沟通；代码的唯一默认色值来源为 `ui/src/palette.ts`，Chart、Tag 默认值与 Symbol 模板直接复用，`installPalette()` 将同一份值安装为 `--color-*` CSS 变量。颜色对应的业务条件仍由各模块唯一需求文档维护。
+共享颜色速查，2026-10-29 对照当前 CSS、Chart 与 Tag 默认值整理。英文名用于需求沟通；代码的唯一默认色值来源为 `ui/src/palette.ts`，Chart、Tag 默认值与 Symbol 模板直接复用，`installPalette()` 将同一份值安装为 `--color-*` CSS 变量。颜色对应的业务条件仍由各模块唯一需求文档维护。
 
 | 名称 | 色值 | 当前用途 |
 | --- | --- | --- |
@@ -106,10 +106,14 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
+| Schwab 活动订单 | 红底圆形按钮内白色 `×` | 取消指定订单；Entry/Stop 的目标规则见 Schwab Trade |
+| Trade Auto | 浅灰圆形按钮内线性 `↺` | 恢复两条参考线的自动标价；自动时灰色禁用，手动拖价后蓝色可点，无悬停说明 |
 | Daily / Intraday | `↦` | Go to latest，回到最新可用交易日 |
 | 图表 / 名单 / Holdings 错误 | 轮廓圆圈内的 `!`，暖黄色 | 提供当前错误详情，不扩展错误判断范围；Holdings 点击详情见独立 UI 规范 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
+- Schwab 订单取消复用 icon-button 圆形按钮，Red 背景、White 符号，hover 加深为 Red Strong；Web 圆底14px，内部为14px SVG中的对称交叉线，使用3px SVG描边，两条对角线的中心与圆心重合；使用flex居中和单元格垂直居中，不依赖文字字形基线。不增加文字按钮或图标库。
+- Trade Auto 复用 26px icon-button 圆形按钮，16px 线性回转箭头 SVG，不引入图标库；容器保持水平/垂直居中，箭头本身向右0.5px、向上0.5px补偿原路径偏左下的视觉重心。保留英文可访问名称，不设置 title。
 - 错误感叹号复用当前Chart警告的极简圆形轮廓：Web图形16×16px、1px边框，边框#b58722、文字#a47614，圆角50%；Chart与Holdings共用一份CSS绘制声明。交互按各模块要求，状态独立，Chart刷新不得改变Holdings错误入口。
 - 置顶箭头位于原有行操作左侧，按钮之间留 **10px** 空隙；Web 置顶/垃圾桶按钮为 **24×24px**，图形 **16×16px**。未置顶时 hover/键盘 focus 可见，置顶后持续显示蓝色，并提供 Unpin 名称和 pressed 状态。
 - 操作使用完整的英文说明和可访问名称，不能仅靠垃圾桶或 `+` 猜测结果。Tag 定义的 Delete 当前是文字按钮，与名单行的垃圾桶操作不同。
@@ -142,6 +146,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 - 面板分隔条和 List 数据列间距均为 **12px**。拖动只调整相邻面板并保留最小宽度；打开页面、切换模式或双击分隔条恢复默认。小窗口保持最小宽度，允许工作区整体溢出。
 - Monitor 的最小宽度也接受独立持仓内容需求，具体测量和固定顶部布局见 [Holdings UI](holdings-ui.md#位置折叠与宽度)。
 - List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Search 和一行 Filter/Tags 位于固定头部的水平分割线上方；与两图保持同一固定高度。Scan 准备状态在分割线下，仅需要时显示。名单列头在 Holdings 下方，文字位于其底部分割线上方；没有额外的 Filters/Holdings 或 section 分割线。
+- 原 Intraday 时间模块统一移到 List 右上角，与 Monitor / Scan / Trade 模式按钮垂直居中、同排显示；使用12px、#293341、26px行高和右侧12px内距。继续读取现有 view.server_time 并显示纽约时间及 ET，不新增时钟请求或定时器。
 - 计数使用独立 `span.count-badge`：**10px、黑色、不加粗**，与标题留小间距。适用于列表按钮、section、symbol 总数、Holdings 与 Filter。数字本身不统一加背景；选中 pill 中的数字仍为黑色，所在 pill 使用浅背景保证可读。
 
 ### 展示范围与控件
@@ -231,3 +236,13 @@ Run `npm run build --prefix ui` after TypeScript edits and only the related offl
 ### Intraday State 图形与颜色
 
 价格、量能与未读的共同外观只在 [Symbol row template](#symbol-row-template) 与 [Color palette](#color-palette) 维护；业务阈值见 [Intraday State](intraday-state.md)。ADR以↑/↓加倍数表达方向，tooltip保留两项数值。量能以 Volume Base / Low / Medium / High 表示等级，普通至二级文字用 Volume High，三级用 White，不与价格方向混色。
+
+## Trade UI
+
+第三模式与独立持仓/交易交互唯一规范见 [Schwab Trade MVP](schwab-trade.md)。保留当前布局、共用 Symbol row template、palette 和表格风格；Scan/Monitor 原有显示不变。Trade 的 Net Liq 沿券商字段，Avg Price 仅展开详情显示。
+
+### Trade 图形
+
+Buy 使用 Blue、Stop 使用 Red，Daily/Intraday 均在 K 线和指标下方绘制细实线；使用公开 primitive 的 bottom 层，实线宽度为一个物理像素（Retina 也不增粗），右轴原生标签只显示价格。横线上不常驻 Buy/Stop、数量、Auto/Draft/Awaiting 或把手。直接命中横线后显示上下调整光标；重合线可再次点击轮换。手动 Alert 保留原虚线与悬停胶囊，双方共用坐标换算、命中范围和横线 renderer，编辑/提交规则独立。多个真实订单分别绘制；未激活或不可编辑订单不可拖动。绘制与命中使用公开 API，不修改 vendor。
+
+交易区报价突出价差百分比，右侧同一列上方为蓝色 Ask、下方为红色 Bid，绝对差值在 Bid 右侧底部对齐，不重复文字标签；绝对差值使用 Muted 灰色，百分比平时黑色，宽价差时仍按 Schwab Trade 配置使用主红粗体。其他报价正常字重，图上 Buy/Stop 线继续使用主蓝/主红。Buy/Sell 为与Send等高的整体胶囊，保留原宽度和水平位置：Buy 共享标题下显示小写 stop / market，左右垂直切分为两个全高度点击区域；标题仅为装饰、不截获点击。Buy 的上下区域按60:40分配，标题在上区水平和垂直居中。选择任意买入方式后，整个 Buy 使用统一深色背景和白字，只显示所选 stop/market，未选类型文字隐藏；隐藏文字保留原点击区域与宽度，可以直接切换模式，hover不改变统一背景。不恢复下方文字小胶囊；浏览时内部白色分隔线从标题下方开始，两侧小字朝中线对称靠拢，文字共同略向上做视觉对齐，为下伸字形保留底部空间，不改变按钮布局或点击区域；Buy激活后隐藏内部线。Buy 和 Sell 标题放大加粗，stop/market 保持正常字重。Sell 位于右侧，以全高度白线分隔。Auto 沿用 Logo / Icon 的圆形回转箭头；Send 保持模式胶囊的尺寸，去掉外圈留白，深色背景填满整个胶囊，与新单/真实止损改价共用同一个入口，和 Buy/Sell 拉开距离。卡片所有操作均无悬停说明。数量为细黑直线、仅保留带数值的大刻度和简洁滑柄，数值在L端上方、无输入框，不显示Qty文字；滑动完全使用浏览器原生 range 行为，始终保留普通鼠标指针，不增加指针捕获、隐藏或左右调整箭头。浏览时隐藏内容但固定位置不变。下方数量、预估和按钮自底向上排布，按钮贴住固定底边；增大行距只让数量和预估向上移动，顶部报价独立定位。数量、预估与Buy/Sell保持原宽度整体左移，使右端按Send的矩形本体视觉对齐；Auto/Send及报价不动。Schwab 明细沿用 Holdings 行高与字体，每条 Buy/Sold/Entry/Stop 单行排列；金额、P/L%和P/L对齐主行，数量、价格及撤单顺序右移，具体列与字段口径只在 Schwab Trade 维护。Entry/Trim 使用现有小号 symbol-flag 文字风格，不增加色块。订单取消沿用 Logo / Icon 的红底白色 ×。字号、对齐、间距与头部位置只在 [Chart UI](chart-ui.md#trade-mode) 维护。

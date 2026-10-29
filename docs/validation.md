@@ -1,5 +1,48 @@
 # 验证记录
 
+## 2026-10-29：Buy 类型文字的底部留白
+
+本机 CSS 静态检查：仅将 Buy 内 stop/market 的文字 span 相对上移 2px，保留同一基线、按钮尺寸、标题/分界线和点击区域；不修改 padding、字号或行高。git diff --check 通过。纯样式微调，按用户要求不截图或扩大测试，最终视觉由用户查看。
+
+## 2026-10-29：Buy/Sell 与 Send 等高
+
+本机 CSS 静态检查：Buy/Sell 高度从 35px 改为现有 Send 的 30px；Buy 上下区域为 18/12px，Sell 行高同步 30px。保留横向 padding、字体、宽度与平移，35px 按钮所在行和其他模块位置不变。git diff --check 通过。纯 CSS 调整，按用户要求不截图、不扩大测试，未改 TypeScript 或交易逻辑。
+
+## 2026-10-29：交易区水平视觉对齐
+
+本机 CSS 静态检查：Qty、预估和 Buy/Sell 共用 translateX(-15px)，按现有 30px Send 胶囊的半径对齐右侧矩形本体；不改变宽度、行距或垂直位置，Auto/Send、报价不参与平移。保留用户已调整的 row-gap:12px、字号与按钮大小。git diff --check 通过；本轮无 TypeScript/后端改动，按用户要求不做截图或扩大测试，最终视觉由用户手动查看。
+
+## 2026-10-29：交易区间距从固定按钮向上展开
+
+环境：本机 macOS，现有正式服务与真实 GTLB，美东 10 月 28 日约 23:34–23:37。仅修改两条布局 CSS 与相关文档；保留用户手调的字号、按钮大小，未改 TypeScript 或交易逻辑，未重启服务或发送真实交易。
+
+- 原布局四行自顶部排列，row-gap 增大会增加总高度、把按钮推到容器裁切区。现在只有 Qty、预估、按钮三行进入 grid，使用 align-content:end；报价和反馈独立绝对定位。
+- 临时分别将同一 CSS 的 row-gap 设为 6/8/12px，通过实际浏览器重载测量。Qty 顶部为 82/78/70px，预估顶部为 122/120/116px；按钮始终为 162–197px，Send 底部始终为 194.5px，报价始终为顶部 20px、右边缘 836px。默认已恢复为原来的 6px。
+- 在 12px 间距下实际拖动数量从 344 到 520，预估正常更新；浏览/激活状态切换未移动按钮和报价。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-bottom-anchor.png`。
+- 本轮只做布局浏览器检查及 git diff --check，不重复未改动的 TypeScript 构建或账户/交易用例。未验证任意极大间距、所有窗口尺寸及实体输入硬件。
+
+## 2026-10-29：数量轴恢复原生拖动与交易细节
+
+环境：本机 macOS、TypeScript 5.9.3，现有正式 8765 服务及真实 GTLB 数据，美东 10 月 28 日约 23:08–23:14。只改前端，未重启后端、修改交易网关或发送真实订单/改单/撤单。
+
+- 删除上一轮数量轴的显式指针捕获、全局隐藏光标 CSS 和自定义拖动生命周期，恢复浏览器原生 range；普通指针始终显示，仅借原生 :active 冻结拖动中的数量步长与范围。本机浏览器在改动前能拖动，未复现用户实体触控板的失败，因此不将指针捕获认定为已证实的硬件故障原因；删除这层干预以恢复最直接的原生路径。
+- `npm run build --prefix ui` 通过；Trade 与 Schwab 数据定向 UI 用例 24 项通过。原光标状态用例删除，改为验证原生 input 更新数量与预估金额、报价变化期间不改变拖动范围、释放后刷新步长仍保留数量。
+- 实际浏览器连续拖动 Market 数量 364→670→150，右端选择 821、键盘左移为 820；Buy Stop 从 344 拖至 520，预估总额同步；Sell 从全部 400 拖到 200，再从右端选回 400。均未点击 Send。本轮没有实体鼠标/触控板硬件验收，不用自动化拖动冒充该覆盖。
+- 百分比未发现其他模块覆盖，原嵌套行内文本盒为 29.5px 高、带半像素定位；移除外层 span 后独立块级文本盒为 34px 高，报价起点改为整数 10px。截图及元素命中检查中百分比完整可见，最上层为自身，不声称已复现用户端的裁切原因。
+- 实际 GTLB 取消按钮为 16×16px，SVG 为 14×14px，四边间距均为 1px，保留原交叉线粗细。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-native-qty.png`。相关唯一 UI/Chart/Trade 与开发文档已同步，未运行全项目测试。
+
+## 2026-10-29：价差主视觉、Buy 明细与盘外止损改单
+
+环境：本机 macOS、TypeScript 5.9.3、Python 3.13；正式 8765 服务，真实美东 10 月 28 日约 22:20–22:47，Regular 之外。仅本次定向验证，不运行全项目测试。
+
+- `npm run build --prefix ui` 通过；`node --test ui/tests/trade.test.mjs ui/tests/schwab-data.test.mjs` 24 项通过；`.venv/bin/python -m pytest -q schwab-minimum-trader/test_trading.py -k replace` 39 项通过。覆盖 Buy 明细两项盈亏为空、Sold/Stop 按当前均价估算及缺均价留空、PENDING_ACTIVATION 在 editable 为 true/false 时的单次 PUT、原数量/有效期/NORMAL 保留、其他不支持状态继续拒绝，以及新 ID 仍待激活时结束旧改单预览。
+- 正式只读订单显示六张普通 SELL STOP 均为 PENDING_ACTIVATION，其中五张 editable=false，另一张为 true；原前后端状态限制共同阻止拖动/提交。仅放开这一状态的本地门禁，其他校验保留。原服务按原入口重启，账户/订单初始化成功、REST connected、认证有效。
+- 实际浏览器显示百分比 25px、蓝 Ask/红 Bid 各 12px 上下排列；Buy 全背景激活、未选 type 隐藏。真实 GTLB 七列盘外表格中，Buy 的 P/L% 与 P/L 完全留空，Stop 显示参考盈亏、数量、价格和红色取消按钮，未增加虚列。
+- 对真实 GTLB 止损线只做本地拖动，确认进入 stop 编辑且 Send 可用，再按 Esc 回到 browse；未点击 Send、取消订单或发送任何真实券商写请求。数量轴实际按住时 cursor=none，松手后立即恢复 default；取消/失焦等清理路径由定向 UI 用例覆盖。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-spread-focus.png`。
+- 启动时既有 Massive Daily 准备对 2026-10-28 返回 HTTP 403，页面保留 Refresh failed；本轮未修改或排查该独立数据源问题，Schwab 读取与交易图表正常。
+
+未覆盖：真实 Stop PUT 的券商接受/拒绝、真实成交、撤单、Regular 实时行为及全部浏览器/输入硬件。盘外允许本地提交不代表已验证 Schwab 接受 editable=false 的改单，也不改变止损的 NORMAL 执行时段。
+
 ## 2026-10-26：Home / End 未读导航快捷键
 
 - Home / End 在现有 main.ts 键盘入口归一为 Command+U/G，继续调用原 jumpUnread，没有改查找、排序、选图和已读逻辑。非编辑区域拦截单键原生滚动；Scan 的 Home 不跳 Holdings。
@@ -461,3 +504,66 @@
 - Monitor 实际验证：Daily 悬停旧日期（Intraday 无该日数据），两图仍显示67.33水平线，Intraday不显示虚构时间线；同一Alert在两图可见。Intraday拖动66.46→66.68，Daily同步；Daily继续拖动66.68→67.12，Intraday同步，悬停胶囊显示相同已保存价格。另用同样临时环境限时60秒保存完整截图 `/tmp/alert-ui-final.png`，显示旧日期的Daily胶囊与Intraday独立水平线。
 - 正式 Charts 窗口已刷新加载构建并恢复刷新前BTGO选择；未重启真实服务或修改正式Alert。临时页已关闭，验证服务按时结束并清除临时库。
 - 需求和职责同步 alert.md、chart-ui.md、ui.md、development.md、behavior.md；相对链接/锚点及 `git diff --check` 通过。未修改 vendor。未重新覆盖真实Regular触发、macOS通知、全部周期/价格轴缩放/pane resize或macOS27；离线UI证据不替代这些验收。
+
+## 2026-10-27 — Schwab 交易后端接入
+
+环境：本机 macOS、Python 3.13.1。原交易网关 143 项测试通过，相关后端回归共 266 项通过，覆盖 Trade 投影/路由、SnapTrade、Scan/Monitor/Trade 身份、Alert、Intraday State 和模拟器。测试使用假凭证、MockTransport 与临时库，没有真实金融写入。
+
+当日只读确认真实授权、REST/Streaming 正常；当前原生持仓市值、持仓盈亏及日盈亏有值，实际 limits 为 45000 / 2000 / 0.15。Sold Today 的订单树去重、余仓与当天卖出同 symbol 场景由定向用例覆盖。未执行实盘交易、新单成交/拒绝、Replace/Cancel、部分成交、跨日与睡眠恢复验证；该记录不替代后续 live 验收。
+
+## 2026-10-29 — Schwab 明细参考盈亏与交易区间距
+
+环境：本机现有正式 localhost:8765、真实 Regular 账户和行情；未改后端、未重启服务、未发送真实下单/改单/撤单。
+
+- `npm run build --prefix ui`、Schwab原生数据与测宽共7项定向用例、`git diff --check`通过。覆盖Buy沿用券商原值、各Stop独立数量/价格、Sold使用当前券商均价而非历史订单价格、缺成本/完全清仓留空，以及自然测宽不读取已分配宽度；未扩大到全量回归。
+- 真实页面数量模块top=82px、预估模块top=122px、按钮top=162px，前两者分别上移4/2px，行距4→6px。撤单SVG描边3px，保持对称路径与居中布局。
+- TEAM真实Buy明细+13.4% / +1,564与主行一致；Stop数量60、价格210.91、券商平均成本194.10，显示+8.7% / +1,009，符合本条订单价差估算。两条明细的P/L%和P/L列边界与主行偏差均为0；数量、价格、撤单移至其后。真实HTFL已清仓Sold缺当前均价，两项盈亏留空。Sold有均价的估算路径由定向用例覆盖，未伪造真实成本。
+- List宽度680px，console无error/warn。未操作金融写入或拖动图线；未做盘外可见列布局和真实故障验收。最终截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-detail-pnl.png`。已退出验证草稿。
+
+## 2026-10-29 — Trade 顶栏归位、数量与持仓默认列对齐
+
+环境：现有 macOS localhost:8765 正式服务、真实 Regular 行情与账户显示。仅调整前端，不重启服务、不调用金融写接口。
+
+- `npm run build --prefix ui`、持仓自然测宽单项用例与 `git diff --check` 通过，没有扩大为全量回归。Monitor/Scan/Trade 三种模式均核对 List 右上时间模块，其垂直中心与模式按钮完全一致；最终恢复 Trade。
+- Intraday归位按钮回到原右上角，报价右端836px、按钮左端844px，间隔8px；三位数报价不会撑宽数量轴。Ask/Bid字号25px、百分比13px，绝对差值保持Bid右侧灰色基线对齐。数量只显示数字，左端与标尺同为598.40625px，位于横线上方；仍保留原行高。Buy上区21px、下区14px，比例60:40。Send按钮与外层均为52.875×30px，外层padding和按钮border均为0。
+- 真实TEAM展开行中，金额/数量/价格的右边界分别与主行Net Liq/P/L%/P/L完全一致，撤单所在单元格与Chg%列边界完全一致。白色交叉线改为对称SVG，路径中心相对红色圆形按钮中心的x/y偏差均为0。Entry额外字段保留于后续可见列，没有修改任何原生金额或撤单目标。
+- 持仓展开与后续真实刷新下，List保持680px、表格保持664px。Console无error/warn；未点击Send或撤单，未拖动图线。已清理验证草稿；没有验证真实交易、撤单及故障反馈。最终截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-columns-final.png`。
+
+## 2026-10-29 — Trade 顶栏报价与 Buy 四分区微调
+
+环境：本机现有 localhost:8765 正式页面与真实 Regular 报价；本轮只调整 CSS/静态标签，执行构建及局部浏览器核对，不重跑全量用例、不重启服务。
+
+- `npm run build --prefix ui` 与 `git diff --check` 通过。Ask/Bid 和左上价格均为28px，矩形顶部19.5px、行高34px完全一致；中间双行价差为26px高，垂直居中。Qty/预览/按钮的顶部仍分别为86/124/162px。TEAM真实三位数报价220.18/219.68在固定区域完整显示，时钟/归位位于同一顶栏的报价左侧，没有重叠。
+- Buy/Sell标题14px加粗，stop/market小写11px正常字重，文字距中界线两侧各6px。分别激活两种买入方式后，另一方式下方区域保留原浅灰，两个全高度点击目标仍生效。
+- Auto原SVG容器中心与按钮一致，路径边界中心约偏左0.214px、偏下0.381px；向右上各补偿0.5px后，路径中心相对按钮约为右0.286px、上0.119px。仅作视觉补偿，没有改变图标尺寸或按钮位置。
+- Console无error/warn。只切选既有symbol及草稿方式，没有点击Send/撤单，也没有拖动图上横线；不验证真实交易或新故障路径。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-card-top-aligned.png`。
+
+## 2026-10-29 — Trade 报价与标尺视觉精简
+
+环境：本机现有正式 localhost:8765 页面、真实 Regular 报价；本轮仅改前端外观和刻度节点，不重启服务，不发送真实交易请求。
+
+- `npm run build --prefix ui`、`git diff --check` 通过；未扩大测试范围。页面核对黑蓝 Ask / 黑红 Bid、灰色差值与原百分比颜色；数量标签保持不变，所有小刻度节点已移除，恢复清晰细黑直线。
+- Buy 区域选中背景整体变深，当前方式白字、另一方式灰字，Stop/Market 切换正常；Buy/Sell 字重700，Stop/Market仍400。轨道左端598.40625px；胶囊曲线顶点580.90625px，加半径17.5px后的直线起点与轨道相同，Send右端仍870px。
+- 真实按住数量滑柄期间，range :active=true，body与range计算出的cursor均为none；释放后恢复default，数量可正常调整。只操作卡片按钮和数量轴，未拖动图上横线、未操作提醒或金融写入；console无error/warn。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-card-refinement.png`。
+
+## 2026-10-29 — Trade 卡片对齐、点击区域与短暂反馈
+
+环境：本机 macOS、项目 Node/TypeScript 与 Python 3.13，现有正式 localhost:8765 服务及真实 Regular 报价。只核对本轮卡片、草稿交互和反馈，不扩大为后端全量回归。
+
+- `npm run build --prefix ui`、Trade 定向 16 项前端用例与 `git diff --check` 通过。新增覆盖数量两端/不重叠刻度、Sell 末端真实数量、风险金额整数、已知离线不发送、连接中断结果未知、Accepted 两秒后消失且不被账户快照刷新延长、后续错误不被旧计时器清除。写请求全部使用内存 fetch 替身，没有真实下单、改单或撤单。
+- 真实页面核对：轨道宽 271.59375px，左端 598.40625px、右端 870px；Ask、总额、Buy/Sell 左端均相同，Send 胶囊右端与轨道相同。浏览/激活四行矩形完全一致；Ask/spread/Bid 两侧间隔均 8px，22px 的价差双行位于 26px 报价高度内。刻度从 0 至实际 maximum，自适应显示不重叠数字。Buy Stop 和 Buy Market 的上半部均可直接点击。卡片内 title 数量为零，console 无 error/warn。
+- 浏览器拖价核对误命中了相邻 SKYA Alert；随后依据本机 SQLite WAL 中的原记录，完整恢复为 2.97、triggered、generation=2 及原 updated_at/expires_at。服务按原命令重启，GET /health 与 GET /v1/alerts 已核对恢复后的真实状态。未改 Alert 实现；未继续在真实提醒相邻处拖价，双图/Auto 的规则由上述定向用例验证。
+- 最终效果截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-card-polish.png`。Accepted 与故障反馈通过替身和可控时钟验证，未用真实交易验证。
+
+## 2026-10-28 — Trade 原生数据与前端统一收拢
+
+环境：本机 macOS、TypeScript 5.9.3、Lightweight Charts 5.2.0、127.0.0.1:8765 现有正式服务与 in-app browser；当前 Regular，真实 Schwab / Longbridge 连接。不重启后台，不改网关或账户 API。
+
+- `npm run build --prefix ui` 与 `git diff --check` 通过；定向运行 Trade、Schwab 原生数据、共用持仓几何、Monitor Holdings、Chart 共 31 项前端用例通过。覆盖父子单去重及只取消 Entry 母单、多组风险分别配对、唯一原生均价 Buy、缺成本跳过、多笔 Sold/Stop、Entry/Trim 与清仓无标记、市价缺价格留空、价差严格阈值、固定占位、交易写入不重发及双图拖价。请求全部使用内存 fetch 替身，未发真实金融写请求。
+- 新增测宽回归：连续 80 次改变已分配宽度不改变内容最小宽度；禁止读取原表 scrollWidth，价格背景排除出自然宽度副本，几何扣除首 td 的 1px 边框。Monitor 与 Schwab 共同调用该纯 DOM 工具，各自原生数据、会计、刷新和渲染保持独立。
+- 本轮真实页面 15:22:23 至 15:27:55 UTC（上海 23:22 至 23:27）连续刷新：Trade List 均为 680px、table/scrollWidth 均为 664px，无逐步扩宽。模式切换后 Monitor List 同为 680px、仅显示 SnapTrade；Scan 隐藏 Intraday/Trade/Schwab，恢复 Trade 仍为 680px。
+- 页面测量浏览与 Buy 模式的 Ask、Bid、Qty、预览、Auto、Send 六组矩形坐标/尺寸完全相同。报价21px、weight=400；SKYA 真实价差0.68%时百分比红色加粗，HTFL真实较窄价差为正常字重；阈值来自构建发布的 config/trade-ui.json。Qty 仅隐藏内容、不移除布局行，轨道/刻度/滑柄已精简。
+- 两个只读快照入口与前端原生整理核对：auth=valid、REST/Streaming=connected，8个 symbol，1个 Entry、7个余仓 Buy 汇总、7个独立 Stop；Buy 数量/平均成本与 position 完全相同，Entry 取消目标均为母单。数据仅在内存传递，不保存账户/订单快照，不打印凭证或内部订单 ID。
+- 真实 ODD 展开只显示一条 Entry 及一个圆形 ×；HTFL 展开为汇总 Buy 与 Stop，各字段单行，Stop 独立一个 ×。未点击任何 × 或 Send；最终 console 无 error/warn。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-mvp-final.png`。
+- 清除被替代的测宽函数、跨列多行订单文字、SOLD/+ENTRY/ORDER 标记及文字 Cancel 样式；原独立前端源码和前端设计/开发文档移出维护源码，导入原文件保留在忽略的本机备份目录。原网关设计与协议测试保留；当前唯一规范同步 Trade、UI、Chart UI、Holdings UI、行为及开发职责。
+- 未覆盖：真实新单/改单/撤单、真实成交、全部周期/移动触屏、跨日及非 Regular 长时运行。当前真实快照没有 Sold/Trim 或多 Stop 同 symbol，相关展示使用定向数据用例验证；没有将历史验证作为本轮 live 证据。

@@ -6,6 +6,7 @@
 
 - 这是 symbol 当前状态的监控和描述。颜色持续同步状态，条件变化立即更新；不闪几秒、不锁定当天最高等级，不要求手动关闭或重新设置。
 - 仅使用当前 Regular 行情，后台持续工作，不依赖浏览器或 Scan/Monitor 展示。完整监控范围为 Focus 候选与当前余仓 Holdings；具体上游订阅只在 [Longbridge 数据要求](longbridge-data.md) 维护。Discover/Excluded 的 Quote-only 不进入本模块。
+- 当前账户角色由最近选择的 Monitor/Trade 决定：Monitor 使用 SnapTrade 余仓，Trade 使用 Schwab 余仓；Scan 延续上次账户角色。两套账户不累加数量，切换角色后沿用静默首状态。Schwab Entries/Sold Today 不作为 holding，已进入其交易显示区的 symbol 不重复作为 Focus 候选报警。
 - 同 symbol 只计算一次，Holdings 优先于 Candidate。多持仓批次同步显示、声音去重；当天已清仓批次只保留复盘，不发持仓风险声音，也不因仍在 Focus 而作为候选重复提醒。
 - 当前 Scan Focus 可以显示同一份 Longbridge 状态；Scan 日图仍使用 Massive，不用 Massive 指标或日 K 补充盘中计算。历史 Scan 不展示当前盘中状态。
 - 只描述关注等级，不自动识别 Pivot、确认主升或作清仓指令；不下单、不接 Atomic feature 自动设置，不建设通用策略框架。

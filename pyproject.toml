@@ -6,11 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "longbridge-data-service"
 version = "0.1.0"
 description = "Local, whitelist-only Longbridge quote and closed-bar service"
-requires-python = ">=3.11"
-dependencies = ["longbridge==5.0.0", "exchange-calendars==4.13.2", "aiohttp>=3.11,<4", "watchdog>=6,<7", "numpy>=2,<3", "pandas>=2.2,<4"]
+requires-python = ">=3.12"
+dependencies = ["longbridge==5.0.0", "exchange-calendars==4.13.2", "aiohttp>=3.11,<4", "watchdog>=6,<7", "numpy>=2,<3", "pandas>=2.2,<4", "fastapi>=0.115,<1", "httpx>=0.28,<1", "websockets>=15,<18", "pydantic>=2.10,<3", "keyring>=25,<26", "uvicorn>=0.34,<1"]
 
 [project.optional-dependencies]
-test = ["pytest>=8,<10"]
+test = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2"]
 
 [project.scripts]
 longbridge-data = "data_service.__main__:main"
@@ -23,3 +23,4 @@ include = ["data_service*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"

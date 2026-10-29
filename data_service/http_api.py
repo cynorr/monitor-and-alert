@@ -93,6 +93,9 @@ def create_app(service, cors_origin=None):
                             await ws.send_json({'type': 'alerts', **alerts})
                             last_alerts = signature
                     if symbol in service.symbols:
+                        if service.mode == 'trade' and getattr(service, 'trade', None):
+                            await ws.send_json({'type': 'trade_quote', 'symbol': symbol, 'request_id': request_id,
+                                                'mode': service.mode, 'source': source, 'quote': service.trade.quote(symbol)})
                         if hasattr(service, 'additional_info'):
                             info = service.additional_info(symbol)
                             signature = (symbol, request_id, source, context, service.additional.revision,
@@ -129,7 +132,7 @@ def create_app(service, cors_origin=None):
                         new_source = payload.get('source', 'watchlist')
                         if new_source not in ('watchlist', 'holdings'):
                             raise ValueError('Unknown selection source')
-                        if payload.get('mode') and payload['mode'] != ('scan' if service.mode == 'scan' else 'monitor'):
+                        if payload.get('mode') and payload['mode'] != (service.mode if service.mode in ('scan', 'monitor', 'trade') else 'monitor'):
                             raise ValueError('Selection belongs to a previous mode')
                         new_id = int(payload['request_id'])
                         service.select(new_symbol, new_tf, source=new_source)
@@ -150,6 +153,46 @@ def create_app(service, cors_origin=None):
     async def index(request):
         return web.FileResponse(UI_ROOT / 'index.html')
 
+    async def trade_request(request):
+        # Keep trading's strict access / validation / unknown-result contract.
+        from .schwab_backend import BackendError, symbol_value
+        from pydantic import ValidationError
+        if urlsplit('http://' + request.host).hostname not in ('127.0.0.1', 'localhost'):
+            raise web.HTTPForbidden(text='Local Host required')
+        if request.headers.get('Origin') not in (None, f'{request.scheme}://{request.host}'):
+            raise web.HTTPForbidden(text='Origin not allowed')
+        trade = getattr(service, 'trade', None)
+        if not trade or service.mode != 'trade':
+            return web.json_response({'result': 'error', 'error': {'code': 'ORDER_CONFLICT', 'message': 'Choose Trade mode'}}, status=409)
+        try:
+            if request.method == 'GET':
+                if request.path.endswith('/orders'):
+                    await trade.runtime.refresh('orders')
+                    return web.json_response({'orders': trade.runtime.state.orders, 'updated_at': trade.runtime.state.orders_updated_at})
+                symbol = request.query.get('symbol', '')
+                if symbol not in service.symbols:
+                    raise ValueError('Choose a current Focus or account symbol')
+                value = await trade.runtime.get_quote(symbol_value(symbol.removesuffix('.US')), refresh=True)
+                return web.json_response(value)
+            operation = request.match_info.get('operation', 'cancel')
+            payload = {}
+            if request.method != 'DELETE':
+                if request.content_type != 'application/json':
+                    raise web.HTTPUnsupportedMediaType()
+                payload = await request.json()
+            value = await trade.action(operation, payload, request.match_info.get('order_id'))
+            return web.json_response(value, status=202 if request.method == 'DELETE' else 201 if request.method == 'POST' else 200)
+        except BackendError as error:
+            return web.json_response(error.body(), status=error.status)
+        except ValidationError as error:
+            details = [{'location': list(item['loc']), 'message': item['msg']} for item in error.errors()]
+            return web.json_response({'result': 'error', 'error': {'code': 'VALIDATION_FAILED', 'message': 'Invalid order parameters', 'details': details}}, status=422)
+
+    app.router.add_get('/v1/trade/quote', trade_request)
+    app.router.add_get('/v1/trade/orders', trade_request)
+    app.router.add_post('/v1/trade/orders/{operation:market-buy|market-sell|breakout-buy}', trade_request)
+    app.router.add_put('/v1/trade/orders/{order_id}/{operation:stop}', trade_request)
+    app.router.add_delete('/v1/trade/orders/{order_id}', trade_request)
     app.router.add_get('/v1/stream', socket)
     app.router.add_post('/v1/list', list_action)
     app.router.add_post('/v1/{action:mode|scan|preferences|alerts|additional-info}', list_action)

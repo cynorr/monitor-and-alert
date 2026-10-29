@@ -87,3 +87,7 @@ Intraday 初始周期按美东开盘经过时间选择，之后保留手工选�
 ## Monitor 页面状态
 
 刷新与 Ready 的数据含义见 [Longbridge 数据要求](longbridge-data.md#调度失败与状态)；Loading、Refreshing、Ready 与错误的显示只在 [Chart status](chart-ui.md#chart-status) 维护。
+
+## Schwab Trade
+
+Monitor / Scan / Trade 为互斥的全局展示模式。Trade 复用 Monitor 图表和 Focus，使用独立 Schwab Holdings，Monitor 继续使用 SnapTrade；账户数据、估值与成本不拼接。两个账户源和行情任务持续后台运行。Trade 的字段、隐式 Entries/Holdings/Sold Today、汇总 Buy/当天 Sold/活动 Stop、明细参考盈亏、Entry/Trim、固定交易卡片、单次 Send、盘外止损改单、独立短暂 Accepted 反馈与网关边界只在 [Schwab Trade MVP](schwab-trade.md) 维护。

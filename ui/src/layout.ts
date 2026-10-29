@@ -14,7 +14,7 @@ export function initLayout() {
     function minimum() {
         return isScan()
             ? [CHART_MIN_WIDTH, LIST_MIN_WIDTH]
-            : [CHART_MIN_WIDTH, CHART_MIN_WIDTH, Math.max(LIST_MIN_WIDTH, holdingsWidth)];
+            : [CHART_MIN_WIDTH, root.dataset.mode === 'trade' ? 540 : CHART_MIN_WIDTH, Math.max(LIST_MIN_WIDTH, holdingsWidth)];
     }
     function widths() {
         const minima = minimum();
@@ -22,9 +22,9 @@ export function initLayout() {
             root.clientWidth - WORKSPACE_PADDING - DIVIDER_WIDTH * (minima.length - 1));
         if (!ratios) {
             const list = Math.max(minima[minima.length - 1], Math.min(available * LIST_WIDTH_RATIO,
-                available - CHART_MIN_WIDTH * (minima.length - 1)));
-            const chart = (available - list) / (minima.length - 1);
-            return isScan() ? [chart, list] : [chart, chart, list];
+                available - minima.slice(0, -1).reduce((a, b) => a + b, 0)));
+            const extra = (available - list - minima.slice(0, -1).reduce((a, b) => a + b, 0)) / (minima.length - 1);
+            return [...minima.slice(0, -1).map(value => value + extra), list];
         }
         const extra = Math.max(0, available - minima.reduce((a, b) => a + b, 0));
         const wanted = ratios.map((r, i) => Math.max(0, r * available - minima[i]));

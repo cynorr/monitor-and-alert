@@ -255,9 +255,15 @@ def test_scan_http_ws_historical_readonly_origin_and_refresh(app_data):
                 assert response.status == 400
                 response = await client.post(base + '/v1/scan',json={'date':'2026-09-30'})
                 assert response.status == 200
-                before = app.workspace.path.read_bytes()
+                # Ready data skips preparation; explicit Refresh still resets
+                # the daily manual layer, including pins, by current policy.
+                ticker = app.list_state()['board'][0]['ticker']
+                app.workspace.pin_ticker(ticker, True)
+                assert ticker in app.workspace.data['pinned']
                 response = await client.post(base + '/v1/scan',json={'generate':True})
-                assert response.status == 200 and app.workspace.path.read_bytes()==before
+                assert response.status == 200
+                assert (await response.json())['date'] == '2026-09-30'
+                assert app.workspace.data['pinned'] == []
                 await stream.send_json({'type':'select','symbol':symbol,'timeframe':'5m','request_id':4,'mode':'monitor'})
                 while True:
                     message = await stream.receive_json(timeout=2)

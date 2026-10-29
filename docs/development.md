@@ -46,7 +46,7 @@
 
 依赖方向：UI → Data API → Workbench → Scan或MonitorService。MonitorService调用longbridge包并组合ChartCache与盘中状态；Scan/Massive只使用共用storage、指标和特征，不从Longbridge包获取共用工具。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；candle preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
-持仓数据需求只在 [holdings-data.md](holdings-data.md) 维护，显示交互见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度使用同样CSS的临时隐藏副本测量，onWidth经main.ts交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。Workbench.list_state用已有calendar.is_open与服务时钟提供current_regular_session，main.ts同时交给Watchlist与Holdings，前端不新增日历、HTTP、券商请求或后台任务，金额仍为后端Decimal字符串，计算语义以Holdings数据需求为准。后端is_new随纽约日期变化，前端复用List标记；账户更新时间显隐由Holdings.tick复用main.ts已有秒级时钟更新，不重排表格或增加账户请求。圆圈错误按钮与Chart共用绘制CSS，使用独立holdings-warning状态标记；详情面板只在点击时打开，保持相同文本节点以允许复制，成功/关闭操作收起，不建立通知或错误历史框架。
+持仓数据需求只在 [holdings-data.md](holdings-data.md) 维护，显示交互见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度统一由ui/src/holdings-layout.ts使用同样CSS的临时隐藏副本测量并排除价格背景，onWidth经main.ts只把当前账户视图交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。Workbench.list_state用已有calendar.is_open与服务时钟提供current_regular_session，main.ts同时交给Watchlist与Holdings，前端不新增日历、HTTP、券商请求或后台任务，金额仍为后端Decimal字符串，计算语义以Holdings数据需求为准。后端is_new随纽约日期变化，前端复用List标记；账户更新时间显隐由Holdings.tick复用main.ts已有秒级时钟更新，不重排表格或增加账户请求。圆圈错误按钮与Chart共用绘制CSS，使用独立holdings-warning状态标记；详情面板只在点击时打开，保持相同文本节点以允许复制，成功/关闭操作收起，不建立通知或错误历史框架。
 
 图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
 
@@ -73,7 +73,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 - sound.py每次play建立独立任务，一次afplay播放完整两段WAV。beat_offsets是资源生成与播放节拍的共同来源；播放器启动后按实际本机时钟发布pulse_at，沿用现有Alert WS。playing每symbol仅输出最新任务的symbol/fired_at/pulse_at；旧任务仍可自然播放完，前端只响应当前未读fired_at的节拍。没有队列、抢占、历史或逐帧消息。退出取消任务并终止播放器；scripts/build_alert_sounds.py只用于离线准备资源。
 - GET /v1/alerts及WS alerts包含revision/alerts/unread/eligible_symbols/scope_known/sound/error；unread为最新提醒对象数组，sound包含enabled/error/playing，字段如上。POST接受create/rearm/delete/read，read仅携带symbol；没有通知历史、事件ack或跳转API。
 - 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
-- ui/src/symbol-row.ts为Grid名单和Table持仓创建同一price-surface/price-wave；attention.ts仅应用最新提醒方向／等级及本次pulse_at，通过Web Animations短暂改变同一波浪亮度，不聚合标题。main.ts所有select及当前chart更新仍直接read。列表表面用Grid列范围定位；持仓表面挂在首个td，宽度由现有列几何计算，table ResizeObserver只同步这一个范围。选中轮廓、状态底色与提醒独立。
+- ui/src/symbol-row.ts为Grid名单和Table持仓创建同一price-surface/price-wave；attention.ts仅应用最新提醒方向／等级及本次pulse_at，通过Web Animations短暂改变同一波浪亮度，不聚合标题。main.ts所有select及当前chart更新仍直接read。列表表面用Grid列范围定位；持仓表面挂在首个td，宽度由现有列几何计算，holdings-layout.ts的table ResizeObserver只同步这一个范围，背景原点计入首个td的实际边框。选中轮廓、状态底色与提醒独立。
 - End/Home与Command+G/U在main.ts归一后路由到原名单jumpUnread，单键Home/End取消原生页面滚动，文本编辑不拦截。Watchlist.sections同时供render与完整Focus导航使用；ScanControls.visible可指定Focus并忽略显示筛选，showList可保留Tag草稿。Watchlist.update仅在成员退出当前List或转入Holdings时自动候补，Tag遮住的已选chart不因后台推送跳走；用户主动修改筛选仍沿用原反馈。Holdings复用ordered与choose，不增加已访问集合。
 
 ## 模式与上游数据
@@ -198,3 +198,11 @@ volume.py只读ChartCache统一closed及SDK open，按合并revision缓存多周
 GET /v1/intraday-state只读返回enabled和symbols；现有list快照增加同名intraday字段，Scan历史关闭该字段。symbol状态含role/state、ADR20、上下行倍数/等级、above_open、price/timestamp、cum_vol/local_vol和rank。量比含ratio/actual/average/samples/level，LocalVol另含window；缺值为null。rank是价格/CumVol/LocalVol三个离散整数，前端不重新计算业务阈值。
 
 ui/src/intraday-state.ts集中格式化、Badge和rank比较；quiet参数仅供Focus隐藏低倍数，Holdings保留完整数值，缺失仍为—；ADR数值方向独立于预警阈值，持仓neutral时选择较大的一项。list.ts直接使用In Play section，复用标题/折叠/空组隐藏，删除Grouped/Dynamic状态与偏好。holdings.ts保持独立风险排序和清仓尾部；重排复用节点、恢复焦点和滚动位置。全部报警及未读通过AlertEngine.notify/read共用上述Alert契约，Intraday State不自行播放声音或存另一份通知。
+
+## Schwab Trade 接入
+
+独立需求与当前接口见 [schwab-trade.md](schwab-trade.md)，保留原项目 backend-design 作为网关协议参考。data_service/schwab_backend.py 是唯一交易核心；旧目录脚本只转入同一模块。trade.py 只做独立账户投影、Sold Today 和订阅集合入口，严格请求模型调用原五个交易函数，不建立交易账本或 SnapTrade 适配。Workbench 管理同进程任务，http_api 保留交易专用 Host/Origin/JSON/错误规则，并通过原 WS 发布带 symbol/request_id/mode/source 的 trade_quote；list 内的 trade 快照带各自账户/订单成功时间和实际 limits。前端 main/types/list 支持第三模式，schwab-data.ts 声明完整原生订单/成交/持仓响应并提供只读整理，schwab-holdings.ts 保留原生视图与节点更新；两表仅共用 holdings-layout.ts 和 symbol-row/attention/palette，不统一会计或刷新。trade.ts 管理草稿及 Send 分派，trade-lines.ts 使用公开 API 绘制双图交易线，price-lines.ts 与 alerts.ts 共用坐标、命中及横线绘制。config/trade-ui.json 是价差显示阈值源，npm build 将其复制到 UI 静态目录，不新增读取 API。新模式不启动第二个 SDK context、HTTP 服务或前端框架；模拟器不构造真实 Schwab Runtime。
+
+trade-ticket 的 CSS grid 仅排列数量、预估与按钮，align-content:end 固定按钮底边，row-gap 只向上展开前两行；顶部报价与反馈使用独立绝对定位，不参与这三行的间距。trade.ts 的数量刻度由当前 maximum/step/轨道宽度直接生成；ResizeObserver 仅在轨道尺寸变化时重算标签，报价更新复用未变化的节点。数量轴保留原生range行为及普通指针，不注册指针捕获或鼠标隐藏生命周期；用原生:active在拖动中冻结步长/范围，input更新数量和预览。Accepted 的短暂反馈由独立前端计时器管理，不订阅账户或订单状态作为关闭条件；写入已知离线与未知结果的区别沿原专用请求契约处理。具体显示和反馈语义只维护在 Schwab Trade 与 Chart UI。
+
+Schwab 明细按标签、金额、P/L%、P/L、数量、价格与撤单的顺序使用可见列；Entry额外字段占据后续区域，跨列数读取当前可见表头，列数不足时在末列内并排，不增加虚列。可见列数变化时重建该行内部单元格，普通报价仍复用节点。schwab-data.ts按当前持仓均价推导Stop/Sold的参考盈亏，Buy明细两项留空；主行继续读取券商余仓盈亏。口径只在Schwab Trade维护，不引入历史成本归属。前后端均支持PENDING_ACTIVATION止损改单，新ID以该状态返回也能结束旧改单预览，不等待Regular激活。List 时钟继续由 main.ts 的既有 view.server_time 更新，移动 DOM 不新增时间来源或任务。

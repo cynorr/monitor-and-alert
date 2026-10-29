@@ -16,3 +16,5 @@ Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-
 - 日分类改动使用 `tests/test_list_rules.py` 的现有真实截面/名单及真实 SQLite 做定向验证；不为此连接真实券商或建立 Mock。
 - `snaptrade.py`只获取原始账户数据；`holdings.py`统一买卖归属、余仓估值、当日清仓与日期规则；`workbench.py`复用共用Quote基准和时钟。HTTP/UI不另算会计，不通过其他历史ticker扩大范围。
 - Holdings修改优先核对现有真实快照/服务，仅补充相关`test_holdings.py`和`test_holdings_integration.py`；失败保持已接受快照，不增加轮询任务或恢复框架。
+
+- Schwab Trade 的唯一规范为 [docs/schwab-trade.md](../docs/schwab-trade.md)。schwab_backend.py 维护原交易内核；trade.py 只投影独立账户/订单并复用严格模型，不读取 SnapTrade 账本、不增加写重试。Workbench 管理第三模式、生命周期与当前账户风险角色；旧项目后端设计保留。

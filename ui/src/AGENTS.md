@@ -4,7 +4,7 @@
 
 - 盘中状态另读 [Intraday State](../../docs/intraday-state.md)，`intraday-state.ts`仅负责格式化、Badge及服务端离散rank比较；In Play复用section，不改真实归属，重排保留节点/选择/焦点/滚动。Holdings当前余仓同步状态，清仓尾部保持灰色。
 - `list.ts`：名单行、section、选择、拖拽、人工 Tag；`scan.ts`：两模式共用 Tag/Filter、日期和草稿编辑；`board.ts`：分组、角标和显示格式；`tags.ts`：Tag 保存与草稿比较；`tag-appearance.ts`：外观默认值、图案与共用 SVG 渲染入口。
-- `layout.ts`：两模式统一的默认名单宽度比例与最小宽度；`holdings.ts`：独立持仓表；`main.ts`：模式和图表选择来源。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
+- `layout.ts`：三模式统一的名单布局；`holdings-layout.ts`：两套原生账户共用的自然内容测宽与价格背景几何；`holdings.ts`：独立持仓表；`main.ts`：模式和图表选择来源。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
 - Holdings数据语义只在 [Holdings 数据需求](../../docs/holdings-data.md) 维护。前端使用后端金额/基准/批次状态，按`closed_today`将当日清仓固定在灰色尾部，排序仅影响余仓；不从市值0猜测清仓，不重算会计或改变名单归属。
 - `additional-info.ts`：独立信息身份校验、分类显示精简、可空格式化及纽约自然日倒计时；原始分类保留在数据契约中，数据与显示规则只读 [Additional Info](../../docs/additional-info.md)，不改变bar revision或Ready。
 - `chart.ts`：共用图表、十字线与成交量显示、交易日联动；`chart-settings.ts`：统一初始 bar spacing 与成交量区比例的集中人工参数。修改参数后构建并刷新页面，不增加设置界面。
@@ -20,3 +20,5 @@
 - 只验证本次改动相关的离线场景；live 必须有明确范围与时限。同步唯一 UI 文档和必要产品文档，不新增交易入口、Atomic feature 自动 Alert 或通用框架。
 
 - 新增 symbol 行复用 `symbol-row.ts` 的表面及 `attention.ts` 的最新提醒入口，规则见 [Symbol模板](../../docs/ui.md#symbol-row-template)。Grid/Table共用CSS，不复制波浪或按不同列表另造提醒；Holdings区域宽度跟随现有列几何。共享颜色只引用 `palette.ts`，由main安装CSS变量，禁止在Chart/Tag/名单重复默认色值；说明见 [Color palette](../../docs/ui.md#color-palette)。未读不改计算、rank、手动线或已读语义。
+
+- Trade 的独立规范见 [docs/schwab-trade.md](../../docs/schwab-trade.md)。schwab-data.ts 维护原生响应字段、订单与成交读取，不引用 SnapTrade；schwab-holdings.ts 保留原生展示逻辑，复用 holdings-layout/symbol-row/attention/intraday-state；trade.ts 管草稿和共用 Send，trade-lines.ts 用公开图表 API 绘制双图交易线，price-lines.ts 与 Alert 共用坐标/命中/绘制。模式身份包括 trade，保持 request_id/source/socket 检查；金融写请求不能复用普通 post 的错误语义或自动重发。

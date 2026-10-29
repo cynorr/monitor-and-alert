@@ -6,10 +6,18 @@ import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
 import { ScanControls } from './scan.js';
 import { post } from './api.js';
+import { TradeController } from './trade.js';
+import { SchwabHoldings } from './schwab-holdings.js';
+import { loadTradeConfig } from './trade-config.js';
 import { HoldingsList } from './holdings.js';
 import { AlertController } from './alerts.js';
 import { AdditionalInfoDisplay, acceptsAdditional } from './additional-info.js';
 installPalette();
+const tradeConfig = await loadTradeConfig().catch(error => {
+    $('intraday-state').textContent = error.message;
+    $('intraday-state').className = 'state error';
+    throw error;
+});
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
@@ -20,8 +28,13 @@ let reconnectTimer, lastMessage = 0, reconnectDelay = 1000, currentView = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource = 'watchlist', holdingKey = '';
 const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList);
-const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => layout.setHoldingsWidth(width));
+const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => { if (appMode !== 'trade')
+    layout.setHoldingsWidth(width); });
 let appMode = 'monitor', scanDate = '', modePending = false;
+const trade = new TradeController([daily, intraday], () => appMode, tradeConfig);
+const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'trade' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'trade')
+    layout.setHoldingsWidth(width); });
+const activeHoldings = () => appMode === 'trade' ? schwab : holdings;
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
@@ -33,9 +46,9 @@ const alerts = new AlertController([daily, intraday], () => symbol, () => appMod
     if (selected)
         select(selected, tf, selectionSource, holdingKey);
 }, value => {
-    watchlist.attention = holdings.attention = attentionState(value);
+    watchlist.attention = holdings.attention = schwab.attention = attentionState(value);
     watchlist.render();
-    holdings.render();
+    activeHoldings().render();
 });
 function applyList(data) {
     const nextMode = data.app_mode ?? 'monitor';
@@ -46,7 +59,8 @@ function applyList(data) {
     $('intraday-panel').hidden = $('divider-0').hidden = appMode === 'scan';
     document.querySelectorAll('[data-app-mode]').forEach(button => {
         button.classList.toggle('active', button.dataset.appMode === appMode);
-        button.disabled = modePending || (data.mode === 'simulation' && !data.app_mode);
+        button.hidden = button.dataset.appMode === 'trade' && !data.trade_enabled;
+        button.disabled = modePending || (button.dataset.appMode === 'trade' && !data.trade_enabled) || (data.mode === 'simulation' && !data.app_mode);
     });
     $('mock-data').hidden = !data.mock;
     const progress = $('scan-progress');
@@ -64,20 +78,22 @@ function applyList(data) {
         watchlist.selected = '';
         selectionSource = 'watchlist';
         holdingKey = '';
-        holdings.selected = '';
+        holdings.selected = schwab.selected = '';
         ++epoch;
     }
+    trade.update(data.trade ?? null);
+    schwab.update(data.trade ?? null, data.current_regular_session === true, data.intraday);
     holdings.update(data.holdings ?? null, data.current_regular_session === true, data.intraday);
     watchlist.update(data, selectionSource === 'watchlist');
-    if (selectionSource === 'holdings' && !holdings.has(holdingKey)) {
-        const first = holdings.first();
+    if (selectionSource === 'holdings' && !activeHoldings().has(holdingKey)) {
+        const first = activeHoldings().first();
         if (first)
             select(first.symbol, timeframe, 'holdings', first.key);
         else
             select(scan.visible(data.board)[0]?.symbol ?? '', timeframe, 'watchlist');
     }
-    else if (!symbol && holdings.first()) {
-        const first = holdings.first();
+    else if (!symbol && activeHoldings().first()) {
+        const first = activeHoldings().first();
         select(first.symbol, timeframe, 'holdings', first.key);
     }
     if (changed && !symbol)
@@ -125,8 +141,8 @@ function apply(view) {
         return;
     currentView = view;
     daily.render(view.charts['1d']);
-    daily.setQuotePrice(view.quote, appMode === 'monitor');
-    if (appMode === 'monitor') {
+    daily.setQuotePrice(view.quote, appMode !== 'scan');
+    if (appMode !== 'scan') {
         intraday.render(view.charts[timeframe]);
         intraday.setQuotePrice(view.quote, true);
         dayLink.restore();
@@ -140,6 +156,7 @@ function apply(view) {
     document.querySelectorAll('.adv').forEach(node => node.textContent = view.summary.adv20 == null ? '—' : '$' + compact(view.summary.adv20));
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
+    trade.view(view);
     alerts.redraw();
     void alerts.read(view.symbol);
 }
@@ -148,6 +165,7 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
     if (next !== symbol)
         dayLink.clear();
     symbol = next;
+    trade.setSymbol(next);
     alerts.changeSymbol();
     selectionSource = source;
     holdingKey = source === 'holdings' ? key : '';
@@ -163,8 +181,8 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
     document.querySelectorAll('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
     watchlist.selected = source === 'watchlist' ? symbol : '';
     watchlist.keyboardEnabled = source === 'watchlist';
-    holdings.selected = source === 'holdings' ? holdingKey : '';
-    holdings.render();
+    activeHoldings().selected = source === 'holdings' ? holdingKey : '';
+    activeHoldings().render();
     watchlist.render();
     for (const id of ['daily', 'intraday'])
         $(id + '-empty').textContent = symbol ? 'Loading' : 'No symbol selected';
@@ -189,6 +207,11 @@ function connect() {
             const data = JSON.parse(event.data);
             if (data.type === 'list') {
                 applyList(data);
+                return;
+            }
+            if (data.type === 'trade_quote') {
+                if (appMode === 'trade' && data.mode === appMode && data.symbol === symbol && data.request_id === epoch && data.source === selectionSource)
+                    trade.updateQuote(data.quote);
                 return;
             }
             if (data.type === 'additional_info') {
@@ -237,9 +260,9 @@ document.addEventListener('keydown', event => {
         event.preventDefault();
         void watchlist.jumpUnread();
     }
-    if (key === 'u' && appMode === 'monitor') {
+    if (key === 'u' && appMode !== 'scan') {
         event.preventDefault();
-        holdings.jumpUnread();
+        activeHoldings().jumpUnread();
     }
 });
 document.querySelectorAll('[data-app-mode]').forEach(button => button.addEventListener('click', async () => {
@@ -261,6 +284,7 @@ document.querySelectorAll('[data-app-mode]').forEach(button => button.addEventLi
 setInterval(() => {
     additional.tick();
     holdings.tick();
+    schwab.tick();
     if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
         socket.close();
     if (currentView && socket?.readyState === WebSocket.OPEN)
