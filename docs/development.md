@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-26。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-10-29。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -36,7 +36,7 @@
 | ui/src/scan.ts / filters.ts / tags.ts / board.ts | 日期/三列表、统一可见结果与持仓屏蔽、Tag 条件/外观草稿、分组/列定义和Scan格式化 |
 | ui/src/tag-appearance.ts | 内置轮廓图案、旧 Tag 外观默认值与共用 SVG 渲染 |
 | scripts/build_scan_mock.py | 明确指定目录的合成日 K/截面/测试名单 |
-| ui/src/chart.ts / chart-settings.ts / layout.ts | Lightweight Charts、共用初始图形参数、日联动、列宽和原生交互 |
+| ui/src/chart.ts / chart-settings.ts / daily-chart-view.ts / layout.ts | 共用图表与参数、Daily 坐标策略/等比缩放/全貌预览及裁切 primitive、交易日联动、列宽 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
 | data_service/additional_info/ / scripts/pull_additional_info.py | 独立Nasdaq公司资料/财报获取、Python清理、业务SQLite/内存缓存和后台调度；先读模块AGENTS.md |
@@ -48,7 +48,9 @@
 
 持仓数据需求只在 [holdings-data.md](holdings-data.md) 维护，显示交互见 [holdings-ui.md](holdings-ui.md)。ui/src/holdings.ts把账户批次扁平化用于显示，排序不修改服务器数据；仅顺序变化时复用主行/买卖行DOM，日期、数量、金额与买卖记录变化时更新明细。自然内容宽度统一由ui/src/holdings-layout.ts使用同样CSS的临时隐藏副本测量并排除价格背景，onWidth经main.ts只把当前账户视图交给layout.setHoldingsWidth；字符位数与结构未变时不重复克隆，不在每次Quote上重新测量。Holdings位于名单滚动容器之外，沿用整体折叠与水平overflow。Workbench.list_state用已有calendar.is_open与服务时钟提供current_regular_session，main.ts同时交给Watchlist与Holdings，前端不新增日历、HTTP、券商请求或后台任务，金额仍为后端Decimal字符串，计算语义以Holdings数据需求为准。后端is_new随纽约日期变化，前端复用List标记；账户更新时间显隐由Holdings.tick复用main.ts已有秒级时钟更新，不重排表格或增加账户请求。圆圈错误按钮与Chart共用绘制CSS，使用独立holdings-warning状态标记；详情面板只在点击时打开，保持相同文本节点以允许复制，成功/关闭操作收起，不建立通知或错误历史框架。
 
-图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护所有图表的默认bar spacing和volume区比例；修改后npm构建并刷新，不增加设置界面。chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
+图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护默认bar spacing、volume区比例与Daily锚点/百分比比例常量；修改后npm构建并刷新，不增加设置界面。daily-chart-view.ts只负责前端Daily坐标策略：公开autoscaleInfoProvider读取当前pane高度与bar spacing，返回统一线性价格范围，均线不参与扩大范围；保留原生autoScale以关闭纵向平移。通过公开逻辑范围事件和ResizeObserver联动缩放/分区，使用公开series primitive画裁切提示。F暂存逻辑视口和间距，用已有数据预览一年，结束时恢复视图而不回滚行情；没有新网络接口、后端指标、持久化或vendor修改。背景及完整交互只维护于[Daily setup scale](chart-ui.md#daily-setup-scale)。
+
+chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
 
 成交量五日比较的唯一需求见 [Volume comparison](chart-ui.md#volume-comparison)。`calendar.previous_days` 按 candle 日期返回前五个交易日；`indicators.volume_context / volume_comparison` 为同周期建立时间槽索引及均值缓存。Monitor 在历史 revision 变化时重建，open 更新仅读取均值并计算比例；Scan Daily 复用同一函数及已有图表缓存。显示行附带 `volume_comparison: {average: number | null, samples: number, percent: number | null}`，不改 SQLite Bar。chart.ts 在公开十字线回调后按时间戳取得原始显示行，保持比较结果与 Vol 一致；前端只做整数截取和显示。
 

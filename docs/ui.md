@@ -11,7 +11,7 @@ Updated: 2026-10-29. This file is the UI entry point and the only current specif
 
 ## Chart UI
 
-Chart layout, colors, margins, headers, [volume and five-day comparison](chart-ui.md#volume-comparison), scale defaults, mouse/zoom, linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak status hint while existing charts and valid values remain visible. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; visible history depends on that spacing and panel width.
+Chart layout, colors, margins, headers, [volume and five-day comparison](chart-ui.md#volume-comparison), [Daily setup scale, coupled zoom, Reset and F overview](chart-ui.md#daily-setup-scale), linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak status hint while existing charts and valid values remain visible. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; normal visible history depends on that spacing and panel width.
 
 ## Alert UI
 
@@ -108,7 +108,8 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
 | Schwab 活动订单 | 红底圆形按钮内白色 `×` | 取消指定订单；Entry/Stop 的目标规则见 Schwab Trade |
 | Trade Auto | 浅灰圆形按钮内线性 `↺` | 恢复两条参考线的自动标价；自动时灰色禁用，手动拖价后蓝色可点，无悬停说明 |
-| Daily / Intraday | `↦` | Go to latest，回到最新可用交易日 |
+| Daily | `↦` | Reset view & go to latest，规则见 [Daily setup scale](chart-ui.md#daily-setup-scale) |
+| Intraday | `↦` | Go to latest，回到最新可用交易日并保留缩放 |
 | 图表 / 名单 / Holdings 错误 | 轮廓圆圈内的 `!`，暖黄色 | 提供当前错误详情，不扩展错误判断范围；Holdings 点击详情见独立 UI 规范 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。

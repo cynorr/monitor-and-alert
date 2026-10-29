@@ -1,6 +1,6 @@
 # Chart UI
 
-Updated: 2026-10-22. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
+Updated: 2026-10-29. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
 
 ## Implementation principle
 
@@ -12,34 +12,69 @@ Updated: 2026-10-22. This is the only current specification for general chart ap
 
 - Monitor has Daily and Intraday charts; Scan has Daily only. Use local Lightweight Charts 5.2.0, with a main candlestick pane above a smaller volume pane. The native pane divider remains draggable.
 - Daily owns the enlarged symbol; Intraday owns the equally styled headline price and ET clock. Both charts show OHLC. Chart cards follow the shared layout in [ui.md](ui.md#layout).
-- Default candle spacing is identical across Scan Daily, Monitor Daily and all Intraday periods. The actual number of visible bars depends on the manually configured spacing and panel width; neither mode enforces a separate fixed month range. The 2px reference spacing shows approximately 12 calendar months in a typical 1280px Scan window; a larger manual value shows fewer months.
-- Keep spacing across ticker changes and panel resizing. Short histories stay aligned right with blank space on the left; never use fitContent to fill the panel with the available samples. Resizing changes the number of visible candles, not candle width. Each chart retains intentional user zoom independently.
-- The two manual defaults are centralized in [ui/src/chart-settings.ts](../ui/src/chart-settings.ts). Change them there, run `npm run build --prefix ui`, then refresh the page. Do not add a settings screen or saved per-symbol defaults.
+- Default candle spacing is identical across Scan Daily, Monitor Daily and all Intraday periods. Outside the temporary Daily overview, visible history depends on spacing and panel width; neither mode enforces a separate fixed month range.
+- Keep spacing across ticker changes, mode changes and panel resizing. Short histories stay aligned right with blank space on the left. Resizing changes the number of visible candles, not candle width. Daily uses the coupled scale and reset below; Intraday retains its independent native zoom.
+- Manual defaults are centralized in [ui/src/chart-settings.ts](../ui/src/chart-settings.ts). Change them there, run `npm run build --prefix ui`, then refresh the page. Do not add a settings screen or saved per-symbol defaults.
 
 | Parameter | Current manual value | Effect |
 | --- | --- | --- |
 | `BAR_SPACING` | 5px | Passed directly to built-in timeScale.barSpacing; increasing it makes candles wider and shows fewer bars in the same width |
+| `DAILY_ANCHOR_BARS` | 5 | Completed Daily closes used for the median anchor |
+| `DAILY_ANCHOR_POSITION` | 2/3 | Anchor position measured upward from the bottom of the main price pane |
+| `DAILY_PERCENT_BAR_SPACING` | 1 | One percentage point relative to the anchor occupies one candle-center spacing |
 | `VOLUME_PANE_RATIO` | 0.28 | Volume occupies 28% of the chart area by default (main 0.72 / volume 0.28); increasing it makes the volume pane taller and moves the divider upward |
 
 The default volume divider is moderately higher than before; it remains adjustable with the native pane drag handle.
+
+## Daily setup scale
+
+### Background and purpose
+
+Swing scanning prioritizes clear recent setups, especially the latest six months, and fast visual comparison across symbols. Fitting every visible high and low to the pane makes an old high or one extreme wick dominate the scale: JBDI's 2026-10-13 spike and the older highs in YMAT/BNC illustrate the problem. It can also make BKYI's roughly 20% ADR and DXC's roughly 5% ADR appear similarly sized. The default Daily view therefore gives recent setups a stable location and a shared percentage-to-candle-spacing ratio. Full historical visibility has lower priority and is available on demand.
+
+### Anchor and linear scale
+
+- Applies to Scan, Monitor and Trade Daily only. Intraday retains its existing native autoscale and independent price scaling. All source data, OHLC, indicators and their calculations remain unchanged.
+- The anchor `A` is the median of the latest five **completed** Daily closes, using the available completed records for shorter histories. Even sample counts use the mean of the two middle closes. The active SDK candle and quotes never contribute. No completed records means there is no fixed anchor yet.
+- Place `A` at two-thirds of the main price pane's height measured upward from its bottom, excluding the volume pane and axes. New completed bars or official corrections update the anchor; live active-candle/quote changes, hovering and horizontal panning do not.
+- Use one **linear** price scale. With candle-center spacing `b`, vertical displacement from the anchor is `b × DAILY_PERCENT_BAR_SPACING × 100 × (price / A − 1)`. The first version uses `1% = 1 spacing`: 5px at default spacing. Percentages refer to `A`, not each individual candle's price. Axis labels remain actual prices. The resulting visible interval can extend below zero when zoomed far out; that coordinate space is blank and does not invent negative-price candles.
+- Only this coordinate policy determines the normal Daily price range. Old highs/lows, wicks, moving averages, quotes, Alert and Trade lines do not enlarge it. Price and overlay coordinates stay shared; volume continues to autoscale independently. There are no per-symbol scale gears or automatic scale changes.
+- Historical Scan uses completed data through its selected date. Viewing or moving the viewport does not download history, change the selected date or modify the dataset.
+
+### Coupled zoom and Reset
+
+- Retain native horizontal zoom and horizontal panning. A change in candle spacing changes vertical percentage distances by the same factor, preserving shape and angle. Disable independent Daily price-axis stretching, vertical panning and native axis double-click resets. Increasing pane height or window width changes coverage, not the percentage-to-spacing ratio.
+- Keep the current Daily spacing across symbols and modes. No saved per-symbol zoom or new settings UI.
+- Daily `↦` is **Reset view & go to latest**: leave overview, restore default spacing and the matching vertical ratio, restore the anchor position, and immediately return to the newest available bar with one-bar right offset. Historical Scan stays on the selected date. This action does not fetch or refresh data. Intraday `↦` remains Go to latest and retains zoom.
+
+### Hold F for one-year overview
+
+- Hold unmodified **F** outside text editing/IME to temporarily fit the latest calendar year through the current chart endpoint; short histories use available data. The anchor is not recomputed from the overview. Release F to restore the exact prior logical viewport and spacing, with current data retained.
+- The overview is read-only: no chart zoom/pan, Alert creation/editing or Trade-line dragging. Hover/OHLC inspection remains available. Do not enter during an active pointer drag. Reset, symbol/mode/date changes, window blur or page hiding end the preview; releasing F afterward must not restore an old context. Repeated keydown does not resnapshot the view.
+- Full view uses native autoscale with the standard 7% top / 5% bottom margins. Its scale is only for inspecting history, not cross-symbol shape comparison.
+
+### Edge clipping cues
+
+- In the normal Daily view, draw a 2 CSS-pixel neutral `palette.tagNeutral` strip on the top/bottom edge at each clipped candle's X position. Use one candle spacing for its width, so adjacent strips merge without stacking. A fully offscreen candle still keeps its time slot. Hide cues during overview.
+- Cues indicate offscreen prices only, not validated resistance or supply. Keep official OHLC unchanged and available to hover. Draw with a public series primitive and public time/price coordinates; do not alter candle rendering or vendor internals.
 
 ## Colors, margins and reference lines
 
 - No horizontal or vertical grid. Teal up candles/volume **#26a69a**, red down candles/volume **#ef5350**.
 - EMA10 blue **#2962ff**, EMA20 yellow **#e4b400**, Daily SMA50 / Intraday SMA65 red **#e53935**. Indicator calculations remain in Python.
-- Black chart boundaries and a gray main/volume divider. Hide price-scale vertical borders; retain the main price scale's 7% top and 5% bottom margins.
+- Black chart boundaries and a gray main/volume divider. Hide price-scale vertical borders. Intraday and Daily overview use 7% top / 5% bottom margins; normal Daily uses the exact anchor and scale above without extra scale margins.
 - `rightOffset=1` and `rightBarStaysOnScroll=true`: keep about one blank bar between the latest candle and the right price axis.
 - Hide the persistent last-price horizontal line on candles, moving averages and volume. The reference lines are the freely moving dashed horizontal/vertical crosshair and its native axis labels; do not add a fixed price reference line.
 - All dashed chart lines use the same thin segment pattern: **1px width, 6px segment / 6px gap**, with flat ends. Use built-in `LineStyle.LargeDashed` for horizontal/vertical crosshairs and the matching pattern for Alert primitives. Apply this to Scan, Monitor, all periods, main and volume panes; do not use dots or short dotted-looking dashes.
 - User-created Alert lines are defined separately in [alert.md](alert.md); saved thresholds do not enable the last-price reference line above.
-- Latest-day Scan Daily shows the backend-selected `quote.latest` as a right-axis numeric price label. Monitor Daily and Intraday show the same label when the latest quote comes from an extended session; an Intraday/Regular latest quote keeps Monitor's native live-candle label. Color follows the quote's `trade_session`: Pre uses EMA20 yellow **#e4b400** with dark text, Post uses EMA10 blue **#2962ff**, and Overnight uses black **#000000**. Scan Regular uses teal **#26a69a** or red **#ef5350** against Longbridge's previous close (teal when unavailable). All except Pre use white text. Keep the last received quote when no newer quote exists, including across session boundaries, holidays and weekends; a retained Post quote stays blue during overnight hours. Do not infer source from the clock or add session/staleness text. Reuse one public createPriceLine with lineVisible=false and axisLabelVisible=true; hide the native candle-price label while present and restore it when absent. Clear on missing quotes, symbol/mode/date reset or historical Scan. Automatic scaling includes the price using public autoscaleInfoProvider; native manual scaling remains. This price-only label never changes candles, volume or indicators. Quote selection belongs to [Longbridge data](longbridge-data.md#最新报价与-overnight).
+- Latest-day Scan Daily shows the backend-selected `quote.latest` as a right-axis numeric price label. Monitor Daily and Intraday show the same label when the latest quote comes from an extended session; an Intraday/Regular latest quote keeps Monitor's native live-candle label. Color follows the quote's `trade_session`: Pre uses EMA20 yellow **#e4b400** with dark text, Post uses EMA10 blue **#2962ff**, and Overnight uses black **#000000**. Scan Regular uses teal **#26a69a** or red **#ef5350** against Longbridge's previous close (teal when unavailable). All except Pre use white text. Keep the last received quote when no newer quote exists, including across session boundaries, holidays and weekends; a retained Post quote stays blue during overnight hours. Do not infer source from the clock or add session/staleness text. Reuse one public createPriceLine with lineVisible=false and axisLabelVisible=true; hide the native candle-price label while present and restore it when absent. Clear on missing quotes, symbol/mode/date reset or historical Scan. Intraday autoscale includes this price using public autoscaleInfoProvider and retains native manual scaling. Normal Daily follows the fixed setup scale above, so this label does not enlarge its range. This price-only label never changes candles, volume or indicators. Quote selection belongs to [Longbridge data](longbridge-data.md#最新报价与-overnight).
 - Use `CrosshairMode.Normal` in both Monitor charts and Scan; no magnet or price snap. The linked peer uses the mouse-driven price or volume value, never candle close or the histogram bar's value.
 - Chart branding and attribution follow [Logo / Icon](ui.md#logo--icon).
 
 ## Headers and information
 
 - Chart headers are **120px** high with one bottom border. Daily shows the symbol at top-left, with no Daily tag. Optional company name sits immediately to its right, sharing the text baseline, in smaller **15px** muted text. The next **22px** row shows the concise classification at **11px**, matching the EMA/SMA legend size; ADR20/ADV20 move down one row. Optional Daily Sell/Bid and Buy/Ask pills share the metrics row to preserve the header height. Category wording and deduplication are maintained only in Additional Info.
-- Earnings text sits immediately to the left of the Daily Go to latest circular button, with **12px** dark **#293341** text and **26px** line height, matching the shared List ET clock. Company name, classification and earnings stay on one line with ellipsis; earnings truncate the report label first and preserve the day countdown. Tooltips provide full text, dates and source timestamps. Missing values and cleared selections hide the corresponding text.
+- Earnings text sits immediately to the left of the Daily Reset view & go to latest circular button, with **12px** dark **#293341** text and **26px** line height, matching the shared List ET clock. Company name, classification and earnings stay on one line with ellipsis; earnings truncate the report label first and preserve the day countdown. Tooltips provide full text, dates and source timestamps. Missing values and cleared selections hide the corresponding text.
 - Scan, Monitor and Holdings share the independent current `.US` Additional Info lookup. Historical Scan does not display historical company metadata. Data sources, Python name cleanup, optionality, refresh and earnings wording/date selection are maintained only in [Additional Info](additional-info.md); selecting or reading a chart never fetches it.
 - Intraday shows `quote.latest` at top-left with the same **28px** size, weight and color as the Daily symbol. Go to latest stays at the toolbar's far right; the ET clock is now in the shared [List header](ui.md#宽度与视觉). No session or Last Post pill is shown. Period controls sit on the next row. Optional `Market Cap` sits below these controls, at **11px** in black **#000**, matching the EMA/SMA legend size. Its compact value omits the dollar sign (for example `Market Cap 1.5B`). Intraday Sell/Bid and Buy/Ask pills share this row; there is no Daily market-cap label.
 - Only Daily displays ADR20 and ADV20, using the same formulas in both modes: recent up to 20 closed records, mean `(H-L)/L×100` and mean `close×volume`. Available Sell/Bid and Buy/Ask quotes remain optional.
@@ -68,10 +103,10 @@ The default volume divider is moderately higher than before; it remains adjustab
 
 ## Mouse, zoom and periods
 
-- Use native pan, zoom, price scaling, pane resizing and scrollToRealTime. Realtime updates preserve a historical viewport.
+- Use native horizontal pan/zoom and pane resizing; Daily couples its vertical scale as specified above, while Intraday retains native price scaling. Realtime updates preserve a historical viewport.
 - At a closed boundary, keep the elapsed SDK candle visible and append the next SDK candle when available; official history corrects closed values when it arrives. Refresh keeps existing data until replacement is ready. Routine tail replacement/append uses public series updates without clearing candles, rebuilding all history or resetting the viewport. Daily does not wait for a 5m refresh.
 - On page load, Intraday defaults by elapsed time since 09:30 America/New_York: before open and `[0,5)` minutes → 5m, `[5,15)` → 15m, `[15,30)` → 30m, and 30 minutes onward → 1h. Manual choices remain in effect across ticker changes; 2h is manual only. Controls: **5m, 15m, 30m, 1h, 2h**.
-- `↦` means Go to latest: return to the latest available trading day while retaining the chart's zoom. Period changes preserve the selected day when that day exists in the new period.
+- Daily `↦` resets the view as specified above. Intraday `↦` returns to the latest available trading day while retaining zoom. Period changes preserve the selected day when that day exists in the new period.
 
 ## Linked trading day
 

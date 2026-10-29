@@ -3,6 +3,7 @@ import type { IChartApi, ISeriesApi, IPriceLine, UTCTimestamp, Time, Candlestick
 import type * as ChartLibrary from 'lightweight-charts';
 import { $, money, compact, dayKey, type Row, type Point, type ChartData, type Quote } from './types.js';
 import { BAR_SPACING, VOLUME_PANE_RATIO } from './chart-settings.js';
+import { DailyChartView } from './daily-chart-view.js';
 declare global {
     interface Window {
         LightweightCharts: typeof ChartLibrary;
@@ -42,6 +43,7 @@ export class Panel {
     hoveredTime?: number;
     precision = 2;
     tradePrices: number[] = [];
+    dailyView?: DailyChartView;
     private linkedPrice?: { series: ISeriesApi<'Candlestick'> | ISeriesApi<'Histogram'>; line: IPriceLine };
     private quotePrice?: { line: IPriceLine; price: number };
     onHover: (row?: Row, price?: number, paneIndex?: number, time?: number) => void = () => { };
@@ -70,15 +72,22 @@ export class Panel {
         this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
         this.chart.panes()[0].setStretchFactor(1 - VOLUME_PANE_RATIO);
         this.chart.panes()[1].setStretchFactor(VOLUME_PANE_RATIO);
+        if (daily) this.dailyView = new DailyChartView(this);
+        let observedPane: HTMLElement | null = null;
         const volumePosition = () => {
+            const pane = this.chart.panes()[0].getHTMLElement();
+            if (pane && pane !== observedPane) {
+                if (observedPane) observer.unobserve(observedPane);
+                observer.observe(pane);
+                observedPane = pane;
+            }
             const label = $(id + '-volume');
             label.style.top = `${this.chart.panes()[0].getHeight() + 5}px`;
             label.style.right = `${this.chart.priceScale('right').width() + 8}px`;
+            this.dailyView?.sync();
         };
         const observer = new ResizeObserver(volumePosition);
         observer.observe($(id + '-chart'));
-        const mainPane = this.chart.panes()[0].getHTMLElement();
-        if (mainPane) observer.observe(mainPane);
         this.chart.subscribeCrosshairMove(param => {
             const candle = param.seriesData.get(this.candles) as CandlestickData | undefined;
             // The library supplies the time; the original row owns Vol and its comparison.
@@ -100,7 +109,8 @@ export class Panel {
             this.onHover();
         });
         $(id + '-latest').addEventListener('click', () => {
-            this.chart.timeScale().scrollToRealTime();
+            if (this.dailyView) this.dailyView.resetLatest();
+            else this.chart.timeScale().scrollToRealTime();
             const latest = this.active ?? this.rows.at(-1);
             if (latest) this.onSelect(latest);
         });
@@ -108,6 +118,7 @@ export class Panel {
     reset(key: string) {
         if (this.key === key)
             return;
+        this.dailyView?.reset();
         this.key = key;
         this.rows = [];
         this.days.clear();
@@ -199,6 +210,7 @@ export class Panel {
             scale.scrollToPosition(1, false);
             this.fitted = true;
         }
+        this.dailyView?.update(this.rows, this.active);
         $(this.id + '-empty').hidden = !!latest;
         const hovered = this.hoveredTime === next?.time ? next : this.rows.find(row => row.time === this.hoveredTime);
         this.showCandleInfo(hovered ?? latest);

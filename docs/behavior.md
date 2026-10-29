@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-26。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-10-29。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## Alert 与入选规则
 
@@ -76,7 +76,7 @@ Longbridge 调度、重试、恢复与窗口状态统一见 [longbridge-data.md]
 
 官方六周期 closed 数据存 SQLite，各周期 SDK open candle 和指标仅在内存。Daily 与 Intraday 的数据来源、成交量口径、初始化与恢复统一见 [Longbridge 数据说明](longbridge-data.md)。
 
-Intraday 初始周期按美东开盘经过时间选择，之后保留手工选择。所有 chart 使用统一、可人工调整的初始 bar spacing；可见历史长度随间距与面板宽度变化。参数、周期控件、参考线和交互只在 [chart-ui.md](chart-ui.md) 维护。
+Intraday 初始周期按美东开盘经过时间选择，之后保留手工选择。所有 chart 使用统一、可人工调整的初始 bar spacing；常规可见历史长度随间距与面板宽度变化。Daily使用近期已完成收盘中位数锚点和统一线性百分比/间距比例，横纵等比缩放；远端历史、报价和价格线不扩大常规视图。Daily的Reset与按住F临时全貌只改变显示，历史Scan不跳日期，也不触发下载；Intraday保留原生缩放。背景、参数、周期控件、参考线和完整交互只在 [Chart UI / Daily setup scale](chart-ui.md#daily-setup-scale) 维护。
 
 所有图表的 Vol 同时显示后端计算的五交易日成交量比较；当前、历史悬停与缺失样本的统一需求只在 [Volume comparison](chart-ui.md#volume-comparison) 维护。
 

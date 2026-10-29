@@ -7,7 +7,7 @@
 - `layout.ts`：三模式统一的名单布局；`holdings-layout.ts`：两套原生账户共用的自然内容测宽与价格背景几何；`holdings.ts`：独立持仓表；`main.ts`：模式和图表选择来源。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
 - Holdings数据语义只在 [Holdings 数据需求](../../docs/holdings-data.md) 维护。前端使用后端金额/基准/批次状态，按`closed_today`将当日清仓固定在灰色尾部，排序仅影响余仓；不从市值0猜测清仓，不重算会计或改变名单归属。
 - `additional-info.ts`：独立信息身份校验、分类显示精简、可空格式化及纽约自然日倒计时；原始分类保留在数据契约中，数据与显示规则只读 [Additional Info](../../docs/additional-info.md)，不改变bar revision或Ready。
-- `chart.ts`：共用图表、十字线与成交量显示、交易日联动；`chart-settings.ts`：统一初始 bar spacing 与成交量区比例的集中人工参数。修改参数后构建并刷新页面，不增加设置界面。
+- `chart.ts`：共用图表、十字线与成交量显示、交易日联动；`daily-chart-view.ts`：Daily 坐标策略、等比缩放、临时全貌和裁切 primitive，唯一需求见 [Daily setup scale](../../docs/chart-ui.md#daily-setup-scale)；`chart-settings.ts`：统一图形参数。修改参数后构建并刷新页面，不增加设置界面。
 - 图表调整首先遵守 [Chart 首要开发准则](../../docs/chart-ui.md#implementation-principle)，优先内置参数和公开 API，保持 vendor 源码原样。
 - 名单归属、自动标签、Hidden 期限由后端计算；自动 Excluded 仅当天候选可见，成员新出现只显示 NEW 标记。Filter、格式化和拖拽显示不能扩大行情订阅，也不能改变底层增长数值或计算口径。
 - Tags 使用纯 SVG 轮廓；图形与外观只维护在 Logo / Icon，行高、列宽与折叠数量只维护在 List UI。新增图案保持已有 Icon ID 的含义，列表与编辑 preview 复用 `tag-appearance.ts`。不恢复文字堆叠或人工蓝色 badge，不引入图标库、测宽监听或另一套外观保存流程；前端初始化旧 Tag 缺失的外观，下次偏好保存才持久化。外观草稿不切换到纯条件预览，不改后端分类默认逻辑。

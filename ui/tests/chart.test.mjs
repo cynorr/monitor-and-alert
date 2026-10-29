@@ -11,7 +11,7 @@ function node(id) {
     });
     return nodes.get(id);
 }
-globalThis.document = { getElementById: node };
+globalThis.document = { getElementById: node, addEventListener() {} };
 globalThis.ResizeObserver = class { observe() {} };
 
 function chart() {
@@ -21,10 +21,12 @@ function chart() {
     const scale = {
         getVisibleRange: () => null, scrollPosition: () => 0, scrollToPosition() {},
         scrollToRealTime() {}, getVisibleLogicalRange: () => null,
+        options: () => ({ barSpacing: 5 }), subscribeVisibleLogicalRangeChange() {},
     };
     return {
         addSeries(kind, options) {
-            const item = { kind, options, rows: [], priceLines: [], applyOptions(next) { Object.assign(this.options, next); }, coordinateToPrice: y => y / 10,
+            const item = { kind, options: () => options, rows: [], priceLines: [], applyOptions(next) { Object.assign(options, next); }, coordinateToPrice: y => y / 10,
+                attachPrimitive() {},
                 createPriceLine(options) {
                     const line = { options: { ...options }, applyOptions(next) { Object.assign(this.options, next); } };
                     this.priceLines.push(line); return line;
@@ -46,6 +48,7 @@ function chart() {
             return item;
         },
         panes: () => panes, priceScale: () => ({ width: () => 55 }), timeScale: () => scale,
+        applyOptions() {},
         subscribeCrosshairMove(handler) { this.crosshair = handler; }, subscribeClick() {},
         move(time, mouse = false, y = 88, paneIndex = 0) {
             const seriesData = new Map();
@@ -60,7 +63,7 @@ function chart() {
         clearCrosshairPosition() { this.crosshairTime = undefined; this.crosshairPrice = undefined; },
     };
 }
-globalThis.window = { LightweightCharts: {
+globalThis.window = { addEventListener() {}, LightweightCharts: {
     createChart: chart, ColorType: { Solid: 0 }, CrosshairMode: { Normal: 0 }, LineStyle: { LargeDashed: 3 },
     CandlestickSeries: 'candle', LineSeries: 'line', HistogramSeries: 'volume',
 } };
@@ -84,9 +87,9 @@ test('Scan price axis follows the latest quote source without changing candles',
     assert.equal(marker.options.axisLabelTextColor, '#171b20');
     assert.ok(marker.options.axisLabelVisible);
     assert.equal(marker.options.lineVisible, false);
-    assert.equal(panel.candles.options.lastValueVisible, false);
-    assert.deepEqual(panel.candles.options.autoscaleInfoProvider(() => ({ priceRange: { minValue: 10, maxValue: 12 } })),
-        { priceRange: { minValue: 10, maxValue: 16.5 } });
+    assert.equal(panel.candles.options().lastValueVisible, false);
+    const fixedRange = panel.candles.options().autoscaleInfoProvider(() => ({ priceRange: { minValue: 10, maxValue: 12 } }));
+    assert.ok(fixedRange.priceRange.maxValue < 16.5);
     pre.latest.last_price = 17;
     panel.setQuotePrice(pre);
     assert.equal(marker.options.price, 17);
@@ -99,17 +102,16 @@ test('Scan price axis follows the latest quote source without changing candles',
     assert.equal(marker.options.axisLabelColor, '#ef5350');
     panel.setQuotePrice({ latest: null });
     assert.equal(panel.candles.priceLines.length, 0);
-    assert.equal(panel.candles.options.lastValueVisible, true);
+    assert.equal(panel.candles.options().lastValueVisible, true);
     panel.setQuotePrice({ latest: { last_price: 8.75, trade_session: 'Post' } });
     const [post] = panel.candles.priceLines;
     assert.equal(post.options.axisLabelColor, '#2962ff');
     assert.equal(post.options.axisLabelTextColor, '#ffffff');
-    assert.deepEqual(panel.candles.options.autoscaleInfoProvider(() => ({ priceRange: { minValue: 10, maxValue: 12 } })),
-        { priceRange: { minValue: 8.75, maxValue: 12 } });
+    assert.deepEqual(panel.candles.options().autoscaleInfoProvider(() => ({ priceRange: { minValue: 10, maxValue: 12 } })), fixedRange);
     assert.deepEqual(panel.candles.data(), bars);
     panel.reset('another-symbol');
     assert.equal(panel.candles.priceLines.length, 0);
-    assert.equal(panel.candles.options.lastValueVisible, true);
+    assert.equal(panel.candles.options().lastValueVisible, true);
 });
 
 test('Monitor Daily and Intraday use the latest extended quote without replacing candles or volume', () => {
@@ -131,7 +133,7 @@ test('Monitor Daily and Intraday use the latest extended quote without replacing
         assert.equal(marker.options.axisLabelTextColor, '#ffffff');
         panel.setQuotePrice({ latest: { last_price: 11, trade_session: 'Intraday' } }, true);
         assert.equal(panel.candles.priceLines.length, 0);
-        assert.equal(panel.candles.options.lastValueVisible, true);
+        assert.equal(panel.candles.options().lastValueVisible, true);
         panel.setQuotePrice(quote, true);
         panel.setQuotePrice({ latest: null }, true);
         assert.equal(panel.candles.priceLines.length, 0);
