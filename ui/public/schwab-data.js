@@ -18,7 +18,7 @@ const active = new Set(['WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_O
 export const activeOrders = (row) => flattenOrders(row.orders).filter(order => order.status != null && active.has(order.status) && order.symbol === row.ticker);
 export const entryOrders = (row) => activeOrders(row).filter(order => order.instruction === 'BUY');
 export function editableStop(order) {
-    return !!order.order_id && order.editable === true && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED'].includes(order.status ?? '');
+    return !!order.order_id && (order.editable === true || order.status === 'PENDING_ACTIVATION') && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION'].includes(order.status ?? '');
 }
 export function entryPreview(order) {
     const qty = numeric(order.quantity), price = numeric(order.stop_price);
@@ -35,9 +35,12 @@ export function holdingTags(row) {
     return [...(entryOrders(row).length ? ['Entry'] : []), ...(row.position && numeric(row.position.quantity) > 0 && numeric(row.sold_today?.quantity) > 0 ? ['Trim'] : [])];
 }
 export function holdingDetails(row) {
-    const result = [], position = row.position;
+    const result = [], position = row.position, average = numeric(position?.average_price);
     const add = (key, kind, qty, price, order) => {
-        result.push({ key, kind, qty, price, stop: null, amount: price != null ? qty * price : null, riskPercent: null, risk: null, cancelId: order?.cancelable && order.order_id ? order.order_id : null });
+        const difference = kind !== 'Buy' && average != null && average > 0 && price != null ? price - average : null;
+        const pnl = difference != null ? qty * difference : null;
+        const pnlPercent = difference != null ? difference / average * 100 : null;
+        result.push({ key, kind, qty, price, stop: null, amount: price != null ? qty * price : null, pnlPercent, pnl, riskPercent: null, risk: null, cancelId: order?.cancelable && order.order_id ? order.order_id : null });
     };
     if (position && numeric(position.quantity) > 0 && numeric(position.average_price) != null)
         add('buy', 'Buy', Number(position.quantity), Number(position.average_price));
@@ -57,7 +60,7 @@ export function holdingDetails(row) {
         const value = entryPreview(order);
         if (value.qty == null)
             continue;
-        result.push({ key: 'entry-' + order.order_id, kind: 'Entry', ...value, qty: value.qty, cancelId: order.cancelable ? order.order_id : null });
+        result.push({ key: 'entry-' + order.order_id, kind: 'Entry', ...value, qty: value.qty, pnlPercent: null, pnl: null, cancelId: order.cancelable ? order.order_id : null });
     }
     for (const order of activeOrders(row))
         if (order.instruction === 'SELL' && order.order_type === 'STOP' && !attached.has(order.order_id) && numeric(order.quantity) != null)

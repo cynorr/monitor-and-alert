@@ -473,6 +473,20 @@ async def test_replace_refuses_inactive_or_unsupported_targets(setup, change):
     assert not broker.writes()
 
 
+@pytest.mark.parametrize("editable", [True, False])
+async def test_replace_pending_activation_outside_execution_session(setup, editable):
+    runtime, broker, _ = setup
+    broker.order_list = [raw_order(status="PENDING_ACTIVATION", editable=editable)]
+    result = await runtime.trading.replace_stop(123, Decimal("92"))
+    assert result["result"] == "accepted"
+    assert len(broker.writes()) == 1
+    payload = json.loads(broker.writes()[0].content)
+    assert payload["session"] == "NORMAL"
+    assert payload["duration"] == "GOOD_TILL_CANCEL"
+    assert payload["stopPrice"] == "92"
+    assert payload["orderLegCollection"][0]["quantity"] == 10
+
+
 async def test_replace_returns_without_followup_get_or_cache_mutation(setup):
     runtime, broker, _ = setup
     before = copy.deepcopy(runtime.state.orders)

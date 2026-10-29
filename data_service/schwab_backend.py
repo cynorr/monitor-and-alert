@@ -1083,15 +1083,15 @@ class TradingGateway:
                 raw.get("orderType") != "STOP"
                 or raw.get("orderStrategyType") != "SINGLE"
                 or raw.get("session") != "NORMAL"
-                or raw.get("editable") is not True
+                or (raw.get("editable") is not True and raw.get("status") != "PENDING_ACTIVATION")
                 or raw.get("status")
-                not in {"WORKING", "AWAITING_STOP_CONDITION", "QUEUED", "ACCEPTED"}
+                not in {"WORKING", "AWAITING_STOP_CONDITION", "QUEUED", "ACCEPTED", "PENDING_ACTIVATION"}
                 or raw.get("childOrderStrategies")
                 or len(legs) != 1
                 or legs[0].get("instruction") != "SELL"
                 or legs[0].get("instrument", {}).get("assetType") != "EQUITY"
             ):
-                raise conflict("只能修改已独立激活且可编辑的股票 Sell Stop")
+                raise conflict("只能修改受支持状态的普通股票 Sell Stop")
             leg = legs[0]
             quantity = positive(
                 leg.get("quantity") if leg.get("quantity") is not None else raw.get("quantity")

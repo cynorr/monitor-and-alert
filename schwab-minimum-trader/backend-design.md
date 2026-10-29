@@ -917,6 +917,8 @@ Child
 - 父 Buy Order 已成交后激活的 Sell Stop 子单。
 - Schwab 当前订单状态允许替换。
 
+当前接入也允许 `PENDING_ACTIVATION` 的普通 `NORMAL` Sell Stop：可在盘前、盘后或夜盘申请修改等待常规时段激活的止损价格，该状态不以 `editable=false` 作为本地拒绝条件。`AWAITING_PARENT_ORDER` 仍不允许；其他支持状态仍要求 `editable=true`。保持原有效期、数量、标准触发方式和一次 PUT，不改变执行 Session，也不改用 Cancel + Place；实际接受或拒绝由 Schwab 响应决定。
+
 不修改：
 
 - `AWAITING_PARENT_ORDER` 的子单。

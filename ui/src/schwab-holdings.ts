@@ -76,21 +76,35 @@ export class SchwabHoldings {
         row.onclick = () => this.select(item.symbol, item.symbol);
         this.nodes.set(item.symbol, row); return row;
     }
-    private detailRow(symbol: string, value: HoldingDetail, closed: boolean) {
+    private detailRow(symbol: string, value: HoldingDetail, closed: boolean, columns: number) {
         const key = symbol + '/' + value.key;
         let row = this.details.get(key);
         if (!row) {
             row = document.createElement('tr'); row.className = 'holding-trade'; row.dataset.detail = key;
-            const cell = row.insertCell(); cell.colSpan = fields.length;
-            const line = document.createElement('div'); line.className = 'holdings-detail-grid';
-            for (const part of ['kind', 'qty', 'price', 'stop', 'amount', 'riskPercent', 'risk']) { const span = document.createElement('span'); span.dataset.part = part; line.append(span); }
-            const cancel = document.createElement('button'); cancel.className = 'icon-button holding-cancel'; cancel.type = 'button'; cancel.textContent = '×'; line.append(cancel); cell.append(line);
             this.details.set(key, row);
         }
+        if (row.dataset.columns !== String(columns)) {
+            row.replaceChildren(); row.dataset.columns = String(columns);
+            for (const part of ['kind', 'amount', 'pnlPercent', 'pnl', 'qty']) row.insertCell().dataset.part = part;
+            const priceCell = row.insertCell(), price = document.createElement('span'); price.dataset.part = 'price'; priceCell.append(price);
+            const cancel = document.createElement('button'); cancel.className = 'icon-button holding-cancel'; cancel.type = 'button';
+            cancel.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+            const cancelCell = columns > 6 ? row.insertCell() : priceCell;
+            if (cancelCell === priceCell) cancel.classList.add('inline-cancel');
+            cancelCell.append(cancel);
+            const cell = columns > 7 ? row.insertCell() : cancelCell;
+            if (columns > 7) cell.colSpan = columns - 7;
+            const line = document.createElement('div'); line.className = 'schwab-detail-values' + (columns <= 7 ? ' inline' : '');
+            for (const part of ['stop', 'riskPercent', 'risk']) { const span = document.createElement('span'); span.dataset.part = part; line.append(span); }
+            cell.append(line);
+        }
         row.classList.toggle('holding-closed', closed);
-        const values = { kind: value.kind, qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), stop: value.stop == null ? '' : money(value.stop), amount: integer(value.amount), riskPercent: value.riskPercent == null ? '' : value.riskPercent.toFixed(2) + '%', risk: integer(value.risk) };
-        const titles = { kind: '', qty: 'Quantity', price: value.kind === 'Buy' ? 'Average cost' : 'Price', stop: 'Stop price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', riskPercent: 'Risk percent', risk: 'Risk amount' };
-        row.querySelectorAll<HTMLElement>('[data-part]').forEach(span => { const part = span.dataset.part as keyof typeof values; span.textContent = values[part]; span.title = titles[part]; });
+        const values = { kind: value.kind, qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), stop: value.stop == null ? '' : money(value.stop), amount: integer(value.amount), pnlPercent: value.pnlPercent == null ? '' : formatted(value.pnlPercent, true), pnl: value.pnl == null ? '' : formatted(value.pnl), riskPercent: value.riskPercent == null ? '' : value.riskPercent.toFixed(2) + '%', risk: integer(value.risk) };
+        const titles = { kind: '', qty: 'Quantity', price: value.kind === 'Buy' ? 'Average cost' : 'Price', stop: 'Stop price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', pnlPercent: '', pnl: '', riskPercent: 'Risk percent', risk: 'Risk amount' };
+        row.querySelectorAll<HTMLElement>('[data-part]').forEach(span => {
+            const part = span.dataset.part as keyof typeof values; span.textContent = values[part]; span.title = titles[part];
+            if (part === 'pnl' || part === 'pnlPercent') { const pnl = value[part]; span.classList.toggle('positive', pnl != null && pnl > 0); span.classList.toggle('negative', pnl != null && pnl < 0); }
+        });
         const cancel = row.querySelector<HTMLButtonElement>('button')!;
         cancel.hidden = !value.cancelId; cancel.setAttribute('aria-label', `Cancel ${value.kind.toLowerCase()} order for ${symbol.replace('.US', '')}`); cancel.title = 'Cancel order';
         cancel.onclick = event => { event.stopPropagation(); if (value.cancelId) this.cancel(value.cancelId); };
@@ -101,6 +115,7 @@ export class SchwabHoldings {
         if (!this.data) { this.layout.reset(); return; }
         const table = $('schwab-table') as HTMLTableElement;
         table.dataset.regular = String(this.regular); table.classList.toggle('holdings-state', this.regular && this.states.enabled);
+        const columns = Array.from(table.tHead!.rows[0].cells).filter(cell => getComputedStyle(cell).display !== 'none').length;
         $('schwab-content').hidden = this.collapsed;
         $('schwab-toggle').setAttribute('aria-expanded', String(!this.collapsed)); $('schwab-arrow').textContent = this.collapsed ? '▸' : '▾';
         $('schwab-count').textContent = String(this.data.rows.length);
@@ -125,7 +140,7 @@ export class SchwabHoldings {
             stateAppearance(row, state); attentionAppearance(row, item.kind === 'holding' ? item.symbol : '', this.attention);
             row.cells[7].textContent = adrText(state); row.cells[7].title = adrTitle(state); volumeBadge(row.cells[8], state?.cum_vol); volumeBadge(row.cells[9], state?.local_vol);
             desired.push(row);
-            if (this.expanded.has(item.symbol)) for (const value of detail) { const child = this.detailRow(item.symbol, value, item.kind === 'sold'); desired.push(child); detailKeys.add(child.dataset.detail!); }
+            if (this.expanded.has(item.symbol)) for (const value of detail) { const child = this.detailRow(item.symbol, value, item.kind === 'sold', columns); desired.push(child); detailKeys.add(child.dataset.detail!); }
         }
         for (const key of this.nodes.keys()) if (!keep.has(key)) { this.nodes.delete(key); this.expanded.delete(key); }
         for (const key of this.details.keys()) if (!detailKeys.has(key)) this.details.delete(key);

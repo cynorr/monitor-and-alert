@@ -115,34 +115,56 @@ export class SchwabHoldings {
         this.nodes.set(item.symbol, row);
         return row;
     }
-    detailRow(symbol, value, closed) {
+    detailRow(symbol, value, closed, columns) {
         const key = symbol + '/' + value.key;
         let row = this.details.get(key);
         if (!row) {
             row = document.createElement('tr');
             row.className = 'holding-trade';
             row.dataset.detail = key;
-            const cell = row.insertCell();
-            cell.colSpan = fields.length;
+            this.details.set(key, row);
+        }
+        if (row.dataset.columns !== String(columns)) {
+            row.replaceChildren();
+            row.dataset.columns = String(columns);
+            for (const part of ['kind', 'amount', 'pnlPercent', 'pnl', 'qty'])
+                row.insertCell().dataset.part = part;
+            const priceCell = row.insertCell(), price = document.createElement('span');
+            price.dataset.part = 'price';
+            priceCell.append(price);
+            const cancel = document.createElement('button');
+            cancel.className = 'icon-button holding-cancel';
+            cancel.type = 'button';
+            cancel.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+            const cancelCell = columns > 6 ? row.insertCell() : priceCell;
+            if (cancelCell === priceCell)
+                cancel.classList.add('inline-cancel');
+            cancelCell.append(cancel);
+            const cell = columns > 7 ? row.insertCell() : cancelCell;
+            if (columns > 7)
+                cell.colSpan = columns - 7;
             const line = document.createElement('div');
-            line.className = 'holdings-detail-grid';
-            for (const part of ['kind', 'qty', 'price', 'stop', 'amount', 'riskPercent', 'risk']) {
+            line.className = 'schwab-detail-values' + (columns <= 7 ? ' inline' : '');
+            for (const part of ['stop', 'riskPercent', 'risk']) {
                 const span = document.createElement('span');
                 span.dataset.part = part;
                 line.append(span);
             }
-            const cancel = document.createElement('button');
-            cancel.className = 'icon-button holding-cancel';
-            cancel.type = 'button';
-            cancel.textContent = '×';
-            line.append(cancel);
             cell.append(line);
-            this.details.set(key, row);
         }
         row.classList.toggle('holding-closed', closed);
-        const values = { kind: value.kind, qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), stop: value.stop == null ? '' : money(value.stop), amount: integer(value.amount), riskPercent: value.riskPercent == null ? '' : value.riskPercent.toFixed(2) + '%', risk: integer(value.risk) };
-        const titles = { kind: '', qty: 'Quantity', price: value.kind === 'Buy' ? 'Average cost' : 'Price', stop: 'Stop price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', riskPercent: 'Risk percent', risk: 'Risk amount' };
-        row.querySelectorAll('[data-part]').forEach(span => { const part = span.dataset.part; span.textContent = values[part]; span.title = titles[part]; });
+        const values = { kind: value.kind, qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), stop: value.stop == null ? '' : money(value.stop), amount: integer(value.amount), pnlPercent: value.pnlPercent == null ? '' : formatted(value.pnlPercent, true), pnl: value.pnl == null ? '' : formatted(value.pnl), riskPercent: value.riskPercent == null ? '' : value.riskPercent.toFixed(2) + '%', risk: integer(value.risk) };
+        const titles = { kind: '', qty: 'Quantity', price: value.kind === 'Buy' ? 'Average cost' : 'Price', stop: 'Stop price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', pnlPercent: '', pnl: '', riskPercent: 'Risk percent', risk: 'Risk amount' };
+        row.querySelectorAll('[data-part]').forEach(span => {
+            const part = span.dataset.part;
+            span.textContent = values[part];
+            span.title = titles[part];
+            if (part === 'pnl' || part === 'pnlPercent') {
+                const pnl = value[part];
+                span.classList.toggle('positive', pnl != null && pnl > 0);
+                span.classList.toggle('negative', pnl != null && pnl < 0);
+            }
+        });
         const cancel = row.querySelector('button');
         cancel.hidden = !value.cancelId;
         cancel.setAttribute('aria-label', `Cancel ${value.kind.toLowerCase()} order for ${symbol.replace('.US', '')}`);
@@ -160,6 +182,7 @@ export class SchwabHoldings {
         const table = $('schwab-table');
         table.dataset.regular = String(this.regular);
         table.classList.toggle('holdings-state', this.regular && this.states.enabled);
+        const columns = Array.from(table.tHead.rows[0].cells).filter(cell => getComputedStyle(cell).display !== 'none').length;
         $('schwab-content').hidden = this.collapsed;
         $('schwab-toggle').setAttribute('aria-expanded', String(!this.collapsed));
         $('schwab-arrow').textContent = this.collapsed ? '▸' : '▾';
@@ -199,7 +222,7 @@ export class SchwabHoldings {
             desired.push(row);
             if (this.expanded.has(item.symbol))
                 for (const value of detail) {
-                    const child = this.detailRow(item.symbol, value, item.kind === 'sold');
+                    const child = this.detailRow(item.symbol, value, item.kind === 'sold', columns);
                     desired.push(child);
                     detailKeys.add(child.dataset.detail);
                 }

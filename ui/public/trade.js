@@ -1,4 +1,4 @@
-import { $, dayKey, money } from './types.js';
+import { $, dayKey } from './types.js';
 import { numeric, editableStop, activeOrders, flattenOrders } from './schwab-data.js';
 import { palette } from './palette.js';
 import { TradeLines } from './trade-lines.js';
@@ -8,6 +8,16 @@ export function quantityStep(price) {
 }
 export function suggestedBuy(high, ask) {
     return high != null && ask != null ? Math.max(high, Math.round((ask + .01) * 100) / 100).toFixed(2) : '';
+}
+export function quantityTicks(maximum, step, width) {
+    const count = Math.ceil(maximum / step);
+    if (!count)
+        return [{ quantity: 0, position: 0, label: true }];
+    const spacing = Math.max(28, String(maximum).length * 5 + 8), slots = Math.max(1, Math.floor(width / spacing));
+    const target = count / slots, magnitude = 10 ** Math.floor(Math.log10(target));
+    const stride = Math.max(1, [1, 2, 5, 10].find(n => n * magnitude >= target) * magnitude);
+    return Array.from({ length: count + 1 }, (_, index) => ({ quantity: Math.min(maximum, index * step), position: index / count * 100,
+        label: index === 0 || index === count || (index % stride === 0 && (count - index) / count * width >= spacing) }));
 }
 export class TradeError extends Error {
     unknown;
@@ -20,6 +30,8 @@ export async function tradeRequest(path, method = 'GET', payload) {
     const writing = method !== 'GET', controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 35_000);
     try {
+        if (writing && window.navigator.onLine === false)
+            throw new TradeError('Not sent · offline');
         const response = await fetch('/v1/trade/' + path, { method, signal: controller.signal,
             ...(payload ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) } : {}) });
         const body = await response.json().catch(() => null);
@@ -38,7 +50,7 @@ export async function tradeRequest(path, method = 'GET', payload) {
     catch (error) {
         if (error instanceof TradeError)
             throw error;
-        throw new TradeError(writing ? 'Order result unknown. Check Schwab before submitting again' : 'Cannot read Schwab quote', writing);
+        throw new TradeError(writing ? (error.name === 'AbortError' ? 'Request timed out · result unknown' : 'Connection lost · result unknown') : 'Cannot read Schwab quote', writing);
     }
     finally {
         window.clearTimeout(timeout);
@@ -67,12 +79,14 @@ export class TradeController {
     unknown = false;
     message = '';
     sequence = 0;
+    acceptedTimer;
     previews = new Map();
     replacements = new Map();
     mode = null;
     lines;
     rulerStep = 1;
     rulerMaximum = 1;
+    tickSignature = '';
     constructor(panels, appMode, config) {
         this.appMode = appMode;
         this.config = config;
@@ -95,6 +109,7 @@ export class TradeController {
             this.render();
         }));
         const ruler = $('trade-ruler');
+        new ResizeObserver(() => this.renderTicks()).observe(ruler);
         ruler.oninput = () => {
             this.quantityInitialized = true;
             this.qty = String(Math.min(this.rulerMaximum, Number(ruler.value) * this.rulerStep));
@@ -157,7 +172,7 @@ export class TradeController {
             const orders = flattenOrders(state.orders);
             for (const [old, next] of this.replacements) {
                 const replacement = orders.find(order => order.order_id === next);
-                if (!replacement || ['PENDING_REPLACE', 'PENDING_ACTIVATION', 'PENDING_ACKNOWLEDGEMENT'].includes(replacement.status ?? ''))
+                if (!replacement || ['PENDING_REPLACE', 'PENDING_ACKNOWLEDGEMENT'].includes(replacement.status ?? ''))
                     continue;
                 this.previews.delete(old);
                 this.replacements.delete(old);
@@ -206,14 +221,22 @@ export class TradeController {
     async write(path, method, payload) {
         if (this.busy || this.appMode() !== 'trade')
             return null;
+        window.clearTimeout(this.acceptedTimer);
         this.busy = true;
         if (!this.unknown)
             this.message = '';
         this.render();
         try {
             const result = await tradeRequest(path, method, payload);
-            if (!this.unknown)
-                this.message = 'Accepted · awaiting Schwab sync';
+            if (!this.unknown) {
+                this.message = 'Accepted';
+                this.acceptedTimer = window.setTimeout(() => {
+                    if (this.message === 'Accepted') {
+                        this.message = '';
+                        this.render();
+                    }
+                }, 2000);
+            }
             return result;
         }
         catch (error) {
@@ -258,6 +281,21 @@ export class TradeController {
         this.render();
     }
     ready() { return !!this.state && this.state.health.auth_status === 'valid' && this.state.health.schwab_rest === 'connected' && !this.busy; }
+    renderTicks() {
+        const ticks = quantityTicks(this.rulerMaximum, this.rulerStep, $('trade-ruler').clientWidth);
+        const signature = JSON.stringify(ticks);
+        if (signature === this.tickSignature)
+            return;
+        this.tickSignature = signature;
+        const labeled = ticks.filter(tick => tick.label);
+        $('trade-ruler-ticks').replaceChildren(...labeled.map((tick, index) => {
+            const span = document.createElement('span');
+            span.className = 'trade-tick' + (index === 0 ? ' first' : index === labeled.length - 1 ? ' last' : '');
+            span.style.left = tick.position + '%';
+            span.textContent = String(tick.quantity);
+            return span;
+        }));
+    }
     render() {
         const visible = this.appMode() === 'trade';
         $('trade-ticket').hidden = !visible;
@@ -289,7 +327,7 @@ export class TradeController {
         }
         ruler.value = String(Math.ceil(Number(this.qty) / this.rulerStep));
         ruler.disabled = this.busy || !active || !this.symbol;
-        ruler.title = `${this.rulerStep} shares per step`;
+        this.renderTicks();
         ruler.setAttribute('aria-valuetext', `${this.qty || '0'} shares`);
         const ask = numeric(this.quote.ask), bid = numeric(this.quote.bid), spread = ask != null && bid != null ? ask - bid : null;
         $('trade-ask').textContent = ask?.toFixed(2) ?? '—';
@@ -300,7 +338,7 @@ export class TradeController {
         $('trade-spread-percent').classList.toggle('spread-wide', spreadPercent != null && spreadPercent > this.config.spread_warning_percent);
         const distance = breakout && reference != null && reference > 0 && numeric(this.stop) != null ? reference - Number(this.stop) : null;
         $('trade-estimate').textContent = active && reference != null && qty != null ? Math.round(reference * qty).toLocaleString('en-US') : '';
-        $('trade-risk').textContent = active && distance != null && qty != null ? `Risk ${(distance / reference * 100).toFixed(2)}% ｜ ${money(distance * qty)}` : '';
+        $('trade-risk').textContent = active && distance != null && qty != null ? `Risk ${(distance / reference * 100).toFixed(2)}% ｜ ${Math.round(distance * qty).toLocaleString('en-US')}` : '';
         const status = !this.state ? 'Loading Schwab' : this.state.health.auth_status === 'auth_required' ? 'Schwab authorization required' : this.state.health.schwab_rest !== 'connected' ? 'Schwab unavailable · last snapshot retained' : '';
         $('trade-message').textContent = this.message || status;
         $('trade-feedback').hidden = !this.message && !status && !pending;
@@ -308,11 +346,11 @@ export class TradeController {
             $('trade-message').textContent = `Stop change · ${pending.quantity} shares`;
         $('trade-message').classList.toggle('unknown', this.unknown);
         $('trade-checked').hidden = !this.unknown;
+        $('trade-message').classList.toggle('accepted', this.message === 'Accepted');
         $('trade-refresh').hidden = !this.unknown;
         const submit = $('trade-submit');
-        submit.textContent = this.busy ? 'Sending…' : 'Send';
+        submit.setAttribute('aria-busy', String(this.busy));
         submit.disabled = !this.ready() || !this.symbol || (pending ? !editableStop(pending) || this.replacements.has(pending.order_id) : !orderFieldsComplete(this.mode, this.qty, this.buy, this.stop));
-        submit.title = pending ? `Send stop change to ${this.previews.get(pending.order_id)}` : this.mode === 'market-buy' ? 'Send market buy · reference lines are not submitted' : this.mode === 'market-sell' ? 'Send market sell · reference lines are not submitted' : 'Send buy with stop';
         submit.setAttribute('aria-label', pending ? 'Send stop change' : 'Send order');
         const values = [];
         for (const order of this.row() ? activeOrders(this.row()) : [])

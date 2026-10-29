@@ -31,7 +31,7 @@ const active = new Set(['WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_O
 export const activeOrders = (row: TradeRow) => flattenOrders(row.orders).filter(order => order.status != null && active.has(order.status) && order.symbol === row.ticker);
 export const entryOrders = (row: TradeRow) => activeOrders(row).filter(order => order.instruction === 'BUY');
 export function editableStop(order: Order) {
-    return !!order.order_id && order.editable === true && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED'].includes(order.status ?? '');
+    return !!order.order_id && (order.editable === true || order.status === 'PENDING_ACTIVATION') && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION'].includes(order.status ?? '');
 }
 export function entryPreview(order: Order) {
     const qty = numeric(order.quantity), price = numeric(order.stop_price);
@@ -47,11 +47,14 @@ export function entryAmount(row: TradeRow) {
 export function holdingTags(row: TradeRow) {
     return [...(entryOrders(row).length ? ['Entry'] : []), ...(row.position && numeric(row.position.quantity)! > 0 && numeric(row.sold_today?.quantity)! > 0 ? ['Trim'] : [])];
 }
-export type HoldingDetail = { key: string; kind: 'Buy' | 'Sold' | 'Stop' | 'Entry'; qty: number; price: number | null; stop: number | null; amount: number | null; riskPercent: number | null; risk: number | null; cancelId: string | null };
+export type HoldingDetail = { key: string; kind: 'Buy' | 'Sold' | 'Stop' | 'Entry'; qty: number; price: number | null; stop: number | null; amount: number | null; pnlPercent: number | null; pnl: number | null; riskPercent: number | null; risk: number | null; cancelId: string | null };
 export function holdingDetails(row: TradeRow): HoldingDetail[] {
-    const result: HoldingDetail[] = [], position = row.position;
+    const result: HoldingDetail[] = [], position = row.position, average = numeric(position?.average_price);
     const add = (key: string, kind: HoldingDetail['kind'], qty: number, price: number | null, order?: Order) => {
-        result.push({ key, kind, qty, price, stop: null, amount: price != null ? qty * price : null, riskPercent: null, risk: null, cancelId: order?.cancelable && order.order_id ? order.order_id : null });
+        const difference = kind !== 'Buy' && average != null && average > 0 && price != null ? price - average : null;
+        const pnl = difference != null ? qty * difference : null;
+        const pnlPercent = difference != null ? difference / average! * 100 : null;
+        result.push({ key, kind, qty, price, stop: null, amount: price != null ? qty * price : null, pnlPercent, pnl, riskPercent: null, risk: null, cancelId: order?.cancelable && order.order_id ? order.order_id : null });
     };
     if (position && numeric(position.quantity)! > 0 && numeric(position.average_price) != null) add('buy', 'Buy', Number(position.quantity), Number(position.average_price));
     // Sold Today retains the backend's FILLED scope, grouped by real broker order.
@@ -65,7 +68,7 @@ export function holdingDetails(row: TradeRow): HoldingDetail[] {
     for (const order of entries) {
         const value = entryPreview(order);
         if (value.qty == null) continue;
-        result.push({ key: 'entry-' + order.order_id, kind: 'Entry', ...value, qty: value.qty, cancelId: order.cancelable ? order.order_id : null });
+        result.push({ key: 'entry-' + order.order_id, kind: 'Entry', ...value, qty: value.qty, pnlPercent: null, pnl: null, cancelId: order.cancelable ? order.order_id : null });
     }
     for (const order of activeOrders(row)) if (order.instruction === 'SELL' && order.order_type === 'STOP' && !attached.has(order.order_id) && numeric(order.quantity) != null) add('stop-' + order.order_id, 'Stop', Number(order.quantity), numeric(order.stop_price), order);
     return result;
