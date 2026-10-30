@@ -193,7 +193,7 @@ export class ScanControls {
             button.replaceChildren(group[0].toUpperCase() + group.slice(1), countBadge(count));
             button.classList.toggle('active', group === this.activeList); button.disabled = this.pending;
         });
-        const displayPriority = (tag: Tag) => tagRole(tag) === 'setup' ? 0 : ['extended', 'broken', 'under50'].includes(tagRole(tag)) ? 2 : 1;
+        const displayPriority = (tag: Tag) => tagRole(tag) === 'setup' ? 0 : ['earnings', 'extended', 'broken', 'under50'].includes(tagRole(tag)) ? 2 : 1;
         $('scan-tags').replaceChildren(...[...this.preferences.tags].sort((a,b) => displayPriority(a) - displayPriority(b)).map(tag => {
             const button = document.createElement('button'); button.dataset.tag = tag.id; button.textContent = tag.name;
             button.classList.toggle('active', tag.id === this.preferences!.activeTag); button.disabled = this.pending; return button;

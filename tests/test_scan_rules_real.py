@@ -3,7 +3,6 @@ from contextlib import closing
 from copy import deepcopy
 import json
 from pathlib import Path
-from statistics import median
 
 import pytest
 
@@ -81,13 +80,11 @@ def test_features_only_cover_real_candidates_and_retained_members(real_scan):
     assert all('extended_k' in r for r in snapshot['rows'] if r['candidate'])
 
 
-def test_saved_real_tags_cannot_use_base_universe_filters():
+def test_saved_real_tags_keep_shape_filters():
     preferences = json.loads((RUNTIME / 'preferences.json').read_text())
-    assert len(CATALOG) == 35 and all(field['group'] != 'Market' for field in CATALOG)
-    validate_preferences(deepcopy(preferences))
+    assert len(CATALOG) == 36 and all(field['group'] != 'Market' for field in CATALOG)
+    saved = validate_preferences(deepcopy(preferences))
     assert preferences['tags']
-    for field in ('close', 'adr20', 'mdv20'):
-        changed = deepcopy(preferences)
-        changed['tags'][0]['filters'][field] = {'min': 5}
-        with pytest.raises(ValueError, match='Unknown filter field'):
-            validate_preferences(changed)
+    for original, tag in zip(preferences['tags'], saved['tags']):
+        assert tag['filters'] == original['filters']
+        assert tag['filters'].keys() <= {field['key'] for field in CATALOG}

@@ -23,6 +23,7 @@ from .alerts import AlertEngine, price_cents
 from .alerts.engine import symbol_key
 from .alerts.sound import AlertSound
 from .list_rules import apply_rules, focus_classification
+from .features.events import days_to_earnings
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,8 @@ class Workbench:
         self.preferences_path = runtime / 'preferences.json'
         self.additional = additional_info or AdditionalInfo(RuntimePaths(runtime).additional_info_dir, enabled=False)
         self.additional_task = None
+        self.earnings_day = datetime.fromtimestamp(self.additional.now(), ET).date()
+        self.additional.on_earnings_change = self.earnings_changed
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(INITIAL_PREFERENCES))
         self.list_context = self._list_context()
         self.sound = sound if sound is not None else AlertSound() if not mock and only is None else None
@@ -103,7 +106,7 @@ class Workbench:
                 'scope_known': True, 'sound': {'enabled': False, 'error': None, 'playing': []}, 'error': None}
 
     def focus_classifications(self, tickers):
-        rows = {row['symbol'].removesuffix('.US'): row for row in self.snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
+        rows = {row['symbol'].removesuffix('.US'): row for row in self.list_snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
         return {ticker: focus_classification(rows.get(ticker, {}), self.preferences) for ticker in tickers}
 
     def _list_context(self):
@@ -125,12 +128,15 @@ class Workbench:
                 atomic_json(self.workspace.root / value / 'scan.json', updated)
                 self.snapshot_cache.pop(value, None)
                 self.chart_cache.clear()
-                snapshot = updated
         if self.workspace.date == value:
-            self.workspace.reclassify(snapshot, self.preferences)
+            self.workspace.reclassify(self.list_snapshot(value), self.preferences)
+
+    def earnings_changed(self):
+        self.earnings_day = datetime.fromtimestamp(self.additional.now(), ET).date()
+        self.workspace_changed()
 
     def workspace_changed(self):
-        if self.only is None and self.has_snapshot(self.workspace.date) and self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences):
+        if self.only is None and self.has_snapshot(self.workspace.date) and self.workspace.reclassify(self.list_snapshot(self.workspace.date), self.preferences):
             return  # The save callback publishes the completed classification.
         context = self._list_context()
         if context != self.list_context:
@@ -217,7 +223,7 @@ class Workbench:
         self.chart_cache.clear()
         self.previous_cache.clear()
         if self.has_snapshot(self.workspace.date):
-            self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences)
+            self.workspace.reclassify(self.list_snapshot(self.workspace.date), self.preferences)
         self.refresh_list_quotes()
         self.run_id = uuid.uuid4().hex
 
@@ -274,6 +280,8 @@ class Workbench:
 
     async def run(self):
         while True:
+            if datetime.fromtimestamp(self.additional.now(), ET).date() != self.earnings_day:
+                self.earnings_changed()
             self.refresh_alert_scope()
             for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task)):
                 if task and task.done():
@@ -298,11 +306,25 @@ class Workbench:
                 self.run_id = uuid.uuid4().hex
         return self.snapshot_cache[value][1]
 
+    def list_snapshot(self, value):
+        snapshot = self.snapshot(value)
+        if value != self.workspace.date:
+            return snapshot
+        today = datetime.fromtimestamp(self.additional.now(), ET).date()
+        rows = {row['symbol']: row for row in snapshot['rows']}
+        symbols = {symbol for symbol, row in rows.items() if row.get('candidate')}
+        symbols.update(ticker + '.US' for ticker in self.workspace.data['statuses'])
+        for symbol in sorted(symbols):
+            event = self.additional.next_earnings(symbol, today.isoformat())
+            rows[symbol] = {**rows.get(symbol, {'symbol': symbol, 'candidate': False}),
+                            'days_to_earnings': days_to_earnings(event['date'] if event else None, today)}
+        return {**snapshot, 'rows': list(rows.values())}
+
     def scan_board(self, value=None):
         value = value or self.selected_date
         if not self.has_snapshot(value):
             return []
-        snapshot = self.snapshot(value)
+        snapshot = self.list_snapshot(value)
         data = self.workspace.data if value == self.workspace.date else apply_rules(
             json.loads((self.workspace.root / value / 'workspace.json').read_text()), snapshot, self.preferences)
         prior = previous_candidates(self.workspace.root, value) if value != self.selected_date else self.previous()
@@ -535,7 +557,7 @@ class Workbench:
                     # Ready data stays cached; explicit Refresh still resets the daily manual layer.
                     self.workspace.reload()
                     if value == self.workspace.date and (not self.pipeline or self.pipeline.state()['ready']):
-                        self.workspace.reclassify(self.snapshot(value), self.preferences, reset=True)
+                        self.workspace.reclassify(self.list_snapshot(value), self.preferences, reset=True)
                     if value and value != self.selected_date:
                         self.selected_date = value
                         self.run_id = uuid.uuid4().hex

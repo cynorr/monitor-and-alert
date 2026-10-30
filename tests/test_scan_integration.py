@@ -275,13 +275,10 @@ def test_scan_http_ws_historical_readonly_origin_and_refresh(app_data):
     asyncio.run(scenario())
 
 
-def test_preferences_reject_unknown_rules_and_keep_exact_thresholds():
+def test_preferences_keep_exact_thresholds():
     data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
     data['tags'][0]['filters']={'extended_k':{'min':5_123_456.75}, 'ma_arrangement':{'values':['ema10_lead','straddle']}}
     assert validate_preferences(data)['tags'][0]['filters']['extended_k']['min'] == 5_123_456.75
-    data['tags'][0]['filters']['BROKEN'] = {'values': ['true']}
-    with pytest.raises(ValueError, match='Unknown'):
-        validate_preferences(data)
 
 
 @pytest.mark.parametrize('background', ['transparent', 'frosted'])

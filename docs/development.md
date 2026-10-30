@@ -16,9 +16,9 @@
 | massive/settings.py / config/scan.json | Massive凭证、目录定位与候选配置读取，不做自动版本跟踪 |
 | massive/pipeline.py | 一次准备任务、阶段重试、产物核对及统一Ready状态 |
 | scan.py | 上游只读连接、完成日截面/发布、Scan 日图 |
-| features/atomic.py / screening.py / snapshot.py | 原子纯算子、初筛/排名、每只一次截面组装 |
+| features/atomic.py / screening.py / snapshot.py / events.py | 行情原子纯算子、初筛/排名、每只一次截面组装；events为不依赖数据源或存储的日期特征 |
 | preferences.py / list_rules.py | Tag 用途和保存契约（含独立外观 metadata）；共享字段目录；纯匹配与自动三名单分类，外观不参与分类 |
-| config.py | 当前Focus解析、统一后端凭证JSON读取与错误脱敏 |
+| config.py | 当前Focus解析、统一后端凭证JSON直接取值与错误脱敏；不另做凭证类型/非空校验 |
 | workspace.py | 最新日期选择、三名单归属/顺序与当日置顶、内存 JSON、同步直接写入、单个原生文件事件 watcher |
 | longbridge/client.py | LongbridgeClient：凭证、单SDK context、static_info、原生历史/实时订阅与请求预算 |
 | snaptrade.py | 独立异步签名GET、指定账户、10次/滚动分钟预算、原始快照获取与成功提交；不提供HTTP服务、不调用Longbridge |
@@ -98,7 +98,7 @@ indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/MDV/RFL入口。ADR/MDV窗口统
 
 来源契约分别只在 [longbridge-data.md](longbridge-data.md) 与 [massive-data.md](massive-data.md) 维护。longbridge/client.py落实Longbridge请求口径；读取、指标和图表直接使用所属来源的数据。pandas ewm(adjust=False)仅是加权算法参数。
 
-35项形态条件目录仅ui/src/filter-catalog.json一份，后端读取该文件验证保存契约，后端list_rules.matches_filters执行名单分类，前端filters.ts执行草稿显示筛选，二者共享相同边界/缺失语义。保存值不取整；旧maxExclusive语义保留到主动编辑。Tag草稿不写盘，Save写完整preferences后才更新内存，失败保留草稿；不建立长期多版本猜测/迁移框架。
+36项条件目录（35项形态和1项财报倒计时）仅ui/src/filter-catalog.json一份，前端依此生成条件，后端原样保存filters，不重复检查字段、规则结构、数值边界或选项枚举。后端list_rules.matches_filters执行名单分类，前端filters.ts执行草稿显示筛选，二者共享相同边界/缺失语义。保存值不取整；旧maxExclusive语义保留到主动编辑。Tag草稿不写盘，Save写完整preferences后才更新内存，失败保留草稿；Tag数量、命名、用途、外观和当前选择仍按既有业务约束处理。
 
 ## Massive准备与统一状态
 
@@ -116,7 +116,7 @@ pipeline-status.json维护daily/splits/bars/features，目标均为daily.target_
 
 `GET /v1/additional-info` 返回独立状态，带symbol返回可空company_name/sector/industry/market_cap、earnings.last/next、来源更新时间和server_time。`POST /v1/additional-info` 的action=refresh只安排后台任务并立即返回，复用Origin/JSON规则。WS的additional_info消息带symbol、request_id、mode、source，独立revision控制推送，完全不改变bars revision。前端检查socket和选择身份，用textContent显示；倒计时按服务器时钟及纽约自然日计算。
 
-additional_info/service.py负责独立SQLite及内存缓存、每日/每周调度；同目录nasdaq.py负责固定公开接口、全响应校验与Python名称处理，symbol_directory.py保持独立的证券目录CLI流程，不并入附加信息刷新。每份公司表或每个财报日期成功后普通提交，失败保留原数据。独立CLI与正式服务共用runtime锁，避免同时写缓存；命令维护在README。
+additional_info/service.py负责独立SQLite及内存缓存、每日/每周调度；同目录nasdaq.py负责固定公开接口、全响应校验与Python名称处理，symbol_directory.py保持独立的证券目录CLI流程，不并入附加信息刷新。每份公司表或每个财报日期成功后普通提交，失败保留原数据。缓存加载成功和财报单日提交/内存更新成功后，通过on_earnings_change通知Workbench；公司资料更新不触发名单分类。Workbench.list_snapshot仅在当前有效日，将候选和已有名单成员的days_to_earnings补入临时分类/显示行，Focus无当日bar也可使用财报日期。features/events.py只接收下一次日期与as_of，返回自然日差或None，不访问AdditionalInfo。原始snapshot缓存和scan.json保持行情数据，历史日不补入当前财报结论。财报变化走既有workspace_changed/reclassify，ET日期变化由Workbench原有循环检测一次并重分类，不新增任务、下载或持久状态。独立CLI与正式服务共用runtime锁，避免同时写缓存；命令维护在README。
 
 Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一放行runtime/massive/splits.json。正式服务的Longbridge缓存按唯一数据要求初始化。
 
@@ -127,7 +127,7 @@ watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 wa
 List完整需求见 [list-design.md](list-design.md)。Workspace V3继续直接维护JSON。内存statuses包含完整当日分类；persistent_workspace供Workspace.save和publish_day共用，落盘时移除机器Excluded成员身份、section和计算Tag，只保留人工Tag注记及独立Pin。Discover/Focus/Hidden的状态和人工顺序沿用现有字段，excluded_at仅属于Hidden。inherit_workspace只继承Focus和有效Hidden；apply_rules统一匹配Tag并生成当天候选归属，保留Focus自动淘汰，非候选淘汰后删除。无需保存历史机器section或未知特征恢复状态。derive_day_view只投影已分类结果及NEW。新section成员置前，同section人工顺序保留。Workspace.reload比较同一持久投影，忽略自身保存引发的文件事件；外部变化由Workbench.workspace_changed同步重建分类并更新行情范围。旧wait/hidden的V2读取迁移仍只在内存。
 
 
-preferences的activeTag为Tag ID或null，tags可为空、最多十个。前端草稿独立，空选择仍可编辑并保存新Tag；点击已选Tag保存null，全部定义仍参与分类。role为setup/extended/broken/under50/label；负面优先级broken → extended → under50，Setup顺序决定主section。manual_tags只允许setup/label，Workbench同时校验，apply_rules清理失效或负面人工ID。manual_tags_date/manual_section_date/manual_focus_date仅当前名单交易日有效；删除或改用途后的人工section回归有效setup/unclassified。写失败恢复原内存，沿用同步保存与单watcher。数据缺失不淘汰Focus。
+preferences的activeTag为Tag ID或null，tags可为空、最多十个。前端草稿独立，空选择仍可编辑并保存新Tag；点击已选Tag保存null，全部定义仍参与分类。role为setup/earnings/extended/broken/under50/label；负面优先级earnings → broken → extended → under50，Setup顺序决定主section。manual_tags只允许setup/label，Workbench同时校验，apply_rules清理失效或负面人工ID。manual_tags_date/manual_section_date/manual_focus_date仅当前名单交易日有效；删除或改用途后的人工section回归有效setup/unclassified。写失败恢复原内存，沿用同步保存与单watcher。数据缺失不淘汰Focus。
 
 Workbench.start_background先异步补本地成员feature并分类，再启动正式Focus行情；本地准备失败保留名单、显示错误并继续原行情与Massive准备。新截面成功发布、Tag保存及显式编辑后重评；list_state/GET不写盘、不下载，不增加定时分类。Monitor board只输出Focus，图表统一来自实时MonitorService；Scan图表使用本地Massive Daily。HTTP/WS保留watchlist/holdings选择来源隔离；_list_context使用日期与Focus成员变化更新run_id并清WS revision。
 

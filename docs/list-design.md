@@ -14,7 +14,7 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 | --- | --- | --- |
 | Discover | 按 [Massive 数据要求](massive-data.md) 先完成证券与历史资格、ADR/MDV 初筛，再取 RFL 排名并集，等待选入 Focus | 按潜力 Tag 分组，未匹配为 Unclassified |
 | Focus | 正式关注、实时看盘；成员跨日保留 | 按潜力 Tag 分组，未匹配为 Unclassified |
-| Excluded | 当日机器排除与人工屏蔽 | Broken、Extended、Under-50、Hidden |
+| Excluded | 当日机器排除与人工屏蔽 | In 14 Days、Broken、Extended、Under-50、Hidden |
 
 同一 symbol 在三个列表中只有一个归属。Holdings 独立，不改变名单归属；同 ticker 底层行情去重。常规名单前端屏蔽 Holdings 已有 ticker，后端成员与规则结果保留。
 
@@ -33,7 +33,7 @@ Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为
 | Hidden | 未满七个自然日 | 保留 Hidden，跳过名单规则判断 |
 | Hidden | 满七个自然日 | 解除屏蔽；仅当天 candidate 重新参与普通分类，否则退出当前名单 |
 
-机器 section 优先级为 Broken → Extended → Under-50，保留全部实际匹配 Tag。机器结果只属于当天候选，可从同一份截面和当前规则重建；不保存其成员身份、section 或机器 Tag 结论。增加负面规则不增加持久名单。Setup 只负责分组，不会自动进入 Focus。
+机器 section 优先级为 In 14 Days → Broken → Extended → Under-50，保留全部实际匹配 Tag。机器结果只属于当天候选，可从行情截面、当前财报缓存和保存的Tag规则重建；不保存其成员身份、section 或机器 Tag 结论。增加负面规则不增加持久名单。Setup 只负责分组，不会自动进入 Focus。
 
 缺失特征不视为已确认的负面匹配，也不推断为 Broken；已有 Focus 不因特征或 Setup 缺失自动淘汰。无历史机器 section 需要保留或恢复。
 
@@ -43,17 +43,27 @@ Hidden 保留七个自然日，期间即使不在 candidate 中也保留并计�
 
 ## Tag、Section 与 Filter
 
-Tag 使用现有 atomic feature 条件，允许同时匹配多个。每日重算结果，禁止继承昨天的形态结论；人工补充只允许 Setup/Label，只对当前交易日有效；负面 Tag 完全由扫描条件决定。
+Tag 使用现有 atomic feature 和财报倒计时条件，允许同时匹配多个。每日重算结果，禁止继承昨天的形态结论；人工补充只允许 Setup/Label，只对当前交易日有效；负面 Tag 完全由扫描条件决定。
 
 潜力 section 来自保存的潜力 Tag，例如 Surf-10、Surf-20、Bounce-10、Bounce-20。多标签按保存顺序选主 section，人工可拖拽调整；同一 symbol 只显示一行。
 
-Tag 的用途固定为 Setup、Extended、Broken、Under-50 或 Label。Setup 用于 Discover/Focus 的潜力 section；Label 仅辅助观察，适合后续 prior-run 等局部特征。显示名称可修改，用途不随改名变化。缺少用途的旧定义按名字识别 Extended / Broken / Under-50，其余已有形态 Tag 转为 Setup；已保存的用途优先。当前 Under-50 Tag 使用 `ma_arrangement = under50` 条件，均线排列含义见 [Atomic Feature 参考](atomic-feature-reference.md#3-ma-arrangement)。分类使用保存的条件，不按名称硬编码条件。
+Tag 的用途固定为 Setup、Earnings、Extended、Broken、Under-50 或 Label；Earnings对应In 14 Days机器section。Setup 用于 Discover/Focus 的潜力 section；Label 仅辅助观察，适合后续 prior-run 等局部特征。显示名称可修改，用途不随改名变化。缺少用途的旧定义按名字识别 Extended / Broken / Under-50，其余已有形态 Tag 转为 Setup；已保存的用途优先。当前 Under-50 Tag 使用 `ma_arrangement = under50` 条件，均线排列含义见 [Atomic Feature 参考](atomic-feature-reference.md#3-ma-arrangement)。分类使用保存的条件，不按名称硬编码条件。
 
 Section 支持折叠、内部排序和跨 section 拖拽。新进入 section 的股票放到队首，同 section 内保留人工顺序。允许盘中操作改变 section；本次不新增基于实时 Quote 的形态规则。
 
 Tag 选择是可空的显示偏好，点击已选 Tag 取消选择；未选时不应用保存 Tag 筛选。可保存零到十个命名 Tag，筛选草稿可独立编辑并保存为新 Tag。取消选择不删除定义，不影响每日自动分类。
 
 Filter 仅改变显示，不移动名单、不改变实时订阅。自动分类与显示筛选使用同一字段目录和相同条件含义。
+
+## 财报排除
+
+`days_to_earnings`为下一次尚未发布财报的日期减当前美东日期，按自然日计算，允许为空。`In 14 Days`使用Earnings用途（role=earnings）及`0 ≤ days_to_earnings ≤ 14`条件，包含今天和第14天；缺失不匹配，不用999代替。阈值保存在该Tag的普通filters中，不增加独立配置或专用匹配函数。
+
+当前有效名单使用这项特征，扫描日K即使截至昨日，财报倒计时仍从今天计算；历史Scan不回算财报，不把当前结论写入历史截面。日K和财报原始缓存各自保存，倒计时只在内存名单特征中补入，不修改日K表或scan.json。没有当日行情记录的保留成员也可使用财报日期。
+
+Additional Info成功加载缓存后即可计算；财报日程成功提交并更新内存后通知Workbench自动重分类。美东自然日变化也重新计算，不要求当天网络请求成功。失败沿用上次成功缓存，完全无日期则为空；不等待公司资料、历史或远期财报下载，不影响Scan Ready。更新不重跑候选/排名/行情特征，也不执行Refresh的人工状态清理。
+
+此项为最高优先级的机器section；Hidden七天屏蔽、当天人工Discover/Focus保留、Focus自动淘汰以及非候选淘汰后退出仍按上述名单规则执行。机器财报Excluded同样不保存跨日成员身份。财报日程仍为第三方预估，不增加其他来源或额外告警。
 
 ## 当日置顶
 

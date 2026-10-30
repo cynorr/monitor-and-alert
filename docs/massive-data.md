@@ -51,6 +51,8 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 
 ### 名单完整特征范围
 
+本节为行情形态特征范围。财报日期特征由Workbench读取独立缓存后在内存名单中补入，见[List设计](list-design.md#财报排除)；不进入Massive截面、构建或Ready。
+
 完整特征计算范围为当日候选 ∪ 当日人工 Discover ∪ Focus ∪ 有效 Hidden。自动 Excluded 是候选分类结果，不额外扩展范围。新日首次生成仅从前日名单保留 Focus 和未到期 Hidden；同日重算纳入当日人工 Discover。过期 Hidden 和历史机器 Excluded 非候选不再计算。搜索新增仅本地补齐该股完整特征，不重跑排名；新日不继承人工 Discover。保留的 Focus/Hidden 即使未通过候选资格或 RFL 前75，仍使用截至扫描日的本地历史计算均线、ATR、原子特征和三种 RFL 数值；Growth 不另建公式或字段。
 
 继承名单不另行排名。已参加候选筛选的成员保留该阶段产生的全市场名次；未参加排名的成员名次保持空缺。补全完整特征和 RFL 数值不改变 `eligible`、`candidate` 或已有名次，也不沿用昨日的特征结论。Hidden 的屏蔽期限只影响名单规则判断，不减少特征计算范围；数据不足的字段继续保留缺失，不编造历史或据此判为 Broken。

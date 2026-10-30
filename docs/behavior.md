@@ -20,7 +20,7 @@ Quote 统一接收和校验，regular 与 extended 按时段保存最新值，qu
 
 ## Additional Info
 
-公司名、行业大类/小类、市值和财报日期独立于行情、筛选和账户，允许缺失，不等待或影响系统 Ready。后台单独刷新并保留成功缓存；页面选择只读本地内存。Scan 历史日期也显示当前参考信息。数据源、处理、刷新及财报文字的唯一需求见 [additional-info.md](additional-info.md)，位置见 [Chart UI](chart-ui.md#headers-and-information)。
+公司名、行业大类/小类、市值和财报日期独立于行情和账户，允许缺失，不等待或影响系统Ready。下一次财报日期同时用于当前名单的In 14 Days排除，规则只在[List设计](list-design.md#财报排除)维护。后台单独刷新并保留成功缓存；页面选择只读本地内存。Scan 历史日期也显示当前参考信息。数据源、处理、刷新及财报文字的唯一需求见 [additional-info.md](additional-info.md)，位置见 [Chart UI](chart-ui.md#headers-and-information)。
 
 ## Holdings
 
@@ -52,7 +52,7 @@ Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两�
 
 候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、当日人工Discover、Focus和有效Hidden计算完整特征与Growth所用RFL数值，继承成员不另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。历史机器Excluded不扩大计算范围；Focus不因候选门槛、短历史或缺数据直接淘汰。启动在后台从本地Daily补齐旧截面缺少的有效成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 
-Tag 保存条件与用途：Setup用于Discover/Focus分组，Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可匹配多个Tag，按Setup定义顺序选主section；未匹配为Unclassified。人工补充仅允许Setup/Label。
+Tag 保存条件与用途：Setup用于Discover/Focus分组，Earnings、Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可匹配多个Tag，按Setup定义顺序选主section；未匹配为Unclassified。人工补充仅允许Setup/Label。
 
 Tag 选择可为空，点击已选 Tag 再次取消；空选择不应用保存 Tag 筛选，全部定义仍参与自动分类。
 

@@ -181,7 +181,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 
 ### Section、顺序与选择
 
-- Discover/Focus 按保存的 **Setup** Tag 顺序分组，最后是 Unclassified；Excluded 固定 **Broken / Extended / Under-50 / Hidden**；前三类为当天候选的计算结果，仅 Hidden 保存人工屏蔽。一只股票可有多个 Tag、一个主 section。
+- Discover/Focus 按保存的 **Setup** Tag 顺序分组，最后是 Unclassified；Excluded 固定 **In 14 Days / Broken / Extended / Under-50 / Hidden**；前四类为当天候选的计算结果，仅 Hidden 保存人工屏蔽。一只股票可有多个 Tag、一个主 section。
 - 置顶是独立显示状态，不是 Tag 定义或 section：每个 List 的 Pinned 区域位于该 List 所有 section 之前，支持多个 ticker；原 section 内不重复显示。取消置顶回到仍属的 section 与其原有顺序。置顶遵循 Filter 和持仓屏蔽。Scan/Monitor 共用保存顺序，置顶区可拖动及 Shift+上下重排，不受 RFL 排序影响。Monitor 只展示 Focus 的置顶区。
 - Section 之间不画水平线，以标题行和间距区分。
 - Scan 与 Monitor 的折叠状态独立。非搜索状态 setup 空组也显示；搜索只显示有结果的组。
@@ -192,10 +192,10 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 
 ### Tag 与 Filter 编辑
 
-- 固定头部最后一行依次为 **Filters + 数字**、保存的 Tags 和新增按钮；Tag 加号固定在右侧，位于 Tag 横向滚动区之外，与 section 加号同一横坐标；不显示 `active`。Tags 单行水平排列，放不开时横向滚动。Setup Tags（Surf/Bounce 等）在前，Label 居中，Extended/Broken/Under-50 在后；仅改变按钮显示，不重写保存顺序或分类优先级。Tag/Filter 标签与 List 列名到下方水平线的间距使用与 Chart legend 相同的共用变量，数值在 [Chart Headers](chart-ui.md#headers-and-information) 维护。Filter 按钮展开线下编辑区，不改变顶部水平线高度；取消原 Filters/Holdings 分割线。
-- 两模式使用同一套保存的 Tag/Filter。35字段目录仅包含MA arrangement和atomic feature；Price、ADR20、MDV20基础门槛只在config/scan.json配置，Tag编辑器没有Market分组。使用 **CSS 两列 columns** 布局，每组保持完整；不使用横向对齐的 grid，避免短组下面出现空白。
+- 固定头部最后一行依次为 **Filters + 数字**、保存的 Tags 和新增按钮；Tag 加号固定在右侧，位于 Tag 横向滚动区之外，与 section 加号同一横坐标；不显示 `active`。Tags 单行水平排列，放不开时横向滚动。Setup Tags（Surf/Bounce 等）在前，Label 居中，Earnings/Extended/Broken/Under-50 在后；仅改变按钮显示，不重写保存顺序或分类优先级。Tag/Filter 标签与 List 列名到下方水平线的间距使用与 Chart legend 相同的共用变量，数值在 [Chart Headers](chart-ui.md#headers-and-information) 维护。Filter 按钮展开线下编辑区，不改变顶部水平线高度；取消原 Filters/Holdings 分割线。
+- 两模式使用同一套保存的 Tag/Filter。36字段目录包含MA arrangement、atomic feature及Earnings组的Next earnings in（days）；Price、ADR20、MDV20基础门槛只在config/scan.json配置，Tag编辑器没有Market分组。使用 **CSS 两列 columns** 布局，每组保持完整；不使用横向对齐的 grid，避免短组下面出现空白。
 - 数值条件支持 Any / ≥ / ≤ / range；不同条件 AND，分类多选 OR。缺失值匹配 Any 或显式 Missing。Filter 不移动名单、不改变订阅，被筛掉的成员保留底层归属。
-- Tag 用途固定为 Setup / Extended / Broken / Under-50 / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Tag 名称唯一，可保存零到十个；选择按钮点击一次选中，再点击取消。没有选择时不应用保存 Tag 筛选。
+- Tag 用途固定为 Setup / Earnings（显示In 14 Days）/ Extended / Broken / Under-50 / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Tag 名称唯一，可保存零到十个；选择按钮点击一次选中，再点击取消。没有选择时不应用保存 Tag 筛选。
 - 新建克隆当前草稿条件，用途默认 Setup；未选 Tag 时从空条件编辑，可保存为新命名 Tag。条件编辑即时预览；Save 保存并折叠，Cancel 恢复。未保存时切 Tag 需明确丢弃，保存失败保留草稿；名单/排序偏好写入不得覆盖未保存的 Filter 草稿。
 - Tag 外观编辑遵循 [Logo / Icon](#logo--icon)，与本章同一份 Tag 草稿一起保存或恢复；外观编辑保留已保存条件下的人工匹配成员，不切换到纯条件预览。
 - 已保存 Tag 的筛选包含人工补 Tag 成员；未保存条件预览只按草稿条件判断。保存规则由后端重评已有本地数据，UI 筛选不触发下载。

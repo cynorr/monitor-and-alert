@@ -66,7 +66,7 @@ Holdings读取同一凭证JSON的snaptrade分组（client_id、consumer_key、ac
 
 ## 配置与凭证
 
-`config/scan.json`只管理全局基础筛选与Top75排名；`config/intraday-state.json`管理盘中规则。Tag仅保存形态与原子条件，不包含Price、ADR20或成交额门槛。名单与偏好属于`runtime/`，不放config。
+`config/scan.json`只管理全局基础筛选与Top75排名；`config/intraday-state.json`管理盘中规则。Tag保存形态、原子条件与财报倒计时，不包含Price、ADR20或成交额门槛。名单与偏好属于`runtime/`，不放config。
 
 三家数据源共用本机`config/credentials.json`，按以下字段分组：
 
@@ -104,7 +104,7 @@ Holdings读取同一凭证JSON的snaptrade分组（client_id、consumer_key、ac
 .venv/bin/python -m data_service scan
 ```
 
-此命令只重新生成候选与特征，并按当前 Tag 规则分类，不下载 Daily/split。仅修改候选配置时，无需重新获取证券目录；需要更新目录时先运行 `scripts/pull_symbol_directory.py`。指定日重算可加日期：
+此命令只重新生成候选与行情特征并分类，不下载Daily/split；财报Tag由正式服务加载财报缓存后应用。仅修改候选配置时，无需重新获取证券目录；需要更新目录时先运行 `scripts/pull_symbol_directory.py`。指定日重算可加日期：
 
 ```bash
 .venv/bin/python -m data_service scan --date 2026-10-05
@@ -126,8 +126,8 @@ Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，�
 - Regular到达/穿越后价格线立即变灰，拖动重新激活；Symbol 未读波浪在任意方式选图或图表更新时清除，两者独立。Focus/Holdings未读导航保留Tag筛选，快捷键见[List交互](docs/list-interactions.md#未读-alert-导航)。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
-- Scan：Discover/Focus/Excluded与日期、Refresh同排，35项形态Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组Top75 RFL排名取并集；Close严格大于$5。候选、当日人工Discover、Focus与有效Hidden均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。直接操作当前选中 symbol，快捷键与行为见 [List 交互](docs/list-interactions.md)。历史日期名单只读；Refresh 跳过已准备数据但重新分类名单。
-- Focus跨日保留，入选仍需人工确认；Surf/Bounce只负责分组。机器Excluded仅显示当天候选的Broken/Extended/Under-50结果，不保存机器成员身份。Focus仍接受每日自动淘汰，非候选淘汰后退出当前名单。手动Hidden保留七个自然日；到期仅当天候选重新分类。新入section放队首。当日Pin/Unpin支持多只与拖动，不改 section，显式 Refresh 或新完成日清空；操作反馈见 List 交互。
+- Scan：Discover/Focus/Excluded与日期、Refresh同排，36项形态/财报Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组Top75 RFL排名取并集；Close严格大于$5。候选、当日人工Discover、Focus与有效Hidden均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。直接操作当前选中 symbol，快捷键与行为见 [List 交互](docs/list-interactions.md)。历史日期名单只读；Refresh 跳过已准备数据但重新分类名单。
+- Focus跨日保留，入选仍需人工确认；Surf/Bounce只负责分组。机器Excluded仅显示当天候选的In 14 Days/Broken/Extended/Under-50结果，不保存机器成员身份。Focus仍接受每日自动淘汰，非候选淘汰后退出当前名单。手动Hidden保留七个自然日；到期仅当天候选重新分类。新入section放队首。当日Pin/Unpin支持多只与拖动，不改 section，显式 Refresh 或新完成日清空；操作反馈见 List 交互。
 - 共用Daily日 K：所有图使用统一默认bar spacing；Daily按近期收盘锚点与统一线性百分比比例等比缩放，右上角重置本图，R重置全部可见图，按住F临时看一年全貌。EMA10/20、SMA50、OHLC/Range、ADR20/MDV20、成交额随十字线切换（tooltip保留股数）。常规可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加SDK活跃日 K。背景、显示与集中人工参数只在 [Chart UI / Daily setup scale](docs/chart-ui.md#daily-setup-scale) 维护。
 - Monitor：5m/15m/30m/1h/2h、SMA65、交易日联动、实时行情；当天SDK candle先显示，官方closed随后校验覆盖，图表与盘中指标共用最新序列。同日重启复用已确认历史，ADR随Quote计算，分钟量比逐股独立就绪；缓存与准备时机见Longbridge数据要求。
 - Search 和 section 的 + 共用内联输入；Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info，确认后才保存。Scan全局搜索新股加入当日Discover置顶，普通重启保留，显式 Refresh 或新交易日清理；需要跨日关注时使用现有移入Focus操作。快捷键和新增位置见 [List 交互](docs/list-interactions.md)。
@@ -157,7 +157,7 @@ reconcile是有界真实近期窗口初始化，verify不联网。live验收需�
 | POST /v1/mode | `{"mode":"scan"}` 或 `{"mode":"monitor"}` |
 | POST /v1/scan | 选择日期`{"date":"D"}`；补齐并打开最新可用日`{"generate":true}`；指定日重算只用 CLI |
 | POST /v1/preferences | 同步保存完整Tag/显示偏好 |
-| GET /v1/filter-catalog | 唯一38字段目录 |
+| GET /v1/filter-catalog | 唯一36字段目录 |
 | POST /v1/list | 查询、新增、删除、拖动、当日置顶/取消/置顶区调序；两模式共用三列表/主section移动及当日Tag补充 |
 | GET /v1/chart?symbol=PAYS.US&timeframe=2h | 只读图表；Scan只含Daily |
 | GET /v1/universe、/v1/quotes、/v1/bars、/v1/readiness | Monitor诊断 |

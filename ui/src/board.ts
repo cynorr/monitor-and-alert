@@ -28,7 +28,7 @@ export function listSections(scan: boolean, list: string, tags: Tag[]): ListSect
         .concat({ list: name, id: 'unclassified', name: 'Unclassified', key: `${name}:unclassified` });
     if (!scan) return sections('focus');
     if (list !== 'excluded') return sections(list);
-    return ['broken', 'extended', 'under50', 'hidden'].map(id => ({ list, id, name: id === 'under50' ? 'Under-50' : id[0].toUpperCase() + id.slice(1), key: `${list}:${id}` }));
+    return ['earnings', 'broken', 'extended', 'under50', 'hidden'].map(id => ({ list, id, name: id === 'earnings' ? 'In 14 Days' : id === 'under50' ? 'Under-50' : id[0].toUpperCase() + id.slice(1), key: `${list}:${id}` }));
 }
 
 export function growthValue(value: unknown) {

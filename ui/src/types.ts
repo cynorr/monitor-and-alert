@@ -96,6 +96,7 @@ export type Ticker = {
     close?: number | null;
     adr20?: number | null;
     mdv20?: number | null;
+    days_to_earnings?: number | null;
 };
 export type View = {
     type?: string;

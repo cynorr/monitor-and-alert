@@ -77,9 +77,9 @@ test('scan progress hides Ready and shows only target-date preparation or errors
     assert.equal(scanProgress(state).title, state.error);
 });
 
-test('all 35 conditions have unique fields and numeric slider stops', () => {
-    assert.equal(catalog.length, 35);
-    assert.equal(new Set(catalog.map(field => field.key)).size, 35);
+test('all 36 conditions have unique fields and numeric slider stops', () => {
+    assert.equal(catalog.length, 36);
+    assert.equal(new Set(catalog.map(field => field.key)).size, 36);
     for (const field of catalog.filter(field => field.type === 'number')) {
         const values = sliderValues(field, [], {});
         assert.ok(values.length > 1 && values.includes(field.default));
@@ -146,8 +146,9 @@ test('setup sections preserve Tag order; renamed negative and helper labels rema
     ];
     assert.deepEqual(listSections(true, 'focus', tags).map(section => section.id), ['first','second','unclassified']);
     const excluded = listSections(true, 'excluded', tags);
-    assert.deepEqual(excluded.map(section => section.id), ['broken','extended','under50','hidden']);
-    assert.equal(excluded[2].name, 'Under-50');
+    assert.deepEqual(excluded.map(section => section.id), ['earnings','broken','extended','under50','hidden']);
+    assert.equal(excluded[0].name, 'In 14 Days');
+    assert.equal(excluded[3].name, 'Under-50');
     assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus']);
     assert.equal(sectionKey({ status: 'focus', section: 'second', tags: ['first','second'] }), 'focus:second');
     assert.equal(tagRole(tags[1]), 'extended');

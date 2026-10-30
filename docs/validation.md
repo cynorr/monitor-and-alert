@@ -1,11 +1,31 @@
 # 验证记录
 
+## 2026-10-30：In 14 Days 财报排除
+
+环境：本机macOS、Python3.13.1、TypeScript5.9.3；使用正式2026-10-29 Massive截面、当前Tag/人工名单及Nasdaq真实财报SQLite/原始响应。定向测试只写临时名单/财报库，不构造Mock行情或财报，不调用供应商接口；没有全量或全链路测试。
+
+- 新增纯日期算子days_to_earnings及36字段目录中的Earnings条件；空日期返回None/JSON null，按当前ET自然日计算。日期原值继续使用独立财报库，无新增表/列、999替代值或历史截面写入。图表和名单共用next_earnings读取，未发布且不早于当前日期的最近日程才为下一次事件。
+- AdditionalInfo在缓存成功加载、单日财报提交/内存更新成功后通知Workbench；Workbench原有循环检测ET日期变化，统一通过list_snapshot补入候选与当前名单成员特征并重分类。保留成员没有当日bar时只补symbol、非候选身份及日期特征，不编造行情。继承Hidden/人工保留与Focus淘汰仍用原规则，不重排候选、不重建bar特征，也不执行Refresh的人工清理。
+- 5项定向用例通过，最终1.07秒：真实财报日的0/14/15天边界与空值、实际缓存加载后的优先级/多Tag重叠及缺失不排除、真实原始单日响应提交后自动分类/重新加载、原循环跨ET日从15天进入14天且不获取数据、当前保存Tag条件保真。原始snapshot内容、排名和源scan.json保持不变；机器Excluded仍不保存成员身份。日期边界使用受控时钟，不将其记录为真实跨日运行证据。
+- npm run build --prefix ui、修改Python语法检查与git diff --check通过。同步维护现有前端用例中的字段数量与section顺序，但没有扩大前端测试；未做浏览器、全部行情周期、真实跨日长跑、交易或Alert验证。
+- 正式服务按原Trade参数重启为PID48683，并经现有preferences保存接口新增In 14 Days（role=earnings，min=0、max=14）；原有七个Tag、选择偏好和模式保留。最高机器优先级为earnings → broken → extended → under50，使用现有label图形默认外观，不新增图标系统。实际GET核对8个Tag、36项条件、名单中的可空特征字段，workspace_error为空、Quote CONNECTED、Massive Ready；正式原始Scan截面逐字核对未变。没有发送交易请求或重置人工名单。
+- 当前产品/数据/开发/UI文档及根、数据、Additional Info、UI的AGENTS同步；CLI继续只处理行情截面，财报分类由正式Workbench加载成功缓存后应用。
+
+## 2026-10-30：Tag 条件保存与凭证读取简化
+
+环境：本机macOS、现有Python虚拟环境、正式2026-10-29 Scan截面、保存的Tag/人工名单与本机凭证。只验证本轮清理涉及的读取、保存条件保真及名单分类/发布，不构造Mock、不运行全量或全链路测试。
+
+- 核对上次提交没有新增Market专用拒绝函数，原通用Tag校验会因目录删字段而拒绝。现删除整段重复的条件字段、规则结构、数值类型/有限值/上下界及选项枚举校验和FIELDS映射；条件由前端唯一目录生成，后端原样保存。既有Tag数量、命名、用途、外观和当前选择约束保留。
+- 删除统一凭证读取中新增的分组类型、字段字符串类型及非空检查，直接读取约定JSON字段。三家真实凭证均可按原值读取；未输出凭证值。Scan配置正常加载，未改候选规则、行情数据校验或交易约束。
+- 删除注入未知/已移除字段并断言拒绝的测试。使用现有真实偏好、截面与人工名单的三项定向用例通过（0.70秒），覆盖条件值保留、规则重分类与实际名单发布/特征范围；Python语法与git diff --check通过。没有修改TypeScript，不重复前端构建。
+- 正式后台重启为PID46685，恢复原Trade模式及2026-10-29日期；服务running、Quote CONNECTED、Massive Ready、持仓后台运行，workspace_error为空，偏好文件内容未变。未提交Tag修改、Alert或交易操作。
+
 ## 2026-10-30：统一 MDV20、Scan 基础筛选与配置入口
 
 环境：本机macOS、Python3.13.1、TypeScript5.9.3；使用正式Massive日库、官方ETF目录、保存的Tag规则与人工workspace。验证只使用真实数据及其临时副本，没有构造Mock行情或发送交易写请求。
 
 - 共用日线指标改为turnover最近最多20根完成记录的中位数，缺金额仍返回空；Scan、日图summary、名单和前端使用同一个mdv20字段。基础规则集中config/scan.json：非ETF、至少50根有效完成日K、MDV20≥15M、ADR20≥4%、Close严格>5，然后在完整合格集合内排名一次，三个RFL周期Top75取OR；Tag分类不重排或补位。35项形态目录不包含Market条件，旧均值计算/字段与独立展示配置加载链路删除。
-- 7项真实数据定向用例通过、6项无关用例未运行。独立验证20条成交额排序中间两项均值、共享Daily summary与Scan一致、ADR公式、完整合格Universe和稳定排名、Top75 OR、过滤后不合格行无名次、候选/保留成员feature scope、Tag拒绝基础字段及名单发布/分类。首次4项核心验证也通过；未执行全项目或全链路测试。npm run build --prefix ui通过，Python源码只做语法检查，没有执行无关测试。
+- 7项真实数据定向用例通过、6项无关用例未运行。独立验证20条成交额排序中间两项均值、共享Daily summary与Scan一致、ADR公式、完整合格Universe和稳定排名、Top75 OR、过滤后不合格行无名次、候选/保留成员feature scope及名单发布/分类。首次4项核心验证也通过；未执行全项目或全链路测试。npm run build --prefix ui通过，Python源码只做语法检查，没有执行无关测试。
 - 直接清理21份旧派生截面，保留35份原dated workspace，逐文件内容核对未改写。正常准备一次最新成熟日2026-10-29：原始Daily/split完成，SQLite因输入更新按原策略重建（578份raw、16,521只历史证券，约71.52秒）；新截面12,597只当日证券、649只基础合格、135只候选、149只完整特征，筛选2.463秒、特征1.581秒、总计4.043秒。当前仅保留该最新截面，不提供旧日期兼容字段。
 - 三份本机凭证文件合并为config/credentials.json，三分组按需读取，真实字段仅在本地验证结构与非空、未输出值；文件权限0600、Git忽略，不进入UI静态目录。CLI只保留一个凭证路径参数。Schwab Keychain保持原样。根目录旧workspace删除，模拟器改为复制最新dated workspace至临时目录；未运行模拟器。
 - 正式服务PID41664按原Trade启动参数恢复，再恢复原先的Scan展示。只读health、名单和单只ACN.US日图：2026-10-29、Massive Ready、Quote CONNECTED、workspace_error为空，SnapTrade后台任务运行；页面Discover52、Focus23、Excluded70（含持仓屏蔽），ACN图表与名单MDV20均为1,460,490,383.3773513。没有为验证提交或修改Schwab订单，也未验收全部行情周期/账户链路。

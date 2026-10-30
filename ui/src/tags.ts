@@ -1,6 +1,6 @@
 import type { Filters } from './filters.js';
 import { tagAppearance, type TagAppearance } from './tag-appearance.js';
-export type TagRole = 'setup' | 'extended' | 'broken' | 'under50' | 'label';
+export type TagRole = 'setup' | 'earnings' | 'extended' | 'broken' | 'under50' | 'label';
 export type Tag = { id: string; name: string; filters: Filters; role?: TagRole; appearance?: TagAppearance };
 export function tagRole(tag: Tag): TagRole {
     if (tag.role) return tag.role;

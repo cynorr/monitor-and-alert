@@ -88,28 +88,35 @@ class AdditionalInfo:
         self.progress = None
         self.wakeup = asyncio.Event()
         self.force = False
+        self.on_earnings_change = None
 
     async def load(self):
         self.companies, self.days, self.events, self.metadata, self.day_symbols = await asyncio.to_thread(self.store.load)
         self.errors['cache'] = None
         self.revision += 1
+        if self.on_earnings_change:
+            self.on_earnings_change()
 
     def state(self):
         return {'enabled': self.enabled, 'running': self.running or self.force, 'progress': self.progress,
                 'companies_updated_at': self.metadata.get('companies_updated_at'),
                 'earnings_updated_at': max(self.days.values(), default=None), 'errors': dict(self.errors)}
 
+    def next_earnings(self, symbol, today):
+        return min((event for event in self.events.get(symbol, [])
+                    if not event['reported'] and event['date'] >= today),
+                   key=lambda event: event['date'], default=None)
+
     def info(self, symbol):
         today = datetime.fromtimestamp(self.now(), ET).date().isoformat()
         company = self.companies.get(symbol, {})
         events = self.events.get(symbol, [])
         reported = [event for event in events if event['reported'] and event['date'] <= today]
-        upcoming = [event for event in events if not event['reported'] and event['date'] >= today]
         def brief(event):
             return {key: event[key] for key in ('date', 'session', 'fiscal_period')} if event else None
         return {'symbol': symbol, **{key: company.get(key) for key in ('company_name', 'sector', 'industry', 'market_cap')},
                 'earnings': {'last': brief(max(reported, key=lambda event: event['date'], default=None)),
-                             'next': brief(min(upcoming, key=lambda event: event['date'], default=None))},
+                             'next': brief(self.next_earnings(symbol, today))},
                 'companies_updated_at': self.metadata.get('companies_updated_at'),
                 'earnings_updated_at': max((self.days[event['date']] for event in events), default=None),
                 'server_time': int(self.now())}
@@ -175,6 +182,8 @@ class AdditionalInfo:
                 self.day_symbols[day] = symbols
                 self.errors['earnings'] = None
                 self.revision += 1
+                if self.on_earnings_change:
+                    self.on_earnings_change()
             else:
                 if earnings_dates is None and weekly_due:
                     updated = stamp(self.now())

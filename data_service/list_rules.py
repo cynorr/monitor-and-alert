@@ -5,7 +5,7 @@ import math
 from .preferences import tag_role
 from .workspace import is_hidden, migrate_workspace
 
-NEGATIVE_ROLES = ('broken', 'extended', 'under50')
+NEGATIVE_ROLES = ('earnings', 'broken', 'extended', 'under50')
 
 
 def matches_filters(row, filters):
