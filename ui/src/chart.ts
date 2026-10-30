@@ -69,7 +69,7 @@ export class Panel {
         const colors = { ema10: palette.blue, ema20: palette.yellow, [daily ? 'sma50' : 'sma65']: palette.red };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-        this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
+        this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'custom', minMove: .01, formatter: (value: number) => '$' + compact(value) }, priceLineVisible: false, lastValueVisible: false }, 1);
         this.chart.panes()[0].setStretchFactor(1 - VOLUME_PANE_RATIO);
         this.chart.panes()[1].setStretchFactor(VOLUME_PANE_RATIO);
         if (daily) this.dailyView = new DailyChartView(this);
@@ -90,12 +90,15 @@ export class Panel {
         observer.observe($(id + '-chart'));
         this.chart.subscribeCrosshairMove(param => {
             const candle = param.seriesData.get(this.candles) as CandlestickData | undefined;
-            // The library supplies the time; the original row owns Vol and its comparison.
+            // The library supplies the time; the original row owns turnover and its comparison.
             const time = candle ? Number(candle.time) : undefined;
             const row = time === this.active?.time ? this.active ?? undefined : this.rows.find(row => row.time === time);
             this.showHover(row);
             // Link the pointer's value, never the candle close or histogram value.
             if (param.sourceEvent) {
+                const crosshair = this.chart.options().crosshair;
+                $(id + '-chart').classList.toggle('chart-inspecting', !!param.point && !!(this.rows.length || this.active) &&
+                    crosshair.mode !== L.CrosshairMode.Hidden && (crosshair.vertLine.visible || crosshair.horzLine.visible));
                 const paneIndex = param.paneIndex ?? 0;
                 const series = paneIndex === 1 ? this.volume : this.candles;
                 const price = param.point ? series.coordinateToPrice(param.point.y) : null;
@@ -105,15 +108,19 @@ export class Panel {
         this.chart.subscribeClick(param => { const row = param.seriesData.get(this.candles) as CandlestickData | undefined; if (row)
             this.onSelect({ ...row, time: Number(row.time), volume: null }); });
         $(id + '-chart').addEventListener('mouseleave', () => {
+            $(id + '-chart').classList.remove('chart-inspecting');
             this.showHover();
             this.onHover();
         });
-        $(id + '-latest').addEventListener('click', () => {
-            if (this.dailyView) this.dailyView.resetLatest();
-            else this.chart.timeScale().scrollToRealTime();
-            const latest = this.active ?? this.rows.at(-1);
-            if (latest) this.onSelect(latest);
-        });
+        $(id + '-latest').addEventListener('click', () => this.resetLatest());
+    }
+    resetLatest() {
+        if (this.dailyView) this.dailyView.resetLatest();
+        else {
+            this.chart.timeScale().applyOptions({ barSpacing: BAR_SPACING });
+            this.chart.priceScale('right').applyOptions({ autoScale: true });
+            this.chart.timeScale().scrollToPosition(1, false);
+        }
     }
     reset(key: string) {
         if (this.key === key)
@@ -127,6 +134,7 @@ export class Panel {
         this.setQuotePrice();
         this.fitted = false;
         this.hoveredTime = undefined;
+        $(this.id + '-chart').classList.remove('chart-inspecting');
         this.clearLinkedPrice();
         this.chart.clearCrosshairPosition();
         this.candles.setData([]);
@@ -158,7 +166,7 @@ export class Panel {
         if (current) { current.price = price; current.line.applyOptions(options); }
         else this.quotePrice = { line: this.candles.createPriceLine(options), price };
     }
-    histogram(row: Row) { return row.volume == null ? { time: row.time as UTCTimestamp } : { time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? palette.candleUp + '99' : palette.candleDown + '99' }; }
+    histogram(row: Row) { return row.turnover == null ? { time: row.time as UTCTimestamp } : { time: row.time as UTCTimestamp, value: row.turnover, color: row.close >= row.open ? palette.candleUp + '99' : palette.candleDown + '99' }; }
     render(data: ChartData) {
         const next = data.active;
         const rebuild = data.bars !== undefined || this.active?.time !== next?.time;
@@ -222,12 +230,14 @@ export class Panel {
     }
     showCandleInfo(row?: Row) {
         const volume = $(this.id + '-volume');
-        const comparison = row?.volume_comparison;
+        const comparison = row?.turnover_comparison;
         const percent = comparison?.percent;
-        volume.textContent = `Vol ${compact(row?.volume)} · 5D Avg ${percent == null ? '—' : Math.trunc(percent) + '%'}`;
-        volume.title = row?.time === this.active?.time && row ? (row.volume == null ? 'Current candle volume unavailable'
-            : this.daily ? 'Current daily cumulative volume' : 'Volume for the current intraday candle') : 'Volume for this candle';
-        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${compact(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average.`
+        const dollars = (amount?: number | null) => amount == null ? '—' : '$' + compact(amount);
+        volume.textContent = `Dollar Vol ${dollars(row?.turnover)} · 5D Avg ${percent == null ? '—' : Math.trunc(percent) + '%'}`;
+        volume.title = row?.time === this.active?.time && row ? (row.turnover == null ? 'Current candle turnover unavailable'
+            : this.daily ? 'Current daily cumulative turnover' : 'Turnover for the current intraday candle') : 'Turnover for this candle';
+        volume.title += `\nShares ${compact(row?.volume)}`;
+        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${dollars(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average turnover.`
             : '\nPrevious 5 trading days: comparison unavailable.';
         const node = $(this.id + '-ohlc');
         if (!row) { node.textContent = '—'; return; }

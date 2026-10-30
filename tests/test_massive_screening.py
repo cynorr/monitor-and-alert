@@ -23,7 +23,7 @@ def market(tmp_path):
         for ticker, count, close in specs:
             db.executemany('INSERT INTO bars VALUES (?,?,?,?,?,?,?,?,?)', [
                 (ticker + '.US', '1d', calendar.grid(day, '1d')[0][0], close, close * 1.1,
-                 10, close, 1_000_000, None) for day in days[-count:]])
+                 10, close, 1_000_000, close * 1_000_000) for day in days[-count:]])
         # A future record cannot give YOUNG its fiftieth sample at the cutoff.
         db.execute('INSERT INTO bars VALUES (?,?,?,?,?,?,?,?,?)',
                    ('YOUNG.US', '1d', calendar.grid(date(2026, 10, 2), '1d')[0][0], 90, 99, 10, 90, 1_000_000, None))

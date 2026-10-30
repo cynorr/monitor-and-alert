@@ -1,5 +1,26 @@
 # 验证记录
 
+## 2026-10-30：Reset 按钮隔离与 Trade 点击遮挡修复
+
+环境：正式Trade页、已有真实行情、隔离Chrome与Lightweight Charts 5.2.0；仅前端修改和构建，未重启后端、创建Alert或发送交易写请求。
+
+- 复现Daily Reset调用onSelect，进而通过交易日联动移动Intraday视口；同时命中测试发现Intraday按钮中心实际落在trade-ticket空白层。移除Reset的candle选中调用，并只提高Trade Intraday按钮点击层级，不改控件位置或票据布局。
+- 真实浏览器把双图移到历史并设置不同间距：点击Daily后Intraday的逻辑范围、间距和滚动位置完全不变；点击Intraday后Daily完全不变。两图各自回到5px及最新位置。R仍同时重置两图，Trade按钮中心命中intraday-latest，浏览器无脚本错误。
+- 前端构建、既有Chart定向6项及git diff --check通过。Chart唯一规范与开发职责补清Reset不触发选日联动；未扩展其他功能或全量测试。
+
+## 2026-10-30：成交额显示、等宽图表组与统一 Reset
+
+环境：本机 macOS、Python 3.13、TypeScript 5.9.3、Lightweight Charts 5.2.0、隔离 Chrome，正式 127.0.0.1:8765。Massive 使用现有已完成日2026-10-28，Longbridge 使用已有正式缓存；没有新增模拟行情。为更新计算短暂停止服务，本地CLI重算最新Scan，随后恢复原先的Trade模式及正常后台；没有提交交易、改动止损或创建Alert。
+
+- 前端构建通过；Chart定向6项、后端Chart中ADV缺失/修正与SDK覆盖3项、特征/候选5项和Scan筛选1项通过，共15项。只更新相关既有用例输入与预期，不运行全量回归。
+- 真实Massive的JBDI/YMAT/BNC/BKYI/DXC分别核对最近20根turnover均值与前五交易日成交额比较。ADV20依次为27.23M/35.50M/5.52M/30.14M/70.24M，均与独立统计一致；JBDI最后一日成交额133500.29、5D比较50.785%（UI截取50%）。Longbridge的ABCL/AMC/ASAN真实5m金额和五日参考均有效；原始VolumeHistory区间结果仍等于股数之和，不是金额之和。
+- 本地维护命令重算2026-10-28共12613只，得到86个候选，用时约6.23秒，没有下载行情。最新Scan已采用新ADV口径；旧日期快照保留生成时结果，没有批量重算，需统一时使用既有scan --date入口。
+- 正式页面真实样本的Daily/Intraday柱值分别等于其turnover；读数为Dollar Vol $2.52M与$367.67K，tooltip保留股数，5D Avg按金额计算。公开图表API核对金额柱，没有引用close估算。
+- Trade双图宽度均为733.03px，拖动图表组/List分隔条后均为693.03px；Monitor仍等宽，Scan只显示单图，旧双图中间把手和键盘焦点已删除。未改变卡片、头部或交易票据样式。
+- R同时恢复两图5px间距及最新位置；F预览后R清除预览状态，松开F不会还原旧视图。搜索输入R不触发重置；按钮复用同一方法重置本图。普通探查指针实测crosshair，按钮仍为pointer；可编辑线继续由原生primitive cursor覆盖，没有发起真实拖价。
+- 本轮不改变Intraday常规价格比例、独立纵轴缩放或平移。量能报警、等级和排序继续使用原volume；没有迁移实时金额报警。未覆盖Regular实时换桶、全部周期、实际交易操作或所有股票，历史/缓存验证不作为实时金额报警鲁棒性证据。
+- 背景、成交额/5D/ADV缺失语义、R及指针、等宽布局同步唯一文档入口；旧股数柱、close×volume ADV和相邻图表拖动要求已替换。vendor未改，git diff --check通过。
+
 ## 2026-10-29：Daily setup 统一线性比例尺
 
 环境：本机 macOS、TypeScript 5.9.3、Lightweight Charts 5.2.0、隔离 Chrome；真实 `runtime/massive/daily.sqlite3`，截至 2026-10-28。临时 127.0.0.1:18766 服务使用正式 Workbench/HTTP/Scan 读取和正式 UI 模块，workspace/Alert 库为现有文件的临时副本；未启动券商、账户或行情下载后台，未读取凭证、修改正式名单或发送交易请求。没有生成模拟行情。
@@ -295,7 +316,7 @@
 
 证据：[历史规则核对](</var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/monitor-volume-history-_3n791tg/report.json>)、[实时验收](</var/folders/92/4bfk_p7n05ld409p32hn7k_m0000gn/T/monitor-volume-live-ji10o50l/report.json>)、[真实页面截图](/tmp/monitor-volume-comparison-2026-10-08.png)。
 
-未覆盖：整日持续运行、移动端、真实开盘/收盘切换；半天与 DST 用真实历史验证，不表示本轮经历了对应 live 时段。未运行全量离线回归。需求唯一入口见 [Volume comparison](chart-ui.md#volume-comparison)。
+未覆盖：整日持续运行、移动端、真实开盘/收盘切换；半天与 DST 用真实历史验证，不表示本轮经历了对应 live 时段。未运行全量离线回归。需求唯一入口见 [Turnover comparison](chart-ui.md#turnover-comparison)。
 
 ## 2026-10-08：Longbridge 六周期 SDK 实时 candle
 

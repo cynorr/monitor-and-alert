@@ -49,8 +49,8 @@ function applyList(data: ListState) {
     const nextMode = data.app_mode ?? 'monitor';
     const changed = nextMode !== appMode || (nextMode === 'scan' && data.date !== scanDate);
     appMode = nextMode; scanDate = data.date ?? '';
+    $('intraday-panel').hidden = $('chart-gap').hidden = appMode === 'scan';
     layout.setMode(appMode);
-    $('intraday-panel').hidden = $('divider-0').hidden = appMode === 'scan';
     document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button => {
         button.classList.toggle('active', button.dataset.appMode === appMode);
         button.hidden = button.dataset.appMode === 'trade' && !data.trade_enabled;
@@ -203,6 +203,11 @@ document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => butt
 document.addEventListener('keydown', event => {
     if (event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
         (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
+    if (!event.metaKey && event.code === 'KeyR') {
+        event.preventDefault();
+        if (!event.repeat) { daily.resetLatest(); if (appMode !== 'scan') intraday.resetLatest(); }
+        return;
+    }
     const key = event.metaKey ? event.key.toLowerCase()
         : event.key === 'Home' ? 'u' : event.key === 'End' ? 'g' : '';
     if (!event.metaKey && key) event.preventDefault();

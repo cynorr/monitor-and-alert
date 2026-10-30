@@ -14,13 +14,13 @@ def volume_key(row, timeframe):
     return local.date(), 0 if timeframe == '1d' else local.hour * 60 + local.minute
 
 
-def volume_context(rows, timeframe):
-    return {'history': {volume_key(row, timeframe): row['volume'] for row in rows
-                        if row['volume'] is not None}, 'baselines': {}}
+def turnover_context(rows, timeframe):
+    return {'history': {volume_key(row, timeframe): row['turnover'] for row in rows
+                        if row.get('turnover') is not None}, 'baselines': {}}
 
 
-def volume_comparison(row, timeframe, calendar, context):
-    """Compare one candle with available matching slots in the prior five sessions."""
+def turnover_comparison(row, timeframe, calendar, context):
+    """Compare candle turnover with matching slots in the prior five sessions."""
     day, slot = key = volume_key(row, timeframe)
     if key not in context['baselines']:
         history = context['history']
@@ -29,7 +29,8 @@ def volume_comparison(row, timeframe, calendar, context):
                                      'samples': len(samples)}
     baseline = context['baselines'][key]
     average = baseline['average']
-    percent = row['volume'] / average * 100 if row['volume'] is not None and average else None
+    amount = row.get('turnover')
+    percent = amount / average * 100 if amount is not None and average else None
     return {**baseline, 'percent': percent}
 
 
@@ -66,10 +67,10 @@ def add_indicators(history):
 
 
 def adr_adv(history):
-    high, low, close, volume = (np.asarray(history[name], dtype=float)
-                                for name in ('high', 'low', 'close', 'volume'))
+    high, low = (np.asarray(history[name], dtype=float) for name in ('high', 'low'))
+    amounts = np.asarray(history.get('turnover', []), dtype=float)[-20:]
     return {'adr20': ((high[-20:] - low[-20:]) / low[-20:] * 100).mean(),
-            'adv20': (close[-20:] * volume[-20:]).mean()}
+            'adv20': float(amounts.mean()) if len(amounts) == min(20, len(high)) and len(amounts) and np.isfinite(amounts).all() else None}
 
 
 def return_from_low(history):
@@ -117,5 +118,5 @@ def daily_summary(bars, calendar, now):
     if not rows:
         return {'adr20': None, 'adv20': None, 'samples': 0}
     metrics = adr_adv({'high': [b.high for b in rows], 'low': [b.low for b in rows],
-                             'close': [b.close for b in rows], 'volume': [b.volume for b in rows]})
+                             'turnover': [b.turnover for b in rows]})
     return {key: metrics[key] for key in ('adr20', 'adv20')} | {'samples': len(rows)}

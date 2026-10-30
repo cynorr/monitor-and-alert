@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 from .calendar import ET
-from .indicators import series, preview, daily_summary, volume_context, volume_comparison
+from .indicators import series, preview, daily_summary, turnover_context, turnover_comparison
 from .storage import Bar, bar_row
 
 
@@ -53,14 +53,14 @@ class ChartCache:
                       if datetime.fromtimestamp(ts, ET).date() == today and self.calendar.bar_end(ts, tf) <= now}
             merged.update((bar.ts, bar_row(bar)) for bar in self.store.window(symbol, tf))
             rows = [dict(merged[ts]) for ts in sorted(merged)]
-            volume = volume_context(rows, tf)
+            amounts = turnover_context(rows, tf)
             for row in rows:
-                row['volume_comparison'] = volume_comparison(row, tf, self.calendar, volume)
+                row['turnover_comparison'] = turnover_comparison(row, tf, self.calendar, amounts)
             previous = self.history.get(key)
             if previous is None or previous[1] != rows:
                 revision = previous[0] + 1 if previous else 1
                 base = series(rows, sma_period=50 if tf == '1d' else 65)
-                base['volume_context'] = volume
+                base['turnover_context'] = amounts
                 bars = [Bar(symbol, tf, row['time'], row['open'], row['high'], row['low'],
                             row['close'], row['volume'], row.get('turnover')) for row in rows]
                 self.history[key] = revision, rows, base, bars
@@ -76,7 +76,7 @@ class ChartCache:
         revision, rows, base, _ = self.closed(symbol, tf)
         active = self.forming(symbol, tf, now)
         if active:
-            active['volume_comparison'] = volume_comparison(active, tf, self.calendar, base['volume_context'])
+            active['turnover_comparison'] = turnover_comparison(active, tf, self.calendar, base['turnover_context'])
         result = {'symbol': symbol, 'timeframe': tf, 'revision': revision,
                   'active': active, 'indicator_preview': preview(base, active)}
         if known_revision != revision:

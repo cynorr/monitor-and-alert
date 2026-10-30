@@ -39,13 +39,13 @@ def test_turnover_and_indicator_invalidation(tmp_path, cal):
         rows = [Bar('PAYS.US', '1d', cal.grid(d, '1d')[0][0], 10, 12, 8, 11, 100, 1234) for d in days]
         store.upsert(rows, now)
         cache = ChartCache(store, cal)
-        assert cache.summary('PAYS.US', now)['adv20'] == 1100
+        assert cache.summary('PAYS.US', now)['adv20'] == 1234
         assert cache.summary('PAYS.US', now)['adr20'] == 50
         before = cache.closed('PAYS.US', '1d')[2]['ema'][10]
         old = rows[-1]
         store.upsert([Bar(old.symbol, old.timeframe, old.ts, 10, 21, 8, 20, 100, None)], now)
         assert cache.closed('PAYS.US', '1d')[2]['ema'][10] != before
-        assert cache.summary('PAYS.US', now)['adv20'] == 1145
+        assert cache.summary('PAYS.US', now)['adv20'] is None
     finally:
         store.close()
 

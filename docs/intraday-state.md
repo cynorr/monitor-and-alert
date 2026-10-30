@@ -67,6 +67,8 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 
 ## 展示与 In Play
 
+图表柱形、5D Avg和ADV20使用turnover不改变本模块：CumVol/LocalVol、量能等级、排序及现有报警仍按股数volume计算。金额量比与股数量比的语义不同，本轮不做自动替代或缺失时跨口径回退。
+
 - 只有一套默认名单展示。删除Grouped/Dynamic按钮、模式状态和浏览器偏好；当前Focus在Scan/Monitor共用In Play自动聚集，Regular外或历史Scan不聚集。
 - 顺序为Pinned → In Play → 原有Surf/Bounce/Unclassified。In Play中为亮蓝 → 浅蓝 → 其他高于open；Pinned始终按人工Pin顺序，成员只出现一次。真实section、Tags、人工顺序不改写，降级后归位；Tags继续表达原分类。
 - In Play复用现有section的标题、计数、折叠与空组隐藏。空section整个隐藏，无标题或No symbols；全表空时保留一份全局空状态。

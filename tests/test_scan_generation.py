@@ -25,7 +25,7 @@ def small_source(tmp_path, rows):
         db.executescript(BAR_SCHEMA + 'CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);')
         db.execute('INSERT INTO metadata VALUES (?,?)', ('completed_date', '2026-10-01'))
         db.executemany('INSERT INTO bars VALUES (?,?,?,?,?,?,?,?,?)',
-                       [(symbol, '1d', calendar.grid(day, '1d')[0][0], close, high, low, close, volume, None)
+                       [(symbol, '1d', calendar.grid(day, '1d')[0][0], close, high, low, close, volume, close * volume)
                         for symbol, close, high, low, volume in rows for day in days])
     atomic_json(tmp_path / 'symbol-directory.json', make_snapshot({
         row[0]: {'name': None, 'etf': False, 'test_issue': False} for row in rows}))

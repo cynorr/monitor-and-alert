@@ -1,6 +1,6 @@
 # Massive 数据要求
 
-更新：2026-10-08。本文件是 Massive 下载、证券目录、候选资格、ADR/ADV、RFL、名单完整特征和构建策略的唯一要求入口。共用 Bar 表结构见 [upstream-daily-data.md](upstream-daily-data.md)，名单生命周期见 [list-design.md](list-design.md)，图表展示见 [ui.md](ui.md)。
+更新：2026-10-30。本文件是 Massive 下载、证券目录、候选资格、ADR/ADV、RFL、名单完整特征和构建策略的唯一要求入口。共用 Bar 表结构见 [upstream-daily-data.md](upstream-daily-data.md)，名单生命周期见 [list-design.md](list-design.md)，图表展示见 [ui.md](ui.md)。
 
 ## 独立配置与处理顺序
 
@@ -42,7 +42,7 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 ## 唯一指标口径
 
 - ADR20：最近最多 20 根实际已完成记录的 `(high-low)/low × 100` 均值，单位为百分比。
-- ADV20：同一窗口的 `close × 整数 volume` 均值，单位 USD；不是平均股数，也不使用 turnover。
+- ADV20：同一窗口的 `turnover` 均值，单位 USD。金额来自同根 VWAP×未取整复权 volume；窗口内有缺失金额则 ADV20 缺失，不跳过、不向前补样本、不回退 close×volume。筛选阈值不变，改口径后通过维护 CLI 重算所需日期的特征。
 - RFL1m / 3m / 6m：分别使用最近最多 21 / 63 / 126 根实际记录的最低 low，计算 `(当日 close / 最低 low - 1) × 100`。不足完整窗口时沿用实际可用记录；候选历史资格另按上述门槛判断。
 - 只对通过全部资格与 ADR/ADV 条件的证券排名。并列按 symbol 稳定顺序 `rank(method=first)`；三个周期入选任一即成为候选。
 
@@ -60,7 +60,7 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 
 `runtime/massive/splits.json` 以 Daily 的同一成熟交易日为目标；本地覆盖包含目标日及向前两年窗口时跳过，周末/休市日不重复获取。需要获取时完整分页覆盖目标交易日向前两年窗口，替换该窗口记录并保留更早历史；核对覆盖、比例与唯一 ID 后才原子发布。不得根据候选列表缩减拆股覆盖。Massive 请求共享至少 15 秒的开始间隔；不在此轮增加类型/名称/IPO 查询。
 
-在执行日前，价格及 VWAP 乘累计 `split_from/split_to`，成交量除该因子后用 Decimal ROUND_HALF_UP 转为 SQLite 非负整数。turnover 仅由可靠同根 VWAP × 未取整的复权量得到，否则 NULL；ADV 仍采用 close × 最终整数 volume。Daily 保留 Massive 的供应商时段口径，metadata 写 `session=massive_daily`，不宣称仅 regular。与 Longbridge 不拼接历史或交叉校验，读库/计算/显示不再二次复权。
+在执行日前，价格及 VWAP 乘累计 `split_from/split_to`，成交量除该因子后用 Decimal ROUND_HALF_UP 转为 SQLite 非负整数。turnover 仅由可靠同根 VWAP × 未取整的复权量得到，否则 NULL；ADV 使用此金额，不再采用 close×整数 volume。Daily 保留 Massive 的供应商时段口径，metadata 写 `session=massive_daily`，不宣称仅 regular。与 Longbridge 不拼接历史或交叉校验，读库/计算/显示不再二次复权。
 
 ## SQLite 增量与全量重建
 

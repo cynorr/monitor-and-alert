@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-10-29. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
+Updated: 2026-10-30. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [holdings-ui.md](holdings-ui.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [holdings-data.md](holdings-data.md).
 
 ## Layout
 
@@ -11,7 +11,7 @@ Updated: 2026-10-29. This file is the UI entry point and the only current specif
 
 ## Chart UI
 
-Chart layout, colors, margins, headers, [volume and five-day comparison](chart-ui.md#volume-comparison), [Daily setup scale, coupled zoom, Reset and F overview](chart-ui.md#daily-setup-scale), linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak status hint while existing charts and valid values remain visible. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; normal visible history depends on that spacing and panel width.
+Chart layout, colors, margins, headers, [turnover and five-day comparison](chart-ui.md#turnover-comparison), [Daily setup scale, coupled zoom, Reset and F overview](chart-ui.md#daily-setup-scale), linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak status hint while existing charts and valid values remain visible. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; normal visible history depends on that spacing and panel width.
 
 ## Alert UI
 
@@ -108,8 +108,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
 | Schwab 活动订单 | 红底圆形按钮内白色 `×` | 取消指定订单；Entry/Stop 的目标规则见 Schwab Trade |
 | Trade Auto | 浅灰圆形按钮内线性 `↺` | 恢复两条参考线的自动标价；自动时灰色禁用，手动拖价后蓝色可点，无悬停说明 |
-| Daily | `↦` | Reset view & go to latest，规则见 [Daily setup scale](chart-ui.md#daily-setup-scale) |
-| Intraday | `↦` | Go to latest，回到最新可用交易日并保留缩放 |
+| Daily / Intraday | `↦` | Reset view & go to latest，重置本图；R 重置全部可见图，见 [Chart 交互](chart-ui.md#mouse-zoom-and-periods) |
 | 图表 / 名单 / Holdings 错误 | 轮廓圆圈内的 `!`，暖黄色 | 提供当前错误详情，不扩展错误判断范围；Holdings 点击详情见独立 UI 规范 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
@@ -143,8 +142,8 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 
 ### 宽度与视觉
 
-- 扣除工作区内边距和面板分隔条后，两模式 List 默认占可用面板宽度 **32%**，最小 **680px**；每个图表最小 **320px**，Monitor 双图均分剩余空间。数值统一放在 `layout.ts`，方便单点调整比例。
-- 面板分隔条和 List 数据列间距均为 **12px**。拖动只调整相邻面板并保留最小宽度；打开页面、切换模式或双击分隔条恢复默认。小窗口保持最小宽度，允许工作区整体溢出。
+- 扣除工作区内边距和间距后，List 默认占可用面板宽度 **32%**，最小 **680px**；其余空间由当前可见图表等分，一个图占满、多个图始终等宽。每个图至少 **320px**；Trade 的 Intraday 票据需要 540px，因此双图均至少 540px。分配函数按图表数量和各组件最小宽度计算，不为模式维护不同分配算法。数值统一维护在 `layout.ts`。
+- 图表之间保留 **12px** 静态间距，删除中间拖动把手、键盘焦点及调整行为。只保留图表组与 List 的 **12px** 分隔条，拖动均匀增减各图宽度；List 数据列间距不变。打开页面、切换模式或双击该分隔条恢复默认比例。持仓自然测宽仍约束 List 最小宽度；小窗口允许整体溢出，Trade 在 List 最小值下工作区至少1804px。圆角、阴影、头部、内边距、票据和内部成交量分界不变。
 - Monitor 的最小宽度也接受独立持仓内容需求，具体测量和固定顶部布局见 [Holdings UI](holdings-ui.md#位置折叠与宽度)。
 - List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Search 和一行 Filter/Tags 位于固定头部的水平分割线上方；与两图保持同一固定高度。Scan 准备状态在分割线下，仅需要时显示。名单列头在 Holdings 下方，文字位于其底部分割线上方；没有额外的 Filters/Holdings 或 section 分割线。
 - 原 Intraday 时间模块统一移到 List 右上角，与 Monitor / Scan / Trade 模式按钮垂直居中、同排显示；使用12px、#293341、26px行高和右侧12px内距。继续读取现有 view.server_time 并显示纽约时间及 ET，不新增时钟请求或定时器。

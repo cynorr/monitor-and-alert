@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-10-29。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-10-30。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 数据要求只在 [longbridge-data.md](longbridge-data.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [holdings-ui.md](holdings-ui.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -36,7 +36,7 @@
 | ui/src/scan.ts / filters.ts / tags.ts / board.ts | 日期/三列表、统一可见结果与持仓屏蔽、Tag 条件/外观草稿、分组/列定义和Scan格式化 |
 | ui/src/tag-appearance.ts | 内置轮廓图案、旧 Tag 外观默认值与共用 SVG 渲染 |
 | scripts/build_scan_mock.py | 明确指定目录的合成日 K/截面/测试名单 |
-| ui/src/chart.ts / chart-settings.ts / daily-chart-view.ts / layout.ts | 共用图表与参数、Daily 坐标策略/等比缩放/全貌预览及裁切 primitive、交易日联动、列宽 |
+| ui/src/chart.ts / chart-settings.ts / daily-chart-view.ts / layout.ts | 共用图表/成交额显示与参数、Daily 坐标策略/等比缩放/全貌预览及裁切 primitive、交易日联动、等宽图表组与List宽度 |
 | simulator/market.py / server.py | 隔离历史/Quote/时钟，复用正式流程，单一网站入口 |
 | scripts/live_check.py | 明确执行的有界 live 验收；临时库、单连接 |
 | data_service/additional_info/ / scripts/pull_additional_info.py | 独立Nasdaq公司资料/财报获取、Python清理、业务SQLite/内存缓存和后台调度；先读模块AGENTS.md |
@@ -50,9 +50,11 @@
 
 图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护默认bar spacing、volume区比例与Daily锚点/百分比比例常量；修改后npm构建并刷新，不增加设置界面。daily-chart-view.ts只负责前端Daily坐标策略：公开autoscaleInfoProvider读取当前pane高度与bar spacing，返回统一线性价格范围，均线不参与扩大范围；保留原生autoScale以关闭纵向平移。通过公开逻辑范围事件和ResizeObserver联动缩放/分区，使用公开series primitive画裁切提示。F暂存逻辑视口和间距，用已有数据预览一年，结束时恢复视图而不回滚行情；没有新网络接口、后端指标、持久化或vendor修改。背景及完整交互只维护于[Daily setup scale](chart-ui.md#daily-setup-scale)。
 
-chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。成交量计算仍只在后端。
+chart.ts保留用户缩放与历史视口，用十字线对应bar更新OHLC和Vol，刷新不覆盖悬停值；双图联动的价格/成交量值来自鼠标所在 pane 的公开 coordinateToPrice，不取 candle close/volume。有对应时间时用 setCrosshairPosition；没有对应时间时，在相应 candles/volume series 上复用一条公开 createPriceLine 来显示水平线，恢复对应时间、离开、清空或 reset 时移除。量能计算仍只在后端。
 
-成交量五日比较的唯一需求见 [Volume comparison](chart-ui.md#volume-comparison)。`calendar.previous_days` 按 candle 日期返回前五个交易日；`indicators.volume_context / volume_comparison` 为同周期建立时间槽索引及均值缓存。Monitor 在历史 revision 变化时重建，open 更新仅读取均值并计算比例；Scan Daily 复用同一函数及已有图表缓存。显示行附带 `volume_comparison: {average: number | null, samples: number, percent: number | null}`，不改 SQLite Bar。chart.ts 在公开十字线回调后按时间戳取得原始显示行，保持比较结果与 Vol 一致；前端只做整数截取和显示。
+成交额五日比较的唯一需求见 [Turnover comparison](chart-ui.md#turnover-comparison)。`calendar.previous_days` 按 candle 日期返回前五个交易日；`indicators.turnover_context / turnover_comparison` 为同周期建立金额时间槽索引及均值缓存。Monitor 在历史 revision 变化时重建，open 更新仅读取均值并计算比例；Scan Daily 复用同一函数及已有图表缓存。显示行附带 `turnover` 与 `turnover_comparison: {average: number | null, samples: number, percent: number | null}`，不改SQLite结构。chart.ts按同一时间戳选择OHLC/金额/比较结果，使用原生custom formatter显示美元刻度，tooltip保留volume。Intraday State仍直接读取原始volume，既有报警和量能排序契约不变。
+
+layout.ts以可见chart数量、各组件最小宽度和单个List比例分配宽度；chart之间是静态间距，只剩图表组/List分隔条。main.ts的无修饰R调用所有可见Panel.resetLatest，按钮复用同一方法重置本图；Reset不调用onSelect，不触发peer.reveal，F恢复状态先清除。Trade的Intraday按钮层级高于票据空白区域。十字指针仅由实际鼠标crosshair事件设置host class，原生/primitive的局部cursor优先；不读内部DOM、不覆盖拖动指针。普通Intraday缩放策略不改。
 
 chart.ts 的 syncSeries 用公开 data/update API 比较已显示数据：相同时间序列的尾部替换/追加只更新变化项，较早官方修订用 update(row, true)。只有新窗口、时间序列变化或删除点时使用 setData；正常 closed 更新不调用滚动重定位，未知 active volume 只更新 histogram 的 whitespace，不重建 candles/MA。保持 vendor 原样。
 
@@ -92,7 +94,7 @@ latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)�
 
 只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有实时active、Intraday或Ready实时状态；Daily复用同一个Panel。Workbench.scan_quote只读同一RealtimeFeed.output，最新Scan日与Monitor共用quote.latest；历史日期返回latest=null，行情K线revision不变也随WS更新报价。Panel复用一个价格轴标签，有最新报价时隐藏原closed价标签；报价选择与外观分别见Longbridge数据要求和Chart UI。
 
-indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际记录；ADV固定close×volume均值，turnover不参与该公式。指标直接消费已选来源的价格；不同供应商的结果允许不同。
+indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际已完成记录；ADV取turnover均值，窗口内任何金额缺失则为空，不跳过或回退估算。指标直接消费已选来源的数据；不同供应商结果允许不同。口径修改后用既有CLI重算最新Scan特征；历史快照保留生成时结果，需统一旧日期时显式scan --date重算，不把GET变成重算触发器。
 
 来源契约分别只在 [longbridge-data.md](longbridge-data.md) 与 [massive-data.md](massive-data.md) 维护。longbridge/client.py落实Longbridge请求口径；读取、指标和图表直接使用所属来源的数据。pandas ewm(adjust=False)仅是加权算法参数。
 

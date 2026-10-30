@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-29。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-10-30。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## Alert 与入选规则
 
@@ -78,9 +78,9 @@ Longbridge 调度、重试、恢复与窗口状态统一见 [longbridge-data.md]
 
 Intraday 初始周期按美东开盘经过时间选择，之后保留手工选择。所有 chart 使用统一、可人工调整的初始 bar spacing；常规可见历史长度随间距与面板宽度变化。Daily使用近期已完成收盘中位数锚点和统一线性百分比/间距比例，横纵等比缩放；远端历史、报价和价格线不扩大常规视图。Daily的Reset与按住F临时全貌只改变显示，历史Scan不跳日期，也不触发下载；Intraday保留原生缩放。背景、参数、周期控件、参考线和完整交互只在 [Chart UI / Daily setup scale](chart-ui.md#daily-setup-scale) 维护。
 
-所有图表的 Vol 同时显示后端计算的五交易日成交量比较；当前、历史悬停与缺失样本的统一需求只在 [Volume comparison](chart-ui.md#volume-comparison) 维护。
+所有图表下方面板显示成交额及后端计算的五交易日成交额比较，tooltip保留原始股数；显示与缺失规则只在 [Turnover comparison](chart-ui.md#turnover-comparison) 维护。Intraday State 的量比、等级、排序和现有报警继续使用原始 volume，本轮不迁移报警。
 
-两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 `close × volume` 均值；停牌/稀疏记录按实际根数取窗口，不使用 turnover 改变公式。均线样本不足时不显示该线；上下界矛盾保留官方原值，也可能体现在派生指标中。
+两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 turnover 均值；停牌/稀疏记录按实际根数取窗口，缺少成交额则 ADV20 缺失，不用 close×volume 补值。均线样本不足时不显示该线；上下界矛盾保留官方原值，也可能体现在派生指标中。
 
 跨 closed 边界和回补期间保留上一份完整图表；本周期 closed 与 open 就绪后一次更新。Daily 不依赖 5m 刷新，报价与账户后台持续运行。
 

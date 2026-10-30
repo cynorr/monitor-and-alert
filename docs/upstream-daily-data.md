@@ -1,6 +1,6 @@
 # 共用 bars 契约
 
-更新：2026-10-05。本文件只维护共用 Bar 表、来源边界与完成日契约。Longbridge 的定位、获取与缓存规则见 [longbridge-data.md](longbridge-data.md)；Massive 的获取、复权、ADR/ADV、ETF/历史过滤、独立配置和增量构建见 [massive-data.md](massive-data.md)。
+更新：2026-10-30。本文件只维护共用 Bar 表、来源边界与完成日契约。Longbridge 的定位、获取与缓存规则见 [longbridge-data.md](longbridge-data.md)；Massive 的获取、复权、ADR/ADV、ETF/历史过滤、独立配置和增量构建见 [massive-data.md](massive-data.md)。
 
 ## 路径与所有权
 
@@ -30,7 +30,7 @@ CREATE INDEX bars_by_time ON bars(timeframe, ts, symbol);
 
 统一使用 `.US` 标识。保留 Massive ticker 原始标点，不猜类别股映射。Daily ts 为交易日 America/New_York 零点转换的整数 Unix 秒，DST 由时区处理。输出 volume 必须是实际 SQLite integer；OHLC 必须正数有限，volume 非负，时间及闭合边界有效。
 
-仅上下界矛盾仍保存官方原值并追加 invalid_ohlc.jsonl，不修正、不告警、不重试。原始行与转换后行继续按各来源契约校验。turnover 允许 NULL，不影响日 K 或 ADV 计算。
+仅上下界矛盾仍保存官方原值并追加 invalid_ohlc.jsonl，不修正、不告警、不重试。原始行与转换后行继续按各来源契约校验。turnover 允许 NULL，不影响OHLC或原股数指标；相应成交额图形缺失，ADV20窗口内缺金额则该指标缺失，不填零或回退估算。
 
 ## 来源与完成状态
 

@@ -6,6 +6,7 @@ const nodes = new Map();
 function node(id) {
     if (!nodes.has(id)) nodes.set(id, {
         textContent: '', style: {}, dataset: {}, listeners: {}, hidden: false,
+        classList: { toggle() {}, remove() {} },
         addEventListener(type, handler) { this.listeners[type] = handler; },
         querySelector(selector) { return node(id + selector); },
     });
@@ -49,6 +50,7 @@ function chart() {
         },
         panes: () => panes, priceScale: () => ({ width: () => 55 }), timeScale: () => scale,
         applyOptions() {},
+        options: () => ({ crosshair: { mode: 0, vertLine: { visible: true }, horzLine: { visible: true } } }),
         subscribeCrosshairMove(handler) { this.crosshair = handler; }, subscribeClick() {},
         move(time, mouse = false, y = 88, paneIndex = 0) {
             const seriesData = new Map();
@@ -71,7 +73,7 @@ const { Panel, linkTradingDay } = await import('../public/chart.js');
 
 const at = value => Date.parse(value) / 1000;
 const first = at('2026-10-01T13:30:00Z'), latest = at('2026-10-02T13:30:00Z');
-const row = (time, volume) => ({ time, open: 10, high: 12, low: 9, close: 11, volume });
+const row = (time, volume) => ({ time, open: 10, high: 12, low: 9, close: 11, volume, turnover: volume == null ? null : volume * 10 });
 const snapshot = (bars, active = null) => ({ revision: 1, bars, active, indicators: {}, indicator_preview: {} });
 const label = panel => node(panel.id + '-volume').textContent;
 
@@ -146,13 +148,13 @@ test('hovered closed volume survives quote updates and refreshes from the same c
     const panel = new Panel('hover', true);
     panel.render(snapshot([row(first, 100), row(latest, 200)], row(latest + 300, 300)));
     panel.chart.move(first, true);
-    assert.equal(label(panel), 'Vol 100 · 5D Avg —');
+    assert.equal(label(panel), 'Dollar Vol $1K · 5D Avg —');
     panel.render({ revision: 1, active: row(latest + 300, 400), indicator_preview: {} });
-    assert.equal(label(panel), 'Vol 100 · 5D Avg —');
+    assert.equal(label(panel), 'Dollar Vol $1K · 5D Avg —');
     panel.render(snapshot([row(first, 150), row(latest, 200)], row(latest + 300, 400)));
-    assert.equal(label(panel), 'Vol 150 · 5D Avg —');
+    assert.equal(label(panel), 'Dollar Vol $1.5K · 5D Avg —');
     node(panel.id + '-chart').listeners.mouseleave();
-    assert.equal(label(panel), 'Vol 400 · 5D Avg —');
+    assert.equal(label(panel), 'Dollar Vol $4K · 5D Avg —');
 });
 
 test('price remains linked without a matching date; time and price clear independently', () => {
@@ -165,7 +167,7 @@ test('price remains linked without a matching date; time and price clear indepen
     assert.equal(intraday.candles.priceLines.length, 1);
     const priceLine = intraday.candles.priceLines[0];
     assert.equal(priceLine.options.price, 8.8);
-    assert.equal(label(intraday), 'Vol 30 · 5D Avg —');
+    assert.equal(label(intraday), 'Dollar Vol $300 · 5D Avg —');
     daily.chart.move(first, true, 93);
     assert.equal(intraday.candles.priceLines[0], priceLine);
     assert.equal(priceLine.options.price, 9.3);
@@ -191,9 +193,9 @@ test('hovered active volume updates and an unknown volume stays absent', () => {
     panel.render(snapshot([row(first, 100)], row(latest, 200)));
     panel.chart.move(latest, true);
     panel.render({ revision: 1, active: row(latest, 250), indicator_preview: {} });
-    assert.equal(label(panel), 'Vol 250 · 5D Avg —');
+    assert.equal(label(panel), 'Dollar Vol $2.5K · 5D Avg —');
     panel.render({ revision: 1, active: row(latest, null), indicator_preview: {} });
-    assert.equal(label(panel), 'Vol — · 5D Avg —');
+    assert.equal(label(panel), 'Dollar Vol — · 5D Avg —');
 });
 
 test('linked crosshair volume follows the peer candle and clears to each latest candle', () => {
@@ -202,21 +204,21 @@ test('linked crosshair volume follows the peer candle and clears to each latest 
     intraday.render(snapshot([row(first, 10), row(first + 300, 20), row(latest, 30)]));
     linkTradingDay(daily, intraday);
     daily.chart.move(first, true);
-    assert.equal(label(daily), 'Vol 1K · 5D Avg —');
-    assert.equal(label(intraday), 'Vol 10 · 5D Avg —');
+    assert.equal(label(daily), 'Dollar Vol $10K · 5D Avg —');
+    assert.equal(label(intraday), 'Dollar Vol $100 · 5D Avg —');
     assert.equal(intraday.chart.crosshairPrice, 8.8);
     assert.equal(intraday.chart.crosshairTime, first);
     assert.equal(intraday.chart.crosshairSeries, intraday.candles);
     intraday.render({ revision: 1, active: row(latest + 300, 40), indicator_preview: {} });
-    assert.equal(label(intraday), 'Vol 10 · 5D Avg —');
+    assert.equal(label(intraday), 'Dollar Vol $100 · 5D Avg —');
     assert.equal(intraday.chart.crosshairPrice, 8.8);
     node(daily.id + '-chart').listeners.mouseleave();
-    assert.equal(label(daily), 'Vol 2K · 5D Avg —');
-    assert.equal(label(intraday), 'Vol 40 · 5D Avg —');
+    assert.equal(label(daily), 'Dollar Vol $20K · 5D Avg —');
+    assert.equal(label(intraday), 'Dollar Vol $400 · 5D Avg —');
     assert.equal(intraday.chart.crosshairPrice, undefined);
     intraday.chart.move(first + 300, true, 103);
-    assert.equal(label(daily), 'Vol 1K · 5D Avg —');
-    assert.equal(label(intraday), 'Vol 20 · 5D Avg —');
+    assert.equal(label(daily), 'Dollar Vol $10K · 5D Avg —');
+    assert.equal(label(intraday), 'Dollar Vol $200 · 5D Avg —');
     assert.equal(daily.chart.crosshairPrice, 10.3);
     assert.equal(daily.chart.crosshairTime, first);
     intraday.chart.move(first + 300, false, 110);

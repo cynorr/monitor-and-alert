@@ -1,6 +1,6 @@
 # List 交互
 
-更新：2026-10-29。
+更新：2026-10-30。
 
 ## 背景与设计哲学
 
@@ -16,6 +16,7 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | --- | --- | --- |
 | Scan / Monitor | ↑ / ↓ | 按当前可见顺序选上一只／下一只，跳过折叠组，不循环 |
 | Daily（三模式） | 按住 F / 松开 | 临时查看一年全貌／恢复视图，完整规则见 [Daily setup scale](chart-ui.md#daily-setup-scale) |
+| 三模式 | R | Reset view & go to latest，同时重置全部可见图表；输入/IME及修饰键除外，不按指针位置分流 |
 | Scan / Monitor | Page Up / Page Down | 跳到前／后一个非空 section 的第一只，不循环 |
 | Scan / Monitor | End / Command + G | 查看完整Focus中按当前排列最上方的未读Alert symbol |
 | Monitor | Home / Command + U | 查看Holdings中按当前排列最上方的未读Alert symbol |

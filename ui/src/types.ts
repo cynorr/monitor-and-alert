@@ -42,7 +42,8 @@ export type Row = {
     low: number;
     close: number;
     volume: number | null;
-    volume_comparison?: {
+    turnover?: number | null;
+    turnover_comparison?: {
         average: number | null;
         samples: number;
         percent: number | null;
