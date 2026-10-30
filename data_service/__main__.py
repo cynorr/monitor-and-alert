@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import sqlite3
+import time
 from pathlib import Path
 
 from .config import load_tickers, DEFAULT_CREDENTIALS, credential_values, credential_section
@@ -17,7 +18,7 @@ from .workspace import Workspace, resolve_latest_workspace
 
 def parser():
     result = argparse.ArgumentParser(description='Scan and Monitor workbench')
-    result.add_argument('command', choices=('universe', 'serve', 'reconcile', 'verify', 'scan', 'massive'))
+    result.add_argument('command', choices=('universe', 'serve', 'reconcile', 'verify', 'scan', 'massive', 'longbridge-usage'))
     result.add_argument('--workspace', type=Path, help='Pin a workspace file instead of following the latest Scan day')
     result.add_argument('--credentials', type=Path, default=DEFAULT_CREDENTIALS,
                         help='Backend credential JSON grouped by provider')
@@ -107,7 +108,7 @@ async def run(args, tickers):
     finally:
         service.store.close()
         if broker:
-            broker.close()
+            await broker.aclose()
 
 
 def main(argv=None):
@@ -115,6 +116,15 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
     try:
         paths = RuntimePaths(args.runtime)
+        if args.command == 'longbridge-usage':
+            from .longbridge.usage import SymbolUsage, month_of, MONTH_ZONE
+            accounts = credential_section(args.credentials, 'longbridge')['accounts']
+            usage = SymbolUsage(paths.longbridge_usage, [account['id'] for account in accounts])
+            counts = usage.counts()
+            print(json.dumps({'month': month_of(time.time()), 'timezone': str(MONTH_ZONE),
+                              'accounts': counts, 'total_symbols': sum(counts.values()),
+                              'path': str(paths.longbridge_usage)}, indent=2))
+            return 0
         args.external_daily_db = args.daily_db is not None
         args.daily_db = args.daily_db or (args.runtime / 'daily.sqlite3' if args.mock_scan else paths.daily_db)
         args.days = args.workspace.parent.parent if args.workspace and re.fullmatch(r'\d{4}-\d{2}-\d{2}', args.workspace.parent.name) else args.runtime / 'days'

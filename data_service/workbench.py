@@ -237,7 +237,7 @@ class Workbench:
             await asyncio.gather(self.monitor_task, return_exceptions=True)
             self.monitor_task = None
         if self.monitor:
-            self.monitor.broker.close()
+            await self.monitor.broker.aclose()
             self.monitor.store.close()
             self.monitor = None
 

@@ -24,6 +24,10 @@ class RuntimePaths:
         return self.root / 'longbridge' / 'bars.sqlite3'
 
     @property
+    def longbridge_usage(self) -> Path:
+        return self.root / 'longbridge' / 'usage.json'
+
+    @property
     def pipeline_status(self) -> Path:
         return self.root / 'pipeline-status.json'
 

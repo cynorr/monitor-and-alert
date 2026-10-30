@@ -1,6 +1,6 @@
 # Longbridge 数据说明
 
-本文件是 Longbridge 数据需求、官方接口、处理与缓存的唯一维护入口。模块职责见 [development.md](development.md#longbridge-同步与缓存实现)，图表显示见 [chart-ui.md](chart-ui.md)，下游需求见 [intraday-state.md](intraday-state.md)、[alert.md](alert.md)、[holdings-data.md](holdings-data.md)。
+本文件是 Longbridge 数据需求、官方接口、处理与缓存的唯一维护入口。多账号配置、选号与访问台账只在 [longbridge-accounts.md](longbridge-accounts.md) 维护。模块职责见 [development.md](development.md#longbridge-同步与缓存实现)，图表显示见 [chart-ui.md](chart-ui.md)，下游需求见 [intraday-state.md](intraday-state.md)、[alert.md](alert.md)、[holdings-data.md](holdings-data.md)。
 
 ## 目标与前置条件
 
@@ -17,7 +17,7 @@ Longbridge 服务 Monitor 的 Daily / Intraday、名单、持仓行情、Alert �
 
 正式服务在Scan与Monitor两种模式都订阅有效workspace完整Discover / Focus / Excluded（含Hidden）的Quote，不随模式、折叠、Filter或选中股票缩减。Focus / Holdings仍保留完整行情，其余成员仅Quote，不请求Trade/candle或历史、不写bars、不加入Alert。全部按symbol去重，名单变化按差集增删；切模式复用已有订阅和缓存。三名单通常少于200只，沿用官方批量订阅及快照，不新增分批上限。
 
-唯一 SDK 入口为 `data_service/longbridge/client.py`；所有报价、实时 candle 与历史请求共用一个 `AsyncQuoteContext` 和一条行情长连接。context 是 SDK 持有连接、订阅和 candle 内存的客户端对象，不是历史数据库，也不是每次查询应重建的 session id。关闭网页不停止后台。
+唯一 SDK 入口为 `data_service/longbridge/client.py`。主账号提供应用使用的报价；官方 K 线与 SDK candle 通过统一入口选择所属账号，各账号独立复用 `AsyncQuoteContext`。context 持有连接、订阅和 candle 内存，关闭网页不停止后台。账号生命周期与访问台账只维护在 [多账号文档](longbridge-accounts.md)。
 
 Scan 日 K 与指标使用 Massive，Monitor 使用 Longbridge；两源分别存库，共用 Bar、指标与显示，不拼接、交叉验证或补缺。
 
@@ -31,7 +31,7 @@ SDK配置显式启用`enable_overnight=True`，Pre、Intraday（Regular）、Pos
 
 ## 官方接口及特点
 
-固定依赖 Longbridge Python SDK 5.0.0。历史查询即此前方案中的“REST 修复”，实现沿用 SDK 的 `ctx.candlesticks`；在此版本中它与推送共用行情 context 的请求通道。
+固定依赖 Longbridge Python SDK 5.0.0。官方历史查询使用 `ctx.candlesticks`，通过所属账号的行情 context 请求通道获取；实时 candle 使用同一所属 context。
 
 | 接口 | 含义与本项目使用 |
 | --- | --- |
@@ -47,7 +47,7 @@ SDK配置显式启用`enable_overnight=True`，Pre、Intraday（Regular）、Pos
 
 Quote / Trade是同一连接中的不同消息类型。Trade是逐笔成交，不是Bid/Ask盘口；字段包括price、volume、timestamp、trade_type、direction、trade_session，其中volume为该笔成交量。普通美股分钟candle由官方SDK合并Trade；Daily由SDK的Quote日行情逻辑更新。应用不处理逐笔加总，不通过Quote减历史量得到分钟量，也不自行生成大周期。
 
-candle包含timestamp、open/high/low/close、volume、turnover、trade_session；volume/turnover为该根截至当前收到行情的累计值。SDK datetime通过统一解析转换为Unix秒。增加分钟周期主要增加初始化请求、SDK本地计算与应用callback，不新增连接或持续Trade网络流；各周期仍各有初始化及官方closed查询成本。
+candle包含timestamp、open/high/low/close、volume、turnover、trade_session；volume/turnover为该根截至当前收到行情的累计值。SDK datetime通过统一解析转换为Unix秒。同一账号增加分钟周期主要增加初始化请求、SDK本地计算与应用callback，不为每个周期新增连接或持续Trade网络流；各周期仍各有初始化及官方closed查询成本。
 
 六周期固定为 `1d / 5m / 15m / 30m / 1h / 2h`。SDK初始化只使用属于当前美东日期的全部有效candle，保留当天已结束根与开放根；此前的NoAdjust行不进入显示或数据库。历史库采用ForwardAdjust，当前日SDK原始值与其直接连接显示，不二次复权。SDK `is_confirmed`不决定SQLite提交。
 
@@ -104,7 +104,7 @@ SDK自动短重连会恢复底层Quote/Trade订阅，不保证补回断线逐笔
 
 调度器检查各周期实际closed目标；5m最频繁，每到本周期闭合后2秒请求count2。15m/30m/1h/2h/Daily只在各自真正闭合后查询，不在每个5m重复拉取未变化的大周期。同日重启或恢复：目标相同则跳过，缺一根count2，缺多根count1000；按XNYS实际开盘对齐边界，不按停机分钟数判断。请求可跨盘前→Regular完成，同一交易日照常提交；跨交易日响应丢弃并重新排队。
 
-所有实际网络请求共用每秒10次、最多5个在途；后台全量最多每秒8次、3个在途，保留选中股票与SDK请求额度。同一历史任务不重复在途；优先处理closed修正，其次初始化。限制见 [官方文档](https://open.longbridge.cn/zh-CN/docs)。
+各账号的实际网络请求预算独立，统一由 [多账号文档](longbridge-accounts.md) 定义，保留选中股票与SDK请求额度。同一历史任务不重复在途；优先处理closed修正，其次初始化。限制见 [官方文档](https://open.longbridge.cn/zh-CN/docs)。
 
 历史失败首次最多重试三次，间隔2/5/10秒；耗尽显示错误，下一实际5m收盘后2秒启动最多三次的新轮次。当前其他有效数据继续使用。SDK周期订阅失败独立记录，并由既有30秒循环重试；Quote成功不清除candle错误。个别无法订阅symbol从失败批量中单独隔离，不挡住有效成员。
 

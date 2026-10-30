@@ -1,4 +1,4 @@
-"""Realtime quotes and native SDK candles on the shared Longbridge context."""
+"""Primary-account quotes and native SDK candles from their assigned contexts."""
 from __future__ import annotations
 
 import asyncio
@@ -37,6 +37,10 @@ class RealtimeFeed:
 
     def recover(self):
         self.candle_refresh.update((symbol, tf) for symbol in self.symbols for tf in PHASES)
+        self.changed.set()
+
+    def change_candle_account(self, symbol):
+        self.candle_refresh.update((symbol, tf) for tf in PHASES)
         self.changed.set()
 
     @property
@@ -130,12 +134,12 @@ class RealtimeFeed:
                 continue
             try:
                 if key in self.candle_subscribed or key in self.candle_errors:
-                    await self.broker.unsubscribe_candles(self.ctx, symbol, tf)
+                    await self.broker.unsubscribe_candles(symbol, tf)
                     self.candle_subscribed.discard(key)
                 # Retain the application view while the SDK acquires a new seed.
                 # Buffer pushes generated after that seed so they win the initial snapshot.
                 self.initializing[key] = {}
-                rows = await self.broker.subscribe_candles(self.ctx, symbol, tf)
+                rows = await self.broker.subscribe_candles(symbol, tf)
                 seeded = {sdk_timestamp(row.timestamp): row for row in rows}
                 seeded.update(self.initializing.pop(key))
                 self.candle_subscribed.add(key)
@@ -155,7 +159,7 @@ class RealtimeFeed:
         self.changed.clear()
         for symbol, tf in sorted(self.candle_subscribed):
             if symbol not in self.symbols:
-                await self.broker.unsubscribe_candles(self.ctx, symbol, tf)
+                await self.broker.unsubscribe_candles(symbol, tf)
                 self.candle_subscribed.discard((symbol, tf))
         removed = self.subscribed - set(self.symbols)
         if removed:
@@ -274,23 +278,19 @@ class RealtimeFeed:
         ctx.set_on_quote(callback)
         if self.on_candle:
             def candle_callback(symbol, event):
-                def deliver():
-                    if generation != self.generation or symbol not in self.symbols:
-                        return
-                    tf = next(tf for tf, period in SDK_PERIODS.items() if period == event.period)
-                    key = symbol, tf
-                    try:
-                        if key in self.initializing:
-                            self.initializing[key][sdk_timestamp(event.candlestick.timestamp)] = event.candlestick
-                        elif self.on_candle(symbol, tf, [event.candlestick]):
-                            self.candle_errors.pop(key, None)
-                    except (AttributeError, ValueError, TypeError, OverflowError) as exc:
-                        self.candle_errors[key] = str(exc)
+                # LongbridgeClient dispatches all account callbacks onto this event loop.
+                if generation != self.generation or symbol not in self.symbols:
+                    return
+                tf = next(tf for tf, period in SDK_PERIODS.items() if period == event.period)
+                key = symbol, tf
                 try:
-                    loop.call_soon_threadsafe(deliver)
-                except RuntimeError:
-                    pass
-            ctx.set_on_candlestick(candle_callback)
+                    if key in self.initializing:
+                        self.initializing[key][sdk_timestamp(event.candlestick.timestamp)] = event.candlestick
+                    elif self.on_candle(symbol, tf, [event.candlestick]):
+                        self.candle_errors.pop(key, None)
+                except (AttributeError, ValueError, TypeError, OverflowError) as exc:
+                    self.candle_errors[key] = str(exc)
+            self.broker.set_on_candlestick(candle_callback, self.change_candle_account)
         snapshot_ok = await self.update_subscriptions(candles=False)
         if self.symbols and not self.subscribed:
             raise RuntimeError('No Focus/Holdings symbols could be subscribed')
@@ -310,10 +310,10 @@ class RealtimeFeed:
         if ctx is not None:
             ctx.set_on_quote(lambda *_: None)
             if self.on_candle:
-                ctx.set_on_candlestick(lambda *_: None)
+                self.broker.set_on_candlestick(None)
             try:
                 for symbol, tf in sorted(self.candle_subscribed | self.candle_errors.keys()):
-                    await self.broker.unsubscribe_candles(ctx, symbol, tf)
+                    await self.broker.unsubscribe_candles(symbol, tf)
                 if self.subscribed:
                     await self.broker.unsubscribe(ctx, sorted(self.subscribed))
                 if self.quote_subscribed:
