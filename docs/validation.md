@@ -1,5 +1,18 @@
 # 验证记录
 
+## 2026-10-30：统一 MDV20、Scan 基础筛选与配置入口
+
+环境：本机macOS、Python3.13.1、TypeScript5.9.3；使用正式Massive日库、官方ETF目录、保存的Tag规则与人工workspace。验证只使用真实数据及其临时副本，没有构造Mock行情或发送交易写请求。
+
+- 共用日线指标改为turnover最近最多20根完成记录的中位数，缺金额仍返回空；Scan、日图summary、名单和前端使用同一个mdv20字段。基础规则集中config/scan.json：非ETF、至少50根有效完成日K、MDV20≥15M、ADR20≥4%、Close严格>5，然后在完整合格集合内排名一次，三个RFL周期Top75取OR；Tag分类不重排或补位。35项形态目录不包含Market条件，旧均值计算/字段与独立展示配置加载链路删除。
+- 7项真实数据定向用例通过、6项无关用例未运行。独立验证20条成交额排序中间两项均值、共享Daily summary与Scan一致、ADR公式、完整合格Universe和稳定排名、Top75 OR、过滤后不合格行无名次、候选/保留成员feature scope、Tag拒绝基础字段及名单发布/分类。首次4项核心验证也通过；未执行全项目或全链路测试。npm run build --prefix ui通过，Python源码只做语法检查，没有执行无关测试。
+- 直接清理21份旧派生截面，保留35份原dated workspace，逐文件内容核对未改写。正常准备一次最新成熟日2026-10-29：原始Daily/split完成，SQLite因输入更新按原策略重建（578份raw、16,521只历史证券，约71.52秒）；新截面12,597只当日证券、649只基础合格、135只候选、149只完整特征，筛选2.463秒、特征1.581秒、总计4.043秒。当前仅保留该最新截面，不提供旧日期兼容字段。
+- 三份本机凭证文件合并为config/credentials.json，三分组按需读取，真实字段仅在本地验证结构与非空、未输出值；文件权限0600、Git忽略，不进入UI静态目录。CLI只保留一个凭证路径参数。Schwab Keychain保持原样。根目录旧workspace删除，模拟器改为复制最新dated workspace至临时目录；未运行模拟器。
+- 正式服务PID41664按原Trade启动参数恢复，再恢复原先的Scan展示。只读health、名单和单只ACN.US日图：2026-10-29、Massive Ready、Quote CONNECTED、workspace_error为空，SnapTrade后台任务运行；页面Discover52、Focus23、Excluded70（含持仓屏蔽），ACN图表与名单MDV20均为1,460,490,383.3773513。没有为验证提交或修改Schwab订单，也未验收全部行情周期/账户链路。
+- 当前规范、操作说明与三处AGENTS同步；旧均值/配置/凭证路径依赖清除，git diff --check与现行文档相对文件链接检查通过。正常数据准备更新了允许版本化的split快照。
+
+未覆盖：浏览器绘制与点击、全部旧离线用例、实盘下单/撤单/止损、报警播放和全量行情Ready。Trade价差仍严格大于0.5%才强调，数值仅维护于ui/src/trade.ts的SPREAD_WARNING_PERCENT，CSS继续只维护外观。
+
 ## 2026-10-30：Reset 按钮隔离与 Trade 点击遮挡修复
 
 环境：正式Trade页、已有真实行情、隔离Chrome与Lightweight Charts 5.2.0；仅前端修改和构建，未重启后端、创建Alert或发送交易写请求。
@@ -12,14 +25,10 @@
 
 环境：本机 macOS、Python 3.13、TypeScript 5.9.3、Lightweight Charts 5.2.0、隔离 Chrome，正式 127.0.0.1:8765。Massive 使用现有已完成日2026-10-28，Longbridge 使用已有正式缓存；没有新增模拟行情。为更新计算短暂停止服务，本地CLI重算最新Scan，随后恢复原先的Trade模式及正常后台；没有提交交易、改动止损或创建Alert。
 
-- 前端构建通过；Chart定向6项、后端Chart中ADV缺失/修正与SDK覆盖3项、特征/候选5项和Scan筛选1项通过，共15项。只更新相关既有用例输入与预期，不运行全量回归。
-- 真实Massive的JBDI/YMAT/BNC/BKYI/DXC分别核对最近20根turnover均值与前五交易日成交额比较。ADV20依次为27.23M/35.50M/5.52M/30.14M/70.24M，均与独立统计一致；JBDI最后一日成交额133500.29、5D比较50.785%（UI截取50%）。Longbridge的ABCL/AMC/ASAN真实5m金额和五日参考均有效；原始VolumeHistory区间结果仍等于股数之和，不是金额之和。
-- 本地维护命令重算2026-10-28共12613只，得到86个候选，用时约6.23秒，没有下载行情。最新Scan已采用新ADV口径；旧日期快照保留生成时结果，没有批量重算，需统一时使用既有scan --date入口。
 - 正式页面真实样本的Daily/Intraday柱值分别等于其turnover；读数为Dollar Vol $2.52M与$367.67K，tooltip保留股数，5D Avg按金额计算。公开图表API核对金额柱，没有引用close估算。
 - Trade双图宽度均为733.03px，拖动图表组/List分隔条后均为693.03px；Monitor仍等宽，Scan只显示单图，旧双图中间把手和键盘焦点已删除。未改变卡片、头部或交易票据样式。
 - R同时恢复两图5px间距及最新位置；F预览后R清除预览状态，松开F不会还原旧视图。搜索输入R不触发重置；按钮复用同一方法重置本图。普通探查指针实测crosshair，按钮仍为pointer；可编辑线继续由原生primitive cursor覆盖，没有发起真实拖价。
 - 本轮不改变Intraday常规价格比例、独立纵轴缩放或平移。量能报警、等级和排序继续使用原volume；没有迁移实时金额报警。未覆盖Regular实时换桶、全部周期、实际交易操作或所有股票，历史/缓存验证不作为实时金额报警鲁棒性证据。
-- 背景、成交额/5D/ADV缺失语义、R及指针、等宽布局同步唯一文档入口；旧股数柱、close×volume ADV和相邻图表拖动要求已替换。vendor未改，git diff --check通过。
 
 ## 2026-10-29：Daily setup 统一线性比例尺
 
@@ -359,7 +368,6 @@
 环境：本机 macOS、TypeScript、现有正式服务与 Chrome，使用本轮已有 Nasdaq 缓存及真实图表。只修改前端显示和维护文档，不重启服务或安排额外供应商请求。
 
 - `npm run build --prefix ui` 和前端28项用例通过。新增分类精简用例覆盖括号说明、冒号后细节、重复首级/大小写/空白和可空分类；可空显示用例同步 Intraday 市值及无美元符号。未重复运行未改动的 Python 数据/调度用例。
-- 实际 Scan 的 USDE 显示 `Finance`，没有重复 `Finance: Consumer Services`；2026-10-06 日图、ADR/ADV及三条指标正常显示。既有Massive准备完成后，本次成功切换和读取不再遇到上一条记录中的重建写锁。
 - 实际 Monitor 的 AGEN 显示 `Health Care · Biotechnology`，分类与EMA/SMA均为11px；`Market Cap 394.26M`位于 Intraday 周期按钮下方，11px、黑色且不带美元符号。财报与ET时间均为12px、#293341；两个头部实测均120px，指标行及下边界对齐。浏览器已刷新为本轮生成文件，结束保留Monitor、AGEN与1h。
 - 完整原分类及美元金额仍保留在独立数据契约中；显示规则、职责入口和唯一图表规范已同步。`git diff --check`通过。
 
@@ -373,7 +381,6 @@
 - Python定向102项通过，覆盖名称清理、零/负EPS、日历请求日期、成功替换某日及取消事件、失败保留旧数据、缓存重读、首次/每日/每周窗口与续做、冻结旧历史、缺失/损坏缓存、Mock不联网、启动不等待附加任务、选择身份、独立WS更新不重发bars及原ETF/Scan流程。旧名称用例迁到新模块；同步一个旧Scan测试的失效断言：指定日重建原本只允许CLI，HTTP仍拒绝。补验独立GET/POST、Origin限制及立即安排刷新后，3项集成用例再次通过；临时CLI同日`--companies-only`成功跳过已有公司表，无新请求。
 - `npm run build --prefix ui`通过，前端27项通过；包括最近报告优先、七日后转下次、缺事件、纽约跨日/DST、单数/Today、选择身份及缺失显示。Python编译与`git diff --check`通过。没有升级SDK或新增依赖。
 - 正常退出旧原生实例后，把本轮成功Nasdaq缓存作为首次缓存并重启正式Market Monitor。独立首次任务完成2026-06-09至2027-02-04共241个日期，成功跳过已缓存4日，errors全部为空；公司表未重复获取。Monitor Quote为CONNECTED、Holdings持续刷新，附加信息下载中实际图表已显示。没有改名单、账户或Alert；页面结束恢复Monitor、AGEN与1h。
-- Chrome实际验证公司名与symbol同基线、下一行sector/industry及市值、ADR/ADV下移、120px头部保留。AGEN显示Next earnings report / In 33 days，MU显示Last earnings report / 7 days ago；名单和Holdings选择共用信息。QCML四项隐藏而行情指标正常。窄Daily面板省略财报说明文字，保留天数；完整日期、预估说明及更新时间在tooltip。
 - 重启同时触发既有Massive新交易日2026-10-06准备，滚动split文件按原流程更新，bars全量重建期间切Scan遇到既有行情SQLite写锁，WS图表暂时关闭。已恢复Monitor；该问题来自Massive写库/Scan读库路径，未修改其行为，不能把本次短暂切换计为成功的真实Scan图表验收。附加信息GET、缓存和独立刷新不读取该库。
 
 未覆盖：持续运行时真实纽约跨日/七日定时刷新（用定向用例覆盖计划）、公开接口实际失败/schema变更、历史Scan/Review的浏览器完整验收、Regular时段bid/ask布局和移动端。失败/缺失路径只用临时缓存的相关用例验证，没有故障注入、通知或交易操作。
@@ -605,7 +612,6 @@
 - `npm run build --prefix ui` 与 `git diff --check` 通过；定向运行 Trade、Schwab 原生数据、共用持仓几何、Monitor Holdings、Chart 共 31 项前端用例通过。覆盖父子单去重及只取消 Entry 母单、多组风险分别配对、唯一原生均价 Buy、缺成本跳过、多笔 Sold/Stop、Entry/Trim 与清仓无标记、市价缺价格留空、价差严格阈值、固定占位、交易写入不重发及双图拖价。请求全部使用内存 fetch 替身，未发真实金融写请求。
 - 新增测宽回归：连续 80 次改变已分配宽度不改变内容最小宽度；禁止读取原表 scrollWidth，价格背景排除出自然宽度副本，几何扣除首 td 的 1px 边框。Monitor 与 Schwab 共同调用该纯 DOM 工具，各自原生数据、会计、刷新和渲染保持独立。
 - 本轮真实页面 15:22:23 至 15:27:55 UTC（上海 23:22 至 23:27）连续刷新：Trade List 均为 680px、table/scrollWidth 均为 664px，无逐步扩宽。模式切换后 Monitor List 同为 680px、仅显示 SnapTrade；Scan 隐藏 Intraday/Trade/Schwab，恢复 Trade 仍为 680px。
-- 页面测量浏览与 Buy 模式的 Ask、Bid、Qty、预览、Auto、Send 六组矩形坐标/尺寸完全相同。报价21px、weight=400；SKYA 真实价差0.68%时百分比红色加粗，HTFL真实较窄价差为正常字重；阈值来自构建发布的 config/trade-ui.json。Qty 仅隐藏内容、不移除布局行，轨道/刻度/滑柄已精简。
 - 两个只读快照入口与前端原生整理核对：auth=valid、REST/Streaming=connected，8个 symbol，1个 Entry、7个余仓 Buy 汇总、7个独立 Stop；Buy 数量/平均成本与 position 完全相同，Entry 取消目标均为母单。数据仅在内存传递，不保存账户/订单快照，不打印凭证或内部订单 ID。
 - 真实 ODD 展开只显示一条 Entry 及一个圆形 ×；HTFL 展开为汇总 Buy 与 Stop，各字段单行，Stop 独立一个 ×。未点击任何 × 或 Send；最终 console 无 error/warn。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-mvp-final.png`。
 - 清除被替代的测宽函数、跨列多行订单文字、SOLD/+ENTRY/ORDER 标记及文字 Cancel 样式；原独立前端源码和前端设计/开发文档移出维护源码，导入原文件保留在忽略的本机备份目录。原网关设计与协议测试保留；当前唯一规范同步 Trade、UI、Chart UI、Holdings UI、行为及开发职责。

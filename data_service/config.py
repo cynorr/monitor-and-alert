@@ -5,6 +5,22 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_CREDENTIALS = Path(__file__).resolve().parents[1] / 'config' / 'credentials.json'
+
+
+def credential_section(path: Path, provider: str) -> dict:
+    section = json.loads(path.read_text()).get(provider, {})
+    if not isinstance(section, dict):
+        raise ValueError(f'{provider} credentials must be a JSON object')
+    return section
+
+
+def credential_values(path: Path, provider: str, *fields: str) -> tuple[str, ...]:
+    section = credential_section(path, provider)
+    if any(not isinstance(section.get(field), str) or not section[field].strip() for field in fields):
+        raise ValueError(f'{provider} credentials require: {", ".join(fields)}')
+    return tuple(section[field].strip() for field in fields)
+
 
 @dataclass(frozen=True)
 class Ticker:

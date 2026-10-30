@@ -46,11 +46,11 @@ Mock 生成器要求目标目录没有现成 daily.sqlite3；重复试验用 `--
 .venv/bin/python scripts/pull_massive.py
 ```
 
-Nasdaq Trader 目录更新独立于 Massive，仅保存官方 ETF 标记用于筛查。扫描先排除 ETF、未确认类别与不足 50 根有效日 K 的证券，再做 ADR/ADV 和 RFL 排名。可编辑条件集中于 [config/massive.json](config/massive.json)，数据要求统一见 [Massive 数据要求](docs/massive-data.md)。普通新日直接追加 SQLite；旧文件或 split 变化则删除 SQLite 后全量重建。配置和目录变更由命令行重算应用，不做自动版本跟踪。
+Nasdaq Trader 目录更新独立于 Massive，仅保存官方 ETF 标记用于筛查。扫描先排除 ETF、未确认类别与不足 50 根有效日 K 的证券，再做 MDV20≥15M、ADR20≥4%、完成日Close>5基础过滤和RFL排名。可编辑条件集中于 [config/scan.json](config/scan.json)，数据要求统一见 [Massive 数据要求](docs/massive-data.md)。普通新日直接追加 SQLite；旧文件或 split 变化则删除 SQLite 后全量重建。配置和目录变更由命令行重算应用，不做自动版本跟踪。
 
 服务未运行时也可用 `.venv/bin/python -m data_service massive`，与启动、页面 Refresh 共用准备流程。任务 Ready 返回0，阶段失败返回2。手动命令与服务共用 runtime 单实例锁。显式 `--daily-db` 只读消费外部库，不启用内置 Massive 下载。日常刷新与维护重算的操作见下方 [Massive 操作](#massive-操作)。
 
-默认代理为 `http://127.0.0.1:7899`，Massive、SnapTrade 与 Additional Info 共用；`MARKET_PROXY` 覆盖地址，显式空值关闭代理。Massive 凭证来自 `MASSIVE_API_KEY` 或 Git 忽略的 `massive-token.txt` 单行文件，不输出到日志。Longbridge SDK 的接入不由此配置改变。
+默认代理为 `http://127.0.0.1:7899`，Massive、SnapTrade 与 Additional Info 共用；`MARKET_PROXY` 覆盖地址，显式空值关闭代理。Massive凭证来自`MASSIVE_API_KEY`或本机`config/credentials.json`的massive.api_key，不输出到日志。Longbridge SDK 的接入不由此配置改变。
 
 数据统一放在 `runtime/massive/`、`runtime/longbridge/`、`runtime/holdings/`、`runtime/additional-info/`，人工名单与偏好保持现有路径。Massive 原始 `daily/*.json` 累积保留且不加入 Git；`splits.json` 是唯一允许入 Git 的运行数据。split 每次完整获取两年窗口，替换窗口内记录并保留更早历史，校验成功后原子覆盖。Massive 采用拆股复权，成交量 HALF_UP 四舍五入为整数；Longbridge 负责Monitor完整行情与Scan最新报价（含Overnight），其数据口径与可重建缓存规则统一见 [Longbridge 数据要求](docs/longbridge-data.md)。两者共用指标与图表，数据互不干涉。
 
@@ -58,11 +58,27 @@ Scan 正常时仅显示日期下拉，不重复显示 Ready 日期和完成时�
 
 默认跟随 `runtime/days/YYYY-MM-DD/workspace.json` 最新日期。新环境可复制既有workspace/preferences，或先生成首份Scan。`--workspace` 固定文件，`--runtime` 修改整个运行目录；原生文件事件自动重读名单与跟随新日期。
 
-Monitor凭证来自longbridge-token.txt，沿用App Key/Secret/Token，不输出到日志。默认官方.cn，`--region global`切换接入点。完整行情只请求/订阅当前Focus及Holdings；Scan/Monitor均覆盖完整三名单Quote，其余成员只订阅Quote，切模式复用缓存，始终共用一条连接。SDK开启Overnight，价格标签统一显示最后收到的最新报价并按来源着色；无新报价保留最后值，不写行情库。历史库不决定订阅范围。
+Longbridge读取`config/credentials.json`的longbridge分组，不输出凭证。默认官方.cn，`--region global`切换接入点。完整行情只请求/订阅当前Focus及Holdings；Scan/Monitor均覆盖完整三名单Quote，其余成员只订阅Quote，切模式复用缓存，始终共用一条连接。SDK开启Overnight，价格标签统一显示最后收到的最新报价并按来源着色；无新报价保留最后值，不写行情库。历史库不决定订阅范围。
 
-Holdings 使用 SnapTrade Personal 的 Client ID / Consumer Key / Account ID，标签与值各占一行，保存在 git 忽略的 `snaptrade-token.txt`（权限600）。没有该文件时不启用持仓；`--holdings-credentials` 指定其他路径。正式服务启动立即刷新，Scan/Monitor 均每30秒获取当前USD股票/ETF多头及买卖活动；失败保留上次完整结果，下个周期再取。Scan Mock、独立模拟器、`--symbols`有界验收不获取真实持仓或 Massive 数据。
+Holdings读取同一凭证JSON的snaptrade分组（client_id、consumer_key、account_id），未配置该分组或分组为空对象则不启用SnapTrade持仓；`--credentials`统一指定其他凭证JSON路径。正式服务启动立即刷新，Scan/Monitor 均每30秒获取当前USD股票/ETF多头及买卖活动；失败保留上次完整结果，下个周期再取。Scan Mock、独立模拟器、`--symbols`有界验收不获取真实持仓或 Massive 数据。
 
 买卖归属配置为 `runtime/holdings/sequences.txt` 与 `merge_buys.txt`，每次刷新重读。新环境需复制这两个文件（无手工关联时可留空）；`--holdings-rules` 可指定目录。单份原始缓存为 `runtime/holdings/latest.json`。SnapTrade 数据获取独立于 HTTP 和前端，正式入口是 `data_service serve`。
+
+## 配置与凭证
+
+`config/scan.json`只管理全局基础筛选与Top75排名；`config/intraday-state.json`管理盘中规则。Tag仅保存形态与原子条件，不包含Price、ADR20或成交额门槛。名单与偏好属于`runtime/`，不放config。
+
+三家数据源共用本机`config/credentials.json`，按以下字段分组：
+
+```json
+{
+  "longbridge": {"app_key": "", "app_secret": "", "access_token": ""},
+  "massive": {"api_key": ""},
+  "snaptrade": {"client_id": "", "consumer_key": "", "account_id": ""}
+}
+```
+
+实际文件不加入Git，权限600，仅后端按需读取；不复制到UI静态目录。`--credentials`覆盖文件路径。Schwab继续使用既有Keychain，不并入该文件。模拟器默认从最新dated workspace复制至临时目录，不读取凭证或改写真实名单。
 
 ## Additional Info
 
@@ -110,14 +126,14 @@ Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，�
 - Regular到达/穿越后价格线立即变灰，拖动重新激活；Symbol 未读波浪在任意方式选图或图表更新时清除，两者独立。Focus/Holdings未读导航保留Tag筛选，快捷键见[List交互](docs/list-interactions.md#未读-alert-导航)。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和SnapTrade刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
-- Scan：Discover/Focus/Excluded与日期、Refresh同排，38项Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组 RFL 排名取并集；无候选 Price 门槛。候选、当日人工Discover、Focus与有效Hidden均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。直接操作当前选中 symbol，快捷键与行为见 [List 交互](docs/list-interactions.md)。历史日期名单只读；Refresh 跳过已准备数据但重新分类名单。
+- Scan：Discover/Focus/Excluded与日期、Refresh同排，35项形态Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组Top75 RFL排名取并集；Close严格大于$5。候选、当日人工Discover、Focus与有效Hidden均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。直接操作当前选中 symbol，快捷键与行为见 [List 交互](docs/list-interactions.md)。历史日期名单只读；Refresh 跳过已准备数据但重新分类名单。
 - Focus跨日保留，入选仍需人工确认；Surf/Bounce只负责分组。机器Excluded仅显示当天候选的Broken/Extended/Under-50结果，不保存机器成员身份。Focus仍接受每日自动淘汰，非候选淘汰后退出当前名单。手动Hidden保留七个自然日；到期仅当天候选重新分类。新入section放队首。当日Pin/Unpin支持多只与拖动，不改 section，显式 Refresh 或新完成日清空；操作反馈见 List 交互。
-- 共用Daily日 K：所有图使用统一默认bar spacing；Daily按近期收盘锚点与统一线性百分比比例等比缩放，右上角重置本图，R重置全部可见图，按住F临时看一年全貌。EMA10/20、SMA50、OHLC/Range、ADR20/ADV20、成交额随十字线切换（tooltip保留股数）。常规可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加SDK活跃日 K。背景、显示与集中人工参数只在 [Chart UI / Daily setup scale](docs/chart-ui.md#daily-setup-scale) 维护。
+- 共用Daily日 K：所有图使用统一默认bar spacing；Daily按近期收盘锚点与统一线性百分比比例等比缩放，右上角重置本图，R重置全部可见图，按住F临时看一年全貌。EMA10/20、SMA50、OHLC/Range、ADR20/MDV20、成交额随十字线切换（tooltip保留股数）。常规可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加SDK活跃日 K。背景、显示与集中人工参数只在 [Chart UI / Daily setup scale](docs/chart-ui.md#daily-setup-scale) 维护。
 - Monitor：5m/15m/30m/1h/2h、SMA65、交易日联动、实时行情；当天SDK candle先显示，官方closed随后校验覆盖，图表与盘中指标共用最新序列。同日重启复用已确认历史，ADR随Quote计算，分钟量比逐股独立就绪；缓存与准备时机见Longbridge数据要求。
 - Search 和 section 的 + 共用内联输入；Scan候选查询只读本地库，Monitor使用同一Longbridge context的static_info，确认后才保存。Scan全局搜索新股加入当日Discover置顶，普通重启保留，显式 Refresh 或新交易日清理；需要跨日关注时使用现有移入Focus操作。快捷键和新增位置见 [List 交互](docs/list-interactions.md)。
 - Monitor与Scan共享Focus分组、Tag/Filter、拖动、Shift+上下排序与折叠。Tag按钮再次点击取消选择，空选择显示全部；每行允许补充当日Setup/Label。Monitor显示Focus与独立Holdings，Scan显示三名单。
 - Monitor 的 Holdings 固定在下方名单滚动区之外，可整体折叠；按买入批次展示及展开 Buy/Sold 明细，允许同 ticker 多个批次；常规名单前端屏蔽持仓已有 ticker，后端归属独立，不写 workspace。余仓盈亏、当天建仓基准、Days和当日清仓保留的唯一需求见 [Holdings 数据](docs/holdings-data.md)；显示、排序和布局见 [Holdings UI](docs/holdings-ui.md)。Longbridge 最新价（含盘前/盘后/夜盘）重算市值和盈亏，缺价回退最后成功的 SnapTrade 价格；cash 来自 SnapTrade，Account Value 为当前持仓市值加 cash。
-- ADR20 = 最近最多20根`(H-L)/L × 100`均值；ADV20 = 最近最多20根已完成记录的`turnover`均值（窗口内缺金额则缺失），两模式同公式。
+- ADR20 = 最近最多20根`(H-L)/L × 100`均值；MDV20 = 最近最多20根已完成记录的`turnover`中位数（窗口内缺金额则缺失），两模式同公式。
 - Monitor 缓存刷新与 Ready 的数据含义见 [Longbridge 数据要求](docs/longbridge-data.md)，弱提示和颜色见 [Chart status](docs/chart-ui.md#chart-status)。Scan 图表显示所选日期，准备状态只在未完成或失败时显示。
 
 ## 命令与接口
@@ -154,6 +170,6 @@ UI构建产物和Lightweight Charts已随仓库提供，正常启动无需npm/CD
 
 ## Schwab Trade
 
-使用现有 Monitor / Scan / Trade 三模式入口；Trade 使用原生 Schwab 持仓、订单和券商原值盈亏，展开为汇总 Buy、当天 Sold 和活动 Entry/Stop。两套账户独立取数与计算，只复用视觉和纯 UI 测宽。交易区位于 Intraday 右下，双图可拖动参考价和真实止损，新单与止损改单均由同一个 Send 明确提交。价差阈值在 config/trade-ui.json，修改后构建 UI。原五个交易函数与零写重试规则保留；完整范围、Sold Today 限制、数据字段及认证见 [Schwab Trade MVP](docs/schwab-trade.md)。
+使用现有 Monitor / Scan / Trade 三模式入口；Trade 使用原生 Schwab 持仓、订单和券商原值盈亏，展开为汇总 Buy、当天 Sold 和活动 Entry/Stop。两套账户独立取数与计算，只复用视觉和纯 UI 测宽。交易区位于 Intraday 右下，双图可拖动参考价和真实止损，新单与止损改单均由同一个 Send 明确提交。价差展示阈值为ui/src/trade.ts的SPREAD_WARNING_PERCENT常量，修改后构建UI。原五个交易函数与零写重试规则保留；完整范围、Sold Today 限制、数据字段及认证见 [Schwab Trade MVP](docs/schwab-trade.md)。
 
 凭证沿用原 macOS Keychain，重新授权运行 `.venv/bin/python -m data_service.schwab_backend auth`。[后端网关设计](docs/schwab-backend.md) 维护认证、内存、恢复、协议和风控；网关定向测试为 `tests/test_schwab_backend.py`，集成测试为 `tests/test_trade.py`。Mock、模拟器和 --symbols 不开放真实交易。

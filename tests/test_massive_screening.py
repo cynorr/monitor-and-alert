@@ -42,7 +42,7 @@ def test_etf_and_49_records_filtered_before_rfl_ranking(tmp_path, monkeypatch):
         called.append(history['close'][-1])
         return original(history)
     monkeypatch.setattr(scan, 'return_from_low', rfl)
-    snapshot = scan.build_day(path, '2026-10-01', calendar, screening_config=replace(load_config(), rfl_top_n=1))
+    snapshot = scan.build_day(path, '2026-10-01', calendar, screening_config=replace(load_config(), momentum_top_n=1))
     rows = {row['symbol']: row for row in snapshot['rows']}
     assert called == [15, 20]  # Only confirmed non-ETF securities with sufficient history.
     assert scan.candidates(snapshot) == {'STOCK'}
@@ -60,7 +60,7 @@ def test_etf_and_49_records_filtered_before_rfl_ranking(tmp_path, monkeypatch):
 def test_retained_members_keep_features_even_when_not_scan_candidates(tmp_path):
     path, calendar, _ = market(tmp_path)
     result = scan.build_day(path, '2026-10-01', calendar, tracked_tickers={'ETF', 'YOUNG'},
-                            screening_config=replace(load_config(), rfl_top_n=1))
+                            screening_config=replace(load_config(), momentum_top_n=1))
     rows = {row['symbol']: row for row in result['rows']}
     assert rows['ETF.US']['sma50'] == 100 and not rows['ETF.US']['candidate']
     assert rows['YOUNG.US']['sma50'] is None and not rows['YOUNG.US']['candidate']

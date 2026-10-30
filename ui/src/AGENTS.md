@@ -22,3 +22,5 @@
 - 新增 symbol 行复用 `symbol-row.ts` 的表面及 `attention.ts` 的最新提醒入口，规则见 [Symbol模板](../../docs/ui.md#symbol-row-template)。Grid/Table共用CSS，不复制波浪或按不同列表另造提醒；Holdings区域宽度跟随现有列几何。共享颜色只引用 `palette.ts`，由main安装CSS变量，禁止在Chart/Tag/名单重复默认色值；说明见 [Color palette](../../docs/ui.md#color-palette)。未读不改计算、rank、手动线或已读语义。
 
 - Trade 的独立规范见 [docs/schwab-trade.md](../../docs/schwab-trade.md)。schwab-data.ts 维护原生响应字段、订单与成交读取，不引用 SnapTrade；schwab-holdings.ts 保留原生展示逻辑，复用 holdings-layout/symbol-row/attention/intraday-state；trade.ts 管草稿和共用 Send，trade-lines.ts 用公开图表 API 绘制双图交易线，price-lines.ts 与 Alert 共用坐标/命中/绘制。模式身份包括 trade，保持 request_id/source/socket 检查；金融写请求不能复用普通 post 的错误语义或自动重发。
+
+- 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

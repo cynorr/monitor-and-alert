@@ -13,12 +13,12 @@
 | paths.py / network.py | 唯一runtime布局、共用HTTP session创建与显式代理配置；各数据源自行管理连接和额度 |
 | massive/daily.py / splits.py / build.py | 原始Daily补文件、两年split覆盖、新日增量追加；输入修订或失败后从raw全量重建派生SQLite |
 | additional_info/symbol_directory.py / scripts/pull_symbol_directory.py | 独立免费Nasdaq目录获取/校验/原子发布；仅保存.US官方ETF标记，用于扫描资格 |
-| massive/settings.py / config/massive.json | Massive凭证、目录定位与候选配置读取，不做自动版本跟踪 |
+| massive/settings.py / config/scan.json | Massive凭证、目录定位与候选配置读取，不做自动版本跟踪 |
 | massive/pipeline.py | 一次准备任务、阶段重试、产物核对及统一Ready状态 |
 | scan.py | 上游只读连接、完成日截面/发布、Scan 日图 |
 | features/atomic.py / screening.py / snapshot.py | 原子纯算子、初筛/排名、每只一次截面组装 |
 | preferences.py / list_rules.py | Tag 用途和保存契约（含独立外观 metadata）；共享字段目录；纯匹配与自动三名单分类，外观不参与分类 |
-| config.py | 当前 Focus 解析与共用错误脱敏；供应商凭证由各自模块读取 |
+| config.py | 当前Focus解析、统一后端凭证JSON读取与错误脱敏 |
 | workspace.py | 最新日期选择、三名单归属/顺序与当日置顶、内存 JSON、同步直接写入、单个原生文件事件 watcher |
 | longbridge/client.py | LongbridgeClient：凭证、单SDK context、static_info、原生历史/实时订阅与请求预算 |
 | snaptrade.py | 独立异步签名GET、指定账户、10次/滚动分钟预算、原始快照获取与成功提交；不提供HTTP服务、不调用Longbridge |
@@ -94,17 +94,17 @@ latest_completed_date只读取上游metadata.completed_date，禁止用MAX(ts)�
 
 只保存days/D/scan.json一份截面，不保存逐根指标序列或Parquet。Scan板只传三列表实际成员，snapshot按mtime缓存，前一候选与图表按日期缓存；重算/修订清缓存。run_id在模式/日期/生成变化时更新，WS据此重发完整历史；UI保留mode/request_id/socket身份检查。Scan没有实时active、Intraday或Ready实时状态；Daily复用同一个Panel。Workbench.scan_quote只读同一RealtimeFeed.output，最新Scan日与Monitor共用quote.latest；历史日期返回latest=null，行情K线revision不变也随WS更新报价。Panel复用一个价格轴标签，有最新报价时隐藏原closed价标签；报价选择与外观分别见Longbridge数据要求和Chart UI。
 
-indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/ADV/RFL入口。ADR/ADV窗口统一最近最多20根实际已完成记录；ADV取turnover均值，窗口内任何金额缺失则为空，不跳过或回退估算。指标直接消费已选来源的数据；不同供应商结果允许不同。口径修改后用既有CLI重算最新Scan特征；历史快照保留生成时结果，需统一旧日期时显式scan --date重算，不把GET变成重算触发器。
+indicators.py是唯一EMA/SMA/TR/Wilder ATR/ADR/MDV/RFL入口。ADR/MDV窗口统一最近最多20根实际已完成记录；MDV取turnover中位数，窗口内任何金额缺失则为空，不跳过或回退估算。指标直接消费已选来源的数据；不同供应商结果允许不同。口径修改后用既有CLI重算最新Scan特征；派生截面可直接清理重建；不把旧均值字段改名成中位数，历史人工workspace保留，不把GET变成重算触发器。
 
 来源契约分别只在 [longbridge-data.md](longbridge-data.md) 与 [massive-data.md](massive-data.md) 维护。longbridge/client.py落实Longbridge请求口径；读取、指标和图表直接使用所属来源的数据。pandas ewm(adjust=False)仅是加权算法参数。
 
-38项条件目录仅ui/src/filter-catalog.json一份，后端读取该文件验证保存契约，后端list_rules.matches_filters执行名单分类，前端filters.ts执行草稿显示筛选，二者共享相同边界/缺失语义。保存值不取整；旧maxExclusive语义保留到主动编辑。Tag草稿不写盘，Save写完整preferences后才更新内存，失败保留草稿；不建立长期多版本猜测/迁移框架。
+35项形态条件目录仅ui/src/filter-catalog.json一份，后端读取该文件验证保存契约，后端list_rules.matches_filters执行名单分类，前端filters.ts执行草稿显示筛选，二者共享相同边界/缺失语义。保存值不取整；旧maxExclusive语义保留到主动编辑。Tag草稿不写盘，Save写完整preferences后才更新内存，失败保留草稿；不建立长期多版本猜测/迁移框架。
 
 ## Massive准备与统一状态
 
 正式serve启动一次MassivePipeline.run；手动massive命令/脚本及页面Refresh复用它，无周期定时器。单任务串行执行Daily→split→bars→features；Daily/split网络获取保持既有有界重试；bars/features本地失败直接报错，不自动重试。网络失败不回退直连。HTTP/WS/图表读取不安排任务。
 
-network.proxy_url统一读取MARKET_PROXY，默认http://127.0.0.1:7899，显式空值直连；create_session禁用trust_env。Massive、SnapTrade和Additional Info显式传proxy，但各自保留限流、签名、解析和session。massive/settings.py读取MASSIVE_API_KEY或单行massive-token.txt；Longbridge及SnapTrade凭证分别由longbridge/client.py、snaptrade.py读取。日志不得包含值、带key的URL或任意上游响应体。
+network.proxy_url统一读取MARKET_PROXY，默认http://127.0.0.1:7899，显式空值直连；create_session禁用trust_env。Massive、SnapTrade和Additional Info显式传proxy，但各自保留限流、签名、解析和session。config.py的credential_section/credential_values共用读取config/credentials.json，各源按分组获取自身字段；Massive保留MASSIVE_API_KEY覆盖。正式CLI只提供一个--credentials路径；模拟器与Mock不读取。日志不得包含值、带key的URL或任意上游响应体。
 
 Daily/split下载、重试及复权要求集中在massive-data.md。symbol_directory独立脚本仅取两个免费文本，不由pull_massive/服务/GET触发；缺目录或坏配置在任何Massive请求之前检查。Mock构建器先写明确合成目录。开发验证遵循独立准则，优先真实数据，只做本次必要检查。
 
@@ -205,7 +205,7 @@ ui/src/intraday-state.ts集中格式化、Badge和rank比较；quiet参数仅供
 
 ## Schwab Trade 接入
 
-独立需求与当前接口见 [schwab-trade.md](schwab-trade.md)，网关认证、内存、恢复与协议见 [schwab-backend.md](schwab-backend.md)。data_service/schwab_backend.py 是唯一交易核心，网关与接入测试分别位于 tests/test_schwab_backend.py、tests/test_trade.py，不依赖独立项目目录。trade.py 只做独立账户投影、Sold Today 和订阅集合入口，严格请求模型调用原五个交易函数，不建立交易账本或 SnapTrade 适配。Workbench 管理同进程任务，http_api 保留交易专用 Host/Origin/JSON/错误规则，并通过原 WS 发布带 symbol/request_id/mode/source 的 trade_quote；list 内的 trade 快照带各自账户/订单成功时间和实际 limits。前端 main/types/list 支持第三模式，schwab-data.ts 声明完整原生订单/成交/持仓响应并提供只读整理，schwab-holdings.ts 保留原生视图与节点更新；两表仅共用 holdings-layout.ts 和 symbol-row/attention/palette，不统一会计或刷新。trade.ts 管理草稿及 Send 分派，trade-lines.ts 使用公开 API 绘制双图交易线，price-lines.ts 与 alerts.ts 共用坐标、命中及横线绘制。config/trade-ui.json 是价差显示阈值源，npm build 将其复制到 UI 静态目录，不新增读取 API。新模式不启动第二个 SDK context、HTTP 服务或前端框架；模拟器不构造真实 Schwab Runtime。
+独立需求与当前接口见 [schwab-trade.md](schwab-trade.md)，网关认证、内存、恢复与协议见 [schwab-backend.md](schwab-backend.md)。data_service/schwab_backend.py 是唯一交易核心，网关与接入测试分别位于 tests/test_schwab_backend.py、tests/test_trade.py，不依赖独立项目目录。trade.py 只做独立账户投影、Sold Today 和订阅集合入口，严格请求模型调用原五个交易函数，不建立交易账本或 SnapTrade 适配。Workbench 管理同进程任务，http_api 保留交易专用 Host/Origin/JSON/错误规则，并通过原 WS 发布带 symbol/request_id/mode/source 的 trade_quote；list 内的 trade 快照带各自账户/订单成功时间和实际 limits。前端 main/types/list 支持第三模式，schwab-data.ts 声明完整原生订单/成交/持仓响应并提供只读整理，schwab-holdings.ts 保留原生视图与节点更新；两表仅共用 holdings-layout.ts 和 symbol-row/attention/palette，不统一会计或刷新。trade.ts 管理草稿及 Send 分派，trade-lines.ts 使用公开 API 绘制双图交易线，price-lines.ts 与 alerts.ts 共用坐标、命中及横线绘制。价差阈值只在trade.ts的SPREAD_WARNING_PERCENT常量维护；没有配置fetch、独立静态JSON或构建复制步骤。新模式不启动第二个 SDK context、HTTP 服务或前端框架；模拟器不构造真实 Schwab Runtime。
 
 trade-ticket 的 CSS grid 仅排列数量、预估与按钮，align-content:end 固定按钮底边，row-gap 只向上展开前两行；顶部报价与反馈使用独立绝对定位，不参与这三行的间距。trade.ts 的数量刻度由当前 maximum/step/轨道宽度直接生成；ResizeObserver 仅在轨道尺寸变化时重算标签，报价更新复用未变化的节点。数量轴保留原生range行为及普通指针，不注册指针捕获或鼠标隐藏生命周期；用原生:active在拖动中冻结步长/范围，input更新数量和预览。Accepted 的短暂反馈由独立前端计时器管理，不订阅账户或订单状态作为关闭条件；写入已知离线与未知结果的区别沿原专用请求契约处理。具体显示和反馈语义只维护在 Schwab Trade 与 Chart UI。
 

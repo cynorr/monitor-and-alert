@@ -18,3 +18,5 @@ Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-
 - Holdings修改优先核对现有真实快照/服务，仅补充相关`test_holdings.py`和`test_holdings_integration.py`；失败保持已接受快照，不增加轮询任务或恢复框架。
 
 - Schwab Trade 的唯一规范为 [docs/schwab-trade.md](../docs/schwab-trade.md)。schwab_backend.py 维护原交易内核；trade.py 只投影独立账户/订单并复用严格模型，不读取 SnapTrade 账本、不增加写重试。Workbench 管理第三模式、生命周期与当前账户风险角色；认证、内存、恢复及网关协议维护于 [docs/schwab-backend.md](../docs/schwab-backend.md)，定向测试位于 tests/test_schwab_backend.py。
+
+- 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

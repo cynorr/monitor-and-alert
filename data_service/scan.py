@@ -15,7 +15,7 @@ import pandas as pd
 from .calendar import ET
 from .features.screening import apply_filter, add_rank, mark_candidate
 from .features.snapshot import feature_row, feature_frame
-from .indicators import series, daily_summary, adr_adv, return_from_low, turnover_context, turnover_comparison
+from .indicators import series, daily_summary, adr_mdv, return_from_low, turnover_context, turnover_comparison
 from .storage import atomic_json, read_bars, bar_row, ohlc_comparison, append_ohlc_log
 from .workspace import inherit_workspace, migrate_workspace, is_hidden, persistent_workspace
 from .preferences import INITIAL_PREFERENCES, validate_preferences
@@ -89,7 +89,7 @@ def _feature_updates(rows):
         return {}
     # Complete metrics, including RFL values, without changing screening or ranks.
     features = feature_frame(rows).drop(columns=['date', 'open', 'high', 'low', 'close', 'volume',
-                                                 'adr20', 'adv20'])
+                                                 'adr20', 'mdv20'])
     return {row['symbol']: row for row in json.loads(features.to_json(orient='records', double_precision=15))}
 
 
@@ -127,14 +127,14 @@ def build_day(path, value, calendar, now=None, log_path=None, mock=False, *, tra
         for symbol in symbols:
             info = directory.get(symbol)
             etf_pass = not config.exclude_etfs or (info is not None and not info['etf'])
-            limit = max(20, config.min_daily_bars) if etf_pass else 20
+            limit = max(20, config.minimum_daily_bars) if etf_pass else 20
             history = checked_history(db, symbol, cutoff, calendar, now, limit, log_path)
             window_starts[symbol] = history[0].ts
-            metrics = adr_adv({key: [getattr(bar, key) for bar in history[-20:]]
+            metrics = adr_mdv({key: [getattr(bar, key) for bar in history[-20:]]
                                for key in ('high', 'low', 'turnover')})
             rows.append({'symbol': symbol, 'close': history[-1].close, **metrics,
                          'etf': info['etf'] if info else None,
-                         'etf_pass': etf_pass, 'history_pass': len(history) >= config.min_daily_bars})
+                         'etf_pass': etf_pass, 'history_pass': len(history) >= config.minimum_daily_bars})
         screen = apply_filter(pd.DataFrame(rows), config)
         for name in ('rfl1m', 'rfl3m', 'rfl6m'):
             screen[name] = float('nan')

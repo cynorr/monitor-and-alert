@@ -12,7 +12,7 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 
 | List | 用途 | Section |
 | --- | --- | --- |
-| Discover | 按 [Massive 数据要求](massive-data.md) 先完成证券与历史资格、ADR/ADV 初筛，再取 RFL 排名并集，等待选入 Focus | 按潜力 Tag 分组，未匹配为 Unclassified |
+| Discover | 按 [Massive 数据要求](massive-data.md) 先完成证券与历史资格、ADR/MDV 初筛，再取 RFL 排名并集，等待选入 Focus | 按潜力 Tag 分组，未匹配为 Unclassified |
 | Focus | 正式关注、实时看盘；成员跨日保留 | 按潜力 Tag 分组，未匹配为 Unclassified |
 | Excluded | 当日机器排除与人工屏蔽 | Broken、Extended、Under-50、Hidden |
 

@@ -1,5 +1,6 @@
 """Offline shared HTTP configuration checks."""
 import asyncio
+import json
 
 import pytest
 
@@ -26,14 +27,14 @@ def test_http_session_uses_source_timeout_and_ignores_environment_proxy():
 
 
 def test_massive_token_prefers_environment_and_missing_config_is_clear(tmp_path, monkeypatch):
-    path = tmp_path / 'massive-token.txt'
-    path.write_text('file-test-token\n')
+    path = tmp_path / 'credentials.json'
+    path.write_text(json.dumps({'massive': {'api_key': 'file-test-token'}}))
     monkeypatch.setenv('MASSIVE_API_KEY', ' environment-test-token ')
     assert read_massive_token(path) == 'environment-test-token'
     monkeypatch.delenv('MASSIVE_API_KEY')
     assert read_massive_token(path) == 'file-test-token'
-    with pytest.raises(ValueError, match='^Massive credentials missing:'):
-        read_massive_token(tmp_path / 'missing-token.txt')
+    with pytest.raises(FileNotFoundError):
+        read_massive_token(tmp_path / 'missing-credentials.json')
 
 
 @pytest.mark.parametrize('configured_proxy,expected', [('http://127.0.0.1:7899', 'http://127.0.0.1:7899'), ('', None)])

@@ -2,6 +2,7 @@ import { $, dayKey } from './types.js';
 import { numeric, editableStop, activeOrders, flattenOrders } from './schwab-data.js';
 import { palette } from './palette.js';
 import { TradeLines } from './trade-lines.js';
+const SPREAD_WARNING_PERCENT = 0.5;
 export function quantityStep(price) {
     const target = Math.max(1, 500 / price), magnitude = 10 ** Math.floor(Math.log10(target));
     return Math.max(1, [1, 2, 5, 10].map(n => n * magnitude).reduce((a, b) => Math.abs(a - target) < Math.abs(b - target) ? a : b));
@@ -63,7 +64,6 @@ export function orderFieldsComplete(mode, qty, buy, stop) {
 }
 export class TradeController {
     appMode;
-    config;
     state = null;
     enabled = false;
     symbol = '';
@@ -87,9 +87,8 @@ export class TradeController {
     rulerStep = 1;
     rulerMaximum = 1;
     tickSignature = '';
-    constructor(panels, appMode, config) {
+    constructor(panels, appMode) {
         this.appMode = appMode;
-        this.config = config;
         this.lines = panels.map(panel => new TradeLines(panel, (line, price) => {
             if (this.busy)
                 return;
@@ -335,7 +334,7 @@ export class TradeController {
         const spreadPercent = spread != null && bid && bid > 0 ? spread / bid * 100 : null;
         $('trade-spread-percent').textContent = spreadPercent != null ? spreadPercent.toFixed(2) + '%' : '';
         $('trade-spread-value').textContent = spread?.toFixed(2) ?? '';
-        $('trade-spread-percent').classList.toggle('spread-wide', spreadPercent != null && spreadPercent > this.config.spread_warning_percent);
+        $('trade-spread-percent').classList.toggle('spread-wide', spreadPercent != null && spreadPercent > SPREAD_WARNING_PERCENT);
         const distance = breakout && reference != null && reference > 0 && numeric(this.stop) != null ? reference - Number(this.stop) : null;
         $('trade-estimate').textContent = active && reference != null && qty != null ? Math.round(reference * qty).toLocaleString('en-US') : '';
         $('trade-risk').textContent = active && distance != null && qty != null ? `Risk ${(distance / reference * 100).toFixed(2)}% ｜ ${Math.round(distance * qty).toLocaleString('en-US')}` : '';

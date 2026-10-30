@@ -12,7 +12,7 @@ from aiohttp import ClientSession
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from data_service.longbridge.client import LongbridgeClient
-from data_service.config import load_tickers
+from data_service.config import load_tickers, DEFAULT_CREDENTIALS
 from data_service.http_api import start_http
 from data_service.monitor import MonitorService
 from data_service.storage import atomic_json
@@ -30,7 +30,7 @@ async def run(args):
             requests.append({'symbol': symbol, 'timeframe': timeframe, 'count': count,
                              'returned': len(rows), 'seconds': round(time.monotonic() - started, 3)})
             return rows
-    broker = ObservedBroker(ROOT / 'longbridge-token.txt', {t.symbol for t in tickers}, runtime)
+    broker = ObservedBroker(DEFAULT_CREDENTIALS, {t.symbol for t in tickers}, runtime)
     service = MonitorService(tickers, runtime, broker)
     runner = await start_http(service, args.port)
     task = asyncio.create_task(service.run())

@@ -11,6 +11,7 @@ import time
 import aiohttp
 
 from ..calendar import TradingCalendar
+from ..config import DEFAULT_CREDENTIALS
 from . import daily, splits, build
 from .settings import load_config, read_massive_token
 from ..additional_info.symbol_directory import read_directory
@@ -41,7 +42,7 @@ class RequestFailure(Exception):
 
 
 class MassivePipeline:
-    def __init__(self, paths, calendar=None, *, credentials=Path('massive-token.txt')):
+    def __init__(self, paths, calendar=None, *, credentials=DEFAULT_CREDENTIALS):
         self.paths, self.calendar, self.credentials = paths, calendar or TradingCalendar(), Path(credentials)
         self.session, self._token, self._last_request = None, None, 0.0
         self._running = False

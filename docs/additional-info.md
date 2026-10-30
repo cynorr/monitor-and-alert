@@ -45,7 +45,7 @@ sector 与 industry 分别保留 Nasdaq 原分类，缓存和传输不截断字�
 
 ## 显示语义
 
-Daily 显示可空公司名和精简分类；公司名在 symbol 右侧底部对齐，分类位于 symbol 下一行，ADR/ADV 顺移一行。市值显示在 Intraday 周期按钮下方，例如 `Market Cap 1.5B`，可见文字不带美元符号；tooltip 保留完整美元数值和更新时间。Scan 没有 Intraday，因此不显示市值。财报位于 Daily 右上角 Go to latest 圆形按钮左侧，样式与 Intraday 的 ET time 相近。位置、字号和颜色的唯一详细规范见 Chart UI。
+Daily 显示可空公司名和精简分类；公司名在 symbol 右侧底部对齐，分类位于 symbol 下一行，ADR/MDV 顺移一行。市值显示在 Intraday 周期按钮下方，例如 `Market Cap 1.5B`，可见文字不带美元符号；tooltip 保留完整美元数值和更新时间。Scan 没有 Intraday，因此不显示市值。财报位于 Daily 右上角 Go to latest 圆形按钮左侧，样式与 Intraday 的 ET time 相近。位置、字号和颜色的唯一详细规范见 Chart UI。
 
 分类最多显示两个不同名称，以 ` · ` 分隔。分别取 sector 和 industry 第一个冒号前的名称，删除括号内说明并合并空白；两者忽略大小写相同则只显示 sector，不把冒号后的更细分类提升为第二级。缺少一级时只显示已有名称，两者都缺失则隐藏。例如 `Health Care / Biotechnology: Biological Products (No Diagnostic Substances)` 显示 `Health Care · Biotechnology`，`Finance / Finance: Consumer Services` 只显示 `Finance`。tooltip 也使用精简文字，原分类仍在缓存和响应中保留。
 

@@ -95,7 +95,7 @@ export type Ticker = {
     errors?: string[];
     close?: number | null;
     adr20?: number | null;
-    adv20?: number | null;
+    mdv20?: number | null;
 };
 export type View = {
     type?: string;
@@ -112,7 +112,7 @@ export type View = {
     quote: Quote;
     summary: {
         adr20: number | null;
-        adv20: number | null;
+        mdv20: number | null;
         samples: number;
     };
     status: {

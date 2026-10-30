@@ -1,24 +1,25 @@
 # Massive 数据要求
 
-更新：2026-10-30。本文件是 Massive 下载、证券目录、候选资格、ADR/ADV、RFL、名单完整特征和构建策略的唯一要求入口。共用 Bar 表结构见 [upstream-daily-data.md](upstream-daily-data.md)，名单生命周期见 [list-design.md](list-design.md)，图表展示见 [ui.md](ui.md)。
+更新：2026-10-30。本文件是 Massive 下载、证券目录、候选资格、ADR/MDV、RFL、名单完整特征和构建策略的唯一要求入口。共用 Bar 表结构见 [upstream-daily-data.md](upstream-daily-data.md)，名单生命周期见 [list-design.md](list-design.md)，图表展示见 [ui.md](ui.md)。
 
 ## 独立配置与处理顺序
 
-候选条件集中在 [config/massive.json](../config/massive.json)，每次生成直接重读。修改配置/目录后通过命令行主动重算，操作见 [Massive 操作](../README.md#massive-操作)；不跟踪配置/目录版本，不自动重算。配置错误直接报错。
+候选条件集中在 [config/scan.json](../config/scan.json)，每次生成直接重读。修改配置/目录后通过命令行主动重算，操作见 [Massive 操作](../README.md#massive-操作)；不跟踪配置/目录版本，不自动重算。配置错误直接报错。
 
 | 配置 | 当前值 | 含义 |
 | --- | --- | --- |
-| exclude_etfs | true | 所有 ETF 均不参与候选排名，含单股、多倍、做多/做空 ETF |
-| min_daily_bars | 50 | 截至扫描日实际存在至少 50 根有效、已完成日 K |
-| adr20_min_pct | 5.0 | ADR20 至少 5% |
-| adv20_min_usd | 5000000 | ADV20 至少 $5M |
-| rfl_top_n | 50 | RFL 1m / 3m / 6m 分别取前 50，取并集 |
+| exclude_etfs | true | 官方目录确认非ETF；ETF与未确认类别不参与排名 |
+| minimum_daily_bars | 50 | 至少50根有效、已完成日K |
+| minimum_mdv20_usd | 15000000 | MDV20至少$15M |
+| minimum_adr20_percent | 4 | ADR20至少4% |
+| close_price_above_usd | 5 | 完成日Close严格大于$5 |
+| momentum_top_n | 75 | RFL 1m/3m/6m各取Top75，OR并集 |
 
-顺序：当日有 bar → 目录确认非 ETF → 有效历史门槛 → ADR/ADV → RFL 计算与全市场排名 → 候选及保留成员的完整特征。被挡住的证券不占 RFL 名次；属于 Focus 或有效 Hidden 的证券仍按下述范围计算完整特征。目录未知不当作非 ETF；公司资料不参与资格判断。未增加 Price、Test Issue、权证、优先股或 ADR 类别规则。
+顺序：当日有bar → 目录确认非ETF → 历史资格 → MDV20/ADR20/Close基础过滤 → 完整合格Universe内计算RFL和排名 → Top75 OR候选 → Tag分类。只排名一次，后续Broken、Extended、Under-50、Hidden和显示Filter不重新排名或补位。沿用现有非ETF目录口径，不新增权证、优先股或Test Issue分类。保留Focus/有效Hidden的完整特征范围见下文。
 
 “50 日”采用实际日 K 根数，目的为确保 SMA50 有样本；不是上市后的 50 个自然日，也不查询或推测 IPO 日期。停牌/缺数据按实际记录计数，未来 bar 不计入；即使名义上市已很久但本地不足 50 根，也暂不成为候选。价格正数有限、volume 非负整数、时间及闭合边界有效；仅 OHLC 上下界矛盾仍保留官方原值并记录日志，继续采用项目共用校验规则。
 
-上述门槛只决定自动扫描候选。Focus 和有效 Hidden 继续用本地数据计算完整特征，不因未入选候选或 RFL 前 50 而省略。Hidden 七天内跳过名单规则判断，仍计算特征；归属与期限见 [list-design.md](list-design.md#每日规则)。Holdings 独立，不根据扫描资格删持仓，也不扩大 Longbridge 订阅。
+上述门槛只决定自动扫描候选。Focus 和有效 Hidden 继续用本地数据计算完整特征，不因未入选候选或 RFL 前75 而省略。Hidden 七天内跳过名单规则判断，仍计算特征；归属与期限见 [list-design.md](list-design.md#每日规则)。Holdings 独立，不根据扫描资格删持仓，也不扩大 Longbridge 订阅。
 
 ## Nasdaq Trader ETF 筛查目录
 
@@ -42,15 +43,15 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 ## 唯一指标口径
 
 - ADR20：最近最多 20 根实际已完成记录的 `(high-low)/low × 100` 均值，单位为百分比。
-- ADV20：同一窗口的 `turnover` 均值，单位 USD。金额来自同根 VWAP×未取整复权 volume；窗口内有缺失金额则 ADV20 缺失，不跳过、不向前补样本、不回退 close×volume。筛选阈值不变，改口径后通过维护 CLI 重算所需日期的特征。
+- MDV20：同一窗口的`turnover`中位数（20条时为排序后第10、11项的均值），单位 USD。金额来自同根 VWAP×未取整复权 volume；窗口内有缺失金额则 MDV20 缺失，不跳过、不向前补样本、不回退 close×volume。窗口沿用最近最多20根实际完成记录；Scan的50根历史资格确保使用20条。基础条件唯一来源为config/scan.json，Tag不可另设。
 - RFL1m / 3m / 6m：分别使用最近最多 21 / 63 / 126 根实际记录的最低 low，计算 `(当日 close / 最低 low - 1) × 100`。不足完整窗口时沿用实际可用记录；候选历史资格另按上述门槛判断。
-- 只对通过全部资格与 ADR/ADV 条件的证券排名。并列按 symbol 稳定顺序 `rank(method=first)`；三个周期入选任一即成为候选。
+- 只对通过全部资格、价格与ADR/MDV条件的证券排名。并列按 symbol 稳定顺序 `rank(method=first)`；三个周期入选任一即成为候选。
 
 唯一公式维护于 `indicators.py`，筛选条件维护于 `features/screening.py`。日图和 Scan 使用同一公式，不重复存逐根指标。
 
 ### 名单完整特征范围
 
-完整特征计算范围为当日候选 ∪ 当日人工 Discover ∪ Focus ∪ 有效 Hidden。自动 Excluded 是候选分类结果，不额外扩展范围。新日首次生成仅从前日名单保留 Focus 和未到期 Hidden；同日重算纳入当日人工 Discover。过期 Hidden 和历史机器 Excluded 非候选不再计算。搜索新增仅本地补齐该股完整特征，不重跑排名；新日不继承人工 Discover。保留的 Focus/Hidden 即使未通过候选资格或 RFL 前 50，仍使用截至扫描日的本地历史计算均线、ATR、原子特征和三种 RFL 数值；Growth 不另建公式或字段。
+完整特征计算范围为当日候选 ∪ 当日人工 Discover ∪ Focus ∪ 有效 Hidden。自动 Excluded 是候选分类结果，不额外扩展范围。新日首次生成仅从前日名单保留 Focus 和未到期 Hidden；同日重算纳入当日人工 Discover。过期 Hidden 和历史机器 Excluded 非候选不再计算。搜索新增仅本地补齐该股完整特征，不重跑排名；新日不继承人工 Discover。保留的 Focus/Hidden 即使未通过候选资格或 RFL 前75，仍使用截至扫描日的本地历史计算均线、ATR、原子特征和三种 RFL 数值；Growth 不另建公式或字段。
 
 继承名单不另行排名。已参加候选筛选的成员保留该阶段产生的全市场名次；未参加排名的成员名次保持空缺。补全完整特征和 RFL 数值不改变 `eligible`、`candidate` 或已有名次，也不沿用昨日的特征结论。Hidden 的屏蔽期限只影响名单规则判断，不减少特征计算范围；数据不足的字段继续保留缺失，不编造历史或据此判为 Broken。
 
@@ -60,7 +61,7 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 
 `runtime/massive/splits.json` 以 Daily 的同一成熟交易日为目标；本地覆盖包含目标日及向前两年窗口时跳过，周末/休市日不重复获取。需要获取时完整分页覆盖目标交易日向前两年窗口，替换该窗口记录并保留更早历史；核对覆盖、比例与唯一 ID 后才原子发布。不得根据候选列表缩减拆股覆盖。Massive 请求共享至少 15 秒的开始间隔；不在此轮增加类型/名称/IPO 查询。
 
-在执行日前，价格及 VWAP 乘累计 `split_from/split_to`，成交量除该因子后用 Decimal ROUND_HALF_UP 转为 SQLite 非负整数。turnover 仅由可靠同根 VWAP × 未取整的复权量得到，否则 NULL；ADV 使用此金额，不再采用 close×整数 volume。Daily 保留 Massive 的供应商时段口径，metadata 写 `session=massive_daily`，不宣称仅 regular。与 Longbridge 不拼接历史或交叉校验，读库/计算/显示不再二次复权。
+在执行日前，价格及 VWAP 乘累计 `split_from/split_to`，成交量除该因子后用 Decimal ROUND_HALF_UP 转为 SQLite 非负整数。turnover 仅由可靠同根 VWAP × 未取整的复权量得到，否则 NULL；MDV使用此金额，不再采用 close×整数 volume。Daily 保留 Massive 的供应商时段口径，metadata 写 `session=massive_daily`，不宣称仅 regular。与 Longbridge 不拼接历史或交叉校验，读库/计算/显示不再二次复权。
 
 ## SQLite 增量与全量重建
 

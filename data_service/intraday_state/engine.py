@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..calendar import ET
-from ..indicators import adr_adv, preview
+from ..indicators import adr_mdv, preview
 from .volume import VolumeHistory
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / 'config' / 'intraday-state.json'
@@ -91,7 +91,7 @@ class IntradayState:
         signature = day, revision
         if cached is None or cached[0] != signature:
             closed = [row for row in rows if datetime.fromtimestamp(row['time'], ET).date() < day][-20:]
-            adr = adr_adv({key: [row[key] for row in closed] for key in ('high', 'low', 'close', 'volume')})['adr20'] if closed else None
+            adr = adr_mdv({key: [row[key] for row in closed] for key in ('high', 'low', 'close', 'volume')})['adr20'] if closed else None
             self.baselines[symbol] = signature, float(adr) if adr is not None else None
         adr = self.baselines[symbol][1]
         if adr is None or adr <= 0:

@@ -1,0 +1,8 @@
+{
+  "exclude_etfs": true,
+  "minimum_daily_bars": 50,
+  "minimum_mdv20_usd": 15000000,
+  "minimum_adr20_percent": 4,
+  "close_price_above_usd": 5,
+  "momentum_top_n": 75
+}

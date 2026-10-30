@@ -13,7 +13,7 @@ from data_service.calendar import TradingCalendar, ET
 from data_service.config import load_tickers
 from data_service.http_api import start_http
 from data_service.monitor import MonitorService
-from data_service.workspace import Workspace
+from data_service.workspace import Workspace, resolve_latest_workspace
 from simulator.market import Market, SessionClock, SimulatedQuotes, default_start
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +29,7 @@ def create_simulation(tickers, runtime, calendar, clock):
 
 def parser():
     result = argparse.ArgumentParser(description='Offline chart and Quote simulator')
-    result.add_argument('--workspace', type=Path, default=ROOT/'workspace.json')
+    result.add_argument('--workspace', type=Path, help='Copy this workspace instead of the latest real Scan day')
     result.add_argument('--symbols', nargs='+', help='Optional subset of workspace focus/wait')
     result.add_argument('--port', type=int, default=18765)
     result.add_argument('--speed', type=float, default=1, help='Trading seconds per real second')
@@ -42,11 +42,12 @@ async def main(args=None):
     calendar = TradingCalendar()
     start = int(datetime.fromisoformat(args.start).replace(tzinfo=ET).timestamp()) if args.start else default_start(calendar)
     clock = SessionClock(calendar, start, args.speed)
-    tickers = load_tickers(args.workspace, args.symbols, allow_empty=True)
+    workspace_path = args.workspace or resolve_latest_workspace()
+    tickers = load_tickers(workspace_path, args.symbols, allow_empty=True)
     with tempfile.TemporaryDirectory(prefix='chart-simulator-') as folder:
         service = create_simulation(tickers, Path(folder), calendar, clock)
         path = Path(folder) / 'workspace.json'
-        shutil.copyfile(args.workspace, path)
+        shutil.copyfile(workspace_path, path)
         workspace = Workspace(path)
         service.attach_workspace(workspace, args.symbols)
         runner = None

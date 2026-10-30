@@ -66,11 +66,11 @@ def add_indicators(history):
     return result
 
 
-def adr_adv(history):
+def adr_mdv(history):
     high, low = (np.asarray(history[name], dtype=float) for name in ('high', 'low'))
     amounts = np.asarray(history.get('turnover', []), dtype=float)[-20:]
     return {'adr20': ((high[-20:] - low[-20:]) / low[-20:] * 100).mean(),
-            'adv20': float(amounts.mean()) if len(amounts) == min(20, len(high)) and len(amounts) and np.isfinite(amounts).all() else None}
+            'mdv20': float(np.median(amounts)) if len(amounts) == min(20, len(high)) and len(amounts) and np.isfinite(amounts).all() else None}
 
 
 def return_from_low(history):
@@ -82,7 +82,7 @@ def return_from_low(history):
 
 
 def daily_metrics(history):
-    return {**adr_adv(history), **return_from_low(history)}
+    return {**adr_mdv(history), **return_from_low(history)}
 
 
 def series(rows: list[dict], sma_period: int = 50) -> dict:
@@ -116,7 +116,7 @@ def preview(base: dict, active: dict | None) -> dict:
 def daily_summary(bars, calendar, now):
     rows = [b for b in bars if calendar.bar_end(b.ts, '1d') <= now][-20:]
     if not rows:
-        return {'adr20': None, 'adv20': None, 'samples': 0}
-    metrics = adr_adv({'high': [b.high for b in rows], 'low': [b.low for b in rows],
+        return {'adr20': None, 'mdv20': None, 'samples': 0}
+    metrics = adr_mdv({'high': [b.high for b in rows], 'low': [b.low for b in rows],
                              'turnover': [b.turnover for b in rows]})
-    return {key: metrics[key] for key in ('adr20', 'adv20')} | {'samples': len(rows)}
+    return {key: metrics[key] for key in ('adr20', 'mdv20')} | {'samples': len(rows)}

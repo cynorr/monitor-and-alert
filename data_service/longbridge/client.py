@@ -9,17 +9,10 @@ from pathlib import Path
 
 from longbridge.openapi import AdjustType, AsyncQuoteContext, Config, Period, PushCandlestickMode, SubType, TradeSessions
 
-from ..config import redact
+from ..config import redact, credential_values
 
 SDK_PERIODS = {'1d': Period.Day, '5m': Period.Min_5, '15m': Period.Min_15,
                '30m': Period.Min_30, '1h': Period.Min_60, '2h': Period.Min_120}
-
-
-def read_credentials(path: Path) -> tuple[str, str, str]:
-    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
-    if len(lines) != 6 or lines[::2] != ['App Key', 'App Secret', 'App Token']:
-        raise ValueError('Expected App Key / App Secret / App Token labels, each followed by its value')
-    return tuple(lines[1::2])
 
 
 class RateLimiter:
@@ -49,7 +42,7 @@ class LongbridgeClient:
                  region: str = 'cn', timeout: float = 15):
         self.allowed = frozenset(allowed)
         self.candle_allowed = self.allowed
-        self.secrets = read_credentials(credentials)
+        self.secrets = credential_values(credentials, 'longbridge', 'app_key', 'app_secret', 'access_token')
         domain = 'cn' if region == 'cn' else 'com'
         os.environ['LONGBRIDGE_REGION'] = 'cn' if region == 'cn' else 'hk'
         self.config = Config.from_apikey(

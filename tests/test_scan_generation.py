@@ -32,29 +32,6 @@ def small_source(tmp_path, rows):
     return path, calendar, calendar.session(date(2026, 10, 1))[1]
 
 
-def test_screen_first_without_price_floor_and_build_only_candidates(tmp_path, monkeypatch):
-    path, calendar, now = small_source(tmp_path, [
-        ('LOW.US', .8, .85, .7, 10_000_000),
-        ('ALSO.US', 10., 11., 9., 1_000_000),
-        ('ILLIQUID.US', 10., 11., 9., 1),
-    ])
-    called = []
-    original = scan.feature_row
-    def feature_row(history):
-        called.append(history['symbol'].iloc[-1])
-        return original(history)
-    monkeypatch.setattr(scan, 'feature_row', feature_row)
-    snapshot = scan.build_day(path, '2026-10-01', calendar, now, screening_config=replace(load_config(), rfl_top_n=1))
-    rows = {row['symbol']: row for row in snapshot['rows']}
-    assert called == ['LOW.US']
-    assert rows['LOW.US']['candidate'] and rows['LOW.US']['close'] < 5
-    assert rows['LOW.US']['sma50'] == pytest.approx(.8)
-    assert rows['ALSO.US']['eligible'] and not rows['ALSO.US']['candidate']
-    assert 'ema20' not in rows['ALSO.US'] and 'extended_k' not in rows['ILLIQUID.US']
-    assert rows['ILLIQUID.US']['rfl1m'] is None
-    json.dumps(snapshot, allow_nan=False)
-
-
 def test_no_candidates_does_not_build_features(tmp_path, monkeypatch):
     path, calendar, now = small_source(tmp_path, [('NONE.US', 10., 10., 10., 1)])
     monkeypatch.setattr(scan, 'feature_row', lambda history: pytest.fail('No candidate needs features'))
@@ -76,18 +53,18 @@ def test_retained_scope_completes_rfl_and_features_without_changing_screening(tm
         return original(history)
     monkeypatch.setattr(scan, 'feature_row', feature_row)
     snapshot = scan.build_day(path, '2026-10-01', calendar, now,
-                              screening_config=replace(load_config(), rfl_top_n=1),
+                              screening_config=replace(load_config(), momentum_top_n=1, minimum_mdv20_usd=5_000_000),
                               tracked_tickers={'ILLIQUID', 'ALSO', 'LOW', 'MISSING'})
     rows = {row['symbol']: row for row in snapshot['rows']}
     assert called == snapshot['feature_scope'] == ['ALSO.US', 'ILLIQUID.US', 'LOW.US']
-    assert rows['LOW.US']['candidate'] and 'ema10' in rows['LOW.US']
+    assert not rows['LOW.US']['candidate'] and 'ema10' in rows['LOW.US']
     assert not rows['ILLIQUID.US']['eligible'] and 'extended_k' in rows['ILLIQUID.US']
     assert not rows['ILLIQUID.US']['candidate']
     for name in ('rfl1m', 'rfl3m', 'rfl6m'):
         assert rows['ILLIQUID.US'][name] == pytest.approx((10 / 9 - 1) * 100)
         assert rows['ILLIQUID.US'][name + '_rank'] is None
-        assert rows['ALSO.US'][name + '_rank'] == 2
-    assert not rows['ALSO.US']['candidate'] and rows['ALSO.US']['sma50'] == 10
+        assert rows['ALSO.US'][name + '_rank'] == 1
+    assert rows['ALSO.US']['candidate'] and rows['ALSO.US']['sma50'] == 10
 
 
 def test_enrich_completes_saved_rfl_and_missing_features_once_and_preserves_ranks(tmp_path, monkeypatch):
@@ -97,7 +74,7 @@ def test_enrich_completes_saved_rfl_and_missing_features_once_and_preserves_rank
         ('ILLIQUID.US', 10., 11., 9., 1),
     ])
     snapshot = scan.build_day(path, '2026-10-01', calendar, now, tracked_tickers={'ILLIQUID'},
-                              screening_config=replace(load_config(), rfl_top_n=1))
+                              screening_config=replace(load_config(), momentum_top_n=1, minimum_mdv20_usd=5_000_000))
     for row in snapshot['rows']:
         if row['symbol'] == 'ILLIQUID.US':
             row.update(rfl1m=None, rfl3m=None, rfl6m=None)
@@ -109,8 +86,8 @@ def test_enrich_completes_saved_rfl_and_missing_features_once_and_preserves_rank
         return original(history)
     monkeypatch.setattr(scan, 'feature_row', feature_row)
     enriched = scan.enrich_snapshot(path, snapshot, calendar, tracked_tickers={'ILLIQUID', 'ALSO'})
-    assert called == ['ALSO.US', 'ILLIQUID.US']
-    assert enriched['feature_scope'] == ['ALSO.US', 'ILLIQUID.US', 'LOW.US']
+    assert called == ['ILLIQUID.US']
+    assert enriched['feature_scope'] == ['ALSO.US', 'ILLIQUID.US']
     rows = {row['symbol']: row for row in enriched['rows']}
     assert rows['ILLIQUID.US']['rfl1m'] == pytest.approx((10 / 9 - 1) * 100)
     assert 'ema10' in rows['ALSO.US']
@@ -119,7 +96,7 @@ def test_enrich_completes_saved_rfl_and_missing_features_once_and_preserves_rank
             assert rows[original_row['symbol']][field] == original_row[field]
     assert json.dumps(snapshot, sort_keys=True) == before
     assert scan.enrich_snapshot(path, enriched, calendar, tracked_tickers={'ILLIQUID.US'}) == enriched
-    assert called == ['ALSO.US', 'ILLIQUID.US']
+    assert called == ['ILLIQUID.US']
 
 
 def test_enrich_does_not_use_previous_day_as_current_feature(tmp_path):

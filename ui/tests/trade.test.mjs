@@ -4,7 +4,6 @@ import { quantityStep, quantityTicks, suggestedBuy, tradeRequest, TradeError, or
 import { horizontalLines } from '../public/price-lines.js';
 import { orderedTradeRows } from '../public/schwab-holdings.js';
 import { openPercent, editableStop } from '../public/schwab-data.js';
-import { loadTradeConfig } from '../public/trade-config.js';
 
 test('automatic buy combines the day High and Schwab Ask; share steps follow the dollar scale', () => {
     assert.equal(suggestedBuy(101, 100), '101.00');
@@ -96,7 +95,7 @@ async function ticket() {
     });
     const stop = {symbol:'XYZ',order_id:'stop-1',stop_price:'80',quantity:'23',editable:true,instruction:'SELL',order_type:'STOP',strategy_type:'SINGLE',child_orders:[],status:'WORKING'};
     const state = {rows:[{symbol:'XYZ.US',ticker:'XYZ',position:{quantity:'23'},orders:[stop]}],orders:[stop],health:{auth_status:'valid',schwab_rest:'connected',schwab_stream:'connected'},limits:{buy_amount:'45000',loss:'2000',stop_ratio:'.15'}};
-    const controller = new TradeController(panels, ()=>'trade', {spread_warning_percent:.5});
+    const controller = new TradeController(panels, ()=>'trade');
     controller.update(state); controller.setSymbol('XYZ.US'); await settle();
     const timestamp=Date.parse('2026-10-27T14:00:00Z')/1000;
     controller.view({symbol:'XYZ.US',server_time:timestamp,quote:{regular:{timestamp,high:102,low:95}}});
@@ -228,7 +227,7 @@ test('solid lines use one physical pixel on Retina and Alert keeps its dashed CS
     horizontalLines(()=>[{y:10,color:'black'}],true).draw(target); assert.equal(ctx.width,2);
 });
 
-test('spread warning uses a configurable strict threshold and browse content stays empty', async () => {
+test('spread warning uses the module strict threshold and browse content stays empty', async () => {
     const {node,controller}=await ticket();
     assert.equal(node('trade-qty').textContent,'');
     assert.equal(node('trade-estimate').textContent,'');
@@ -238,10 +237,4 @@ test('spread warning uses a configurable strict threshold and browse content sta
     assert.equal(node('trade-spread-percent').classList.contains('spread-wide'),false);
     controller.updateQuote({ask:'100.51',bid:'100',updated_at:'2026-10-27T14:00:02Z'});
     assert.equal(node('trade-spread-percent').classList.contains('spread-wide'),true);
-});
-test('UI config accepts a numeric percentage and reports invalid configuration', async () => {
-    globalThis.fetch=async()=>({ok:true,json:async()=>({spread_warning_percent:.75})});
-    assert.deepEqual(await loadTradeConfig(),{spread_warning_percent:.75});
-    globalThis.fetch=async()=>({ok:true,json:async()=>({spread_warning_percent:'0.5'})});
-    await assert.rejects(loadTradeConfig(),/Invalid Trade/);
 });

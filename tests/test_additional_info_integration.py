@@ -20,7 +20,7 @@ def workbench(tmp_path, monkeypatch):
         'orders': {'discover': [], 'focus': ['XYZ'], 'excluded': []},
     })
     atomic_json(day / 'scan.json', {'date': '2026-09-30', 'mock': True, 'rows': [
-        {'symbol': 'XYZ.US', 'candidate': False, 'close': 10, 'adr20': 5, 'adv20': 6000000}
+        {'symbol': 'XYZ.US', 'candidate': False, 'close': 10, 'adr20': 5, 'mdv20': 6000000}
     ]})
     def no_broker(*_): pytest.fail('Additional info must not construct a broker')
     info = AdditionalInfo(tmp_path / 'additional-info', enabled=False)

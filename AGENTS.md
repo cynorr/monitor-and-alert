@@ -18,3 +18,5 @@
 - TypeScript 改动后 npm run build --prefix ui；数据/调度改动只做相关的必要真实数据验证与定向用例。历史记录不能当成本轮 live 证据。
 
 - Symbol 行的选中、价格／量能分区与未读波浪只按 [Symbol row template](docs/ui.md#symbol-row-template)；配色名称见 [Color palette](docs/ui.md#color-palette)，代码复用 `ui/src/palette.ts`。新增行或提醒复用 `symbol-row.ts`、`attention.ts` 与 `AlertEngine.notify`，未读只保留最后一次方向／等级，禁止叠加或保存通知历史。
+
+- 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

@@ -1,9 +1,7 @@
 .venv/
 __pycache__/
 *.py[cod]
-longbridge-token.txt
-snaptrade-token.txt
-massive-token.txt
+/config/credentials.json
 .env
 .env.*
 # Runtime stays local; only the rolling split snapshot is versioned.

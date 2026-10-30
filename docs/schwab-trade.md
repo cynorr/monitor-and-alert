@@ -87,7 +87,7 @@ Trade 在 Intraday header 右侧使用固定行列显示交易区，报价与左
 - 拖动真实 Stop 只改本地预览，同时退出新单状态；右下角同一个 Send 改为提交这一张止损的 PUT，每次只编辑一张真实 Stop；再次拖另一张或点击新单方式会放弃上次尚未提交的改价。等待券商新 ID/快照期间不重复发送该改单。Esc 撤销尚未提交的真实改价。撤单保留明确的独立按钮，不绑定 Backspace。
 - 预估金额和价差风险是估算，不称最大损失；STOP 不承诺执行价格。后端提交前的新 Bid/Ask 可导致拒绝，不自动改用户价格或重发。错误、认证与 unknown 保留必要反馈，正常就绪不堆叠提示。
 
-交易报价突出 (Ask − Bid) / Bid × 100%，其右侧 Ask 在上、Bid 在下，绝对差值位于 Bid 右侧并与其底部对齐。百分比严格大于 config/trade-ui.json 的 spread_warning_percent 时，百分比使用红色粗体；默认 0.5（单位为百分比数值）。该文件随 npm build 复制为静态 trade-ui.json，修改后重新构建并刷新页面；不新增后端配置或交易路由。
+交易报价突出 (Ask − Bid) / Bid × 100%，其右侧 Ask 在上、Bid 在下，绝对差值位于 Bid 右侧并与其底部对齐。百分比严格大于ui/src/trade.ts的SPREAD_WARNING_PERCENT时使用红色粗体；默认0.5（单位为百分比数值）。该常量就近维护，ui/public/style.css的spread-wide仅负责颜色和字重；修改后构建并刷新页面，不增加独立JSON加载或交易路由。
 
 ## 风控与写入契约
 

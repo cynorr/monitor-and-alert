@@ -514,7 +514,7 @@ export class Watchlist {
         if (scan) {
             value('price', money(ticker.close));
             value('adr', ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%');
-            value('adv', ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20));
+            value('mdv', ticker.mdv20 == null ? '—' : '$' + compact(ticker.mdv20));
             row.querySelectorAll<HTMLElement>('[data-growth]').forEach(cell => { cell.textContent = growthValue(ticker[cell.dataset.growth!]); });
             return;
         }

@@ -8,16 +8,10 @@ import { ScanControls } from './scan.js';
 import { post } from './api.js';
 import { TradeController } from './trade.js';
 import { SchwabHoldings } from './schwab-holdings.js';
-import { loadTradeConfig } from './trade-config.js';
 import { HoldingsList } from './holdings.js';
 import { AlertController } from './alerts.js';
 import { AdditionalInfoDisplay, acceptsAdditional } from './additional-info.js';
 installPalette();
-const tradeConfig = await loadTradeConfig().catch(error => {
-    $('intraday-state').textContent = error.message;
-    $('intraday-state').className = 'state error';
-    throw error;
-});
 const layout = initLayout();
 const daily = new Panel('daily', true), intraday = new Panel('intraday', false);
 const dayLink = linkTradingDay(daily, intraday);
@@ -31,7 +25,7 @@ const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', '')
 const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => { if (appMode !== 'trade')
     layout.setHoldingsWidth(width); });
 let appMode = 'monitor', scanDate = '', modePending = false;
-const trade = new TradeController([daily, intraday], () => appMode, tradeConfig);
+const trade = new TradeController([daily, intraday], () => appMode);
 const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'trade' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'trade')
     layout.setHoldingsWidth(width); });
 const activeHoldings = () => appMode === 'trade' ? schwab : holdings;
@@ -153,7 +147,7 @@ function apply(view) {
     const bid = quote?.bid_price, ask = quote?.ask_price;
     document.querySelectorAll('.spread').forEach(node => { node.hidden = !bid && !ask; const sell = node.querySelector('.bid'), buy = node.querySelector('.ask'); sell.hidden = !bid; buy.hidden = !ask; sell.textContent = `Sell ${money(bid)}`; buy.textContent = `Buy ${money(ask)}`; });
     document.querySelectorAll('.adr').forEach(node => node.textContent = view.summary.adr20 == null ? '—' : view.summary.adr20.toFixed(2) + '%');
-    document.querySelectorAll('.adv').forEach(node => node.textContent = view.summary.adv20 == null ? '—' : '$' + compact(view.summary.adv20));
+    document.querySelectorAll('.mdv').forEach(node => node.textContent = view.summary.mdv20 == null ? '—' : '$' + compact(view.summary.mdv20));
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
     trade.view(view);

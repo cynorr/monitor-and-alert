@@ -80,7 +80,7 @@ Intraday 初始周期按美东开盘经过时间选择，之后保留手工选�
 
 所有图表下方面板显示成交额及后端计算的五交易日成交额比较，tooltip保留原始股数；显示与缺失规则只在 [Turnover comparison](chart-ui.md#turnover-comparison) 维护。Intraday State 的量比、等级、排序和现有报警继续使用原始 volume，本轮不迁移报警。
 
-两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/ADV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，ADV20 是同窗口 turnover 均值；停牌/稀疏记录按实际根数取窗口，缺少成交额则 ADV20 缺失，不用 close×volume 补值。均线样本不足时不显示该线；上下界矛盾保留官方原值，也可能体现在派生指标中。
+两模式共用 EMA10/20，Daily SMA50、Intraday SMA65，以及 Daily ADR20/MDV20。ADR20 是最近最多20根已收盘记录的 `(H-L)/L × 100` 均值，MDV20是同窗口turnover中位数；停牌/稀疏记录按实际根数取窗口，缺少成交额则 MDV20 缺失，不用 close×volume 补值。均线样本不足时不显示该线；上下界矛盾保留官方原值，也可能体现在派生指标中。
 
 跨 closed 边界和回补期间保留上一份完整图表；本周期 closed 与 open 就绪后一次更新。Daily 不依赖 5m 刷新，报价与账户后台持续运行。
 

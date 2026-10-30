@@ -25,13 +25,6 @@ def decimal_json(value):
     return json.loads(json.dumps(value, default=lambda n: format(n, 'f'), allow_nan=False))
 
 
-def read_snaptrade_credentials(path: Path) -> tuple[str, str, str]:
-    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
-    if len(lines) != 6 or lines[::2] != ['Client ID', 'Consumer Key', 'Account ID']:
-        raise ValueError('Expected Client ID / Consumer Key / Account ID labels, each followed by its value')
-    return tuple(lines[1::2])
-
-
 class SnapTrade:
     def __init__(self, client_id, consumer_key, account_id, data_file: Path):
         self.client_id, self.consumer_key, self.account_id = client_id, consumer_key, account_id

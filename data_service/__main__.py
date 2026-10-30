@@ -9,7 +9,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from .config import load_tickers
+from .config import load_tickers, DEFAULT_CREDENTIALS, credential_values, credential_section
 from .paths import RuntimePaths
 from .storage import atomic_json
 from .workspace import Workspace, resolve_latest_workspace
@@ -19,9 +19,8 @@ def parser():
     result = argparse.ArgumentParser(description='Scan and Monitor workbench')
     result.add_argument('command', choices=('universe', 'serve', 'reconcile', 'verify', 'scan', 'massive'))
     result.add_argument('--workspace', type=Path, help='Pin a workspace file instead of following the latest Scan day')
-    result.add_argument('--credentials', type=Path, default=Path('longbridge-token.txt'))
-    result.add_argument('--holdings-credentials', type=Path, default=Path('snaptrade-token.txt'))
-    result.add_argument('--massive-credentials', type=Path, default=Path('massive-token.txt'))
+    result.add_argument('--credentials', type=Path, default=DEFAULT_CREDENTIALS,
+                        help='Backend credential JSON grouped by provider')
     result.add_argument('--holdings-rules', type=Path, help='Buy/sell rules; defaults to runtime/holdings')
     result.add_argument('--runtime', type=Path, default=Path('runtime'))
     result.add_argument('--mode', choices=('monitor','scan','trade'), default='monitor')
@@ -49,11 +48,11 @@ async def run(args, tickers):
         pipeline = None
         if not args.external_daily_db and not args.mock_scan and args.symbols is None:
             from .massive.pipeline import MassivePipeline
-            pipeline = MassivePipeline(paths, credentials=args.massive_credentials)
+            pipeline = MassivePipeline(paths, credentials=args.credentials)
         def holdings_factory():
-            from .snaptrade import SnapTrade, read_snaptrade_credentials
+            from .snaptrade import SnapTrade
             from .holdings import Holdings
-            return Holdings(SnapTrade(*read_snaptrade_credentials(args.holdings_credentials),
+            return Holdings(SnapTrade(*credential_values(args.credentials, 'snaptrade', 'client_id', 'consumer_key', 'account_id'),
                                       paths.holdings_dir / 'latest.json'),
                             args.holdings_rules or paths.holdings_dir)
         from .trade import SchwabTrade
@@ -61,7 +60,8 @@ async def run(args, tickers):
         service = Workbench(workspace, args.runtime, args.daily_db,
                             lambda allowed: LongbridgeClient(args.credentials, allowed, args.runtime, args.region),
                             mock=args.mock_scan, only=args.symbols,
-                            holdings_factory=holdings_factory if args.holdings_credentials.exists() else None,
+                            holdings_factory=holdings_factory if not args.mock_scan and args.symbols is None and
+                            credential_section(args.credentials, 'snaptrade') else None,
                             pipeline=pipeline, bars_path=paths.bars_db, trade_factory=SchwabTrade,
                             additional_info=AdditionalInfo(paths.additional_info_dir,
                                                            enabled=not args.mock_scan and args.symbols is None))
@@ -129,7 +129,7 @@ def main(argv=None):
                 except BlockingIOError:
                     raise ValueError('Stop the service before running the Massive command') from None
                 async def prepare():
-                    pipeline = MassivePipeline(paths, credentials=args.massive_credentials)
+                    pipeline = MassivePipeline(paths, credentials=args.credentials)
                     try:
                         await pipeline.run(force=args.force)
                         return pipeline.state()

@@ -61,7 +61,7 @@ class FeatureSnapshotTest(unittest.TestCase):
             ((bars["high"] - bars["low"]) / bars["low"] * 100).tail(20).mean(),
         )
         self.assertAlmostEqual(
-            result["adv20"], bars["turnover"].tail(20).mean()
+            result["mdv20"], bars["turnover"].tail(20).median()
         )
         for name, window in [("rfl1m", 21), ("rfl3m", 63), ("rfl6m", 126)]:
             self.assertAlmostEqual(

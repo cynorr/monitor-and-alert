@@ -48,7 +48,7 @@ def test_source_contract_date_cutoff_and_shared_metrics(app_data):
     chart, summary = daily_chart(path, 'NVDA.US', '2026-09-29', cal)
     assert chart['active'] is None
     assert row['adr20'] == pytest.approx(summary['adr20'])
-    assert row['adv20'] == pytest.approx(summary['adv20'])
+    assert row['mdv20'] == pytest.approx(summary['mdv20'])
     assert row['ema20'] == pytest.approx(chart['indicators']['ema20'][-1]['value'])
     assert chart['bars'][-1]['time'] == cal.grid(date(2026,9,29),'1d')[0][0]
     with sqlite3.connect(path) as db:
@@ -277,8 +277,8 @@ def test_scan_http_ws_historical_readonly_origin_and_refresh(app_data):
 
 def test_preferences_reject_unknown_rules_and_keep_exact_thresholds():
     data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
-    data['tags'][0]['filters']={'adv20':{'min':5_123_456.75}, 'ma_arrangement':{'values':['ema10_lead','straddle']}}
-    assert validate_preferences(data)['tags'][0]['filters']['adv20']['min'] == 5_123_456.75
+    data['tags'][0]['filters']={'extended_k':{'min':5_123_456.75}, 'ma_arrangement':{'values':['ema10_lead','straddle']}}
+    assert validate_preferences(data)['tags'][0]['filters']['extended_k']['min'] == 5_123_456.75
     data['tags'][0]['filters']['BROKEN'] = {'values': ['true']}
     with pytest.raises(ValueError, match='Unknown'):
         validate_preferences(data)
@@ -291,10 +291,10 @@ def test_preferences_appearance_roundtrip_and_legacy_compatibility(background):
     data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
     appearance = {'icon': 'surf', 'color': '#2962ff', 'background': background, 'backgroundColor': '#E4B400'}
     data['tags'][0]['appearance'] = appearance
-    data['tags'][0]['filters'] = {'adv20': {'min': 5_123_456.75}}
+    data['tags'][0]['filters'] = {'extended_k': {'min': 5_123_456.75}}
     saved = json.loads(json.dumps(validate_preferences(data)))
     assert saved['tags'][0]['appearance'] == appearance
-    assert saved['tags'][0]['filters'] == {'adv20': {'min': 5_123_456.75}}
+    assert saved['tags'][0]['filters'] == {'extended_k': {'min': 5_123_456.75}}
     assert saved['tags'][0]['role'] == 'label'
 
 

@@ -167,7 +167,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 
 | 模式 | 列 |
 | --- | --- |
-| Scan | Symbol / Price / ADR20 / ADV20 / RFL 排序 / Tags / 行操作 |
+| Scan | Symbol / Price / ADR20 / MDV20 / RFL 排序 / Tags / 行操作 |
 | Monitor | Symbol / Last / Chg% / Ext（仅非 regular）/ Tags / 行操作 |
 
 - 同 ticker 只有一行，固定行高 **28px**，主体数据列保持同一水平行；Scan Growth、Tags 与行操作不换行、不增加副标题。
@@ -176,7 +176,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 - Tags 列显示轮廓 glyph，图案、尺寸与配色统一见 [Logo / Icon](#logo--icon)。保持 **110px** 列宽下限并为编辑按钮留空隙；最多显示三个 glyph，其余用小号 `+N`，悬停列出完整剩余标签。glyph 悬停显示完整名称与人工 `today` 状态，人工补充仅当日有效，不额外使用蓝色 badge。Tags 与 `+N` 均不换行、不增加行高，不增加测宽或 ResizeObserver。
 - Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑只提供 Setup/Label，修改当日人工补充；Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
 - NEW 使用 Symbol 旁的小标记，颜色与 EMA10 一致为蓝色 **#2962ff**。ticker 不显示 `.US`。不显示成员勾选框。
-- Scan Price 是完成日收盘价，ADR20/ADV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。
+- Scan Price 是完成日收盘价，ADR20/MDV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。
 - 选中、hover 与价格区域外观共用 [Symbol row template](#symbol-row-template)。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
 
 ### Section、顺序与选择
@@ -193,7 +193,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 ### Tag 与 Filter 编辑
 
 - 固定头部最后一行依次为 **Filters + 数字**、保存的 Tags 和新增按钮；Tag 加号固定在右侧，位于 Tag 横向滚动区之外，与 section 加号同一横坐标；不显示 `active`。Tags 单行水平排列，放不开时横向滚动。Setup Tags（Surf/Bounce 等）在前，Label 居中，Extended/Broken/Under-50 在后；仅改变按钮显示，不重写保存顺序或分类优先级。Tag/Filter 标签与 List 列名到下方水平线的间距使用与 Chart legend 相同的共用变量，数值在 [Chart Headers](chart-ui.md#headers-and-information) 维护。Filter 按钮展开线下编辑区，不改变顶部水平线高度；取消原 Filters/Holdings 分割线。
-- 两模式使用同一套保存的 Tag/Filter。38 字段目录包含 Market、MA arrangement 和 atomic feature 各组。使用 **CSS 两列 columns** 布局，每组保持完整；不使用横向对齐的 grid，避免短组下面出现空白。
+- 两模式使用同一套保存的 Tag/Filter。35字段目录仅包含MA arrangement和atomic feature；Price、ADR20、MDV20基础门槛只在config/scan.json配置，Tag编辑器没有Market分组。使用 **CSS 两列 columns** 布局，每组保持完整；不使用横向对齐的 grid，避免短组下面出现空白。
 - 数值条件支持 Any / ≥ / ≤ / range；不同条件 AND，分类多选 OR。缺失值匹配 Any 或显式 Missing。Filter 不移动名单、不改变订阅，被筛掉的成员保留底层归属。
 - Tag 用途固定为 Setup / Extended / Broken / Under-50 / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Tag 名称唯一，可保存零到十个；选择按钮点击一次选中，再点击取消。没有选择时不应用保存 Tag 筛选。
 - 新建克隆当前草稿条件，用途默认 Setup；未选 Tag 时从空条件编辑，可保存为新命名 Tag。条件编辑即时预览；Save 保存并折叠，Cancel 恢复。未保存时切 Tag 需明确丢弃，保存失败保留草稿；名单/排序偏好写入不得覆盖未保存的 Filter 草稿。
