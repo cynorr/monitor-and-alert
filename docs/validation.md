@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-11-18：历史日期对齐 P/L Day
+
+环境：本机macOS、现有TypeScript项目，仅调整历史日期的单元格位置，移除原左侧padding，使用P/L Day列的右对齐；Regular隐藏Ext后仍保持同列。TypeScript build和git diff --check通过。未改数据、后端或预览开关，未做截图、浏览器视觉验证或交易操作。
+
+## 2026-11-18：Schwab 历史链字段对齐
+
+环境：本机macOS、现有TypeScript项目，仅修改Schwab持仓的DOM列序、CSS和对应文档。树干移至symbol首字母中心；Sold百分比与历史数量共用Symbol后的列，历史日期移至价格右侧。核对表头、主行、明细与Total的列序，以及Regular/扩展时段的可见列对应。TypeScript build、8项原生数据/共用持仓布局用例、git diff --check通过。未改后端、历史计算或持仓预览开关；未进行截图、浏览器视觉验证、真实交易写入或全量测试，实际视觉由本人确认。
+
+## 2026-11-18：Schwab 历史成交树形展示
+
+环境：本机macOS、现有TypeScript项目，仅调整Schwab明细DOM和CSS。Buy/Sold保留平级与原缩进，移除背景、加入树线和空心/实心圆点；类型与较小灰色日期独立排列，数字列保持原位置。TypeScript build、Schwab原生数据及共用持仓布局定向用例、git diff --check通过。未改后端、FIFO或预览开关；未进行截图、真实交易写入或全量测试，实际视觉由本人确认。
+
 ## 2026-11-18：Schwab 历史字段、FIFO 与可逆持仓预览
 
 环境：本机 macOS、Python3.13.1、TypeScript5.9.3、正式 127.0.0.1:8765 Trade 服务。真实账户为空仓；采用本人授权的 --schwab-holdings-preview 展示副本，忽略最近30天股票Sell，不删改券商数据。测试覆盖交易日为2026-11-17 Regular，文档日期按本人Asia/Shanghai日期记录。

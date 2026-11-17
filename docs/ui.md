@@ -106,12 +106,14 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
+| Schwab 历史成交 | 灰色空心圆 / 实心圆 | 空心表示 Buy，实心表示 Sold；平级树线表达 symbol 归属，保留文字类型 |
 | Schwab 活动订单 | 红底圆形按钮内白色 `×` | 取消指定订单；Entry/Stop 的目标规则见 Schwab Trade |
 | Trade Auto | 浅灰圆形按钮内线性 `↺` | 恢复两条参考线的自动标价；自动时灰色禁用，手动拖价后蓝色可点，无悬停说明 |
 | Daily / Intraday | `↦` | Reset view & go to latest，重置本图；R 重置全部可见图，见 [Chart 交互](chart-ui.md#mouse-zoom-and-periods) |
 | 图表 / 名单 / Holdings 错误 | 轮廓圆圈内的 `!`，暖黄色 | 提供当前错误详情，不扩展错误判断范围；Holdings 点击详情见独立 UI 规范 |
 
 - 垃圾桶保持简单线性轮廓；当前 Web 行按钮为 **24×24px**，图形 **16×16px**，默认灰色，hover 时使用浅红背景与红色线条。键盘 focus 也可显示行操作。原生端需单独适配触摸操作区域与可见性。
+- Schwab 历史圆点为5px圆形，使用Muted灰色；Buy为1px轮廓与白色中心，Sold实心，作为不可交互装饰并从可访问树隐藏。树线与缩进只维护在Schwab Trade，不加入图标库或节点坐标计算。
 - Schwab 订单取消复用 icon-button 圆形按钮，Red 背景、White 符号，hover 加深为 Red Strong；Web 圆底14px，内部为14px SVG中的对称交叉线，使用3px SVG描边，两条对角线的中心与圆心重合；使用flex居中和单元格垂直居中，不依赖文字字形基线。不增加文字按钮或图标库。
 - Trade Auto 复用 26px icon-button 圆形按钮，16px 线性回转箭头 SVG，不引入图标库；容器保持水平/垂直居中，箭头本身向右0.5px、向上0.5px补偿原路径偏左下的视觉重心。保留英文可访问名称，不设置 title。
 - 错误感叹号复用当前Chart警告的极简圆形轮廓：Web图形16×16px、1px边框，边框#b58722、文字#a47614，圆角50%；Chart与Holdings共用一份CSS绘制声明。交互按各模块要求，状态独立，Chart刷新不得改变Holdings错误入口。
@@ -245,4 +247,4 @@ Run `npm run build --prefix ui` after TypeScript edits and only the related offl
 
 Buy 使用 Blue、Stop 使用 Red，Daily/Intraday 均在 K 线和指标下方绘制细实线；使用公开 primitive 的 bottom 层，实线宽度为一个物理像素（Retina 也不增粗），右轴原生标签只显示价格。横线上不常驻 Buy/Stop、数量、Auto/Draft/Awaiting 或把手。直接命中横线后显示上下调整光标；重合线可再次点击轮换。手动 Alert 保留原虚线与悬停胶囊，双方共用坐标换算、命中范围和横线 renderer，编辑/提交规则独立。多个真实订单分别绘制；未激活或不可编辑订单不可拖动。绘制与命中使用公开 API，不修改 vendor。
 
-交易区报价突出价差百分比，右侧同列蓝色 Ask / 红色 Bid，绝对差灰色；百分比宽价差时主红粗体。底部蓝色 Market/Stop 与红色 Market/ATR/EMA 为两个独立单行胶囊，未选分段使用对应主色与白色混合后的浅色背景和白字，所选分段使用主色背景；悬停只加深同色背景。字体使用 semibold；所有策略名保持可见，每个分段全高度可点，不加 Buy/Sell 大标题、二层类型或悬停说明。Auto 沿用圆形回转箭头，Send 沿用现有实心模式胶囊，字体与策略按钮共用同一样式并与策略组拉开距离，统一提交新单或真实 Stop 修改。数量轴保持细黑直线、大刻度与原生滑动，普通指针始终可见；百分比/EMA 参数复用轴上方空间。浏览时保留布局，报价独立固定；策略组决定票据自然宽度，滑杆/预估同步向左扩展并按胶囊直线边缘对齐。首尾标签通过非对称内边距向内部直线侧做光学校正，中间分段保持居中，不增加 JS 测宽。Schwab 增加 Days/Sold 主列，逐笔 Buy/Sold 明细沿用 Holdings 单行行高、字体和列对齐；日期与类型并列，NEW取当天实际买入，Entry/NEW 使用小号 symbol-flag；取消按钮沿用红底白色 ×；可逆预览使用明确 Preview 文字并禁用交易，详细边界见 Schwab Trade。具体几何只在 [Chart UI](chart-ui.md#trade-mode) 维护，策略、字段和 Send 语义只在 [Schwab Trade](schwab-trade.md) 维护。
+交易区报价突出价差百分比，右侧同列蓝色 Ask / 红色 Bid，绝对差灰色；百分比宽价差时主红粗体。底部蓝色 Market/Stop 与红色 Market/ATR/EMA 为两个独立单行胶囊，未选分段使用对应主色与白色混合后的浅色背景和白字，所选分段使用主色背景；悬停只加深同色背景。字体使用 semibold；所有策略名保持可见，每个分段全高度可点，不加 Buy/Sell 大标题、二层类型或悬停说明。Auto 沿用圆形回转箭头，Send 沿用现有实心模式胶囊，字体与策略按钮共用同一样式并与策略组拉开距离，统一提交新单或真实 Stop 修改。数量轴保持细黑直线、大刻度与原生滑动，普通指针始终可见；百分比/EMA 参数复用轴上方空间。浏览时保留布局，报价独立固定；策略组决定票据自然宽度，滑杆/预估同步向左扩展并按胶囊直线边缘对齐。首尾标签通过非对称内边距向内部直线侧做光学校正，中间分段保持居中，不增加 JS 测宽。Schwab 增加 Days/Sold 主列，Sold百分比在Symbol与Net Liq之间使用小号灰字、不显示列名；逐笔 Buy/Sold 明细使用无背景的平级树线，树干对齐symbol首字母中心，数量与Sold百分比对齐，灰色日期与P/L Day列右对齐，沿用 Holdings 单行行高和财务列对齐；NEW取当天实际买入，Entry/NEW 使用小号 symbol-flag；取消按钮沿用红底白色 ×；可逆预览使用明确 Preview 文字并禁用交易，详细边界见 Schwab Trade。具体几何只在 [Chart UI](chart-ui.md#trade-mode) 维护，策略、字段和 Send 语义只在 [Schwab Trade](schwab-trade.md) 维护。

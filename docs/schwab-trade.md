@@ -36,7 +36,7 @@
 | Chg% / Ext | 共用 Longbridge Quote 与完成 Daily 修正基准 |
 | ADR / CumVol / LocalVol | 共用 Intraday State，沿用 Regular 显隐 |
 
-主行顺序为 Symbol、Net Liq、Days、P/L %、P/L、Sold、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。金额取整数，P/L%与Chg%一位小数，Ext与成交价两位小数。Sold 为整数百分比，零留空，非零但四舍五入为零显示 <1%。缺值显示 —，明细缺值留空。Regular 隐藏 Ext；ADR/量比按现有规则。排序只影响余仓，Entries 固定前部，纯 Sold Today 固定灰色尾部。
+主行顺序为 Symbol、Sold、Net Liq、Days、P/L %、P/L、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。Sold 不显示列名，使用与历史日期一致的11px Muted灰色，保留列头区域的排序操作。金额取整数，P/L%与Chg%一位小数，Ext与成交价两位小数。Sold 为整数百分比，零留空，非零但四舍五入为零显示 <1%。缺值显示 —，明细缺值留空。Regular 隐藏 Ext；ADR/量比按现有规则。排序只影响余仓，Entries 固定前部，纯 Sold Today 固定灰色尾部。
 
 Total Net Liq / P/L / P/L Day 仅汇总当前券商余仓；P/L Day Total 不合并已清仓交易，保持券商当前持仓口径。主行盈亏、账户净值和行情不等待历史整理成功；FIFO、Days、Sold 或明细成本不可用时只影响相应派生字段。账户、订单和历史分别保留自己的成功时间，不把视图生成时间当刷新时间。
 
@@ -78,7 +78,9 @@ Transactions 主动读取最近365天，启动和纽约跨日各读一次，复�
 - Entry：每组母子买单保留原名义金额、数量、买入价、保护 Stop、风险比例及金额；只有母单保留一个圆形 ×，取消联动交给券商。
 - Stop：每张真实活动 SELL STOP 独立显示数量×Stop、数量和价格；预估盈亏继续使用当前券商 averagePrice，不混入 FIFO 历史已实现盈亏。只按 cancelable 显示圆形 ×。
 
-日期与类型在 Symbol 单元格单行排列；金额、Days、P/L%、P/L 对齐主行同名列，数量、价格、取消依次位于后续可见列；Entry额外字段合并在末尾可见区域。不显示内部 ID 或常态订单状态，不增加缺失历史提示。
+历史 Buy/Sold 保持同级、按成交时间排列，以浅灰树线表达同一 symbol 归属，不绘制买卖配对或嵌套批次。历史行移除常驻及悬停背景；树干对齐主行symbol首字母中心，当前Web距单元格左边21px，由CSS的 --history-tree-x 统一控制。文字在树干右侧20px，分支连向5px圆点，末条历史行在圆点中心收尾。圆点含义只维护在 [Logo / Icon](ui.md#操作与状态图标)。Entry/Stop 保留原订单行和取消交互，不加入历史树线。
+
+Buy/Sold 类型12px，位于 Symbol 单元格；明细数量移至 Symbol 和 Net Liq 之间，与主行 Sold 百分比右对齐，保留原11px字号与正常明细颜色。金额、Days、P/L%、P/L 对齐主行同名列，价格位于Chg%列。历史日期与主行P/L Day列右对齐，使用11px Muted灰色；取消操作保留原位置。文本使用正常表格布局参与自然测宽，不绝对定位覆盖其他字段；Entry额外字段合并在末尾可见区域。不显示内部 ID 或常态订单状态，不增加缺失历史提示。
 
 Sold Today 的显示范围沿用当前订单中完全成交股票 SELL 的最后 execution 纽约日期；有余仓时卖出位于同一 Holding 下拉，无余仓且无活动买单时灰色尾行。当天清仓再买回仍只显示一条当前 symbol 主行，其旧轮次明细保留在下拉，Sold 统计新轮次。纽约跨日移除昨日纯清仓行。
 
