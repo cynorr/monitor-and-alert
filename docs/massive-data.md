@@ -61,6 +61,8 @@ Grouped Daily 仍是一份全市场响应，ETF 筛选节省本地扫描计算�
 
 `runtime/massive/daily/YYYY-MM-DD.json` 保存 grouped Daily 的 `adjusted=false&include_otc=false` 原始响应，累积保留，有效已有文件不覆盖。首次按两年交易日获取；以后仅补最近 14 个自然日范围内缺失的文件。目标按 XNYS 和 ET18点门槛确定，不请求尚未成熟的当天数据。
 
+Grouped Daily 接受 `status=OK` 或 `DELAYED`；`DELAYED` 是延迟数据标记，不作为请求失败。下载和本地读取共用相同校验，仍必须为 `adjusted=false`，结果数量、交易日期、必要字段与数值校验保持不变；原始响应保留供应商状态，不改写为 OK。
+
 `runtime/massive/splits.json` 以 Daily 的同一成熟交易日为目标；本地覆盖包含目标日及向前两年窗口时跳过，周末/休市日不重复获取。需要获取时完整分页覆盖目标交易日向前两年窗口，替换该窗口记录并保留更早历史；核对覆盖、比例与唯一 ID 后才原子发布。不得根据候选列表缩减拆股覆盖。Massive 请求共享至少 15 秒的开始间隔；不在此轮增加类型/名称/IPO 查询。
 
 在执行日前，价格及 VWAP 乘累计 `split_from/split_to`，成交量除该因子后用 Decimal ROUND_HALF_UP 转为 SQLite 非负整数。turnover 仅由可靠同根 VWAP × 未取整的复权量得到，否则 NULL；MDV使用此金额，不再采用 close×整数 volume。Daily 保留 Massive 的供应商时段口径，metadata 写 `session=massive_daily`，不宣称仅 regular。与 Longbridge 不拼接历史或交叉校验，读库/计算/显示不再二次复权。

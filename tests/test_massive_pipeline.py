@@ -210,9 +210,15 @@ def test_feature_failure_reports_once(tmp_path, monkeypatch):
     assert app.state()['ready'] and called['bars'] == 1
 
 
-def test_success_publishes_revision_and_callback(tmp_path, monkeypatch):
+@pytest.mark.parametrize('status', ['OK', 'DELAYED'])
+def test_success_publishes_revision_and_callback(tmp_path, monkeypatch, status):
     paths, calendar = inputs(tmp_path)
     fixed_dates(monkeypatch, calendar)
+    path = paths.daily_dir / f'{TARGET}.json'
+    raw = json.loads(path.read_bytes())
+    raw['status'] = status
+    atomic_json(path, raw)
+    before = path.read_bytes()
     app = MassivePipeline(paths, calendar)
     published = []
     snapshot = asyncio.run(app.run(on_publish=published.append))
@@ -223,6 +229,7 @@ def test_success_publishes_revision_and_callback(tmp_path, monkeypatch):
     assert json.loads(paths.pipeline_status.read_bytes()) == state
     restored = MassivePipeline(paths, calendar)
     assert restored.state()['ready']
+    assert path.read_bytes() == before
 
 
 def test_local_scan_command_keeps_latest_date_ready(tmp_path, monkeypatch):

@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-11-18：Massive 日线接受 DELAYED 状态
+
+环境：本机macOS、Python3.13.1、正式127.0.0.1:8765服务。生产代码仅调整Grouped Daily状态判断，接受OK/DELAYED；未复权、数量、交易日期及数值校验保持不变。25项Massive定向用例通过，覆盖两种状态的构建、重读就绪及原始文件不改写。
+
+- 重启加载修改后，正常准备流程保存2026-11-16真实日线12646条，原始status仍为DELAYED、adjusted=false，本地读取全量校验通过。Daily/splits/bars/features均Ready，无阶段错误。
+- 恢复原Scan显示，并通过正常Refresh打开2026-11-16。GET确认workspace_error为空、报价CONNECTED；ACHC.US真实日图返回590根bar。构建期间曾出现SQLite读取锁定，完成后图表接口恢复成功；没有改动读写架构。
+- git diff --check通过；未修改TypeScript或交易模块，未执行交易写入、截图或全量测试。实际验证范围为本次目标日的一次正常准备及一只当前名单股票图表，成功后结束。
+
 ## 2026-11-18：Schwab 真实持仓路径清理
 
 环境：本机macOS、Python3.13.1、TypeScript5.9.3、正式127.0.0.1:8765 Trade服务。删除临时持仓展示路径及其启动参数、接口字段、前端标识和专属交易禁用判断；清理专属用例、剩余成本辅助字段、重复名单入口、过期文档及测试缓存。Transactions、FIFO、Days、Sold%、NEW、历史链与原交易网关保留。
