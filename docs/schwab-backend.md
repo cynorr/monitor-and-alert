@@ -452,6 +452,7 @@ state = {
 |---|---|
 | Account + Positions | 5 秒 |
 | Orders | 5 秒 |
+| Transactions | 接入层按 Schwab Trade 规范低频读取，仅展示使用 |
 | Quotes | 按需 |
 
 Account 与 Positions 共用：
@@ -474,6 +475,8 @@ toEnteredTime = 当前时间
 ```
 
 不添加 `status=WORKING` 过滤。
+
+SchwabREST.transactions(start,end) 仅新增 TRADE 历史 GET，复用原认证与解析。调用、缓存、FIFO 与失败隔离由 trade.py/trade_history.py 负责，交易网关不依赖该历史；详细范围只在 [Schwab Trade](schwab-trade.md) 维护。
 
 正常基础请求量约：
 

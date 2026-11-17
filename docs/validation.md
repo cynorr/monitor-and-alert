@@ -1,5 +1,14 @@
 # 验证记录
 
+## 2026-11-18：Schwab 历史字段、FIFO 与可逆持仓预览
+
+环境：本机 macOS、Python3.13.1、TypeScript5.9.3、正式 127.0.0.1:8765 Trade 服务。真实账户为空仓；采用本人授权的 --schwab-holdings-preview 展示副本，忽略最近30天股票Sell，不删改券商数据。测试覆盖交易日为2026-11-17 Regular，文档日期按本人Asia/Shanghai日期记录。
+
+- 正式后台只读 Transactions 成功，生成20个预览symbol；20行均取得真实Longbridge报价并显示预估Net Liq，Days与逐笔Buy正常返回。GET /v1/trade 同时仍保留64条原始完全成交Sell订单，历史过滤没有改写原始Orders/Transactions/Positions，账户总值仍为真实Schwab净值。预览保持开启，等待本人指令关闭。
+- 原交易网关、TokenManager、Runtime、Streaming和所有既有SchwabREST方法的AST与修改前一致；网关文件仅增加transactions历史GET。预览期间金融写请求由接入层拒绝，前端Send/撤单禁用；离线用例确认不触发真实写入，未通过真实POST/PUT/DELETE探测，也未发真实下单、改单、撤单。
+- 后端定向 tests/test_schwab_backend.py、test_trade.py、test_trade_strategies.py、test_trade_history.py 共186项通过；覆盖FIFO批次切换、整轮Sold%、加仓NEW、纽约日期/旧Days规则、MU窗口截断、同日清仓再买回、未知旧批次、异常数量不猜配、股票过滤/无orderId丢弃、日期唯一来源、历史读失败隔离，以及预览可逆和写入门禁。Node交易/原生数据28项通过；TypeScript build与git diff --check通过。
+- 未覆盖真实成交后的即时展示、跨纽约日期的服务实测与真实金融写入。表格视觉和间距由本人查看；关闭预览后本人可验证买入/加仓的NEW、完整成交减仓后的FIFO Days与整轮Sold%、清仓重开及次日Transactions交接。本轮未将旧验证记录当作live证据。
+
 ## 2026-11-17：Trade 策略按钮与票据对齐
 
 环境：本机 macOS，仅修改 CSS 及对应 UI 规范。未选策略使用浅蓝/浅红背景和白字，Send 与策略按钮共用 11px/600 字体及 30px 高度/行高；首尾标签通过内边距向内部直线侧校正，票据由按钮组自然撑宽，数量/预估不参与自然测宽，滑杆两端按胶囊直线边缘对齐。git diff --check 通过，改动范围核对仅含样式和文档；未修改后端或 TypeScript，未运行交易/行情测试、截图或浏览器视觉验证，实际观感由本人查看。
@@ -115,18 +124,6 @@
 - 实际浏览器连续拖动 Market 数量 364→670→150，右端选择 821、键盘左移为 820；Buy Stop 从 344 拖至 520，预估总额同步；Sell 从全部 400 拖到 200，再从右端选回 400。均未点击 Send。本轮没有实体鼠标/触控板硬件验收，不用自动化拖动冒充该覆盖。
 - 百分比未发现其他模块覆盖，原嵌套行内文本盒为 29.5px 高、带半像素定位；移除外层 span 后独立块级文本盒为 34px 高，报价起点改为整数 10px。截图及元素命中检查中百分比完整可见，最上层为自身，不声称已复现用户端的裁切原因。
 - 实际 GTLB 取消按钮为 16×16px，SVG 为 14×14px，四边间距均为 1px，保留原交叉线粗细。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-native-qty.png`。相关唯一 UI/Chart/Trade 与开发文档已同步，未运行全项目测试。
-
-## 2026-10-29：价差主视觉、Buy 明细与盘外止损改单
-
-环境：本机 macOS、TypeScript 5.9.3、Python 3.13；正式 8765 服务，真实美东 10 月 28 日约 22:20–22:47，Regular 之外。仅本次定向验证，不运行全项目测试。
-
-- `npm run build --prefix ui` 通过；`node --test ui/tests/trade.test.mjs ui/tests/schwab-data.test.mjs` 24 项通过；网关 Replace 定向用例 39 项通过（测试文件现已迁至 `tests/test_schwab_backend.py`）。覆盖 Buy 明细两项盈亏为空、Sold/Stop 按当前均价估算及缺均价留空、PENDING_ACTIVATION 在 editable 为 true/false 时的单次 PUT、原数量/有效期/NORMAL 保留、其他不支持状态继续拒绝，以及新 ID 仍待激活时结束旧改单预览。
-- 正式只读订单显示六张普通 SELL STOP 均为 PENDING_ACTIVATION，其中五张 editable=false，另一张为 true；原前后端状态限制共同阻止拖动/提交。仅放开这一状态的本地门禁，其他校验保留。原服务按原入口重启，账户/订单初始化成功、REST connected、认证有效。
-- 实际浏览器显示百分比 25px、蓝 Ask/红 Bid 各 12px 上下排列；Buy 全背景激活、未选 type 隐藏。真实 GTLB 七列盘外表格中，Buy 的 P/L% 与 P/L 完全留空，Stop 显示参考盈亏、数量、价格和红色取消按钮，未增加虚列。
-- 对真实 GTLB 止损线只做本地拖动，确认进入 stop 编辑且 Send 可用，再按 Esc 回到 browse；未点击 Send、取消订单或发送任何真实券商写请求。数量轴实际按住时 cursor=none，松手后立即恢复 default；取消/失焦等清理路径由定向 UI 用例覆盖。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-spread-focus.png`。
-- 启动时既有 Massive Daily 准备对 2026-10-28 返回 HTTP 403，页面保留 Refresh failed；本轮未修改或排查该独立数据源问题，Schwab 读取与交易图表正常。
-
-未覆盖：真实 Stop PUT 的券商接受/拒绝、真实成交、撤单、Regular 实时行为及全部浏览器/输入硬件。盘外允许本地提交不代表已验证 Schwab 接受 editable=false 的改单，也不改变止损的 NORMAL 执行时段。
 
 ## 2026-10-26：Home / End 未读导航快捷键
 
@@ -607,15 +604,6 @@
 
 当日只读确认真实授权、REST/Streaming 正常；当前原生持仓市值、持仓盈亏及日盈亏有值，实际 limits 为 45000 / 2000 / 0.15。Sold Today 的订单树去重、余仓与当天卖出同 symbol 场景由定向用例覆盖。未执行实盘交易、新单成交/拒绝、Replace/Cancel、部分成交、跨日与睡眠恢复验证；该记录不替代后续 live 验收。
 
-## 2026-10-29 — Schwab 明细参考盈亏与交易区间距
-
-环境：本机现有正式 localhost:8765、真实 Regular 账户和行情；未改后端、未重启服务、未发送真实下单/改单/撤单。
-
-- `npm run build --prefix ui`、Schwab原生数据与测宽共7项定向用例、`git diff --check`通过。覆盖Buy沿用券商原值、各Stop独立数量/价格、Sold使用当前券商均价而非历史订单价格、缺成本/完全清仓留空，以及自然测宽不读取已分配宽度；未扩大到全量回归。
-- 真实页面数量模块top=82px、预估模块top=122px、按钮top=162px，前两者分别上移4/2px，行距4→6px。撤单SVG描边3px，保持对称路径与居中布局。
-- TEAM真实Buy明细+13.4% / +1,564与主行一致；Stop数量60、价格210.91、券商平均成本194.10，显示+8.7% / +1,009，符合本条订单价差估算。两条明细的P/L%和P/L列边界与主行偏差均为0；数量、价格、撤单移至其后。真实HTFL已清仓Sold缺当前均价，两项盈亏留空。Sold有均价的估算路径由定向用例覆盖，未伪造真实成本。
-- List宽度680px，console无error/warn。未操作金融写入或拖动图线；未做盘外可见列布局和真实故障验收。最终截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-detail-pnl.png`。已退出验证草稿。
-
 ## 2026-10-29 — Trade 顶栏归位、数量与持仓默认列对齐
 
 环境：现有 macOS localhost:8765 正式服务、真实 Regular 行情与账户显示。仅调整前端，不重启服务、不调用金融写接口。
@@ -650,15 +638,3 @@
 - 真实页面核对：轨道宽 271.59375px，左端 598.40625px、右端 870px；Ask、总额、Buy/Sell 左端均相同，Send 胶囊右端与轨道相同。浏览/激活四行矩形完全一致；Ask/spread/Bid 两侧间隔均 8px，22px 的价差双行位于 26px 报价高度内。刻度从 0 至实际 maximum，自适应显示不重叠数字。Buy Stop 和 Buy Market 的上半部均可直接点击。卡片内 title 数量为零，console 无 error/warn。
 - 浏览器拖价核对误命中了相邻 SKYA Alert；随后依据本机 SQLite WAL 中的原记录，完整恢复为 2.97、triggered、generation=2 及原 updated_at/expires_at。服务按原命令重启，GET /health 与 GET /v1/alerts 已核对恢复后的真实状态。未改 Alert 实现；未继续在真实提醒相邻处拖价，双图/Auto 的规则由上述定向用例验证。
 - 最终效果截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-card-polish.png`。Accepted 与故障反馈通过替身和可控时钟验证，未用真实交易验证。
-
-## 2026-10-28 — Trade 原生数据与前端统一收拢
-
-环境：本机 macOS、TypeScript 5.9.3、Lightweight Charts 5.2.0、127.0.0.1:8765 现有正式服务与 in-app browser；当前 Regular，真实 Schwab / Longbridge 连接。不重启后台，不改网关或账户 API。
-
-- `npm run build --prefix ui` 与 `git diff --check` 通过；定向运行 Trade、Schwab 原生数据、共用持仓几何、Monitor Holdings、Chart 共 31 项前端用例通过。覆盖父子单去重及只取消 Entry 母单、多组风险分别配对、唯一原生均价 Buy、缺成本跳过、多笔 Sold/Stop、Entry/Trim 与清仓无标记、市价缺价格留空、价差严格阈值、固定占位、交易写入不重发及双图拖价。请求全部使用内存 fetch 替身，未发真实金融写请求。
-- 新增测宽回归：连续 80 次改变已分配宽度不改变内容最小宽度；禁止读取原表 scrollWidth，价格背景排除出自然宽度副本，几何扣除首 td 的 1px 边框。Monitor 与 Schwab 共同调用该纯 DOM 工具，各自原生数据、会计、刷新和渲染保持独立。
-- 本轮真实页面 15:22:23 至 15:27:55 UTC（上海 23:22 至 23:27）连续刷新：Trade List 均为 680px、table/scrollWidth 均为 664px，无逐步扩宽。模式切换后 Monitor List 同为 680px、仅显示 SnapTrade；Scan 隐藏 Intraday/Trade/Schwab，恢复 Trade 仍为 680px。
-- 两个只读快照入口与前端原生整理核对：auth=valid、REST/Streaming=connected，8个 symbol，1个 Entry、7个余仓 Buy 汇总、7个独立 Stop；Buy 数量/平均成本与 position 完全相同，Entry 取消目标均为母单。数据仅在内存传递，不保存账户/订单快照，不打印凭证或内部订单 ID。
-- 真实 ODD 展开只显示一条 Entry 及一个圆形 ×；HTFL 展开为汇总 Buy 与 Stop，各字段单行，Stop 独立一个 ×。未点击任何 × 或 Send；最终 console 无 error/warn。截图：`/Users/cyno/.codex/visualizations/2026/10/26/01a17832-a589-7120-8e1f-ffe5c161d0de/trade-mvp-final.png`。
-- 清除被替代的测宽函数、跨列多行订单文字、SOLD/+ENTRY/ORDER 标记及文字 Cancel 样式；原独立前端源码和前端设计/开发文档移出维护源码，导入原文件保留在忽略的本机备份目录。原网关设计与协议测试保留；当前唯一规范同步 Trade、UI、Chart UI、Holdings UI、行为及开发职责。
-- 未覆盖：真实新单/改单/撤单、真实成交、全部周期/移动触屏、跨日及非 Regular 长时运行。当前真实快照没有 Sold/Trim 或多 Stop 同 symbol，相关展示使用定向数据用例验证；没有将历史验证作为本轮 live 证据。

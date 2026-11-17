@@ -286,3 +286,13 @@ test('spread warning uses the module strict threshold and browse content stays e
     controller.updateQuote({ask:'100.51',bid:'100',updated_at:'2026-10-27T14:00:02Z'});
     assert.equal(node('trade-spread-percent').classList.contains('spread-wide'),true);
 });
+
+test('holdings preview disables Send and cannot dispatch cancellation writes', async () => {
+    const {node,controller,state,writes}=await ticket();
+    controller.update({...state,holdings_preview:true});
+    node('market-buy').onclick();
+    assert.equal(node('trade-submit').disabled,true);
+    assert.equal(node('trade-message').textContent,'Holdings preview · trading disabled');
+    node('trade-submit').onclick(); await controller.cancel('stop-1'); await settle();
+    assert.deepEqual(writes,[]);
+});

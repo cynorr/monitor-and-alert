@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import logging
 from typing import Annotated, Literal
@@ -11,6 +11,7 @@ from pydantic import Field, field_validator
 
 from .calendar import ET
 from . import schwab_backend as broker
+from .trade_history import transaction_fills, display_fills, analyze, preview_positions
 
 ACTIVE = {'WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_ORDER',
           'AWAITING_RELEASE_TIME',
@@ -94,16 +95,40 @@ def portfolio(positions, orders, day):
 
 
 class SchwabTrade:
-    def __init__(self, runtime=None):
+    def __init__(self, runtime=None, *, holdings_preview=False):
         # Root INFO logging must not print account hashes in HTTP request URLs.
         for name in ('httpx', 'aiohttp.access'):
             logging.getLogger(name).setLevel(logging.WARNING)
         self.runtime = runtime or broker.Runtime()
         self.reference = None  # Bound to Workbench's existing Longbridge chart cache.
+        self.holdings_preview = holdings_preview
+        self.history = []
+        self.history_ready = False
+        self.history_updated_at = None
+        self.history_attempt_day = None
+        self.history_task = None
 
-    def rows(self, now):
-        day = datetime.fromtimestamp(now, ET).date().isoformat()
-        return portfolio(self.runtime.state.positions, self.runtime.state.orders, day)
+    def rows(self, now, quotes=None):
+        day = datetime.fromtimestamp(now, ET).date()
+        fills = display_fills(self.history, self.runtime.state.orders, day)
+        positions = self.runtime.state.positions
+        if self.holdings_preview:
+            ignored = [f for f in fills if f.side == 'SELL' and f.day >= day - timedelta(days=30)]
+            fills = [f for f in fills if f not in ignored]
+            positions = preview_positions(positions, fills, ignored, day, self.history_ready, quotes or {})
+        rows = portfolio(positions, self.runtime.state.orders, day.isoformat())
+        for row in rows:
+            if self.holdings_preview:
+                row['sold_today'] = None
+            selected = [f for f in fills if f.symbol == row['ticker']]
+            qty = Decimal(row['position']['quantity']) if row['position'] else Decimal(0)
+            data = analyze(selected, qty, day, self.history_ready)
+            row.update({key: value for key, value in data.items() if not key.startswith('_')})
+        return rows
+
+    def real_symbols(self, now):
+        return [row['symbol'] for row in portfolio(self.runtime.state.positions, self.runtime.state.orders,
+                                                  datetime.fromtimestamp(now, ET).date().isoformat())]
 
     def symbols(self, now):
         return [r['symbol'] for r in self.rows(now)]
@@ -128,7 +153,7 @@ class SchwabTrade:
                 'updated_at': stream.get('updated_at', fallback.get('updated_at'))}
 
     def state(self, now, quotes):
-        rows = self.rows(now)
+        rows = self.rows(now, quotes)
         for item in rows:
             quote = quotes.get(item['symbol'], {})
             regular, latest = quote.get('regular'), quote.get('latest')
@@ -139,6 +164,7 @@ class SchwabTrade:
             item['extended_percent'] = broker.decimal_text((ext / price - 1) * 100) if (
                 ext and price and latest['trade_session'] != 'Intraday' and latest['timestamp'] > regular['timestamp']) else None
         return {'account': self.runtime.state.account, 'rows': rows, 'orders': self.runtime.state.orders,
+                'holdings_preview': self.holdings_preview, 'history_updated_at': self.history_updated_at,
                 'account_updated_at': self.runtime.state.account_updated_at,
                 'orders_updated_at': self.runtime.state.orders_updated_at,
                 'health': self.runtime.health(),
@@ -148,8 +174,32 @@ class SchwabTrade:
     async def run(self, changed):
         await self.runtime.start()
         async for event in self.runtime.events.listen(self.runtime.snapshot()):
+            now = datetime.now(timezone.utc)
+            day = now.astimezone(ET).date()
+            if (self.runtime.rest.account_hash and self.runtime.state.orders_updated_at
+                    and self.history_attempt_day != day
+                    and (self.history_task is None or self.history_task.done())):
+                self.history_attempt_day = day
+                self.history_task = self.runtime.background(self.refresh_history(now, changed))
             if event.startswith('event: snapshot_updated'):
                 changed()
+
+    async def refresh_history(self, now, changed):
+        try:
+            raw = await self.runtime.rest.transactions(now - timedelta(days=365), now)
+            if len(raw) >= 3000:
+                raise broker.conflict('Transaction history reached the response limit')
+            history = transaction_fills(raw)
+        except (broker.BackendError, KeyError, TypeError, ValueError) as error:
+            logging.getLogger(__name__).warning('Schwab history read failed: %s', type(error).__name__)
+            return
+        finally:
+            # This optional display read must not poison the trading REST health.
+            if self.runtime.rest.account_hash:
+                self.runtime.rest.failures.discard(self.runtime.rest.account_path('/transactions'))
+        self.history, self.history_ready = history, True
+        self.history_updated_at = now.isoformat().replace('+00:00', 'Z')
+        changed()
 
     def held(self, symbol):
         return sum((Decimal(p['quantity']) for p in self.runtime.state.positions
@@ -238,6 +288,8 @@ class SchwabTrade:
         return await gateway.place_stop(data.symbol, int(held), price, duration=duration, release_time=release_time)
 
     async def action(self, operation, payload, order_id=None):
+        if self.holdings_preview:
+            raise broker.conflict('Holdings preview is active; trading is disabled')
         completed = []
         # One explicit financial workflow at a time, including its intermediate writes.
         async with self.runtime.trading.operation(('trade',)):

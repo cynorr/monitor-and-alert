@@ -22,47 +22,77 @@
 
 ## 账户字段与持仓表
 
-一个 symbol 一行，默认顺序为 Entries、实际 Holdings、其他活动订单、仅 Sold Today 的灰色尾行，不显示 section 标题。持仓同时挂买单或当天卖出仍为同一行；分别保留真实订单，操作不按 symbol 合并委托。位置、折叠、选择及表面效果复用现有 Holdings / Symbol row template。
+一个 symbol 一行，默认顺序为 Entries、真实 Holdings、其他活动订单、仅 Sold Today 的灰色尾行，不显示 section 标题。持仓、活动买单和当天卖出共用同一行。主行当前估值不使用 FIFO 成本重算，来源保持独立：
 
 | 显示 | 来源与口径 |
 | --- | --- |
-| Net Liq | Holding 使用 Schwab positions.marketValue；纯 Entry 使用父单数量 × 买入触发价，不计入持仓 Total |
-| P/L | longOpenProfitLoss |
-| P/L % | 沿原 Schwab 前端：P/L / (averagePrice × quantity) × 100，缺值为空 |
-| P/L Day | currentDayProfitLoss，保持券商口径 |
-| 顶部账户总值 | currentBalances.liquidationValue，不以 cashBalance 加本地市值替代 |
-| Quantity / Avg Price | 券商当前数量及 averagePrice，在展开后的汇总 Buy 行显示 |
-| Chg% / Ext | 现有 Longbridge Quote 与完成 Daily 修正基准；沿用现有时段显示 |
-| ADR / CumVol / LocalVol | 复用现有 Intraday State 计算、格式和 Regular 显隐 |
+| Net Liq | Schwab positions.marketValue；纯 Entry 使用母单股数 × 买入触发价，不计入持仓 Total |
+| P/L | Schwab longOpenProfitLoss |
+| P/L % | longOpenProfitLoss / (averagePrice × quantity) × 100；仅依赖当前 Positions |
+| P/L Day | Schwab currentDayProfitLoss |
+| 顶部账户总值 | Schwab currentBalances.liquidationValue |
+| Days | 当前 FIFO 最老未清批次的买入日期；旧批卖完后转下一批 |
+| Sold | 本轮累计卖出数量 / 本轮累计买入数量 × 100 |
+| Chg% / Ext | 共用 Longbridge Quote 与完成 Daily 修正基准 |
+| ADR / CumVol / LocalVol | 共用 Intraday State，沿用 Regular 显隐 |
 
-主行顺序为 Symbol、Net Liq、P/L %、P/L、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。金额取整数、百分比一位小数、详情价格两位小数；缺值显示 —。Regular 隐藏 Ext，ADR/量比按已有时段规则。列排序降序/取消，Entries 固定前部、仅 Sold Today 固定尾部；余仓复用既有风险 rank。
+主行顺序为 Symbol、Net Liq、Days、P/L %、P/L、Sold、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。金额取整数，P/L%与Chg%一位小数，Ext与成交价两位小数。Sold 为整数百分比，零留空，非零但四舍五入为零显示 <1%。缺值显示 —，明细缺值留空。Regular 隐藏 Ext；ADR/量比按现有规则。排序只影响余仓，Entries 固定前部，纯 Sold Today 固定灰色尾部。
 
-Total Net Liq / P/L / P/L Day 仅汇总当前 Schwab 余仓，日盈亏不包含 Sold Today 的已实现结果，不声称是完整账户日收益。已知缺值不计算部分金额总计。账户与订单保留各自成功更新时间；snapshot 的生成时间不代表账户刚刷新。失败保留成功快照，并在交易区显示认证/REST 状态。
+Total Net Liq / P/L / P/L Day 仅汇总当前券商余仓；P/L Day Total 不合并已清仓交易，保持券商当前持仓口径。主行盈亏、账户净值和行情不等待历史整理成功；FIFO、Days、Sold 或明细成本不可用时只影响相应派生字段。账户、订单和历史分别保留自己的成功时间，不把视图生成时间当刷新时间。
 
-两源原生数据、取数、刷新及会计各自独立。前端共用 palette、Symbol row、折叠/圆形按钮风格和 holdings-layout.ts 的自然内容测宽，不强制共用字段模型或表格 renderer。内容宽度只由必要时的隐藏自然宽度副本决定，价格背景宽度另按实际单元格边框原点计算；禁止用当前已分配的 scrollWidth 反推侧栏最小宽度。报价更新只改已有节点，顺序或展开结构变化才重排。
+表面复用 Holdings / Symbol row template、palette、attention 和 holdings-layout.ts 的纯 DOM 自然测宽，账户和会计不引用 SnapTrade。内容宽度由隐藏自然宽度副本决定，不使用已分配 scrollWidth 反推最小宽度。普通报价更新复用节点，顺序或明细结构变化才重排。
 
-展开内容一条记录一行。标签位于 Symbol 列并缩进；金额、P/L %、P/L 分别与原表的同名列右对齐，数量、价格、撤单按钮依次移到后续可见列。Entry 额外的止损价、风险比例和风险金额位于其后；缺失额外字段不留空槽，跨列数按当前可见表头计算。可见列较少时，末尾操作与额外字段合并在末列内保持单行，不增加虚列。
+## 历史范围与成交链
 
-- Buy：唯一汇总行，金额仍为 quantity × averagePrice，表示当前余仓成本；P/L%与P/L均留空，后接数量与均价。缺成本直接跳过，不回溯历史买入、不提示缺失。
-- Sold：从 sold_today.executions 按真实 order ID 分组，显示成交金额、参考盈亏、实际数量和加权成交价；不建立成本归属或卖出比例。
-- Entry：每张买入母单一行，显示名义金额、数量、买入触发价、对应子单止损价、风险比例与金额。risk% = (buy − stop) / buy × 100，risk = quantity × (buy − stop)。多组 Entry 分别配对，不使用其他 Stop；市价单缺少的价格/风险留空。
-- Stop：未归入活动 Entry 的每张真实 SELL STOP 单独一行，显示 quantity × Stop、数量、Stop。不堆叠常态状态文字；原生状态、editable/cancelable 仍控制交互。
+只接受正常多头股票/ETF买卖：assetType=EQUITY、有 orderId，Transactions 为 TRADE/VALID，正数 OPENING 为买入、负数 CLOSING 为卖出。期权腿、卖空/回补、无 orderId 的记录直接跳过，不用 activityId 补造订单，不猜配、不引入对账或特殊操作恢复框架。有 orderId 的重复 Transactions 记录仍用其原生 activityId 去重。
 
-明细盈亏口径：Buy 不表示卖出或止损收益，P/L与P/L%为空，不显示横杠；主行仍保留券商当前持仓盈亏。Sold 与 Stop 以当前券商持仓 averagePrice 为参考，本条价格分别取成交均价或止损价；P/L = 本条数量 ×（本条价格 − averagePrice），P/L % =（本条价格 / averagePrice − 1）× 100。Sold 是按当前均价估算的参考盈亏，不追溯卖出批次成本；完全清仓后通常没有当前持仓均价，缺正均价或本条价格时两项留空，不显示提示。Entry 尚未成交，P/L 两项为空，保留独立的风险预估。明细盈亏显示整数金额、一位百分比，正负沿用已有配色；不参与 Total，不改变券商主行盈亏。
+Transactions 主动读取最近365天，启动和纽约跨日各读一次，复用原认证及 GET；记录仅在内存，重启从券商重建，不落盘。达到接口3000条上限时不把截断响应当完整历史。读取失败保留成功历史；历史读取错误不污染交易 REST 健康或阻塞当前持仓。
 
-Entry 每组仅母单保留一个圆形 ×，向该 order ID 发送一次 DELETE，父子联动由 Schwab 处理；独立活动 Stop 按自己的 cancelable 显示 ×。Buy/Sold 成交行无取消按钮。界面不显示 @、解释性分隔符、内部 ID 或 Pending activation 等常态文字；缺失历史直接跳过，无补齐提示或 warning。
+成交日期使用交易发生时间转纽约日期，不用订单创建、改单或结算日。每个日期只有一个来源：
 
-主行只用两个小号标记：Entry 表示仍有活动买单；Trim 表示当天有卖出记录且当前仍有余仓。两者可并列。完全清仓行仅为灰色，不显示 Sold/Order 或其他状态标签。
+- 今天之前的成交只使用 Transactions，同一 orderId 的股票成交汇总数量、金额与实际成交时间。
+- 今天的成交只使用现有 Orders 中完全成交且带 executions 的 BUY/SELL；当前只支持原59天创建订单的查询范围，不增加部分成交或跨日分批成交处理。
+- 同一订单不叠加两份数量；当天 Transactions 不参与，纽约跨日后该日期交给 Transactions。历史尚未补齐时派生缺值，不用昨天的 Orders 猜补。Entry、未触发 Stop 和撤单不充当实际成交。
 
-MVP 隐藏 Days、NEW、Sold%、历史买入批次、人工买卖归属及按批次归属的已实现盈亏。不调用 transactions，不使用 SnapTrade 缓存或 sequences/merge_buys，不建立执行账本。
+历史涉及的其他 ticker 不扩大正式行情订阅。普通行情范围只按 Longbridge 数据要求维护。
 
-## Sold Today
+## FIFO、Days、Sold 与 NEW
 
-沿原 trader 范围：从现有最近 59 天创建的订单快照递归查找股票 SELL / FILLED，按最后一笔 execution 的纽约日期判断当天，按 order ID 去除订单树重复出现的订单。累计数量取 filled_quantity，金额为逐笔 quantity × price，均价为金额 / 数量。数量、实际均价及未扣费用的总额保持原生值；明细参考盈亏沿用上方明细口径，不建立历史成本归属。
+从当前真实 Positions 股数倒序处理成交：遇到买入减去股数，遇到卖出加回股数；第一次回到零即找到本轮起点。更早轮次不参与当前轮次。负数不是清仓边界，无法建立可靠顺序或数量不符时派生缺值，不把负数清零猜测。
 
-部分卖出余仓或卖出后买回均保留当日记录；同 symbol 仍一行，卖出信息位于展开详情。没有余仓且无活动买单的当天卖出记录才作为灰色尾行；仍有余仓的卖出只在该 Holding 下展开，并标记 Trim。纽约跨日移除，不依赖页面收到成交声音事件。
+本轮再按时间正序执行 FIFO：买入追加批次，卖出扣除最老余仓批次，扣完转下一批。只使用成交价与 Decimal 数量计算税费前价差。主行仍只有一个 symbol，多批次在展开明细中显示。
 
-保持原支持边界：只统计完全成交订单，不处理跨日分批成交或部分成交后撤单；59 天以前创建的有效订单/止损不承诺完整覆盖。不给这些边界增加历史补取或账本。
+- Days 取 FIFO 队首剩余批次日期。买入当天为0；自然日差不超过7时只计周一至周五，不处理休市日；超过7直接取自然日差。纯清仓行冻结最后清仓前余仓的 Days。
+- Sold 统计从零建仓到再次归零的整轮累计卖出/买入。加仓扩大分母；完全清仓为100%，当天重新买入开启新轮并清零进度。
+- NEW 使用最新实际买入成交日期，纽约当天买入或加仓均显示；与 Days 起点独立。未成交买单不算买入，周末 Days=0 不等于 NEW。
+- 未在窗口内找到本轮起点时，窗口前余额作为未知旧批次参与 FIFO，不编造其成本或买入日期。旧批次仍剩余且已成功读取完整窗口时 Days 显示 >1y；旧批次已卖完，只剩窗口内批次时 Days 正常计算。整轮分母缺失则 Sold 留空；无法确定的成本及盈亏留空。
+
+主行标记仅保留 Entry 和 NEW，复用 symbol-flag。完全清仓仍为灰色行，不增加额外状态标签。
+
+## 展开明细与 Sold Today
+
+下拉每条记录单行，显示当前轮次的逐笔 Buy/Sold、当天更早结束轮次的 Buy/Sold，以及真实 Entry/Stop。不把历史已结束旧轮次铺入当前持仓，不再生成一条虚构的平均成本 Buy。
+
+- Buy：按真实买入订单分别显示日期、原买入金额、数量、成交均价；Days/P/L两项留空。
+- Sold：按真实卖出订单显示日期、金额、FIFO买入成本对应的税费前价差与比例、卖出时 Days、数量及成交均价。一笔卖出跨多个批次时内部累加成本，界面仍只显示一条 Sold；缺对应成本时盈亏留空。
+- Entry：每组母子买单保留原名义金额、数量、买入价、保护 Stop、风险比例及金额；只有母单保留一个圆形 ×，取消联动交给券商。
+- Stop：每张真实活动 SELL STOP 独立显示数量×Stop、数量和价格；预估盈亏继续使用当前券商 averagePrice，不混入 FIFO 历史已实现盈亏。只按 cancelable 显示圆形 ×。
+
+日期与类型在 Symbol 单元格单行排列；金额、Days、P/L%、P/L 对齐主行同名列，数量、价格、取消依次位于后续可见列；Entry额外字段合并在末尾可见区域。不显示内部 ID 或常态订单状态，不增加缺失历史提示。
+
+Sold Today 的显示范围沿用当前订单中完全成交股票 SELL 的最后 execution 纽约日期；有余仓时卖出位于同一 Holding 下拉，无余仓且无活动买单时灰色尾行。当天清仓再买回仍只显示一条当前 symbol 主行，其旧轮次明细保留在下拉，Sold 统计新轮次。纽约跨日移除昨日纯清仓行。
+
+## 可逆持仓预览
+
+正式命令默认使用真实 Positions。本人观察显示时可启动：
+
+```sh
+.venv/bin/python -m data_service serve --mode trade --schwab-holdings-preview
+```
+
+开关只在内存展示副本忽略纽约最近30个自然日的 Sell，以真实余仓加被忽略卖出股数推导预览股数。剩余成本由同一 FIFO 得到，Net Liq/浮盈亏按真实 Longbridge 最新价估算，P/L Day 留空；官方账户净值继续保持真实值。原始 Transactions、Orders、Positions 不被删除或改写。
+
+表头显示 Preview，交易卡片显示 Holdings preview · trading disabled。前端禁用 Send/撤单，后端 Trade 接入层拒绝所有金融写操作；原交易网关函数不变。预览标的不获得真实持仓自动风险身份，当前预览展示范围可取得行情。该临时显示保持到本人明确要求关闭；重启时去掉 --schwab-holdings-preview 即恢复真实持仓，无须恢复文件或重新导入记录。
 
 ## 行情与报警
 
@@ -121,7 +151,7 @@ Accepted 独立显示约两秒后消失，不等待 Holdings/订单刷新，也�
 ## 实现入口与接口
 
 - data_service/schwab_backend.py：认证、Keychain、REST、单条 Streaming、Runtime、固定网关函数。买入核心不变；Stop 支持可选数量、保留/显式更新有效期及 releaseTime，新增固定 place_stop。旧兼容 API 不另起服务。
-- data_service/trade.py：原生账户投影、Sold Today、订阅及显式卖出流程；不读取 SnapTrade、不增加落盘。
+- data_service/trade.py：原生账户投影、低频历史生命周期、可逆预览、Sold Today、订阅及显式卖出流程；trade_history.py 只做正股/ETF 成交归一、轮次截取、FIFO 和展示派生，不读取 SnapTrade、不落盘。
 - workbench.py / chart_cache.py：从现有 Longbridge Daily/Quote/交易日历提供 trade_reference；读取不下载历史。http_api.py 使用原交易专用访问、校验及 unknown 契约。
 - ui/src/schwab-data.ts / schwab-holdings.ts：原生订单/成交字段、展示和节点更新；仅复用通用表面与测宽。
 - ui/src/trade.ts / trade-lines.ts：所选策略、数量/比例、统一 Send 和双图线；price-lines.ts 与 Alert 共用绘制/命中。main.ts 保持既有选择身份检查。
@@ -140,4 +170,4 @@ Accepted 独立显示约两秒后消失，不等待 Holdings/订单刷新，也�
 
 ATR/EMA 不接受客户端数量，后端刷新后取全仓，当前全仓 Stop 要求持仓为整股。price 为正十进制字符串，省略表示在 Send 时计算固定公式；EMA 周期不接受 Max。view 的 trade_reference 含 atr20、ema10/ema20、当天 high/low、server_time、session_close、release_at。订单 release_time 原样映射 Schwab releaseTime。
 
-交易入口只在正式 Trade 模式开放。网关、接入、策略定向测试分别在 tests/test_schwab_backend.py、tests/test_trade.py、tests/test_trade_strategies.py；金融协议用假凭证/MockTransport，绝不提交真实订单。行情验证优先读取当前正式服务的真实数据。
+交易入口只在正式 Trade 模式开放。网关、接入、策略及历史定向测试分别在 tests/test_schwab_backend.py、tests/test_trade.py、tests/test_trade_strategies.py、tests/test_trade_history.py；金融协议用假凭证/MockTransport，绝不提交真实订单。行情验证优先读取当前正式服务的真实数据。

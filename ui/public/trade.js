@@ -263,7 +263,7 @@ export class TradeController {
         }
     }
     async write(path, method, payload) {
-        if (this.busy || this.appMode() !== 'trade')
+        if (this.busy || this.appMode() !== 'trade' || this.state?.holdings_preview)
             return null;
         window.clearTimeout(this.acceptedTimer);
         this.busy = true;
@@ -340,7 +340,7 @@ export class TradeController {
             this.replacements.set(order.order_id, result.new_order_id);
         this.render();
     }
-    ready() { return !!this.state && this.state.health.auth_status === 'valid' && this.state.health.schwab_rest === 'connected' && !this.busy; }
+    ready() { return !!this.state && !this.state.holdings_preview && this.state.health.auth_status === 'valid' && this.state.health.schwab_rest === 'connected' && !this.busy; }
     renderTicks() {
         const ticks = quantityTicks(this.rulerMaximum, this.rulerStep, $('trade-ruler').clientWidth);
         const signature = JSON.stringify(ticks);
@@ -411,7 +411,7 @@ export class TradeController {
         $('trade-estimate').textContent = active && reference != null && qty != null ? Math.round(reference * qty).toLocaleString('en-US') : '';
         $('trade-risk').textContent = active && distance != null && qty != null ? `Risk ${(distance / reference * 100).toFixed(2)}% ｜ ${Math.round(distance * qty).toLocaleString('en-US')}` : '';
         const invalidStop = positionStop && !this.stopValid(this.stop) || pending && !this.stopValid(this.previews.get(pending.order_id) ?? pending.stop_price ?? '');
-        const status = !this.state ? 'Loading Schwab' : this.state.health.auth_status === 'auth_required' ? 'Schwab authorization required' : this.state.health.schwab_rest !== 'connected' ? 'Schwab unavailable · last snapshot retained' : invalidStop ? 'Stop must be positive and below Bid' : this.mode === 'ema-stop' && !this.fieldsValid() ? 'Today’s EMA order unavailable' : '';
+        const status = !this.state ? 'Loading Schwab' : this.state.holdings_preview ? 'Holdings preview · trading disabled' : this.state.health.auth_status === 'auth_required' ? 'Schwab authorization required' : this.state.health.schwab_rest !== 'connected' ? 'Schwab unavailable · last snapshot retained' : invalidStop ? 'Stop must be positive and below Bid' : this.mode === 'ema-stop' && !this.fieldsValid() ? 'Today’s EMA order unavailable' : '';
         $('trade-message').textContent = this.message || status;
         $('trade-feedback').hidden = !this.message && !status && !pending;
         $('trade-message').classList.toggle('unknown', this.unknown);

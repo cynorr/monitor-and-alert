@@ -432,6 +432,13 @@ class SchwabREST:
     async def order(self, order_id: str) -> dict:
         return await self.get(self.account_path(f"/orders/{order_id}"))
 
+    async def transactions(self, start: datetime, end: datetime) -> list:
+        return await self.get(self.account_path("/transactions"), {
+            "startDate": start.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "endDate": end.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "types": "TRADE",
+        })
+
 
 # 05 Schwab Streaming Client --------------------------------------------------
 class StreamFailure(Exception):

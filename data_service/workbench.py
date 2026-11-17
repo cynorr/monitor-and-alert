@@ -83,7 +83,7 @@ class Workbench:
             if self.monitor.intraday:
                 if self.account_mode == 'trade' and self.trade:
                     open_symbols = self.trade.held_symbols()
-                    displayed = trade_symbols
+                    displayed = set(self.trade.real_symbols(now))
                 else:
                     open_symbols = {symbol_key(h['ticker']) for h in self.holdings.base['holdings']
                                     if any(not s['closed_today'] for s in h['sequences'])} if self.holdings and self.holdings.base else set()

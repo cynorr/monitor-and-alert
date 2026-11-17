@@ -27,6 +27,8 @@ python3 -m venv .venv
 | Scan Mock | `.venv/bin/python -m data_service serve --mode scan --runtime runtime/scan-mock --mock-scan` | 独立合成日 K 和测试名单，MOCK 标记 |
 | Monitor 模拟器 | `./simulator/start.command --speed 30` | 临时库/名单，SIM 标记 |
 
+Trade 的可逆只读持仓预览使用 `--schwab-holdings-preview`，显示副本忽略最近30天卖出，禁用交易写入；去掉参数重启恢复真实持仓。规则见 [Schwab Trade](docs/schwab-trade.md#可逆持仓预览)。
+
 正式服务与 Scan Mock 在 http://127.0.0.1:8765/ 打开；模拟器在 http://127.0.0.1:18765/ 。命令同时启动后端和网页，不需另起前端。停止使用 Ctrl+C，关闭网页不停止后端。同一 runtime 只允许一个实例。
 
 需要临时合成 Scan 数据时，先生成 Mock：
