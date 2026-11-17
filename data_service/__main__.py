@@ -25,8 +25,6 @@ def parser():
     result.add_argument('--holdings-rules', type=Path, help='Buy/sell rules; defaults to runtime/holdings')
     result.add_argument('--runtime', type=Path, default=Path('runtime'))
     result.add_argument('--mode', choices=('monitor','scan','trade'), default='monitor')
-    result.add_argument('--schwab-holdings-preview', action='store_true',
-                        help='Read-only display preview ignoring the last 30 days of equity sells')
     result.add_argument('--daily-db', type=Path, help='Read-only external daily SQLite; disables the built-in Massive pipeline')
     result.add_argument('--date', help='Completed trading date; scan defaults to upstream metadata.completed_date')
     result.add_argument('--force', action='store_true', help='Force the Massive splits/bars/features refresh; existing raw daily files are kept')
@@ -66,7 +64,7 @@ async def run(args, tickers):
                             holdings_factory=holdings_factory if not args.mock_scan and args.symbols is None and
                             credential_section(args.credentials, 'snaptrade') else None,
                             pipeline=pipeline, bars_path=paths.bars_db,
-                            trade_factory=lambda: SchwabTrade(holdings_preview=args.schwab_holdings_preview),
+                            trade_factory=SchwabTrade,
                             additional_info=AdditionalInfo(paths.additional_info_dir,
                                                            enabled=not args.mock_scan and args.symbols is None))
         server = None

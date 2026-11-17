@@ -1,5 +1,4 @@
 """FIFO arithmetic and read-only protocol contracts; never send broker writes."""
-import copy
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -8,7 +7,7 @@ import httpx
 
 from data_service.trade import SchwabTrade
 from data_service.trade_history import Fill, analyze, display_fills, holding_days, transaction_fills
-from test_trade import runtime, position
+from test_trade import runtime
 
 
 TODAY = date(2026, 11, 18)
@@ -31,7 +30,6 @@ def test_fifo_days_advance_when_oldest_remaining_batch_is_sold():
     data = analyze(fills, Decimal(200), TODAY, True)
     assert data['holding_days'] == 3
     assert Decimal(data['sold_percent']) == Decimal(100) / 300 * 100
-    assert data['_remaining_cost'] == 2400
     assert data['trades'][-1]['pnl'] == '500'
     assert data['trades'][-1]['pnl_percent'] == '50.0'
 
@@ -72,7 +70,6 @@ def test_unknown_opening_lot_can_be_consumed_leaving_known_days_but_unknown_roun
     data = analyze(fills, Decimal(50), TODAY, True)
     assert data['holding_days'] == 3 and not data['days_over_year']
     assert data['sold_percent'] is None and data['trades'][-1]['pnl'] is None
-    assert data['_remaining_cost'] == 600
 
 
 def test_old_unknown_remaining_lot_only_claims_over_year_after_successful_history_read():
@@ -114,29 +111,6 @@ def test_day_boundary_gives_orders_today_and_transactions_exclusive_ownership_to
     assert display_fills(history, orders, TODAY)[0].amount == 1200
     assert display_fills(history, orders, TODAY + timedelta(days=1))[0].amount == 1100
     assert len(display_fills(history, orders, TODAY)) == 1
-
-
-@pytest.mark.asyncio
-async def test_preview_is_reversible_and_cannot_write_or_change_real_account_fields():
-    value = runtime()
-    trade = SchwabTrade(value, holdings_preview=True)
-    trade.history_ready = True
-    trade.history = [fill(1, 'BUY', 100, 10, 10), fill(2, 'SELL', 30, 15, 1)]
-    value.state.positions = [{**position(), 'quantity': '70'}]
-    original = copy.deepcopy(value.state.positions)
-    now = datetime(2026, 11, 18, 18, tzinfo=timezone.utc).timestamp()
-    state = trade.state(now, {'XYZ.US': {'latest': {'last_price': '12'}}})
-    assert state['rows'][0]['position']['quantity'] == '100'
-    assert state['rows'][0]['position']['market_value'] == '1200'
-    assert state['rows'][0]['sold_percent'] == '0'
-    assert value.state.positions == original and len(trade.history) == 2
-    assert state['account'] == value.state.account
-    with pytest.raises(Exception, match='ORDER_CONFLICT'):
-        await trade.action('market-buy', {'symbol': 'XYZ', 'qty': 1})
-    trade.holdings_preview = False
-    assert trade.state(now, {})['rows'][0]['position'] == original[0]
-    assert Decimal(trade.state(now, {})['rows'][0]['sold_percent']) == 30
-    await value.close()
 
 
 @pytest.mark.asyncio

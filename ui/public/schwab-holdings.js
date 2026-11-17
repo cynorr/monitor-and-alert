@@ -184,7 +184,6 @@ export class SchwabHoldings {
         date.hidden = !value.date;
         date.dateTime = value.date ?? '';
         const cancel = row.querySelector('button');
-        cancel.disabled = !!this.data?.holdings_preview;
         cancel.hidden = !value.cancelId;
         cancel.setAttribute('aria-label', `Cancel ${value.kind.toLowerCase()} order for ${symbol.replace('.US', '')}`);
         cancel.title = 'Cancel order';
@@ -207,7 +206,6 @@ export class SchwabHoldings {
         $('schwab-arrow').textContent = this.collapsed ? '▸' : '▾';
         $('schwab-count').textContent = String(this.data.rows.length);
         $('schwab-account').textContent = integer(numeric(this.data.account?.liquidation_value)) || '—';
-        $('schwab-preview').hidden = !this.data.holdings_preview;
         $('schwab-account').title = `Schwab liquidationValue · Stock BP ${money(numeric(this.data.account?.stock_buying_power))} · Available ${money(numeric(this.data.account?.available_funds))}`;
         this.tick();
         if (this.regular && this.sort === 'extended_percent')

@@ -1,6 +1,6 @@
 # Holdings UI
 
-本文件维护原 SnapTrade 持仓及共用行风格。Trade 的独立 Schwab Days/Sold、FIFO明细、NEW与预览差异只在 [Schwab Trade MVP](schwab-trade.md) 维护，复用本文件的位置、自然高度、折叠和 Symbol row template。
+本文件维护原 SnapTrade 持仓及共用行风格。Trade 的独立 Schwab Days/Sold、FIFO明细、NEW差异只在 [Schwab Trade MVP](schwab-trade.md) 维护，复用本文件的位置、自然高度、折叠和 Symbol row template。
 
 更新：2026-10-26。本文件是独立持仓表的唯一UI规范；[ui.md](ui.md) 是总入口。账户刷新、价格来源、会计、Days与P/L Day计算只在 [holdings-data.md](holdings-data.md) 维护，图案与操作含义见 [Logo / Icon](ui.md#logo--icon)。产品界面仅使用英文。
 

@@ -1,25 +1,24 @@
 # 验证记录
 
+## 2026-11-18：Schwab 真实持仓路径清理
+
+环境：本机macOS、Python3.13.1、TypeScript5.9.3、正式127.0.0.1:8765 Trade服务。删除临时持仓展示路径及其启动参数、接口字段、前端标识和专属交易禁用判断；清理专属用例、剩余成本辅助字段、重复名单入口、过期文档及测试缓存。Transactions、FIFO、Days、Sold%、NEW、历史链与原交易网关保留。
+
+- TypeScript build、28项前端定向用例及40项后端账户/历史/策略用例通过；其中一个本机HTTP用例初次因沙箱禁止监听临时端口失败，允许本机端口后单独重跑通过。所有交易协议用例使用假凭证和MockTransport，不连接真实券商。
+- 正式服务按正常Trade命令重启为PID65838；只读GET确认真实持仓0行、原生订单165条、历史读取成功，认证有效，REST/Streaming均connected，账户与订单均已初始化。接口不再返回已删除字段。未向真实券商下单、改单或撤单；当前空仓，没有对非空持仓做现场验收。
+- 源码、构建JS/HTML、测试、维护文档、AGENTS及本机测试缓存的相关标识搜索无残余；git diff --check通过，data_service/schwab_backend.py无修改。图表与订单草稿的正常预估功能保留。
+
 ## 2026-11-18：历史日期对齐 P/L Day
 
-环境：本机macOS、现有TypeScript项目，仅调整历史日期的单元格位置，移除原左侧padding，使用P/L Day列的右对齐；Regular隐藏Ext后仍保持同列。TypeScript build和git diff --check通过。未改数据、后端或预览开关，未做截图、浏览器视觉验证或交易操作。
+环境：本机macOS、现有TypeScript项目，仅调整历史日期的单元格位置，移除原左侧padding，使用P/L Day列的右对齐；Regular隐藏Ext后仍保持同列。TypeScript build和git diff --check通过。未改数据或后端，未做截图、浏览器视觉验证或交易操作。
 
 ## 2026-11-18：Schwab 历史链字段对齐
 
-环境：本机macOS、现有TypeScript项目，仅修改Schwab持仓的DOM列序、CSS和对应文档。树干移至symbol首字母中心；Sold百分比与历史数量共用Symbol后的列，历史日期移至价格右侧。核对表头、主行、明细与Total的列序，以及Regular/扩展时段的可见列对应。TypeScript build、8项原生数据/共用持仓布局用例、git diff --check通过。未改后端、历史计算或持仓预览开关；未进行截图、浏览器视觉验证、真实交易写入或全量测试，实际视觉由本人确认。
+环境：本机macOS、现有TypeScript项目，仅修改Schwab持仓的DOM列序、CSS和对应文档。树干移至symbol首字母中心；Sold百分比与历史数量共用Symbol后的列，历史日期移至价格右侧。核对表头、主行、明细与Total的列序，以及Regular/扩展时段的可见列对应。TypeScript build、8项原生数据/共用持仓布局用例、git diff --check通过。未改后端或历史计算；未进行截图、浏览器视觉验证、真实交易写入或全量测试，实际视觉由本人确认。
 
 ## 2026-11-18：Schwab 历史成交树形展示
 
-环境：本机macOS、现有TypeScript项目，仅调整Schwab明细DOM和CSS。Buy/Sold保留平级与原缩进，移除背景、加入树线和空心/实心圆点；类型与较小灰色日期独立排列，数字列保持原位置。TypeScript build、Schwab原生数据及共用持仓布局定向用例、git diff --check通过。未改后端、FIFO或预览开关；未进行截图、真实交易写入或全量测试，实际视觉由本人确认。
-
-## 2026-11-18：Schwab 历史字段、FIFO 与可逆持仓预览
-
-环境：本机 macOS、Python3.13.1、TypeScript5.9.3、正式 127.0.0.1:8765 Trade 服务。真实账户为空仓；采用本人授权的 --schwab-holdings-preview 展示副本，忽略最近30天股票Sell，不删改券商数据。测试覆盖交易日为2026-11-17 Regular，文档日期按本人Asia/Shanghai日期记录。
-
-- 正式后台只读 Transactions 成功，生成20个预览symbol；20行均取得真实Longbridge报价并显示预估Net Liq，Days与逐笔Buy正常返回。GET /v1/trade 同时仍保留64条原始完全成交Sell订单，历史过滤没有改写原始Orders/Transactions/Positions，账户总值仍为真实Schwab净值。预览保持开启，等待本人指令关闭。
-- 原交易网关、TokenManager、Runtime、Streaming和所有既有SchwabREST方法的AST与修改前一致；网关文件仅增加transactions历史GET。预览期间金融写请求由接入层拒绝，前端Send/撤单禁用；离线用例确认不触发真实写入，未通过真实POST/PUT/DELETE探测，也未发真实下单、改单、撤单。
-- 后端定向 tests/test_schwab_backend.py、test_trade.py、test_trade_strategies.py、test_trade_history.py 共186项通过；覆盖FIFO批次切换、整轮Sold%、加仓NEW、纽约日期/旧Days规则、MU窗口截断、同日清仓再买回、未知旧批次、异常数量不猜配、股票过滤/无orderId丢弃、日期唯一来源、历史读失败隔离，以及预览可逆和写入门禁。Node交易/原生数据28项通过；TypeScript build与git diff --check通过。
-- 未覆盖真实成交后的即时展示、跨纽约日期的服务实测与真实金融写入。表格视觉和间距由本人查看；关闭预览后本人可验证买入/加仓的NEW、完整成交减仓后的FIFO Days与整轮Sold%、清仓重开及次日Transactions交接。本轮未将旧验证记录当作live证据。
+环境：本机macOS、现有TypeScript项目，仅调整Schwab明细DOM和CSS。Buy/Sold保留平级与原缩进，移除背景、加入树线和空心/实心圆点；类型与较小灰色日期独立排列，数字列保持原位置。TypeScript build、Schwab原生数据及共用持仓布局定向用例、git diff --check通过。未改后端或FIFO；未进行截图、真实交易写入或全量测试，实际视觉由本人确认。
 
 ## 2026-11-17：Trade 策略按钮与票据对齐
 

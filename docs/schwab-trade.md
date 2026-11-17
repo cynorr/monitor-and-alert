@@ -84,18 +84,6 @@ Buy/Sold 类型12px，位于 Symbol 单元格；明细数量移至 Symbol 和 Ne
 
 Sold Today 的显示范围沿用当前订单中完全成交股票 SELL 的最后 execution 纽约日期；有余仓时卖出位于同一 Holding 下拉，无余仓且无活动买单时灰色尾行。当天清仓再买回仍只显示一条当前 symbol 主行，其旧轮次明细保留在下拉，Sold 统计新轮次。纽约跨日移除昨日纯清仓行。
 
-## 可逆持仓预览
-
-正式命令默认使用真实 Positions。本人观察显示时可启动：
-
-```sh
-.venv/bin/python -m data_service serve --mode trade --schwab-holdings-preview
-```
-
-开关只在内存展示副本忽略纽约最近30个自然日的 Sell，以真实余仓加被忽略卖出股数推导预览股数。剩余成本由同一 FIFO 得到，Net Liq/浮盈亏按真实 Longbridge 最新价估算，P/L Day 留空；官方账户净值继续保持真实值。原始 Transactions、Orders、Positions 不被删除或改写。
-
-表头显示 Preview，交易卡片显示 Holdings preview · trading disabled。前端禁用 Send/撤单，后端 Trade 接入层拒绝所有金融写操作；原交易网关函数不变。预览标的不获得真实持仓自动风险身份，当前预览展示范围可取得行情。该临时显示保持到本人明确要求关闭；重启时去掉 --schwab-holdings-preview 即恢复真实持仓，无须恢复文件或重新导入记录。
-
 ## 行情与报警
 
 Schwab 一条 Streaming 连接，继续订阅 ACCT_ACTIVITY 与 LEVELONE_EQUITIES 的 symbol / bid / ask。启动即覆盖完整 Focus，再追加当前 Schwab 持仓、活动 Entries、当天卖出记录和当前选择；差集使用原 SUBS/ADD，重连恢复，MVP 不另加自动退订。不为订阅 Focus 逐股发 REST Quote；选股时只对选中股票初始化交易报价，提交前仍使用原 REST 校验。
@@ -153,7 +141,7 @@ Accepted 独立显示约两秒后消失，不等待 Holdings/订单刷新，也�
 ## 实现入口与接口
 
 - data_service/schwab_backend.py：认证、Keychain、REST、单条 Streaming、Runtime、固定网关函数。买入核心不变；Stop 支持可选数量、保留/显式更新有效期及 releaseTime，新增固定 place_stop。旧兼容 API 不另起服务。
-- data_service/trade.py：原生账户投影、低频历史生命周期、可逆预览、Sold Today、订阅及显式卖出流程；trade_history.py 只做正股/ETF 成交归一、轮次截取、FIFO 和展示派生，不读取 SnapTrade、不落盘。
+- data_service/trade.py：原生账户投影、低频历史生命周期、Sold Today、订阅及显式卖出流程；trade_history.py 只做正股/ETF 成交归一、轮次截取、FIFO 和展示派生，不读取 SnapTrade、不落盘。
 - workbench.py / chart_cache.py：从现有 Longbridge Daily/Quote/交易日历提供 trade_reference；读取不下载历史。http_api.py 使用原交易专用访问、校验及 unknown 契约。
 - ui/src/schwab-data.ts / schwab-holdings.ts：原生订单/成交字段、展示和节点更新；仅复用通用表面与测宽。
 - ui/src/trade.ts / trade-lines.ts：所选策略、数量/比例、统一 Send 和双图线；price-lines.ts 与 Alert 共用绘制/命中。main.ts 保持既有选择身份检查。

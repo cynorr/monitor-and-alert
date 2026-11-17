@@ -153,15 +153,13 @@ def _round(fills, held, today, history_ready):
     return {'start': start, 'trades': details,
             'holding_days': holding_days(oldest, today) if oldest else last_days if not held else None,
             'days_over_year': (oldest is None and history_ready) if held else last_old,
-            'sold_percent': decimal_text(sells / buys * 100) if complete and buys else None,
-            '_remaining_cost': sum((lot[0] * lot[1] for lot in lots), Decimal(0))
-            if all(lot[1] is not None for lot in lots) else None}
+            'sold_percent': decimal_text(sells / buys * 100) if complete and buys else None}
 
 
 def analyze(fills, held, today, history_ready):
     result = {'holding_days': None, 'days_over_year': False, 'sold_percent': None,
               'is_new': any(f.side == 'BUY' and f.day == today for f in fills),
-              'trades': [], '_remaining_cost': None}
+              'trades': []}
     if not fills:
         return result
     # Same-second opposite sides do not establish a reliable buy/sell sequence.
@@ -182,31 +180,4 @@ def analyze(fills, held, today, history_ready):
         previous = closed['trades'] + previous
         prefix = prefix[:closed['start']]
     result['trades'] = previous + result['trades']
-    return result
-
-
-def preview_positions(positions, fills, ignored, today, history_ready, quotes):
-    """Disposable display projection; original Positions and fills stay untouched."""
-    actual = {p['symbol']: Decimal(p['quantity']) for p in positions}
-    added = defaultdict(Decimal)
-    for fill in ignored:
-        added[fill.symbol] += fill.quantity
-    by_symbol = defaultdict(list)
-    for fill in fills:
-        by_symbol[fill.symbol].append(fill)
-    result = []
-    for symbol in sorted(actual.keys() | added.keys()):
-        quantity = actual.get(symbol, Decimal(0)) + added[symbol]
-        if quantity <= 0:
-            continue
-        data = analyze(by_symbol[symbol], quantity, today, history_ready)
-        cost = data['_remaining_cost']
-        quote = quotes.get(symbol + '.US', {})
-        price = positive((quote.get('latest') or quote.get('regular') or {}).get('last_price'))
-        value = quantity * price if price else None
-        result.append({'symbol': symbol, 'asset_type': 'EQUITY', 'quantity': decimal_text(quantity),
-                       'average_price': decimal_text(cost / quantity) if cost is not None else None,
-                       'market_value': decimal_text(value), 'open_profit_loss': decimal_text(value - cost)
-                       if value is not None and cost is not None else None,
-                       'day_profit_loss': None, 'day_profit_loss_percent': None})
     return result

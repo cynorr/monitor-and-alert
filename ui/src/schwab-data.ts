@@ -18,7 +18,7 @@ export type TradeState = {
     account_updated_at: string | null; orders_updated_at: string | null;
     health: { service: string; auth_status: string; schwab_rest: string; schwab_stream: string; account_initialized: boolean; orders_initialized: boolean; last_account_update: string | null; last_orders_update: string | null };
     limits: { buy_amount: string; loss: string; stop_ratio: string };
-    holdings_preview: boolean; history_updated_at: string | null;
+    history_updated_at: string | null;
 };
 export const numeric = (value: string | number | null | undefined) => value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 export function openPercent(position: Position | null) {
