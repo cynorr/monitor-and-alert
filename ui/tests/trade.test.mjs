@@ -62,7 +62,7 @@ test('unstructured write failures and malformed success stay unknown; explicit p
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function ticket() {
-    const nodes = new Map(), modes = ['breakout-buy', 'market-buy', 'market-sell'];
+    const nodes = new Map(), modes = ['breakout-buy', 'market-buy', 'market-sell', 'atr-stop', 'ema-stop'];
     const node = id => {
         if (!nodes.has(id)) { const classes = new Set(); nodes.set(id, {
             value: '', textContent: '', hidden: false, disabled: false, clientWidth: 270, active: false, style: {}, dataset: {}, attributes: {}, listeners: {},
@@ -76,7 +76,9 @@ async function ticket() {
         return nodes.get(id);
     };
     const buttons = modes.map(mode => Object.assign(node(mode), {dataset:{tradeMode:mode}}));
-    globalThis.document = { getElementById: node, createElement:()=>node(Symbol()), querySelectorAll: () => buttons, addEventListener() {} };
+    const presets = [25,30,40,50].map(percent => Object.assign(node('percent-'+percent), {dataset:{sellPercent:String(percent)}}));
+    const periods = [10,20].map(period => Object.assign(node('ema-'+period), {dataset:{emaPeriod:String(period)}}));
+    globalThis.document = { getElementById: node, createElement:()=>node(Symbol()), querySelectorAll: selector => selector === '[data-trade-mode]' ? buttons : selector === '[data-sell-percent]' ? presets : periods, addEventListener() {} };
     globalThis.ResizeObserver = class { observe() {} };
     globalThis.window = globalThis;
     const writes = [];
@@ -135,10 +137,56 @@ test('market references never become order prices; the Sell ruler can select all
     assert.deepEqual(writes,[{path:'/v1/trade/orders/market-buy',method:'POST',body:{symbol:'XYZ',qty:200}}]);
     assert.equal(node('trade-size').attributes['aria-hidden'],'true');
     node('market-sell').onclick();
+    assert.equal(node('trade-qty').textContent,'6');
+    assert.equal(node('trade-percent').textContent,'26.1%');
+    node('percent-50').onclick();
+    assert.equal(node('trade-qty').textContent,'11');
     node('trade-ruler').value=node('trade-ruler').max; node('trade-ruler').oninput();
     assert.equal(node('trade-qty').textContent,'23');
     node('trade-submit').onclick(); await settle();
     assert.deepEqual(writes[1],{path:'/v1/trade/orders/market-sell',method:'POST',body:{symbol:'XYZ',qty:23}});
+});
+
+test('EMA offers only 10/20, defaults to the higher Daily value and sends the chosen static strategy', async () => {
+    const {node,controller,writes,panels}=await ticket();
+    const timestamp=Date.parse('2026-10-27T14:00:00Z')/1000;
+    node('ema-stop').onclick();
+    controller.view({symbol:'XYZ.US',server_time:timestamp,quote:{regular:{timestamp,high:102,low:95}},
+        trade_reference:{atr20:5,ema10:91,ema20:94,server_time:timestamp,session_close:timestamp+20000,release_at:timestamp+18200}});
+    assert.equal(node('ema-20').classList.contains('active'),true);
+    assert.equal(node('trade-qty').textContent,'23');
+    assert.equal(node('trade-ruler').disabled,true);
+    assert.deepEqual(panels[0].tradePrices,[80,94]);
+    node('ema-10').onclick();
+    assert.deepEqual(panels[1].tradePrices,[80,91]);
+    node('trade-submit').onclick(); await settle();
+    assert.deepEqual(writes,[{path:'/v1/trade/orders/ema-stop',method:'POST',body:{symbol:'XYZ',ema:10}}]);
+});
+
+test('ATR below Bid is required before Send and a manual line remains the submitted target', async () => {
+    const {node,controller,writes,panels,drag}=await ticket();
+    const timestamp=Date.parse('2026-10-27T14:00:00Z')/1000;
+    controller.view({symbol:'XYZ.US',server_time:timestamp,quote:{regular:{timestamp,high:102,low:95}},
+        trade_reference:{atr20:1,ema10:91,ema20:94,server_time:timestamp,session_close:timestamp+20000,release_at:timestamp+18200}});
+    node('atr-stop').onclick();
+    assert.equal(node('trade-submit').disabled,true);
+    drag(panels[0],100.9,12);
+    assert.equal(node('trade-submit').disabled,false);
+    node('trade-submit').onclick(); await settle();
+    assert.deepEqual(writes,[{path:'/v1/trade/orders/atr-stop',method:'POST',body:{symbol:'XYZ',price:'94.90'}}]);
+});
+
+test('clicking an existing Stop loads its quantity and supports a quantity-only PUT', async () => {
+    const {node,panels,writes}=await ticket();
+    const host=node('daily-chart');
+    for (const type of ['pointerdown','pointerup']) for (const handler of host.listeners[type]) handler({button:0,clientX:100,clientY:140,pointerId:1,target:host,preventDefault(){},stopImmediatePropagation(){}});
+    assert.equal(node('trade-qty').textContent,'23');
+    assert.equal(node('trade-submit').disabled,true);
+    node('trade-ruler').value='10'; node('trade-ruler').oninput();
+    assert.equal(node('trade-submit').disabled,false);
+    assert.deepEqual(panels[0].tradePrices,[80]);
+    node('trade-submit').onclick(); await settle();
+    assert.deepEqual(writes,[{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'80',qty:10}}]);
 });
 test('dragging an existing stop switches Send to one explicit replacement without a new order', async () => {
     const {node,panels,drag,writes}=await ticket();
@@ -149,7 +197,7 @@ test('dragging an existing stop switches Send to one explicit replacement withou
     assert.equal(node('trade-submit').disabled,false);
     for (const panel of panels) assert.deepEqual(panel.tradePrices,[85]);
     node('trade-submit').onclick(); await settle();
-    assert.deepEqual(writes,[{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'85.00'}}]);
+    assert.deepEqual(writes,[{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'85.00',qty:23}}]);
     assert.equal(node('trade-submit').disabled,true);
 });
 test('pending-activation Stops edit outside Regular even with editable=false and accept the next snapshot', async () => {
@@ -162,7 +210,7 @@ test('pending-activation Stops edit outside Regular even with editable=false and
     assert.equal(node('trade-submit').disabled,false);
     assert.deepEqual(panels[1].tradePrices,[85]);
     node('trade-submit').onclick(); await settle();
-    assert.deepEqual(writes[0],{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'85.00'}});
+    assert.deepEqual(writes[0],{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'85.00',qty:23}});
     const replacement={...stop,order_id:'replacement',stop_price:'85'};
     controller.update({...outside,orders:[replacement],rows:[{...outside.rows[0],orders:[replacement]}]});
     drag(panels[1],85,-10);

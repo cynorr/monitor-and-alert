@@ -1,6 +1,6 @@
 # Market Monitor
 
-个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘，Trade 在同一工作台使用 Schwab 交易。三个模式共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
+个人美股工作台：Scan 全市场筛选与日 K 看 setup，Monitor 实时 Daily + Intraday 看盘，Trade 在同一工作台使用 Schwab 买入、市价卖出、ATR/EMA 止损及原生延迟单。三个模式共用 Focus、日 K 图表和指标；正式服务切页时行情与账户刷新持续后台运行。单进程 Python、SQLite、同源 WebSocket。
 
 [Schwab Trade MVP](docs/schwab-trade.md) · [开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [List 交互](docs/list-interactions.md) · [Alert 需求](docs/alert.md) · [Chart UI](docs/chart-ui.md) · [Holdings 数据](docs/holdings-data.md) · [Holdings UI](docs/holdings-ui.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Longbridge 数据要求](docs/longbridge-data.md)** · [Longbridge 多账号与访问台账](docs/longbridge-accounts.md) · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
 

@@ -4,7 +4,7 @@ export type Order = {
     order_id: string | null; parent_order_id: string | null; symbol: string | null; asset_type: string | null;
     instruction: string | null; order_type: string | null; strategy_type: string | null; status: string | null;
     quantity: string | null; filled_quantity: string | null; stop_price: string | null;
-    duration: string | null; session: string | null; entered_at: string | null;
+    duration: string | null; session: string | null; entered_at: string | null; release_time: string | null;
     editable: boolean | null; cancelable: boolean | null; executions: Execution[]; child_orders: Order[];
 };
 export type Position = { symbol: string; asset_type: string; quantity: string; average_price: string | null; market_value: string | null; open_profit_loss: string | null; day_profit_loss: string | null; day_profit_loss_percent: string | null };
@@ -27,11 +27,11 @@ export function flattenOrders(orders: Order[]) {
     const visit = (items: Order[]) => { for (const item of items) { const key = item.order_id ?? item; if (!found.has(key)) found.set(key, item); visit(item.child_orders); } };
     visit(orders); return [...found.values()];
 }
-const active = new Set(['WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_ORDER', 'PENDING_ACTIVATION', 'QUEUED', 'PENDING_REPLACE', 'PENDING_CANCEL', 'PARTIALLY_FILLED', 'ACCEPTED', 'PENDING_ACKNOWLEDGEMENT']);
+const active = new Set(['WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_ORDER', 'AWAITING_RELEASE_TIME', 'PENDING_ACTIVATION', 'QUEUED', 'PENDING_REPLACE', 'PENDING_CANCEL', 'PARTIALLY_FILLED', 'ACCEPTED', 'PENDING_ACKNOWLEDGEMENT']);
 export const activeOrders = (row: TradeRow) => flattenOrders(row.orders).filter(order => order.status != null && active.has(order.status) && order.symbol === row.ticker);
 export const entryOrders = (row: TradeRow) => activeOrders(row).filter(order => order.instruction === 'BUY');
 export function editableStop(order: Order) {
-    return !!order.order_id && (order.editable === true || order.status === 'PENDING_ACTIVATION') && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION'].includes(order.status ?? '');
+    return !!order.order_id && (order.editable === true || ['PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '')) && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '');
 }
 export function entryPreview(order: Order) {
     const qty = numeric(order.quantity), price = numeric(order.stop_price);

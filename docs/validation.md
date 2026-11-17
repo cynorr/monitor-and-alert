@@ -1,5 +1,14 @@
 # 验证记录
 
+## 2026-11-17：Schwab 卖出策略与 Stop 数量/延迟
+
+环境：本机 macOS、Python 3.13.1、TypeScript 5.9.3，正式服务 127.0.0.1:8765（Trade，现有 workspace）。行情只读检查在当日美东盘前完成，使用当前 Longbridge 真数据及真实交易日历，不生成 Mock candle；未向真实券商提交、修改或撤销订单。
+
+- TRAX/DFIN/AMPL 分别读取 157/1000/1000 根真实 Daily；trade_reference 的 EMA10/20 与图表最新序列逐值相同，ATR20 与现有 Wilder 算法对同一前日完成窗口的计算一致。ATR20 分别约 3.231490 / 2.339628 / 0.818930。盘前 high/low 为空，没有借用前一日高低价；普通日激活为 15:30 ET，2026-11-27 半日市为 12:30 ET。
+- UI 实际浏览核对独立买入/卖出胶囊、固定数量/报价/Send 布局及仅 10/20 的 EMA 选项，默认选 TRAX 较高的 EMA10。当前真实账户无持仓，持仓 Stop 拖动和数量更新由离线交互用例覆盖；未按 Send 或撤单按钮。
+- TypeScript build 通过；交易与原生字段 UI 定向用例 26 项通过。网关/接入/策略定向用例共 173 项通过；金融协议测试使用假凭证和 MockTransport，覆盖市价卖出按占用条件撤单、确认 CANCELED 后卖出、零/一/多 Stop、全仓 ATR、EMA DAY/releaseTime、明确拒绝才撤旧新建、未知不继续、延迟单数量编辑保留有效期、手动目标和严格数量参数。网关原认证/REST/Streaming/Runtime、Buy Market/Buy Stop 和原子 Sell/Cancel/Submit 的 AST 与本轮修改前一致。
+- 未覆盖：当日 Regular High 实时变化、真实券商 Stop 数量替换、延迟单的接受/激活/触发/到期及真实撤单后卖出。本人需小仓验证 EMA 旧 Stop 替换（含不能替换时的撤旧新建）、激活时已低于 Stop 的行为、DAY 当天到期、普通 Stop 数量修改、全仓 ATR 与受 Stop 占用的 Market Sell。实盘结果反馈前不把这些协议假设记作已经验证。
+
 ## 2026-10-30：In 14 Days 财报排除
 
 环境：本机macOS、Python3.13.1、TypeScript5.9.3；使用正式2026-10-29 Massive截面、当前Tag/人工名单及Nasdaq真实财报SQLite/原始响应。定向测试只写临时名单/财报库，不构造Mock行情或财报，不调用供应商接口；没有全量或全链路测试。

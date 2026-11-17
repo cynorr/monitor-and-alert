@@ -136,6 +136,7 @@ class BreakoutRequest(MarketRequest):
 
 class ReplaceRequest(StrictRequest):
     new_stop: Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
+    qty: Annotated[StrictInt, Field(gt=0)] | None = None
 
     @field_validator("new_stop", mode="before")
     @classmethod
@@ -664,6 +665,7 @@ def map_order(raw: dict, parent_id: str | None = None) -> dict:
         "stop_price": decimal_text(raw.get("stopPrice")),
         "duration": raw.get("duration"),
         "session": raw.get("session"),
+        "release_time": raw.get("releaseTime"),
         "status": raw.get("status"),
         "cancelable": raw.get("cancelable"),
         "entered_at": raw.get("enteredTime"),
@@ -1074,7 +1076,16 @@ class TradingGateway:
             ]
             return await self.submit(parent)
 
-    async def replace_stop(self, order_id: str | int, new_stop: Decimal) -> dict:
+    async def place_stop(self, symbol: str, qty: int, stop: Decimal, *,
+                         duration: str = "GOOD_TILL_CANCEL", release_time: str | None = None) -> dict:
+        async with self.operation(("place_stop", symbol, qty, stop, duration, release_time)):
+            payload = order_payload(symbol, qty, "SELL", "STOP", duration, stop)
+            if release_time is not None:
+                payload["releaseTime"] = release_time
+            return await self.submit(payload)
+
+    async def replace_stop(self, order_id: str | int, new_stop: Decimal, new_qty: int | None = None, *,
+                           duration: str | None = None, release_time: str | None = None) -> dict:
         order_id = order_id_value(order_id)
         async with self.operation(("order", order_id)):
             raw = await self.runtime.rest.order(order_id)
@@ -1083,9 +1094,9 @@ class TradingGateway:
                 raw.get("orderType") != "STOP"
                 or raw.get("orderStrategyType") != "SINGLE"
                 or raw.get("session") != "NORMAL"
-                or (raw.get("editable") is not True and raw.get("status") != "PENDING_ACTIVATION")
+                or (raw.get("editable") is not True and raw.get("status") not in {"PENDING_ACTIVATION", "AWAITING_RELEASE_TIME"})
                 or raw.get("status")
-                not in {"WORKING", "AWAITING_STOP_CONDITION", "QUEUED", "ACCEPTED", "PENDING_ACTIVATION"}
+                not in {"WORKING", "AWAITING_STOP_CONDITION", "QUEUED", "ACCEPTED", "PENDING_ACTIVATION", "AWAITING_RELEASE_TIME"}
                 or raw.get("childOrderStrategies")
                 or len(legs) != 1
                 or legs[0].get("instruction") != "SELL"
@@ -1102,9 +1113,10 @@ class TradingGateway:
                 or leg.get("quantityType") not in (None, "", "SHARES")
             ):
                 raise conflict("原订单数量必须是有限正整数股数，不能截断或推测改单数量")
-            duration = raw.get("duration")
-            if not duration:
+            if not raw.get("duration"):
                 raise conflict("原订单缺少有效期，无法保持原单设置")
+            if duration is None:
+                duration, release_time = raw["duration"], raw.get("releaseTime")
             if (
                 raw.get("stopType") not in (None, "", "STANDARD")
                 or raw.get("stopPriceLinkBasis") not in (None, "", "MANUAL")
@@ -1118,12 +1130,14 @@ class TradingGateway:
                 raise conflict("仅支持固定价格、标准触发的股票 Sell Stop，不能自动更改原触发设置")
             payload = order_payload(
                 leg["instrument"]["symbol"],
-                int(quantity),
+                int(quantity) if new_qty is None else new_qty,
                 "SELL",
                 "STOP",
                 duration=duration,
                 stop=new_stop,
             )
+            if release_time is not None:
+                payload["releaseTime"] = release_time
             # Preserve explicit tax/execution instructions, including FIFO, without GET metadata.
             for key in ("taxLotMethod", "specialInstruction"):
                 if raw.get(key) not in (None, ""):
@@ -1352,7 +1366,7 @@ def create_app(*, runtime: Runtime | None = None) -> FastAPI:
 
     @app.put("/api/v1/orders/{order_id}/stop")
     async def replace_stop(order_id: str, request: ReplaceRequest):
-        return await runtime.trading.replace_stop(order_id, request.new_stop)
+        return await runtime.trading.replace_stop(order_id, request.new_stop, request.qty)
 
     @app.delete("/api/v1/orders/{order_id}", status_code=202)
     async def cancel_order(order_id: str):

@@ -3,6 +3,7 @@ import { horizontalLines, nearPriceLine, panePoint, priceAtPointer } from './pri
 export class TradeLines {
     panel;
     change;
+    select;
     lines = new Map();
     drag = null;
     suppressed = false;
@@ -10,9 +11,10 @@ export class TradeLines {
     requestUpdate = () => { };
     renderer = horizontalLines(() => [...this.lines.values()].map(({ value }) => ({ y: this.coordinate(value), color: value.color })));
     view = { zOrder: () => 'bottom', renderer: () => this.renderer };
-    constructor(panel, change) {
+    constructor(panel, change, select = () => { }) {
         this.panel = panel;
         this.change = change;
+        this.select = select;
         panel.candles.attachPrimitive(this);
         const host = $(panel.id + '-chart');
         host.addEventListener('pointerdown', event => {
@@ -25,6 +27,7 @@ export class TradeLines {
             }
             const index = hits.findIndex(line => line.key === this.selected), line = hits[(index + 1) % hits.length];
             this.selected = line.key;
+            this.select(line);
             this.stop(event);
             this.drag = { key: line.key, pointer: event.pointerId, original: line.price, start: event.clientY, moved: false };
             host.setPointerCapture(event.pointerId);

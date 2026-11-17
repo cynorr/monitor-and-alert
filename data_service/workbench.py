@@ -41,6 +41,8 @@ class Workbench:
         self.holdings_factory = holdings_factory if not mock and only is None else None
         self.holdings, self.holdings_task = None, None
         self.trade = trade_factory() if trade_factory and not mock and only is None else None
+        if self.trade:
+            self.trade.reference = self.trade_reference
         self.trade_task = None
         self.account_mode = "monitor"
         self.focus = ('', '5m')
@@ -400,9 +402,22 @@ class Workbench:
             raise ValueError('Ticker is outside this Scan workspace')
         self.focus = symbol, timeframe
 
+    def trade_reference(self, symbol):
+        now = int(self.monitor.now())
+        regular = self.monitor.quote(symbol, now).get('regular')
+        today = datetime.fromtimestamp(now, ET).date()
+        current = regular and datetime.fromtimestamp(regular['timestamp'], ET).date() == today
+        session = self.calendar.session(today)
+        return {**self.monitor.charts.trade_reference(symbol, now),
+                'high': regular.get('high') if current else None,
+                'low': regular.get('low') if current else None,
+                'server_time': now, 'session_close': session[1] if session else None,
+                'release_at': session[1] - 1800 if session else None}
+
     def view(self, symbol, tf, revisions=None, source='watchlist'):
         if self.mode in ('monitor', 'trade'):
-            return {**self.monitor.view(symbol, tf, revisions), 'app_mode': self.mode}
+            return {**self.monitor.view(symbol, tf, revisions), 'app_mode': self.mode,
+                    **({'trade_reference': self.trade_reference(symbol)} if self.mode == 'trade' else {})}
         value = self.selected_date
         key = value, symbol
         if key not in self.chart_cache:
@@ -598,6 +613,10 @@ class Workbench:
         if path == '/v1/filter-catalog':
             from .preferences import CATALOG
             return CATALOG
+        if path == '/v1/chart' and self.mode == 'trade':
+            symbol = query['symbol'][0]
+            self.monitor.store.check(symbol)
+            return self.view(symbol, query.get('timeframe', ['5m'])[0])
         if self.mode in ('monitor', 'trade'):
             return await self.monitor.api(path, query)
         if path == '/v1/chart':

@@ -18,6 +18,11 @@ from data_service.workspace import Workspace
 from test_scan_integration import app_data, mock_data, FakeBroker
 
 
+class TradeTestBroker(FakeBroker):
+    async def aclose(self):
+        self.close()
+
+
 class MemoryStore:
     def load(self): return None
     def secret(self): return 'fake'
@@ -125,7 +130,7 @@ def test_trade_mode_scope_and_sold_today_do_not_duplicate_holding_role(app_data)
         ws = Workspace(root=app_data / 'days')
         value = runtime()
         trade = SchwabTrade(value)
-        app = Workbench(ws, app_data, app_data / 'daily.sqlite3', lambda allowed: FakeBroker(allowed, app.calendar), trade_factory=lambda: trade)
+        app = Workbench(ws, app_data, app_data / 'daily.sqlite3', lambda allowed: TradeTestBroker(allowed, app.calendar), trade_factory=lambda: trade)
         try:
             app.start_monitor()
             app.monitor.now = lambda: int(datetime(2026, 10, 26, 15, tzinfo=timezone.utc).timestamp())

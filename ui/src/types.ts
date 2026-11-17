@@ -99,6 +99,8 @@ export type Ticker = {
     days_to_earnings?: number | null;
 };
 export type View = {
+    trade_reference?: { atr20: number | null; ema10: number | null; ema20: number | null;
+        high: number | null; low: number | null; server_time: number; session_close: number | null; release_at: number | null };
     type?: string;
     request_id?: number;
     symbol: string;

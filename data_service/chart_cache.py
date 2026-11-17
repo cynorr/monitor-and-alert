@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
+import math
+import pandas as pd
 
 from .calendar import ET
-from .indicators import series, preview, daily_summary, turnover_context, turnover_comparison
+from .indicators import series, preview, daily_summary, turnover_context, turnover_comparison, true_range, wilder_atr
 from .storage import Bar, bar_row
 
 
@@ -14,6 +16,7 @@ class ChartCache:
         self.store, self.calendar, self.now = store, calendar, clock
         self.live, self.live_revisions = {}, {}
         self.history, self.dependencies, self.summaries = {}, {}, {}
+        self.trade_atrs = {}
 
     def apply_candle(self, symbol, tf, row):
         return self.apply_candles(symbol, tf, [row])
@@ -38,7 +41,7 @@ class ChartCache:
         self.dependencies.clear()
 
     def remove(self, symbol):
-        for cache in (self.live, self.live_revisions, self.history, self.dependencies, self.summaries):
+        for cache in (self.live, self.live_revisions, self.history, self.dependencies, self.summaries, self.trade_atrs):
             for key in list(cache):
                 if key == symbol or isinstance(key, tuple) and key[0] == symbol:
                     cache.pop(key)
@@ -89,3 +92,20 @@ class ChartCache:
         if symbol not in self.summaries or self.summaries[symbol][0] != key:
             self.summaries[symbol] = key, daily_summary(bars, self.calendar, now)
         return self.summaries[symbol][1]
+
+    def trade_reference(self, symbol, now):
+        """Same Daily EMA as the chart; ATR excludes today's session, even after close."""
+        revision, rows, base, _ = self.closed(symbol, '1d')
+        day = datetime.fromtimestamp(now, ET).date()
+        key = revision, day
+        if symbol not in self.trade_atrs or self.trade_atrs[symbol][0] != key:
+            previous = [row for row in rows if datetime.fromtimestamp(row['time'], ET).date() < day]
+            value = wilder_atr(true_range(pd.DataFrame(previous))).iloc[-1] if len(previous) >= 20 else None
+            self.trade_atrs[symbol] = key, float(value) if value is not None and math.isfinite(value) else None
+        latest = preview(base, self.forming(symbol, '1d', now))
+        result = {'atr20': self.trade_atrs[symbol][1]}
+        for period in (10, 20):
+            name = f'ema{period}'
+            points = base['series'][name]
+            result[name] = latest[name]['value'] if name in latest else points[-1]['value'] if points else None
+        return result

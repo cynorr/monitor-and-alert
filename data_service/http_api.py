@@ -190,7 +190,7 @@ def create_app(service, cors_origin=None):
 
     app.router.add_get('/v1/trade/quote', trade_request)
     app.router.add_get('/v1/trade/orders', trade_request)
-    app.router.add_post('/v1/trade/orders/{operation:market-buy|market-sell|breakout-buy}', trade_request)
+    app.router.add_post('/v1/trade/orders/{operation:market-buy|market-sell|breakout-buy|atr-stop|ema-stop}', trade_request)
     app.router.add_put('/v1/trade/orders/{order_id}/{operation:stop}', trade_request)
     app.router.add_delete('/v1/trade/orders/{order_id}', trade_request)
     app.router.add_get('/v1/stream', socket)

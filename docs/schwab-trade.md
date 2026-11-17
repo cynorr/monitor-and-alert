@@ -1,6 +1,6 @@
 # Schwab Trade MVP
 
-更新：2026-10-29。本文件是 Schwab Trade 产品范围、账户数据、交易交互及接入契约的唯一入口。开发遵循 [development-principles.md](development-principles.md)。[后端网关设计](schwab-backend.md) 维护认证、内存、恢复、协议及安全规则；当前集成方式以本文件为准。
+本文件是 Schwab Trade 产品范围、账户数据、交易交互及接入契约的唯一入口。开发遵循 [development-principles.md](development-principles.md)。[后端网关设计](schwab-backend.md) 维护认证、内存、恢复、协议及安全规则；当前集成方式以本文件为准。
 
 ## 范围与模式
 
@@ -76,36 +76,68 @@ Longbridge 完整范围只在 [longbridge-data.md](longbridge-data.md) 维护。
 
 ## 交易区与图上操作
 
-Trade 在 Intraday header 右侧使用固定行列显示交易区，报价与左上价格同一行、紧邻右上归位按钮的左侧，顶部报价独立固定；下方仅数量、预览和按钮参与底部对齐布局，按钮底边固定，增大三组间距只让预览和数量向上移动。浏览状态隐藏 Qty/预览内容但保留空间，不显示占位横杠；时钟移动到共用 List 顶部模式行右端，归位恢复顶栏右上角，周期按钮位置保留。头部几何、字号与最小宽度只在 [Chart UI](chart-ui.md#trade-mode) 维护，颜色、胶囊与横线只在 [UI / Trade 图形](ui.md#trade-图形) 维护。账户数据、行情与后台行为不变。
+Trade 复用 Daily/Intraday 图表，顶部报价固定在归位按钮左侧，时钟位于共用 List 顶部。底部数量、预估、策略与 Send 的几何只在 [Chart UI](chart-ui.md#trade-mode) 维护，颜色与图形只在 [UI / Trade 图形](ui.md#trade-图形) 维护。浏览时隐藏数量/预估但保留空间；选择策略不会移动报价或 Send。
 
-- 默认浏览模式，只保留 Schwab 报价、交易方式入口及已有真实订单线，不初始化新单草稿。Buy Stop、Buy Market、Sell 各自直接点击进入对应新单；Buy 的两半均为全高度点击区域，共享 Buy 标题不截获点击。再次点击当前方式回到浏览。切 symbol/账户模式清理草稿，切周期保留草稿。卡片不设置悬停说明，保留可访问名称。
-- 数量使用浏览器原生标尺选择正整股，始终保留普通鼠标指针、不接管拖动，仅在轨道左端上方显示数字，不显示 Qty 文字。刻度对应实际数量，始终标注两端，在当前宽度内尽量显示不重叠的数值。买入初始名义金额约 $20,000；步长随股价取约 $500 名义金额，拖动中不变刻度。Sell 初始取当前整股余仓，标尺最右端可准确选择全部整股，不向上超出余仓。
-- 三种交易方式都显示相同的参考线。Auto Buy = max(Longbridge 当天 Regular High, Schwab Ask + 0.01)，Auto Stop = 当天 Regular Low；自动状态持续跟随两者。不得用前一天或扩展时段 High/Low 冒充当天 Regular。手动拖动任意参考线即关闭 Auto，点击 Auto 同时恢复两条线；已自动时 Auto 灰色不可点。调整价格不改变已选数量。
-- Daily 与 Intraday 的 candle pane 同时显示同一组交易线，任意一图可直接拖动，另一图同步。不设置常驻价格把手、线旁文字或价格输入框；价格只在右轴显示。市价买卖的参考线不传入订单，也不附加止损；名义金额按 Ask/Bid 估算，只有 Buy Stop 显示止损价差风险。
-- 当前 symbol 的活动 Stop 常驻，多单分别画真实价格，不合成平均止损。AWAITING_PARENT_ORDER 子单及其他不支持的状态只读。标准 SELL STOP 的 PENDING_ACTIVATION 状态允许盘前、盘后及夜盘拖动并 Send 申请改单，包括 Schwab 将其 editable 标为 false 的情况；其他可编辑状态仍要求 editable=true。不增加已提交 BUY 改单。
-- 新单持续预览，点击 Send 一次提交当前 symbol/数量和该接口所需价格，期间冻结草稿及操作，Send 保持原文字和位置、禁用并设置 busy 状态。前端只要求所需字段为正有效值、数量为正整股；不重复执行后端价格关系和风控判断。成功回到浏览，不自动重填数量。
-- 拖动真实 Stop 只改本地预览，同时退出新单状态；右下角同一个 Send 改为提交这一张止损的 PUT，每次只编辑一张真实 Stop；再次拖另一张或点击新单方式会放弃上次尚未提交的改价。等待券商新 ID/快照期间不重复发送该改单。Esc 撤销尚未提交的真实改价。撤单保留明确的独立按钮，不绑定 Backspace。
-- 预估金额和价差风险是估算，不称最大损失；STOP 不承诺执行价格。后端提交前的新 Bid/Ask 可导致拒绝，不自动改用户价格或重发。错误、认证与 unknown 保留必要反馈，正常就绪不堆叠提示。
+- 底部两个独立单行胶囊：蓝色买入 `Market / Stop`，红色卖出 `Market / ATR / EMA`。每项直接选择，再点 Send；无大号 Buy/Sell 标题、二层标签、隐藏类型或 Review。再次点击当前项回到浏览。卡片无悬停说明，保留可访问名称。
+- 买入初始约 $20,000，数量步长约 $500 名义金额。市价卖出默认当前余仓的 30% 向下取整，显示实际股数及占余仓百分比，提供 25/30/40/50% 快捷选择，最右端可准确选全仓。卖出与真实 Stop 编辑步长为一股。ATR/EMA 固定全仓，数量标尺只读。
+- 数量轴保持浏览器原生 range 与普通鼠标指针，不接管拖动；拖动期间冻结刻度。Auto 已开启时灰色禁用；拖动草稿线后解除自动跟随，Auto 可恢复所选策略公式，不改变手选数量。
+- Buy Stop 及市价参考线：Buy = max(Longbridge 当天 Regular High, Schwab Ask + 0.01)，Stop = 当天 Regular Low；市价订单不提交参考价格、不附加止损。缺当天 Regular 数据不使用前一天或扩展时段替代。Buy Stop 的父子结构不变。
+- ATR/EMA 只画一条红色目标 Stop；Daily/Intraday 显示和拖动同一份草稿。自动模式在 Send 时取最新参考并冻结为两位小数，手动模式提交可见目标价，不偷偷恢复公式。
+- 已有活动 Stop 常驻，多单分开显示。点击可编辑线即载入该单数量；可只改数量、只拖价格或同时修改，统一点 Send 提交一张 PUT。选另一张 Stop/新策略放弃未提交编辑，Esc 清除编辑。PENDING_ACTIVATION、AWAITING_RELEASE_TIME 均可申请修改，包括 editable=false；AWAITING_PARENT_ORDER 不可编辑。延迟 Stop 的手动修改保留原 DAY/releaseTime。
+- Stop 目标价必须为正且低于当前 Bid，否则 Send 禁用。后端在撤任何旧单之前使用新 Schwab Bid 再校验；失败不撤旧单、不切为市价。新单与真实改单发送期间冻结操作；成功回浏览，真实替换等待新 ID 出现在快照前禁用重复提交。
 
-交易报价突出 (Ask − Bid) / Bid × 100%，其右侧 Ask 在上、Bid 在下，绝对差值位于 Bid 右侧并与其底部对齐。百分比严格大于ui/src/trade.ts的SPREAD_WARNING_PERCENT时使用红色粗体；默认0.5（单位为百分比数值）。该常量就近维护，ui/public/style.css的spread-wide仅负责颜色和字重；修改后构建并刷新页面，不增加独立JSON加载或交易路由。
+报价突出 (Ask − Bid) / Bid × 100%，其右侧上方 Ask、下方 Bid，绝对差值在 Bid 右侧底部对齐。百分比严格大于 ui/src/trade.ts 的 SPREAD_WARNING_PERCENT 时使用红色粗体；默认 0.5，单位为百分比数值。显示金额为整数，Risk 保留两位百分比和整数金额；它是价差估算。
+
+## 卖出策略
+
+### Market
+
+Send 时刷新 Schwab 持仓及活动订单。若未被 Stop 占用的仓位足够覆盖本次数量，直接市价卖出；不足则取消该 symbol 的全部当前持仓 Stop，确认 CANCELED 后立即发送本次数量的市价单。不缩减 Stop、不重建剩余保护、不回滚。未成交买单的保护子单不占用当前余仓。取消尚未确认、失败或结果未知时停止，明确显示实际进度，禁止自动重发。
+
+### ATR
+
+目标价 = 提交时当天 Regular High − 1.1 × 上一完整交易日的 Wilder ATR20。ATR20 复用现有 true_range/wilder_atr 算法及 Longbridge 合并后的 closed Daily，排除当天；按图表 revision 缓存，不使用 ADR 百分比换算、不触发额外行情请求。
+
+提交普通 NORMAL/GTC 全仓 Sell Stop：无旧 Stop 时新建，一张时修改价格和数量，多张时全部撤销并确认后新建一张。已有延迟 Stop 改为 ATR 时清除 releaseTime 并改用 GTC。
+
+### EMA
+
+只有 10/20 两项。进入 EMA 时默认选当前 Daily EMA 较高的一项；相等时选 10。用户可直接切换，之后不会自动更换周期。参考价来自与图表相同的 closed Daily 序列及当前 indicator_preview，不使用鼠标悬停的历史值。
+
+Send 将选定 EMA 冻结为静态两位小数价格，覆盖全部当前持仓，NORMAL/DAY，releaseTime 为当天实际收盘前 30 分钟（交易日历处理半日市和夏令时，以 UTC ISO 发送）。已到激活时刻且未收盘则发送即时 DAY Stop、不带过去的 releaseTime；收盘后或休市日不可发送当天 EMA 单。
+
+EMA 直接替换旧 Stop，旧保护不持续到延迟激活。单张优先 PUT 改为 DAY/releaseTime；明确不支持替换或券商明确拒绝时撤旧并确认后新建。超时或结果未知禁止转为撤旧重建。多张旧 Stop 全撤确认后新建一张；无旧单直接新建。当天未触发则随 DAY 到期，不恢复旧 GTC。无本地定时器、夜间策略服务或动态 EMA 追踪。
+
+releaseTime 的券商实际支持、激活时已低于 Stop 的触发方式、DAY 失效及数量替换由本人使用小仓实测；已发送到 Schwab 的有效订单由券商管理，不要求本机整晚在线。
 
 ## 风控与写入契约
 
-统一买入名义金额上限 $45,000、突破单估算价差风险 $2,000、止损比例 15%；前端读取实际配置。保留固定 NORMAL、DAY / GTC 和原五个交易函数。NORMAL 决定常规时段执行，不将本机当前时段作为下单或改单门禁；盘外止损改单仍保留 NORMAL，不转为扩展时段执行。市价卖出不隐式取消止损，Replace 不执行 Cancel+Place。止损执行时段参考 [Schwab 官方说明](https://www.schwab.com/learn/story/stop-orders-mastering-order-types)。
+买入名义金额上限 $45,000、Buy Stop 估算价差风险 $2,000、止损比例 15%；前端读取实际配置。普通订单使用 NORMAL，市价及 Buy Stop 母单 DAY、保护子单 GTC；时段决定执行规则，不将本机当前时段设为止损改单门禁。EMA 使用上面的固定 DAY/releaseTime 契约，不暴露通用订单参数。
 
-网关仍使用 Decimal、严格正整数数量、十进制字符串价格和拒绝未知字段的请求模型。只监听本机；交易入口检查 Host、同源 Origin 与 JSON，不使用普通名单 mutation 的错误/重试提示替代交易契约。
+网关保留 Decimal、严格正整股数量、十进制字符串价格、拒绝未知字段的请求模型以及本机 Host/同源 Origin/JSON 校验。每个底层交易函数最多一次券商写请求；trade.py 只组合上述已明确选择的卖出流程，同一时间接受一个工作流。取消最多等待五秒确认；未确认不发送后续订单。没有交易写重试、通用编排框架或交易账本。
 
-每个交易操作最多一次券商写请求。收到现有接口的 accepted 响应后，仅显示 Accepted，约两秒后独立消失，不等待或耦合 Holdings、订单刷新及其他接口，也不被这些刷新延长计时；表示请求被接受，不表示成交。已知浏览器离线时不发请求，显示 Not sent · offline。已尝试的写操作超时或连接丢失分别显示 Request timed out · result unknown / Connection lost · result unknown；未知响应仍为 unknown，不自动重发，也不冒充确定未发送。unknown 常驻提示提供只读 Refresh orders 与人工核对后的清除操作；读取订单不代表原写入已经确认。后来的错误不受 Accepted 旧计时器影响。
+Accepted 独立显示约两秒后消失，不等待 Holdings/订单刷新，也不代表成交。已知离线不发请求，显示 Not sent · offline；写入超时或连接丢失按 result unknown 处理，不自动重发。unknown 提供只读 Refresh orders 及人工核对后的清除操作。中途撤单后的失败/未知保留已请求撤销的订单 ID 和必要提示，不伪装成全部成功。
 
-## 实现入口
+## 实现入口与接口
 
-- data_service/schwab_backend.py：原交易核心，Keychain、认证、REST、Streaming、Runtime、TradingGateway；旧独立 API 保留兼容，不随主服务另起端口。
-- data_service/trade.py：独立账户投影、Sold Today、订阅入口、严格请求模型到原网关的调用，不操作 SnapTrade。
-- workbench.py / http_api.py：三模式、生命周期、范围、独立状态、固定交易 HTTP 路由及原 WS 的 trade_quote 推送。
-- ui/src/schwab-data.ts：完整原生响应类型、订单树去重、Entry/Stop 读取、汇总 Buy 与当天 Sold 明细、原生余仓及止损/卖出参考盈亏；不引用 SnapTrade。
-- ui/src/schwab-holdings.ts：Schwab 表格、排序、选择与稳定节点更新；与 Monitor 共用 holdings-layout.ts 的纯 DOM 测宽及 Symbol row/attention/palette。
-- ui/src/trade.ts：交易草稿、预览、Send 分派、请求与 unknown；trade-lines.ts 负责双图交易线；price-lines.ts 与 Alert 共用坐标、命中及绘制；ui/src/main.ts 复用 symbol/request_id/mode/source/socket 身份检查。
+- data_service/schwab_backend.py：认证、Keychain、REST、单条 Streaming、Runtime、固定网关函数。买入核心不变；Stop 支持可选数量、保留/显式更新有效期及 releaseTime，新增固定 place_stop。旧兼容 API 不另起服务。
+- data_service/trade.py：原生账户投影、Sold Today、订阅及显式卖出流程；不读取 SnapTrade、不增加落盘。
+- workbench.py / chart_cache.py：从现有 Longbridge Daily/Quote/交易日历提供 trade_reference；读取不下载历史。http_api.py 使用原交易专用访问、校验及 unknown 契约。
+- ui/src/schwab-data.ts / schwab-holdings.ts：原生订单/成交字段、展示和节点更新；仅复用通用表面与测宽。
+- ui/src/trade.ts / trade-lines.ts：所选策略、数量/比例、统一 Send 和双图线；price-lines.ts 与 Alert 共用绘制/命中。main.ts 保持既有选择身份检查。
 
-本地入口为 GET /v1/trade、GET /v1/trade/quote?symbol=…、GET /v1/trade/orders，以及 POST /v1/trade/orders/{market-buy|market-sell|breakout-buy}、PUT /v1/trade/orders/{id}/stop、DELETE /v1/trade/orders/{id}。读取 chart/list/trade 状态不触发账户历史下载。交易写入只在正式 Trade 模式接受，Mock / 模拟器不可启用。
+| 本机接口 | 参数 |
+| --- | --- |
+| GET /v1/trade | 只读账户与订单状态 |
+| GET /v1/trade/quote?symbol=… | 当前 Schwab Bid/Ask |
+| GET /v1/trade/orders | 刷新活动及近期订单 |
+| POST /v1/trade/orders/market-buy、market-sell | symbol、qty |
+| POST /v1/trade/orders/breakout-buy | symbol、qty、buy_stop、sell_stop |
+| POST /v1/trade/orders/atr-stop | symbol；手动目标可传 price |
+| POST /v1/trade/orders/ema-stop | symbol、ema（10/20）；手动目标可传 price |
+| PUT /v1/trade/orders/{id}/stop | new_stop；可选 qty，省略则保留原数量 |
+| DELETE /v1/trade/orders/{id} | 只取消指定订单 |
 
-网关协议测试位于 tests/test_schwab_backend.py，集成测试位于 tests/test_trade.py；均使用假凭证与 MockTransport，不连接真实账户或发送真实写请求。运行：`.venv/bin/python -m pytest -q tests/test_schwab_backend.py tests/test_trade.py`。原独立项目及其前端、部署模板、依赖环境和导入备份不再保留。
+ATR/EMA 不接受客户端数量，后端刷新后取全仓，当前全仓 Stop 要求持仓为整股。price 为正十进制字符串，省略表示在 Send 时计算固定公式；EMA 周期不接受 Max。view 的 trade_reference 含 atr20、ema10/ema20、当天 high/low、server_time、session_close、release_at。订单 release_time 原样映射 Schwab releaseTime。
+
+交易入口只在正式 Trade 模式开放。网关、接入、策略定向测试分别在 tests/test_schwab_backend.py、tests/test_trade.py、tests/test_trade_strategies.py；金融协议用假凭证/MockTransport，绝不提交真实订单。行情验证优先读取当前正式服务的真实数据。

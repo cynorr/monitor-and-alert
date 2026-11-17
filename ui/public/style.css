@@ -319,7 +319,14 @@ button:disabled { cursor: default; opacity: .45; }
 #trade-spread-value { align-self: flex-end; margin-bottom: 3px; font-size: var(--font-small); line-height: 14px; color: var(--color-muted); }
 .trade-inactive { visibility: hidden; pointer-events: none; }
 .trade-size { position: relative; }
-#trade-qty { position: absolute; left: 0; top: 0; font-size: var(--font-row); line-height: 14px; color: var(--color-ink); }
+.trade-quantity { position: absolute; left: 0; top: 0; display: flex; align-items: baseline; gap: 7px; line-height: 14px; color: var(--color-ink); }
+#trade-qty { font-size: var(--font-row); }
+#trade-percent { font-size: var(--font-small); color: var(--color-muted); }
+.trade-parameters { position: absolute; right: 0; top: -2px; z-index: 1; }
+.trade-parameters button { font-size: 10px; line-height: 14px; padding: 0 5px; border-radius: 999px; }
+#trade-sell-presets { display: flex; gap: 3px; color: var(--color-red); }
+#trade-sell-presets button:hover { background: var(--surface-muted); }
+#trade-ema-periods { padding: 1px; }
 .trade-ruler-axis { position: relative; width: 100%; height: 34px; padding-top: 8px; }
 #trade-ruler-ticks { position: absolute; inset: 26px 0 0; pointer-events: none; font-size: 9px; line-height: 10px; color: var(--color-muted); }
 .trade-tick { position: absolute; transform: translateX(-50%); }
@@ -340,23 +347,15 @@ button:disabled { cursor: default; opacity: .45; }
 .trade-preview { justify-content: flex-start; align-items: baseline; gap: 12px; color: var(--color-ink); }
 #trade-estimate { font-size: var(--font-title); font-weight: 400; line-height: 34px; }
 #trade-risk { font-size: var(--font-detail); white-space: nowrap; }
-.trade-actions { justify-content: space-between; gap: 24px; }
-.trade-side { display: flex; align-items: stretch; margin-left: -17.5px; border-radius: 999px; overflow: hidden; background: var(--surface-muted); }
-.trade-buy-side { --trade-buy-heading: 18px; position: relative; display: grid; grid-template-columns: repeat(2, 1fr); text-align: center; }
-.trade-buy-side::after { content: ""; position: absolute; left: calc(50% - 1px); top: var(--trade-buy-heading); bottom: 0; width: 2px; background: var(--color-white); pointer-events: none; }
-.trade-buy-label { position: absolute; top: 0; left: 0; right: 0; height: var(--trade-buy-heading); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; line-height: 16px; pointer-events: none; }
-.trade-side button { white-space: nowrap; height: 30px; font-size: var(--font-small); line-height: 12px; }
-.trade-buy-side button { padding: var(--trade-buy-heading) 7px 0; }
-.trade-buy-side button span { position: relative; top: -2px; }
-.trade-buy-side button:first-of-type { text-align: right; padding-right: 6px; }
-.trade-buy-side button:last-of-type { text-align: left; padding-left: 6px; }
-.trade-sell-side { border-left: 2px solid white; }
-.trade-side .trade-sell-side { padding: 0 10px; font-size: 14px; font-weight: 700; line-height: 30px; }
-.trade-side .trade-sell-side.active, .trade-buy-side:has(button.active) { color: var(--color-white); background: #242c38; }
-.trade-buy-side:has(button.active)::after { display: none; }
-.trade-buy-side:has(button.active) button:not(.active) span { visibility: hidden; }
+.trade-actions { position: relative; justify-content: flex-end; }
+.trade-side { position: absolute; right: 116px; display: flex; align-items: center; gap: 10px; }
+.trade-buy-side, .trade-sell-side { display: flex; border-radius: 999px; overflow: hidden; background: var(--surface-muted); }
+.trade-buy-side { --strategy-color: var(--color-blue); }
+.trade-sell-side { --strategy-color: var(--color-red); }
+.trade-side button { padding: 0 10px; height: 30px; font-size: var(--font-small); line-height: 30px; white-space: nowrap; color: var(--strategy-color); }
+.trade-side button + button { border-left: 1px solid white; }
+.trade-side button.active { background: var(--strategy-color); color: var(--color-white); }
 .trade-side button:not(:disabled):not(.active):hover { background: #dfe4eb; }
-.trade-buy-side:has(button.active) button:hover { background: none; }
 .trade-commit-actions { display: flex; align-items: center; gap: 8px; }
 #trade-auto { color: var(--color-blue); }
 #trade-auto svg { transform: translate(.5px, -.5px); }

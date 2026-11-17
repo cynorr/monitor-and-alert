@@ -13,7 +13,8 @@ export class TradeLines implements ISeriesPrimitive {
     private requestUpdate = () => {};
     private renderer = horizontalLines(() => [...this.lines.values()].map(({ value }) => ({ y: this.coordinate(value), color: value.color })));
     private view = { zOrder: () => 'bottom' as const, renderer: () => this.renderer };
-    constructor(private panel: Panel, private change: (line: TradeLine, price: string) => void) {
+    constructor(private panel: Panel, private change: (line: TradeLine, price: string) => void,
+                private select: (line: TradeLine) => void = () => {}) {
         panel.candles.attachPrimitive(this);
         const host = $(panel.id + '-chart');
         host.addEventListener('pointerdown', event => {
@@ -22,6 +23,7 @@ export class TradeLines implements ISeriesPrimitive {
             if (!hits.length) { this.suppressed = false; return; }
             const index = hits.findIndex(line => line.key === this.selected), line = hits[(index + 1) % hits.length];
             this.selected = line.key;
+            this.select(line);
             this.stop(event);
             this.drag = { key: line.key, pointer: event.pointerId, original: line.price, start: event.clientY, moved: false };
             host.setPointerCapture(event.pointerId);

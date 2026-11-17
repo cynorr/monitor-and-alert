@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-10-30。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-11-17。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
 
 ## Alert 与入选规则
 
@@ -90,4 +90,4 @@ Intraday 初始周期按美东开盘经过时间选择，之后保留手工选�
 
 ## Schwab Trade
 
-Monitor / Scan / Trade 为互斥的全局展示模式。Trade 复用 Monitor 图表和 Focus，使用独立 Schwab Holdings，Monitor 继续使用 SnapTrade；账户数据、估值与成本不拼接。两个账户源和行情任务持续后台运行。Trade 的字段、隐式 Entries/Holdings/Sold Today、汇总 Buy/当天 Sold/活动 Stop、明细参考盈亏、Entry/Trim、固定交易卡片、单次 Send、盘外止损改单、独立短暂 Accepted 反馈与网关边界只在 [Schwab Trade MVP](schwab-trade.md) 维护。
+Monitor / Scan / Trade 为互斥的全局展示模式。Trade 复用 Monitor 图表和 Focus，使用独立 Schwab Holdings，Monitor 继续使用 SnapTrade；账户数据、估值与成本不拼接。两个账户源和行情任务持续后台运行。Trade 的字段、隐式 Entries/Holdings/Sold Today、汇总 Buy/当天 Sold/活动 Stop、明细参考盈亏、Entry/Trim、固定交易卡片、显式 Market/ATR/EMA 卖出策略、共用 Send、盘外止损改价/数量与券商延迟激活、独立短暂 Accepted 反馈与网关边界只在 [Schwab Trade MVP](schwab-trade.md) 维护。
