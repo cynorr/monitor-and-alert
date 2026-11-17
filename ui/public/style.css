@@ -302,14 +302,15 @@ button:disabled { cursor: default; opacity: .45; }
 
 /* Trade shares the quantity rail and keeps quotes beside Go to latest. */
 [data-mode="trade"] { --header-height: 192px; }
-[data-mode="trade"] #intraday-panel .chart-header { position: relative; --trade-ticket-width: min(calc(64% - 74px), 306px); }
+[data-mode="trade"] #intraday-panel .chart-header { position: relative; }
 [data-mode="trade"] #intraday-latest { position: relative; z-index: 1; }
 [data-mode="trade"] #intraday-panel .header-bottom { position: absolute; left: 0; bottom: 0; }
 [data-mode="trade"] #intraday-panel .state { position: absolute; left: 12px; bottom: 24px; margin-left: 0; }
 [data-mode="trade"] #intraday-panel .state.full { display: none; }
-.trade-ticket { position: absolute; top: 0; right: 12px; bottom: var(--label-rule-gap); width: var(--trade-ticket-width); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 34px 34px 35px; align-content: end; row-gap: 12px; font-size: var(--font-small); font-variant-numeric: tabular-nums; }
+.trade-ticket { --trade-button-height: 30px; --trade-cap-radius: calc(var(--trade-button-height) / 2); --trade-label-shift: 3px; position: absolute; top: 0; right: 12px; bottom: var(--label-rule-gap); width: max-content; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 34px 34px 35px; align-content: end; row-gap: 12px; font-size: var(--font-small); font-variant-numeric: tabular-nums; }
 .trade-quotes, .trade-size, .trade-preview, .trade-actions { display: flex; align-items: center; }
-.trade-size, .trade-preview, .trade-side { transform: translateX(-15px); }
+/* Only the action row sizes the ticket; changing quote/preview digits cannot widen it. */
+.trade-size, .trade-preview { margin-inline: var(--trade-cap-radius); contain: inline-size; }
 .trade-quotes { position: absolute; top: 10px; right: 34px; width: max-content; align-items: baseline; gap: 8px; }
 .trade-prices { display: grid; grid-template-rows: repeat(2, 14px); align-self: center; text-align: right; }
 #trade-ask, #trade-bid { font-size: var(--font-row); line-height: 14px; font-weight: 400; }
@@ -347,21 +348,25 @@ button:disabled { cursor: default; opacity: .45; }
 .trade-preview { justify-content: flex-start; align-items: baseline; gap: 12px; color: var(--color-ink); }
 #trade-estimate { font-size: var(--font-title); font-weight: 400; line-height: 34px; }
 #trade-risk { font-size: var(--font-detail); white-space: nowrap; }
-.trade-actions { position: relative; justify-content: flex-end; }
-.trade-side { position: absolute; right: 116px; display: flex; align-items: center; gap: 10px; }
-.trade-buy-side, .trade-sell-side { display: flex; border-radius: 999px; overflow: hidden; background: var(--surface-muted); }
+.trade-actions { position: relative; justify-content: flex-start; }
+.trade-side { display: flex; align-items: center; gap: 10px; margin-right: calc(116px + var(--trade-cap-radius)); }
+.trade-buy-side, .trade-sell-side { display: flex; border-radius: 999px; overflow: hidden; }
 .trade-buy-side { --strategy-color: var(--color-blue); }
 .trade-sell-side { --strategy-color: var(--color-red); }
-.trade-side button { padding: 0 10px; height: 30px; font-size: var(--font-small); line-height: 30px; white-space: nowrap; color: var(--strategy-color); }
+.trade-side button, .trade-send-pill button { height: var(--trade-button-height); font-size: var(--font-small); font-weight: 600; line-height: var(--trade-button-height); }
+.trade-side button { padding: 0 10px; white-space: nowrap; color: var(--color-white); background: color-mix(in srgb, var(--strategy-color) 60%, var(--color-white)); }
+/* Keep total padding; shift end labels toward their flat divider. */
+.trade-side button:first-child { padding-left: calc(10px + var(--trade-label-shift)); padding-right: calc(10px - var(--trade-label-shift)); }
+.trade-side button:last-child { padding-left: calc(10px - var(--trade-label-shift)); padding-right: calc(10px + var(--trade-label-shift)); }
 .trade-side button + button { border-left: 1px solid white; }
-.trade-side button.active { background: var(--strategy-color); color: var(--color-white); }
-.trade-side button:not(:disabled):not(.active):hover { background: #dfe4eb; }
-.trade-commit-actions { display: flex; align-items: center; gap: 8px; }
+.trade-side button.active { background: var(--strategy-color); }
+.trade-side button:not(:disabled):not(.active):hover { background: color-mix(in srgb, var(--strategy-color) 75%, var(--color-white)); }
+.trade-commit-actions { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
 #trade-auto { color: var(--color-blue); }
 #trade-auto svg { transform: translate(.5px, -.5px); }
 #trade-auto:disabled { color: var(--color-muted); opacity: 1; }
 .trade-send-pill { flex-shrink: 0; padding: 0; }
-.trade-send-pill button { padding: 8px 12px; }
+.trade-send-pill button { padding: 0 12px; }
 .trade-feedback { position: absolute; right: 0; top: 42px; display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 6px; border-radius: 8px; background: white; box-shadow: var(--panel-shadow); }
 #trade-message { font-size: 10px; line-height: 12px; color: var(--color-negative); max-height: 24px; overflow: auto; }
 #trade-message.unknown { color: var(--color-yellow-text); }
