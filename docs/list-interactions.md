@@ -6,7 +6,7 @@
 
 Scan 的核心工作是逐只查看候选，决定是否纳入 Focus；Monitor 用于持续看盘。交互直接围绕当前 active symbol，减少“勾选 → 选择目标 → 提交”的操作路径。按键尽量符合直觉，短组合留给高频操作，低频操作使用较长组合；只保留少量常用快捷键，不增加需要记忆的模式或隐式按键优先级。
 
-操作完成后的反馈应一致，但只覆盖明确需要的场景，不为所有刷新、筛选和拖动建立新的全局选择机制。名单归属和刷新分类规则只在 [List 设计](list-design.md) 维护；外观、Tag/Filter 编辑和图标见 [UI](ui.md#list-ui)，独立持仓见 [Holdings UI](holdings-ui.md)。
+操作完成后的反馈应一致，但只覆盖明确需要的场景，不为所有刷新、筛选和拖动建立新的全局选择机制。名单归属和刷新分类规则只在 [List 设计](list-design.md) 维护；外观、Tag/Filter 编辑和图标见 [UI](ui.md#list-ui)，独立持仓见 [Schwab 持仓 UI](schwab.md)。
 
 ## 导航与快捷键
 
@@ -15,8 +15,8 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | 范围 | 按键 | 动作 |
 | --- | --- | --- |
 | Scan / Monitor | ↑ / ↓ | 按当前可见顺序选上一只／下一只，跳过折叠组，不循环 |
-| Daily（三模式） | 按住 F / 松开 | 临时查看一年全貌／恢复视图，完整规则见 [Daily setup scale](chart-ui.md#daily-setup-scale) |
-| 三模式 | R | Reset view & go to latest，同时重置全部可见图表；输入/IME及修饰键除外，不按指针位置分流 |
+| Daily（Scan / Monitor） | 按住 F / 松开 | 临时查看一年全貌／恢复视图，完整规则见 [Daily setup scale](chart-ui.md#daily-setup-scale) |
+| Scan / Monitor | R | Reset view & go to latest，同时重置全部可见图表；输入/IME及修饰键除外，不按指针位置分流 |
 | Scan / Monitor | Page Up / Page Down | 跳到前／后一个非空 section 的第一只，不循环 |
 | Scan / Monitor | End / Command + G | 查看完整Focus中按当前排列最上方的未读Alert symbol |
 | Monitor | Home / Command + U | 查看Holdings中按当前排列最上方的未读Alert symbol |

@@ -1,15 +1,15 @@
-# Schwab Trade MVP
+# Schwab 账户与交易
 
-本文件是 Schwab Trade 产品范围、账户数据、交易交互及接入契约的唯一入口。开发遵循 [development-principles.md](development-principles.md)。[后端网关设计](schwab-backend.md) 维护认证、内存、恢复、协议及安全规则；当前集成方式以本文件为准。
+本文件是 Schwab 账户与交易 产品范围、账户数据、交易交互及接入契约的唯一入口。开发遵循 [development-principles.md](development-principles.md)。[后端网关设计](schwab-backend.md) 维护认证、内存、恢复、协议及安全规则；当前集成方式以本文件为准。
 
 ## 范围与模式
 
-现有模式入口为 Monitor / Scan / Trade，三者互斥、所有客户端共享选择。Monitor 使用原 SnapTrade Holdings；Scan 保持扫描功能；Trade 复用 Monitor 的 Daily、Intraday、Focus，显示独立 Schwab Holdings 与交易区。SnapTrade 和 Schwab 各自刷新、各自保存当前成功状态，不拼接账户数据或成本。Scan 切换不停止后台账户和行情任务；自动盘中状态在 Scan 延续上次 Monitor/Trade 账户角色。
+现有模式为 Scan / Monitor，两者互斥、所有客户端共享选择。Scan 使用Massive日线筛选；Monitor 使用Longbridge Daily/Intraday、Focus、Schwab持仓与交易区。账户、订单、历史和行情在两种模式持续后台运行，持仓风险身份始终来自Schwab真实余仓。
 
-正式服务启动即运行一份 Schwab Runtime，与 Longbridge、SnapTrade 同属现有 Python 进程。没有独立前端或 5678 服务。Mock、模拟器及 --symbols 会话不读取 Schwab 凭证、不开放 Trade。正常入口：
+正式服务启动即运行一份Schwab Runtime，与Longbridge同属现有Python进程。Scan Mock只开放Scan；模拟器和 --symbols 会话不读取Schwab凭证、不开放交易，Monitor双图仍可只读使用。正常入口：
 
 ```sh
-.venv/bin/python -m data_service serve --mode trade
+.venv/bin/python -m data_service serve --mode monitor
 ```
 
 凭证继续使用原 macOS Keychain service，首次授权或失效后运行：
@@ -40,7 +40,15 @@
 
 Total Net Liq / P/L / P/L Day 仅汇总当前券商余仓；P/L Day Total 不合并已清仓交易，保持券商当前持仓口径。主行盈亏、账户净值和行情不等待历史整理成功；FIFO、Days、Sold 或明细成本不可用时只影响相应派生字段。账户、订单和历史分别保留自己的成功时间，不把视图生成时间当刷新时间。
 
-表面复用 Holdings / Symbol row template、palette、attention 和 holdings-layout.ts 的纯 DOM 自然测宽，账户和会计不引用 SnapTrade。内容宽度由隐藏自然宽度副本决定，不使用已分配 scrollWidth 反推最小宽度。普通报价更新复用节点，顺序或明细结构变化才重排。
+表面复用 Symbol row template、palette、attention 和 holdings-layout.ts 的纯 DOM 自然测宽。内容宽度由隐藏自然宽度副本决定，不使用已分配 scrollWidth 反推最小宽度。普通报价更新复用节点，顺序或明细结构变化才重排。
+
+## 持仓布局、选择与自然宽度
+
+Holdings固定在List顶部、Focus上方，不随下方名单滚动；自然高度、整体折叠并记忆，展开时Total下方保留8px空白，横向过宽允许滚动。账户总值为整数；最后成功账户更新时间不足一分钟隐藏，延迟时显示原成功时间，不使用行情时间替代。
+
+一个symbol一行，持仓选择与Watchlist保持独立。名单刷新、Filter或从Focus删除同ticker不抢走持仓选择；选中账户行消失时先选首条持仓，再回名单。主行及明细随报价复用节点，排序不修改后端数据或workspace。
+
+holdings-layout.ts通过隐藏自然宽度副本测量，排除装饰性价格背景，不能从分配后的scrollWidth反推最小宽度。只在必要时提高当前名单的最小宽度，展开增长、收起不律动；默认List比例仍在UI总规范维护。通用表格、Symbol行、选中、未读和颜色沿用现有共用样式。
 
 ## 历史范围与成交链
 
@@ -88,15 +96,15 @@ Sold Today 的显示范围沿用当前订单中完全成交股票 SELL 的最后
 
 Schwab 一条 Streaming 连接，继续订阅 ACCT_ACTIVITY 与 LEVELONE_EQUITIES 的 symbol / bid / ask。启动即覆盖完整 Focus，再追加当前 Schwab 持仓、活动 Entries、当天卖出记录和当前选择；差集使用原 SUBS/ADD，重连恢复，MVP 不另加自动退订。不为订阅 Focus 逐股发 REST Quote；选股时只对选中股票初始化交易报价，提交前仍使用原 REST 校验。
 
-Longbridge 完整范围只在 [longbridge-data.md](longbridge-data.md) 维护。Trade 复用现有图表、Quote、指标和订阅连接，不改变原行情数据含义。
+Longbridge完整范围只在 [longbridge-data.md](longbridge-data.md) 维护。Monitor复用同一份图表、Quote、指标和订阅连接。
 
-自动 Intraday State 仅把当前账户源的真实余仓视为 holding；Entries 与 Sold Today 保留图表，不充当持仓风险身份，也不因仍在 Focus 而重复作为候选。相同 symbol 同时有持仓、卖出记录只计算一次。切回 Monitor 使用 SnapTrade 角色，切入 Trade 使用 Schwab 角色；Scan 延续上次账户角色，改变角色首状态静默。
+自动Intraday State始终仅把Schwab真实余仓视为holding；Entries与Sold Today保留图表，不充当持仓风险身份，也不因仍在Focus而重复作为候选。相同symbol只计算一次；切换Scan/Monitor不切换账户身份、不重置已有状态。
 
 手动 Alert 仍按 symbol 共享，既有保存线可按原规则触发。Sold Today 不触发自动持仓风险声音，不代表禁用已有手动价格线。未读与声音继续通过同一 AlertEngine，不按列表复制提醒。
 
 ## 交易区与图上操作
 
-Trade 复用 Daily/Intraday 图表，顶部报价固定在归位按钮左侧，时钟位于共用 List 顶部。底部数量、预估、策略与 Send 的几何只在 [Chart UI](chart-ui.md#trade-mode) 维护，颜色与图形只在 [UI / Trade 图形](ui.md#trade-图形) 维护。浏览时隐藏数量/预估但保留空间；选择策略不会移动报价或 Send。
+Monitor 使用 Daily/Intraday 图表，顶部报价固定在归位按钮左侧，时钟位于共用 List 顶部。底部数量、预估、策略与 Send 的几何只在 [Chart UI](chart-ui.md#trade-ticket) 维护，颜色与图形只在 [UI / Trade 图形](ui.md#trade-图形) 维护。浏览时隐藏数量/预估但保留空间；选择策略不会移动报价或 Send。
 
 - 底部两个独立单行胶囊：蓝色买入 `Market / Stop`，红色卖出 `Market / ATR / EMA`。每项直接选择，再点 Send；无大号 Buy/Sell 标题、二层标签、隐藏类型或 Review。再次点击当前项回到浏览。卡片无悬停说明，保留可访问名称。
 - 买入初始约 $20,000，数量步长约 $500 名义金额。市价卖出默认当前余仓的 30% 向下取整，显示实际股数及占余仓百分比，提供 25/30/40/50% 快捷选择，最右端可准确选全仓。卖出与真实 Stop 编辑步长为一股。ATR/EMA 固定全仓，数量标尺只读。
@@ -134,21 +142,21 @@ releaseTime 的券商实际支持、激活时已低于 Stop 的触发方式、DA
 
 买入名义金额上限 $45,000、Buy Stop 估算价差风险 $2,000、止损比例 15%；前端读取实际配置。普通订单使用 NORMAL，市价及 Buy Stop 母单 DAY、保护子单 GTC；时段决定执行规则，不将本机当前时段设为止损改单门禁。EMA 使用上面的固定 DAY/releaseTime 契约，不暴露通用订单参数。
 
-网关保留 Decimal、严格正整股数量、十进制字符串价格、拒绝未知字段的请求模型以及本机 Host/同源 Origin/JSON 校验。每个底层交易函数最多一次券商写请求；trade.py 只组合上述已明确选择的卖出流程，同一时间接受一个工作流。取消最多等待五秒确认；未确认不发送后续订单。没有交易写重试、通用编排框架或交易账本。
+网关保留 Decimal、严格正整股数量、十进制字符串价格、拒绝未知字段的请求模型以及本机 Host/同源 Origin/JSON 校验。每个底层交易函数最多一次券商写请求；schwab.py 只组合上述已明确选择的卖出流程，同一时间接受一个工作流。取消最多等待五秒确认；未确认不发送后续订单。没有交易写重试、通用编排框架或交易账本。
 
 Accepted 独立显示约两秒后消失，不等待 Holdings/订单刷新，也不代表成交。已知离线不发请求，显示 Not sent · offline；写入超时或连接丢失按 result unknown 处理，不自动重发。unknown 提供只读 Refresh orders 及人工核对后的清除操作。中途撤单后的失败/未知保留已请求撤销的订单 ID 和必要提示，不伪装成全部成功。
 
 ## 实现入口与接口
 
 - data_service/schwab_backend.py：认证、Keychain、REST、单条 Streaming、Runtime、固定网关函数。买入核心不变；Stop 支持可选数量、保留/显式更新有效期及 releaseTime，新增固定 place_stop。旧兼容 API 不另起服务。
-- data_service/trade.py：原生账户投影、低频历史生命周期、Sold Today、订阅及显式卖出流程；trade_history.py 只做正股/ETF 成交归一、轮次截取、FIFO 和展示派生，不读取 SnapTrade、不落盘。
+- data_service/schwab.py / SchwabService：原生账户投影、低频历史生命周期、Sold Today、订阅及显式卖出流程；schwab_history.py 只做正股/ETF 成交归一、轮次截取、FIFO 和展示派生，不落盘。
 - workbench.py / chart_cache.py：从现有 Longbridge Daily/Quote/交易日历提供 trade_reference；读取不下载历史。http_api.py 使用原交易专用访问、校验及 unknown 契约。
-- ui/src/schwab-data.ts / schwab-holdings.ts：原生订单/成交字段、展示和节点更新；仅复用通用表面与测宽。
+- ui/src/schwab-data.ts / schwab-holdings.ts：SchwabState、AccountRow、原生订单/成交字段、展示和节点更新；复用通用表面与测宽。
 - ui/src/trade.ts / trade-lines.ts：所选策略、数量/比例、统一 Send 和双图线；price-lines.ts 与 Alert 共用绘制/命中。main.ts 保持既有选择身份检查。
 
 | 本机接口 | 参数 |
 | --- | --- |
-| GET /v1/trade | 只读账户与订单状态 |
+| GET /v1/schwab | 只读账户与订单状态 |
 | GET /v1/trade/quote?symbol=… | 当前 Schwab Bid/Ask |
 | GET /v1/trade/orders | 刷新活动及近期订单 |
 | POST /v1/trade/orders/market-buy、market-sell | symbol、qty |
@@ -160,4 +168,6 @@ Accepted 独立显示约两秒后消失，不等待 Holdings/订单刷新，也�
 
 ATR/EMA 不接受客户端数量，后端刷新后取全仓，当前全仓 Stop 要求持仓为整股。price 为正十进制字符串，省略表示在 Send 时计算固定公式；EMA 周期不接受 Max。view 的 trade_reference 含 atr20、ema10/ema20、当天 high/low、server_time、session_close、release_at。订单 release_time 原样映射 Schwab releaseTime。
 
-交易入口只在正式 Trade 模式开放。网关、接入、策略及历史定向测试分别在 tests/test_schwab_backend.py、tests/test_trade.py、tests/test_trade_strategies.py、tests/test_trade_history.py；金融协议用假凭证/MockTransport，绝不提交真实订单。行情验证优先读取当前正式服务的真实数据。
+交易入口只在正式Monitor模式且启用Schwab接入时开放。网关、接入、策略及历史定向测试分别在 tests/test_schwab_backend.py、tests/test_schwab.py、tests/test_trade_strategies.py、tests/test_schwab_history.py；金融协议用假凭证/MockTransport，绝不提交真实订单。行情验证优先读取当前正式服务的真实数据。
+
+账户快照入口为 GET /v1/schwab，List消息使用 schwab 与 trading_enabled，Bid/Ask消息为 schwab_quote。trading_enabled只表示券商交易接入是否启用；Monitor本身在只读环境仍可看图。金融操作继续使用 /v1/trade/orders/...，不以产品模式名改变实际订单协议。

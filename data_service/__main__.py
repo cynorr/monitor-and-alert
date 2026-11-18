@@ -10,7 +10,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from .config import load_tickers, DEFAULT_CREDENTIALS, credential_values, credential_section
+from .config import load_tickers, DEFAULT_CREDENTIALS, credential_section
 from .paths import RuntimePaths
 from .storage import atomic_json
 from .workspace import Workspace, resolve_latest_workspace
@@ -22,9 +22,8 @@ def parser():
     result.add_argument('--workspace', type=Path, help='Pin a workspace file instead of following the latest Scan day')
     result.add_argument('--credentials', type=Path, default=DEFAULT_CREDENTIALS,
                         help='Backend credential JSON grouped by provider')
-    result.add_argument('--holdings-rules', type=Path, help='Buy/sell rules; defaults to runtime/holdings')
     result.add_argument('--runtime', type=Path, default=Path('runtime'))
-    result.add_argument('--mode', choices=('monitor','scan','trade'), default='monitor')
+    result.add_argument('--mode', choices=('scan','monitor'), default='monitor')
     result.add_argument('--daily-db', type=Path, help='Read-only external daily SQLite; disables the built-in Massive pipeline')
     result.add_argument('--date', help='Completed trading date; scan defaults to upstream metadata.completed_date')
     result.add_argument('--force', action='store_true', help='Force the Massive splits/bars/features refresh; existing raw daily files are kept')
@@ -40,7 +39,7 @@ def parser():
 async def run(args, tickers):
     from .longbridge.client import LongbridgeClient
     from .http_api import start_http
-    from .monitor import MonitorService
+    from .market import MarketService
 
     if args.command == 'serve':
         from .workbench import Workbench
@@ -50,29 +49,20 @@ async def run(args, tickers):
         if not args.external_daily_db and not args.mock_scan and args.symbols is None:
             from .massive.pipeline import MassivePipeline
             pipeline = MassivePipeline(paths, credentials=args.credentials)
-        def holdings_factory():
-            from .snaptrade import SnapTrade
-            from .holdings import Holdings
-            return Holdings(SnapTrade(*credential_values(args.credentials, 'snaptrade', 'client_id', 'consumer_key', 'account_id'),
-                                      paths.holdings_dir / 'latest.json'),
-                            args.holdings_rules or paths.holdings_dir)
-        from .trade import SchwabTrade
+        from .schwab import SchwabService
         workspace = Workspace(args.workspace, root=args.days)
         service = Workbench(workspace, args.runtime, args.daily_db,
                             lambda allowed: LongbridgeClient(args.credentials, allowed, args.runtime, args.region),
                             mock=args.mock_scan, only=args.symbols,
-                            holdings_factory=holdings_factory if not args.mock_scan and args.symbols is None and
-                            credential_section(args.credentials, 'snaptrade') else None,
                             pipeline=pipeline, bars_path=paths.bars_db,
-                            trade_factory=SchwabTrade,
+                            schwab_factory=SchwabService,
                             additional_info=AdditionalInfo(paths.additional_info_dir,
                                                            enabled=not args.mock_scan and args.symbols is None))
         server = None
         try:
-            if args.mode == "trade" and service.trade is None:
-                raise ValueError("Trade is unavailable for mock or symbol-subset sessions")
+            if args.mock_scan and args.mode != 'scan':
+                raise ValueError('Use Scan mode for Scan Mock')
             service.mode = args.mode
-            service.account_mode = "trade" if args.mode == "trade" else "monitor"
             workspace.start_watcher()
             server = await start_http(service, args.port, args.cors_origin)
             await service.start_background()
@@ -84,8 +74,8 @@ async def run(args, tickers):
                     pass
             else:
                 await service.run()
-            if service.monitor:
-                summary = {s: service.monitor.validate(s) for s in service.monitor.symbols}
+            if service.market:
+                summary = {s: service.market.validate(s) for s in service.market.symbols}
                 atomic_json(args.runtime / 'last_run_report.json', {'health': await service.api('/health', {}), 'readiness': summary})
                 return 0 if summary and all(c['complete'] for s in summary.values() for c in s.values()) else 2
             return 0
@@ -96,7 +86,7 @@ async def run(args, tickers):
             await service.close()
 
     broker = None if args.command == 'verify' else LongbridgeClient(args.credentials, {t.symbol for t in tickers}, args.runtime, args.region)
-    service = MonitorService(tickers, args.runtime, broker, bars_path=RuntimePaths(args.runtime).bars_db)
+    service = MarketService(tickers, args.runtime, broker, bars_path=RuntimePaths(args.runtime).bars_db)
     try:
         if args.command == 'verify':
             for symbol in service.symbols:

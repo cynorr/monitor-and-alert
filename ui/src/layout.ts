@@ -49,7 +49,7 @@ export function initLayout() {
     return { setMode(mode: string) {
         if (root.dataset.mode === mode) return;
         root.dataset.mode = mode; listRatio = null;
-        $('intraday-panel').dataset.minWidth = String(mode === 'trade' ? 540 : CHART_MIN_WIDTH);
+        $('intraday-panel').dataset.minWidth = String(mode === 'monitor' ? 540 : CHART_MIN_WIDTH);
         handle.setAttribute('aria-label', 'Resize charts and watchlist');
         paint();
     }, setHoldingsWidth(width: number) {

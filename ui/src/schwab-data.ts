@@ -1,4 +1,4 @@
-// Native Schwab response fields and read-only calculations. No SnapTrade accounting.
+// Native Schwab response fields and read-only account calculations.
 export type Execution = { activity_id: string; leg_id: string; quantity: string; price: string; time: string };
 export type Order = {
     order_id: string | null; parent_order_id: string | null; symbol: string | null; asset_type: string | null;
@@ -10,11 +10,11 @@ export type Order = {
 export type Position = { symbol: string; asset_type: string; quantity: string; average_price: string | null; market_value: string | null; open_profit_loss: string | null; day_profit_loss: string | null; day_profit_loss_percent: string | null };
 export type SoldToday = { quantity: string; amount: string; average_price: string; executions: (Execution & { order_id: string })[] };
 export type HistoricalTrade = { order_id: string; side: 'BUY' | 'SELL'; time: string; date: string; quantity: string; price: string; amount: string; pnl: string | null; pnl_percent: string | null; holding_days: number | null };
-export type TradeRow = { symbol: string; ticker: string; kind: 'entry' | 'holding' | 'sold' | 'order'; position: Position | null; orders: Order[]; sold_today: SoldToday | null; change_percent: string | null; extended_percent: string | null;
+export type AccountRow = { symbol: string; ticker: string; kind: 'entry' | 'holding' | 'sold' | 'order'; position: Position | null; orders: Order[]; sold_today: SoldToday | null; change_percent: string | null; extended_percent: string | null;
     holding_days: number | null; days_over_year: boolean; sold_percent: string | null; is_new: boolean; trades: HistoricalTrade[] };
 type AccountField = 'liquidation_value' | 'long_market_value' | 'cash_balance' | 'available_funds' | 'buying_power' | 'intraday_buying_power' | 'day_trading_buying_power' | 'margin_balance' | 'maintenance_requirement' | 'stock_buying_power';
-export type TradeState = {
-    rows: TradeRow[]; orders: Order[]; account: (Record<AccountField, string | null> & { updated_at: string }) | null;
+export type SchwabState = {
+    rows: AccountRow[]; orders: Order[]; account: (Record<AccountField, string | null> & { updated_at: string }) | null;
     account_updated_at: string | null; orders_updated_at: string | null;
     health: { service: string; auth_status: string; schwab_rest: string; schwab_stream: string; account_initialized: boolean; orders_initialized: boolean; last_account_update: string | null; last_orders_update: string | null };
     limits: { buy_amount: string; loss: string; stop_ratio: string };
@@ -31,8 +31,8 @@ export function flattenOrders(orders: Order[]) {
     visit(orders); return [...found.values()];
 }
 const active = new Set(['WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_ORDER', 'AWAITING_RELEASE_TIME', 'PENDING_ACTIVATION', 'QUEUED', 'PENDING_REPLACE', 'PENDING_CANCEL', 'PARTIALLY_FILLED', 'ACCEPTED', 'PENDING_ACKNOWLEDGEMENT']);
-export const activeOrders = (row: TradeRow) => flattenOrders(row.orders).filter(order => order.status != null && active.has(order.status) && order.symbol === row.ticker);
-export const entryOrders = (row: TradeRow) => activeOrders(row).filter(order => order.instruction === 'BUY');
+export const activeOrders = (row: AccountRow) => flattenOrders(row.orders).filter(order => order.status != null && active.has(order.status) && order.symbol === row.ticker);
+export const entryOrders = (row: AccountRow) => activeOrders(row).filter(order => order.instruction === 'BUY');
 export function editableStop(order: Order) {
     return !!order.order_id && (order.editable === true || ['PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '')) && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '');
 }
@@ -43,15 +43,15 @@ export function entryPreview(order: Order) {
     const distance = price != null && stop != null ? price - stop : null;
     return { qty, price, stop, amount, riskPercent: distance != null && price && price > 0 ? distance / price * 100 : null, risk: distance != null && qty != null ? distance * qty : null };
 }
-export function entryAmount(row: TradeRow) {
+export function entryAmount(row: AccountRow) {
     const values = entryOrders(row).map(order => entryPreview(order).amount);
     return values.length && values.every(value => value != null) ? values.reduce<number>((sum, value) => sum + value!, 0) : null;
 }
-export function holdingTags(row: TradeRow) {
+export function holdingTags(row: AccountRow) {
     return [...(entryOrders(row).length ? ['Entry'] : []), ...(row.is_new ? ['NEW'] : [])];
 }
 export type HoldingDetail = { key: string; kind: 'Buy' | 'Sold' | 'Stop' | 'Entry'; date: string | null; days: number | null; qty: number; price: number | null; stop: number | null; amount: number | null; pnlPercent: number | null; pnl: number | null; riskPercent: number | null; risk: number | null; cancelId: string | null };
-export function holdingDetails(row: TradeRow): HoldingDetail[] {
+export function holdingDetails(row: AccountRow): HoldingDetail[] {
     const result: HoldingDetail[] = [], position = row.position, average = numeric(position?.average_price);
     const add = (key: string, kind: HoldingDetail['kind'], qty: number, price: number | null, order?: Order) => {
         const difference = kind !== 'Buy' && average != null && average > 0 && price != null ? price - average : null;

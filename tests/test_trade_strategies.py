@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from data_service import schwab_backend as broker
-from data_service.trade import SchwabTrade, PositionStopRequest
+from data_service.schwab import SchwabService, PositionStopRequest
 from pydantic import ValidationError
 from test_schwab_backend import Broker, MemoryStore, credentials, raw_order
 
@@ -45,7 +45,7 @@ async def strategy():
     http = httpx.AsyncClient(transport=httpx.MockTransport(server))
     runtime = broker.Runtime(http=http, store=MemoryStore(credentials()))
     await runtime.rest.initialize_account()
-    trade = SchwabTrade(runtime)
+    trade = SchwabService(runtime)
     # Static reference values test payload construction, not market-data computation.
     now = int(datetime(2026, 11, 17, 15, tzinfo=timezone.utc).timestamp())
     trade.reference = lambda symbol: {'high': 100, 'atr20': 5, 'ema10': 94, 'ema20': 95,

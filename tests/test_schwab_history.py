@@ -5,9 +5,9 @@ from decimal import Decimal
 import pytest
 import httpx
 
-from data_service.trade import SchwabTrade
-from data_service.trade_history import Fill, analyze, display_fills, holding_days, transaction_fills
-from test_trade import runtime
+from data_service.schwab import SchwabService
+from data_service.schwab_history import Fill, analyze, display_fills, holding_days, transaction_fills
+from test_schwab import runtime
 
 
 TODAY = date(2026, 11, 18)
@@ -121,7 +121,7 @@ async def test_history_uses_existing_authenticated_get_and_does_not_poison_tradi
         calls.append(request)
         return httpx.Response(503 if fail else 200, json=[] if fail else [tx()])
     value = runtime(transport)
-    trade = SchwabTrade(value)
+    trade = SchwabService(value)
     changed = []
     now = datetime(2026, 11, 18, 18, tzinfo=timezone.utc)
     await trade.refresh_history(now, lambda: changed.append(True))

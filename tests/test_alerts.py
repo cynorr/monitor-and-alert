@@ -279,19 +279,19 @@ def test_alert_http_origin_and_independent_empty_selection_stream(app_data):
 def test_reconnect_snapshot_establishes_baseline_before_next_live_cross(engine, tmp_path, cal):
     from unittest.mock import patch
     from data_service.config import Ticker
-    from data_service.monitor import MonitorService
+    from data_service.market import MarketService
     value, clock = engine
     alert = value.create('NVDA.US', 10)
     tick(value, 9)
     class Broker:
         def context(self): return self
         def set_on_quote(self, callback): pass
-        def set_on_candlestick(self, callback): pass
-        async def subscribe_candles(self, ctx, symbol, timeframe): return []
+        def set_on_candlestick(self, callback, on_account_change=None): pass
+        async def subscribe_candles(self, symbol, timeframe): return []
         async def subscribe(self, ctx, symbols): pass
         async def snapshot(self, ctx, symbols):
             return [SimpleNamespace(symbol='NVDA.US', timestamp=datetime.fromtimestamp(clock[0]), last_done=12, volume=100)]
-    service = MonitorService([Ticker(symbol='NVDA.US', ticker='NVDA', status='focus')], tmp_path / 'bars', Broker(), cal, alerts=value)
+    service = MarketService([Ticker(symbol='NVDA.US', ticker='NVDA', status='focus')], tmp_path / 'bars', Broker(), cal, alerts=value)
     async def scenario():
         with patch('data_service.longbridge.realtime.time.time', return_value=clock[0]):
             service.quotes.has_connected = True

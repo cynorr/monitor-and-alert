@@ -45,7 +45,7 @@
   <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
   <aside class="watchlist" aria-label="Watchlist">
     <div class="list-header">
-    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button><button data-app-mode="trade">Trade</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span><div class="market-clock"><time class="clock"></time></div></div>
+    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="scan">Scan</button><button data-app-mode="monitor" class="active">Monitor</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span><div class="market-clock"><time class="clock"></time></div></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
     <div id="list-tools" class="list-tools" hidden><button id="filter-toggle" aria-expanded="false" aria-controls="filter-editor">Filters <span id="filter-count"></span></button><div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div></div><button id="tag-add" class="add-button" aria-label="Create Tag">+</button></div>
     </div>
@@ -73,44 +73,6 @@
     <section id="schwab-holdings" class="holdings-list" aria-label="Schwab holdings and orders" hidden>
       <div class="holdings-heading"><button id="schwab-toggle" type="button" aria-expanded="true"><span id="schwab-arrow">▾</span>Holdings <span id="schwab-count" class="count-badge"></span></button><div class="holdings-meta"><time id="schwab-updated"></time><b id="schwab-account" aria-label="Schwab account value">—</b></div></div>
       <div id="schwab-content"><div class="holdings-scroll"><table id="schwab-table" class="holdings-table schwab-table" aria-label="Schwab holdings and orders"><thead><tr id="schwab-head"></tr></thead><tbody id="schwab-rows"></tbody><tfoot><tr><td>Total</td><td></td><td id="schwab-total-value"></td><td></td><td id="schwab-total-percent"></td><td id="schwab-total-pnl"></td><td></td><td data-field="extended_percent"></td><td id="schwab-total-day" title="Schwab current-position day P/L; excludes realized sales"></td><td data-field="adr"></td><td data-field="cum"></td><td data-field="local"></td></tr></tfoot></table></div><div id="schwab-empty" class="list-message"></div></div>
-    </section>
-    <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
-      <div class="holdings-heading">
-        <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count" class="count-badge"></span></button>
-        <div class="holdings-meta">
-          <time id="holdings-updated" role="status" hidden></time>
-          <div id="holdings-error" class="holdings-error" hidden>
-            <button id="holdings-warning" class="holdings-warning" aria-label="Holdings refresh error" aria-expanded="false" aria-controls="holdings-error-details" title="Show holdings refresh error">!</button>
-            <div id="holdings-error-details" class="holdings-error-details" role="region" aria-label="Holdings refresh error details" hidden>
-              <strong id="holdings-error-reason"></strong>
-              <p id="holdings-error-action"></p>
-              <pre id="holdings-error-detail" tabindex="0" aria-label="Error details"></pre>
-            </div>
-          </div>
-          <b id="holdings-account" aria-label="Account value">—</b>
-        </div>
-      </div>
-      <div id="holdings-content">
-        <div class="holdings-scroll">
-          <table id="holdings-table" class="holdings-table" aria-label="Holdings and trades by buy order">
-            <thead><tr>
-              <th scope="col" aria-sort="none"><button data-holdings-sort="symbol">Symbol</button></th>
-              <th scope="col" aria-sort="none" title="Shares held × latest price"><button data-holdings-sort="market_value">Net Liq</button></th>
-              <th scope="col" aria-sort="none"><button data-holdings-sort="holding_days">Days</button></th>
-              <th scope="col" aria-sort="none" title="Remaining position profit / remaining cost; closed rows show realized return"><button data-holdings-sort="total_pnl_percent">P/L %</button></th>
-              <th scope="col" aria-sort="none" title="Remaining position profit; closed rows show realized profit"><button data-holdings-sort="total_pnl">P/L</button></th>
-              <th scope="col" aria-sort="none"><button data-holdings-sort="sold_percent">Sold</button></th>
-              <th scope="col" aria-sort="none" title="Regular price change from previous daily close"><button data-holdings-sort="change_percent">Chg%</button></th>
-              <th scope="col" aria-sort="none" title="Latest extended price change from regular close"><button data-holdings-sort="extended_percent">Ext</button></th>
-              <th scope="col" aria-sort="none" title="Remaining shares: today's buys use entry cost, older shares use previous regular close; closed rows show realized daily profit"><button data-holdings-sort="day_pnl">P/L Day</button></th>
-              <th scope="col">ADR</th><th scope="col">CumVol</th><th scope="col">LocalVol</th>
-            </tr></thead>
-            <tbody id="holdings-rows"></tbody>
-            <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td><td></td><td></td><td></td></tr></tfoot>
-          </table>
-        </div>
-        <div id="holdings-empty" class="empty-list">Loading…</div>
-      </div>
     </section>
     <div id="list-columns" class="list-columns"></div>
     <div class="list-body">

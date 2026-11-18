@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-11-17。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [holdings-ui.md](holdings-ui.md)。
+更新：2026-11-17。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [schwab.md](schwab.md)。
 
 ## Alert 与入选规则
 
@@ -14,7 +14,7 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 ## 启动与接收
 
-正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote 与 SDK 实时 candle，同时初始化近期行情缓存；配置SnapTrade后也接收当前Holdings的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护；多账号归属与本地访问统计只在 [longbridge-accounts.md](longbridge-accounts.md) 维护，不增加看盘UI。
+正式服务启动选择 `runtime/days/` 下目录名为 YYYY-MM-DD 且含 workspace.json 的最新日期，读取 focus，开始接收当前名单的 Quote 与 SDK 实时 candle，同时初始化近期行情缓存；同时接收Schwab当前展示范围的行情。显式 `--workspace` 则固定使用该文件。Longbridge 的定位、官方前复权、Regular 范围、缓存替换与刷新时机只在 [longbridge-data.md](longbridge-data.md) 维护；多账号归属与本地访问统计只在 [longbridge-accounts.md](longbridge-accounts.md) 维护，不增加看盘UI。
 
 Quote 统一接收和校验，regular 与 extended 按时段保存最新值，quote.latest按timestamp统一提供最后报价，均不落盘；最新价格、ADR盘中状态、持仓估值与手动Alert直接使用Quote。同日重启复用各周期已确认历史；下一交易日准备由现有后台持续调度，不依赖解锁操作。当天各周期SDK序列先用于图表和盘中计算，官方历史随后覆盖已闭合同timestamp，所有下游消费同一份最新值。价格状态与分钟量比独立显示，开盘不重建行情，刷新期间保留有效显示；页面选择只调整待加载数据优先级，不扩大订阅或触发下载。切模式复用三名单Quote订阅与缓存，Focus/Holdings后台持续运行。关闭网页不停止后端。
 
@@ -24,15 +24,11 @@ Quote 统一接收和校验，regular 与 extended 按时段保存最新值，qu
 
 ## Holdings
 
-Holdings 是独立的只读持仓来源，按买入 sequence 显示，允许同 ticker 多个买入批次，后端可与 Focus 重复，常规 List 前端屏蔽 Holdings 已有 ticker。它不检查或修改观察名单归属，不参与名单新增、排除、移动或排序。点击持仓复用现有 Daily/Intraday；名单刷新、折叠或从 Focus 删除同 ticker 不改变持仓的选择来源。被选持仓批次消失时改选第一条持仓，持仓为空则回到观察名单。
-
-持仓排序只影响当前页面，不修改账户数据或 workspace；行情更新沿用当前排序。Holdings固定在下方名单滚动区之外，可整体折叠。布局、列、数值格式、排序按钮和买卖明细的唯一要求见 [holdings-ui.md](holdings-ui.md)。
-
-账户刷新、买卖归属、余仓P/L、当日建仓P/L Day基准、短期Days与当日清仓记录的唯一数据需求见 [holdings-data.md](holdings-data.md)。P/L与P/L %总计仅计剩余仓位，P/L Day总计加入当天清仓的已实现日盈亏。当日新仓NEW、整数账户总值、延迟时才显示的刷新时间及点击查看错误原因/处理建议的轻量入口见Holdings UI；成功刷新自动清除当前错误，不主动弹出通知。它与Focus共用既有行情任务和图表，数据获取仍在单进程中独立维护。
+Monitor只显示Schwab原生账户，一个symbol一行。持仓、活动Entry/Stop和Sold Today与Focus共享底层行情，归属和选择独立；名单前端屏蔽当前账户展示的symbol，不修改workspace。券商当前持仓盈亏与FIFO历史派生独立，字段、排序、历史链、布局及账户刷新只在 [Schwab账户与交易](schwab.md) 维护。
 
 ## Scan 与后台数据任务
 
-启动默认 Monitor，可用 --mode scan。页面在列表面板内切换展示，所有浏览器会话跟随这个选择。正式服务的Longbridge与SnapTrade任务仅在整体退出时停止；Scan使用Massive数据，后台仍只跟踪最新Focus及已接受Holdings。切回Monitor复用连接、任务和缓存。Mock Scan仍离线；只有明确切入Monitor才启用Longbridge，回到Mock Scan时停止。
+启动默认Monitor，可用 --mode scan。所有浏览器会话共享Scan/Monitor选择；Longbridge、Schwab与Alert后台持续运行。Scan使用Massive日线，切回Monitor复用行情连接与缓存。Scan Mock只开放Scan；独立模拟器提供SIM标识的只读Monitor双图，不读取真实券商凭证。
 
 Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多1000根日 K，只有closed日图，没有实时active或分钟线。Focus 在Scan中也使用该上游来源；切回Monitor才使用runtime/longbridge/bars.sqlite3与SDK实时candle。两者复用同一Daily图表和计算，不拼接两个供应商的历史。
 
@@ -88,6 +84,6 @@ Intraday 初始周期按美东开盘经过时间选择，之后保留手工选�
 
 刷新与 Ready 的数据含义见 [Longbridge 数据要求](longbridge-data.md#闭合刷新失败与状态)；Loading、Refreshing、Ready 与错误的显示只在 [Chart status](chart-ui.md#chart-status) 维护。
 
-## Schwab Trade
+## Schwab 账户与交易
 
-Monitor / Scan / Trade 为互斥的全局展示模式。Trade 复用 Monitor 图表和 Focus，使用独立 Schwab Holdings，Monitor 继续使用 SnapTrade；账户数据、估值与成本不拼接。两个账户源和行情任务持续后台运行。Trade 的字段、隐式 Entries/Holdings/Sold Today、逐笔 Buy/Sold/活动 Stop、FIFO Days/整轮 Sold/已实现价差、Entry/NEW、固定交易卡片、显式 Market/ATR/EMA 卖出策略、共用 Send、盘外止损改价/数量与券商延迟激活、独立短暂 Accepted 反馈与网关边界只在 [Schwab Trade MVP](schwab-trade.md) 维护。
+Monitor整合Longbridge看盘与Schwab账户、订单、成交历史和显式交易。Scan与Monitor使用同一份Schwab持仓风险身份，切换不改变账户口径或停止任务。字段、FIFO Days/整轮Sold/NEW、买卖策略、共用Send及金融写入契约只在 [Schwab账户与交易](schwab.md) 维护。

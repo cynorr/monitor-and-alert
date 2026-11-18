@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { quantityStep, quantityTicks, suggestedBuy, tradeRequest, TradeError, orderFieldsComplete, TradeController } from '../public/trade.js';
 import { horizontalLines } from '../public/price-lines.js';
-import { orderedTradeRows } from '../public/schwab-holdings.js';
+import { orderedAccountRows } from '../public/schwab-holdings.js';
 import { openPercent, editableStop } from '../public/schwab-data.js';
 
 test('automatic buy combines the day High and Schwab Ask; share steps follow the dollar scale', () => {
@@ -15,7 +15,7 @@ test('native P/L percentage does not use the chart price; sold rows stay at the 
     assert.equal(openPercent({quantity:'10', average_price:'20', open_profit_loss:'10'}), 5);
     assert.equal(openPercent({quantity:'10', average_price:null, open_profit_loss:'10'}), null);
     const rows = [{ticker:'ZZZ',symbol:'ZZZ.US',kind:'sold'}, {ticker:'AAA',symbol:'AAA.US',kind:'holding'}, {ticker:'BBB',symbol:'BBB.US',kind:'entry'}];
-    assert.deepEqual(orderedTradeRows(rows, 'symbol', {enabled:false,symbols:{}}).map(r => r.kind), ['entry','holding','sold']);
+    assert.deepEqual(orderedAccountRows(rows, 'symbol', {enabled:false,symbols:{}}).map(r => r.kind), ['entry','holding','sold']);
     assert.equal(editableStop({order_id:'1',editable:true,instruction:'SELL',order_type:'STOP',strategy_type:'SINGLE',child_orders:[],status:'AWAITING_PARENT_ORDER'}), false);
     for (const editable of [true,false]) assert.equal(editableStop({order_id:'1',editable,instruction:'SELL',order_type:'STOP',strategy_type:'SINGLE',child_orders:[],status:'PENDING_ACTIVATION'}),true);
 });
@@ -97,7 +97,7 @@ async function ticket() {
     });
     const stop = {symbol:'XYZ',order_id:'stop-1',stop_price:'80',quantity:'23',editable:true,instruction:'SELL',order_type:'STOP',strategy_type:'SINGLE',child_orders:[],status:'WORKING'};
     const state = {rows:[{symbol:'XYZ.US',ticker:'XYZ',position:{quantity:'23'},orders:[stop]}],orders:[stop],health:{auth_status:'valid',schwab_rest:'connected',schwab_stream:'connected'},limits:{buy_amount:'45000',loss:'2000',stop_ratio:'.15'}};
-    const controller = new TradeController(panels, ()=>'trade');
+    const controller = new TradeController(panels, ()=>'monitor');
     controller.update(state); controller.setSymbol('XYZ.US'); await settle();
     const timestamp=Date.parse('2026-10-27T14:00:00Z')/1000;
     controller.view({symbol:'XYZ.US',server_time:timestamp,quote:{regular:{timestamp,high:102,low:95}}});

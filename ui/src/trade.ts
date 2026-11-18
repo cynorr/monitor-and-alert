@@ -1,6 +1,6 @@
 import type { Panel } from './chart.js';
 import { $, dayKey, type View } from './types.js';
-import { numeric, editableStop, activeOrders, flattenOrders, type TradeState, type Order } from './schwab-data.js';
+import { numeric, editableStop, activeOrders, flattenOrders, type SchwabState, type Order } from './schwab-data.js';
 import { palette } from './palette.js';
 import { TradeLines, type TradeLine } from './trade-lines.js';
 
@@ -57,7 +57,7 @@ export function orderFieldsComplete(mode: OrderMode | null, qty: string, buy: st
 }
 
 export class TradeController {
-    private state: TradeState | null = null;
+    private state: SchwabState | null = null;
     private enabled = false;
     private symbol = '';
     private quote: { bid: string | null; ask: string | null; updated_at?: string | null } = { bid: null, ask: null };
@@ -120,19 +120,19 @@ export class TradeController {
         this.qty = order.quantity ?? ''; this.quantityInitialized = true;
     }
     setSymbol(symbol: string) {
-        const enabled = this.appMode() === 'trade';
+        const enabled = this.appMode() === 'monitor' && this.state !== null;
         if (symbol === this.symbol && enabled === this.enabled) return;
         this.enabled = enabled;
         ++this.sequence; this.symbol = symbol; this.quote = { bid: null, ask: null }; this.high = this.low = null;
         this.mode = null; this.selectedStop = null; this.reference = undefined; this.quantityInitialized = false; this.auto = true; this.buy = this.stop = this.qty = ''; this.previews.clear(); this.render();
-        if (!symbol || this.appMode() !== 'trade') return;
+        if (!symbol || !enabled) return;
         const request = this.sequence;
         void tradeRequest<{ bid: string | null; ask: string | null; updated_at: string }>('quote?symbol=' + encodeURIComponent(symbol)).then(quote => {
             if (request !== this.sequence) return;
             this.updateQuote(quote);
         }).catch(error => { if (request === this.sequence && !this.unknown) { this.message = (error as Error).message; this.render(); } });
     }
-    update(state: TradeState | null) {
+    update(state: SchwabState | null) {
         this.state = state;
         if (state) {
             const orders = flattenOrders(state.orders);
@@ -151,7 +151,7 @@ export class TradeController {
         this.follow(); this.render();
     }
     view(view: View) {
-        if (view.symbol !== this.symbol || this.appMode() !== 'trade') return;
+        if (view.symbol !== this.symbol || this.appMode() !== 'monitor') return;
         const regular = view.quote.regular;
         const today = regular && dayKey(regular.timestamp) === dayKey(view.server_time);
         this.high = today ? numeric(regular.high) : null; this.low = today ? numeric(regular.low) : null;
@@ -179,7 +179,7 @@ export class TradeController {
         }
     }
     private async write(path: string, method: string, payload?: object) {
-        if (this.busy || this.appMode() !== 'trade') return null;
+        if (this.busy || this.appMode() !== 'monitor') return null;
         window.clearTimeout(this.acceptedTimer);
         this.busy = true; if (!this.unknown) this.message = ''; this.render();
         try {
@@ -240,7 +240,7 @@ export class TradeController {
         }));
     }
     render() {
-        const visible = this.appMode() === 'trade'; $('trade-ticket').hidden = !visible;
+        const visible = this.appMode() === 'monitor' && this.state !== null; $('trade-ticket').hidden = !visible;
         if (!visible) { this.lines.forEach(layer => layer.update([])); return; }
         const pending = this.pendingStop(), active = this.mode != null || !!pending, breakout = this.mode === 'breakout-buy';
         const positionStop = this.mode === 'atr-stop' || this.mode === 'ema-stop';

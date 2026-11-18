@@ -12,7 +12,7 @@ from data_service.config import Ticker
 from data_service.longbridge.history import BarDownloader
 from data_service.http_api import create_app
 from data_service.indicators import series, preview, daily_summary
-from data_service.monitor import MonitorService
+from data_service.market import MarketService
 from data_service.storage import BarStore, Bar
 from data_service.longbridge.client import RateLimiter
 from test_data_service import cal, store, at, bar, raw
@@ -114,7 +114,7 @@ def test_global_limiter_rolling_window():
 
 
 def test_http_ws_snapshot_switch_origin_and_reconnect(tmp_path, cal):
-    service = MonitorService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, calendar=cal)
+    service = MarketService([Ticker('PAYS.US','PAYS','focus'), Ticker('BLSH.US','BLSH','wait')], tmp_path, calendar=cal)
     async def receive_view(ws):
         while True:
             message = await ws.receive_json(timeout=2)
@@ -182,7 +182,7 @@ def test_broker_request_budget_shared_by_all_callers():
     async def scenario():
         broker = object.__new__(LongbridgeClient)
         broker.timeout, broker.secrets = 1, ()
-        broker.limiter, broker.inflight = RateLimiter(10, 0.04), asyncio.Semaphore(5)
+        broker.primary = SimpleNamespace(limiter=RateLimiter(10, 0.04), inflight=asyncio.Semaphore(5))
         active = maximum = 0
         started = []
         async def method():

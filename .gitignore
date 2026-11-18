@@ -16,3 +16,4 @@ build/
 dist/
 
 ui/node_modules/
+/retired-snaptrade-monitor/

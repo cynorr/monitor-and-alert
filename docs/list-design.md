@@ -4,7 +4,7 @@
 
 ## 背景与目的
 
-个人美股工作流程：Scan → Tag → Monitor → Alert → Trade。List、Tag 与 Filter 维护于本文件；Alert 需求见 [alert.md](alert.md)，不开发交易。
+个人美股工作流程：Scan → Tag → Monitor → Alert → Trade。List、Tag 与 Filter 维护于本文件；Alert 需求见 [alert.md](alert.md)。
 
 Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，让代码扫描逐步主导发现、分类与淘汰；人工补齐尚未表达为 atomic feature 的判断。当前进入 Focus 仍由人工最终确认，后续重点完善 feature 和 Tag 条件，不另建服务或评分系统。
 

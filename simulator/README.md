@@ -7,3 +7,5 @@
 参数：`--workspace`、`--symbols`（当前白名单子集）、`--port`、`--speed`、`--start`（ET 盘中，例如 2026-09-18T13:44:45）。30 倍时 5m 约 10 秒；休市自动跳到下一交易日。
 
 不扩展故障注入、录制回放或真实数据回退。文件职责和检查见 [开发维护](../docs/development.md)。
+
+模拟器使用只读Monitor双图与共用MarketService；SIM标识常驻，模式切换禁用，不创建Schwab Runtime，不开放金融写入。

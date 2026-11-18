@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Watchlist } from '../public/list.js';
 import { ScanControls } from '../public/scan.js';
-import { HoldingsList } from '../public/holdings.js';
+import { SchwabHoldings } from '../public/schwab-holdings.js';
 
 const ticker = (name, status = 'discover', section = 'unclassified') =>
     ({ ticker: name, symbol: name + '.US', status, section });
@@ -157,21 +157,17 @@ test('ordinary list updates keep a chart selection hidden by a Tag filter withou
     } finally { delete globalThis.document; }
 });
 
-test('Holdings unread navigation follows the current table order, opens the table and reads each symbol once', () => {
-    const list = Object.create(HoldingsList.prototype), choices = [], scrolls = [];
-    Object.assign(list, { collapsed: true, sort: 'market_value', regularSession: false, intraday: { enabled: false },
+test('Holdings unread navigation follows account-row order and opens the table', () => {
+    const list = Object.create(SchwabHoldings.prototype), choices = [];
+    Object.assign(list, { collapsed: true, sort: 'market_value', regular: false, states: { enabled: false, symbols: {} },
         attention: { unread: new Map(['A.US', 'B.US'].map(symbol => [symbol, {symbol,direction:'up',level:1,fired_at:1}])), playing: new Map() },
-        data: { data: { holdings: [
-            { ticker: 'A', sequences: [{ buy_ids: ['a1'], market_value: '1' }, { buy_ids: ['a2'], market_value: '3' }] },
-            { ticker: 'B', sequences: [{ buy_ids: ['b'], market_value: '2' }] },
-        ] } } });
-    list.onSelect = (symbol, key) => { choices.push([symbol, key]); list.attention.unread.delete(symbol); };
-    list.render = () => { list.rows = new Map(['a2', 'b'].map(key => [key, { scrollIntoView() { scrolls.push(key); } }])); };
-    globalThis.localStorage = { setItem() {} };
-    try {
-        list.jumpUnread(); list.jumpUnread(); list.jumpUnread();
-        assert.deepEqual(choices, [['A.US', 'a2'], ['B.US', 'b']]);
-        assert.deepEqual(scrolls, ['a2', 'b']);
-        assert.equal(list.collapsed, false);
-    } finally { delete globalThis.localStorage; }
+        data: { rows: [
+            { ticker: 'A', symbol: 'A.US', kind: 'holding', position: { market_value: '3' } },
+            { ticker: 'B', symbol: 'B.US', kind: 'holding', position: { market_value: '2' } },
+        ] } });
+    list.select = (symbol, key) => { choices.push([symbol, key]); list.attention.unread.delete(symbol); };
+    list.render = () => {};
+    list.jumpUnread(); list.jumpUnread(); list.jumpUnread();
+    assert.deepEqual(choices, [['A.US', 'A.US'], ['B.US', 'B.US']]);
+    assert.equal(list.collapsed, false);
 });

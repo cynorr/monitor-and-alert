@@ -44,9 +44,5 @@ class RuntimePaths:
         return self.root / 'days'
 
     @property
-    def holdings_dir(self) -> Path:
-        return self.root / 'holdings'
-
-    @property
     def alerts_db(self) -> Path:
         return self.root / 'alerts' / 'alerts.sqlite3'

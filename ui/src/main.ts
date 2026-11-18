@@ -8,7 +8,6 @@ import { ScanControls } from './scan.js';
 import { post } from './api.js';
 import { TradeController } from './trade.js';
 import { SchwabHoldings } from './schwab-holdings.js';
-import { HoldingsList } from './holdings.js';
 import { AlertController, type AlertState } from './alerts.js';
 import { AdditionalInfoDisplay, acceptsAdditional, type AdditionalMessage } from './additional-info.js';
 installPalette();
@@ -22,11 +21,9 @@ let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, 
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource: 'watchlist' | 'holdings' = 'watchlist', holdingKey = '';
 const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList);
-const holdings = new HoldingsList((next, key) => select(next, timeframe, 'holdings', key), () => selectionSource === 'holdings', width => { if (appMode !== 'trade') layout.setHoldingsWidth(width); });
-let appMode: 'scan' | 'monitor' | 'trade' = 'monitor', scanDate = '', modePending = false;
+let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 const trade = new TradeController([daily, intraday], () => appMode);
-const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'trade' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'trade') layout.setHoldingsWidth(width); });
-const activeHoldings = () => appMode === 'trade' ? schwab : holdings;
+const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'monitor' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'monitor') layout.setHoldingsWidth(width); });
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async selected => {
@@ -35,8 +32,8 @@ const alerts = new AlertController([daily, intraday], () => symbol, () => appMod
     applyList(await (await fetch('/v1/scan')).json() as ListState);
     if (selected) select(selected, tf, selectionSource, holdingKey);
 }, value => {
-    watchlist.attention = holdings.attention = schwab.attention = attentionState(value);
-    watchlist.render(); activeHoldings().render();
+    watchlist.attention = schwab.attention = attentionState(value);
+    watchlist.render(); schwab.render();
 });
 
 function applyList(data: ListState) {
@@ -47,8 +44,8 @@ function applyList(data: ListState) {
     layout.setMode(appMode);
     document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button => {
         button.classList.toggle('active', button.dataset.appMode === appMode);
-        button.hidden = button.dataset.appMode === 'trade' && !data.trade_enabled;
-        button.disabled = modePending || (button.dataset.appMode === 'trade' && !data.trade_enabled) || (data.mode === 'simulation' && !data.app_mode);
+        button.hidden = button.dataset.appMode === 'monitor' && data.mock === true;
+        button.disabled = modePending || data.mode === 'simulation';
     });
     $('mock-data').hidden = !data.mock;
     const progress = $('scan-progress');
@@ -61,17 +58,16 @@ function applyList(data: ListState) {
         progress.classList.toggle('error', status.error);
     }
     scan.update(data);
-    if (changed) { symbol = ''; watchlist.selected = ''; selectionSource = 'watchlist'; holdingKey = ''; holdings.selected = schwab.selected = ''; ++epoch; }
-    trade.update(data.trade ?? null);
-    schwab.update(data.trade ?? null, data.current_regular_session === true, data.intraday);
-    holdings.update(data.holdings ?? null, data.current_regular_session === true, data.intraday);
+    if (changed) { symbol = ''; watchlist.selected = ''; selectionSource = 'watchlist'; holdingKey = ''; schwab.selected = ''; ++epoch; }
+    trade.update(data.schwab ?? null);
+    schwab.update(data.schwab ?? null, data.current_regular_session === true, data.intraday);
     watchlist.update(data, selectionSource === 'watchlist');
-    if (selectionSource === 'holdings' && !activeHoldings().has(holdingKey)) {
-        const first = activeHoldings().first();
+    if (selectionSource === 'holdings' && !schwab.has(holdingKey)) {
+        const first = schwab.first();
         if (first) select(first.symbol, timeframe, 'holdings', first.key);
         else select(scan.visible(data.board)[0]?.symbol ?? '', timeframe, 'watchlist');
-    } else if (!symbol && activeHoldings().first()) {
-        const first = activeHoldings().first()!; select(first.symbol, timeframe, 'holdings', first.key);
+    } else if (!symbol && schwab.first()) {
+        const first = schwab.first()!; select(first.symbol, timeframe, 'holdings', first.key);
     }
     if (changed && !symbol) select('', timeframe);
 }
@@ -147,8 +143,8 @@ function select(next: string, tf: string, source: 'watchlist' | 'holdings' = sel
     document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
     watchlist.selected = source === 'watchlist' ? symbol : '';
     watchlist.keyboardEnabled = source === 'watchlist';
-    activeHoldings().selected = source === 'holdings' ? holdingKey : '';
-    activeHoldings().render();
+    schwab.selected = source === 'holdings' ? holdingKey : '';
+    schwab.render();
     watchlist.render();
     for (const id of ['daily', 'intraday']) $(id + '-empty').textContent = symbol ? 'Loading' : 'No symbol selected';
     state(symbol ? 'Loading' : '');
@@ -169,7 +165,7 @@ function connect() {
         try {
             const data = JSON.parse(event.data);
             if (data.type === 'list') { applyList(data as ListState); return; }
-            if (data.type === 'trade_quote') { if (appMode === 'trade' && data.mode === appMode && data.symbol === symbol && data.request_id === epoch && data.source === selectionSource) trade.updateQuote(data.quote); return; }
+            if (data.type === 'schwab_quote') { if (appMode === 'monitor' && data.mode === appMode && data.symbol === symbol && data.request_id === epoch && data.source === selectionSource) trade.updateQuote(data.quote); return; }
             if (data.type === 'additional_info') {
                 const info = data as AdditionalMessage;
                 if (acceptsAdditional(info, { symbol, request_id: epoch, mode: appMode, source: selectionSource }))
@@ -206,7 +202,7 @@ document.addEventListener('keydown', event => {
         : event.key === 'Home' ? 'u' : event.key === 'End' ? 'g' : '';
     if (!event.metaKey && key) event.preventDefault();
     if (key === 'g') { event.preventDefault(); void watchlist.jumpUnread(); }
-    if (key === 'u' && appMode !== 'scan') { event.preventDefault(); activeHoldings().jumpUnread(); }
+    if (key === 'u' && appMode !== 'scan') { event.preventDefault(); schwab.jumpUnread(); }
 });
 document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button => button.addEventListener('click', async () => {
     if (button.dataset.appMode === appMode || modePending) return;
@@ -216,7 +212,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(button =
     catch (error) { $('list-notice').textContent = (error as Error).message; }
     finally { modePending = false; document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach(node => { node.disabled = false; }); }
 }));
-setInterval(() => { additional.tick(); holdings.tick(); schwab.tick(); if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
+setInterval(() => { additional.tick(); schwab.tick(); if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessage > 15000)
     socket.close(); if (currentView && socket?.readyState === WebSocket.OPEN)
     showState(currentView); }, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && symbol && socket?.readyState === WebSocket.OPEN)

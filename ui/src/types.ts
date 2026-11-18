@@ -108,7 +108,7 @@ export type View = {
     server_time: number;
     run_id: string;
     mode?: string;
-    app_mode?: 'scan' | 'monitor' | 'trade';
+    app_mode?: 'scan' | 'monitor';
     mock?: boolean;
     date?: string;
     charts: Record<string, ChartData>;
@@ -129,5 +129,5 @@ export function extendedQuote(quote?: Quote) {
     return latest && latest.trade_session !== 'Intraday' ? latest : undefined;
 }
 
-export const selectionRequest = (symbol: string, timeframe: string, request_id: number, mode: 'scan' | 'monitor' | 'trade', source: 'watchlist' | 'holdings') =>
+export const selectionRequest = (symbol: string, timeframe: string, request_id: number, mode: 'scan' | 'monitor', source: 'watchlist' | 'holdings') =>
     ({ type: 'select', symbol, timeframe, request_id, mode, source });

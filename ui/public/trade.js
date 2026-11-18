@@ -168,7 +168,7 @@ export class TradeController {
         this.quantityInitialized = true;
     }
     setSymbol(symbol) {
-        const enabled = this.appMode() === 'trade';
+        const enabled = this.appMode() === 'monitor' && this.state !== null;
         if (symbol === this.symbol && enabled === this.enabled)
             return;
         this.enabled = enabled;
@@ -184,7 +184,7 @@ export class TradeController {
         this.buy = this.stop = this.qty = '';
         this.previews.clear();
         this.render();
-        if (!symbol || this.appMode() !== 'trade')
+        if (!symbol || !enabled)
             return;
         const request = this.sequence;
         void tradeRequest('quote?symbol=' + encodeURIComponent(symbol)).then(quote => {
@@ -222,7 +222,7 @@ export class TradeController {
         this.render();
     }
     view(view) {
-        if (view.symbol !== this.symbol || this.appMode() !== 'trade')
+        if (view.symbol !== this.symbol || this.appMode() !== 'monitor')
             return;
         const regular = view.quote.regular;
         const today = regular && dayKey(regular.timestamp) === dayKey(view.server_time);
@@ -263,7 +263,7 @@ export class TradeController {
         }
     }
     async write(path, method, payload) {
-        if (this.busy || this.appMode() !== 'trade')
+        if (this.busy || this.appMode() !== 'monitor')
             return null;
         window.clearTimeout(this.acceptedTimer);
         this.busy = true;
@@ -357,7 +357,7 @@ export class TradeController {
         }));
     }
     render() {
-        const visible = this.appMode() === 'trade';
+        const visible = this.appMode() === 'monitor' && this.state !== null;
         $('trade-ticket').hidden = !visible;
         if (!visible) {
             this.lines.forEach(layer => layer.update([]));

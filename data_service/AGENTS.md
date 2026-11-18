@@ -1,10 +1,10 @@
 # 数据模块维护入口
 
-先读项目根入口与 [开发准则](../docs/development-principles.md)；Longbridge行情需求只在 [docs/longbridge-data.md](../docs/longbridge-data.md) 维护，多账号与访问台账只在 [docs/longbridge-accounts.md](../docs/longbridge-accounts.md) 维护；List需求以 [docs/list-design.md](../docs/list-design.md) 为准，交互见 [docs/list-interactions.md](../docs/list-interactions.md)，Massive特征范围以 [docs/massive-data.md](../docs/massive-data.md#名单完整特征范围) 为准，Holdings数据需求只在 [docs/holdings-data.md](../docs/holdings-data.md) 维护。Alert 需求见 [docs/alert.md](../docs/alert.md)，模块维护另读 [alerts/AGENTS.md](alerts/AGENTS.md)。
+先读项目根入口与 [开发准则](../docs/development-principles.md)；Longbridge行情需求只在 [docs/longbridge-data.md](../docs/longbridge-data.md) 维护，多账号与访问台账只在 [docs/longbridge-accounts.md](../docs/longbridge-accounts.md) 维护；List需求以 [docs/list-design.md](../docs/list-design.md) 为准，交互见 [docs/list-interactions.md](../docs/list-interactions.md)，Massive特征范围以 [docs/massive-data.md](../docs/massive-data.md#名单完整特征范围) 为准，Holdings数据需求只在 [docs/schwab.md](../docs/schwab.md) 维护。Alert 需求见 [docs/alert.md](../docs/alert.md)，模块维护另读 [alerts/AGENTS.md](alerts/AGENTS.md)。
 
 Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-info.md)，维护模块前另读 [additional_info/AGENTS.md](additional_info/AGENTS.md)。
 
-- `longbridge/`仅含官方SDK入口、多账号访问台账、实时订阅与历史获取/检查；`monitor.py`组合行情、名单及盘中状态；`massive/pipeline.py`管理Massive准备任务。共享Bar、持久化和OHLC诊断集中在`storage.py`，图表序列与指标缓存集中在`chart_cache.py`，来源包不作为共用工具入口。
+- `longbridge/`仅含官方SDK入口、多账号访问台账、实时订阅与历史获取/检查；`market.py`组合行情、名单及盘中状态；`massive/pipeline.py`管理Massive准备任务。共享Bar、持久化和OHLC诊断集中在`storage.py`，图表序列与指标缓存集中在`chart_cache.py`，来源包不作为共用工具入口。
 
 - 显式 Refresh 与跨日首次分类共用人工状态清理，不重复准备 Ready 数据；清理后 Focus 接受自动淘汰。普通重分类与用户 Refresh 分开，详细边界见 List 设计。
 - `workspace.py` 管三名单归属、顺序、迁移与同步保存；`list_rules.py` 只做纯条件匹配和分类，不请求行情；财报日期由Workbench在当前名单的list_snapshot统一补入，纯日期算子位于features/events.py，不写回行情截面。
@@ -14,9 +14,7 @@ Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-
 - Longbridge SDK 保留当天完整周期序列，ChartCache统一叠加官方closed；图表、指标与盘中状态共用该读取结果。同日恢复只用SQLite成功批次/最新closed判断缺口，不能用SDK暂定行跳过官方修正；全量窗口就绪后替换旧值，刷新/恢复期间保留有效显示。接口与生命周期只在Longbridge数据要求维护。
 - 候选、当日人工 Discover、Focus 和有效 Hidden 计算完整特征。只继承 Focus 和有效 Hidden；机器 Excluded 为当天候选的派生结果，不保存成员身份。Focus 仍每日自动淘汰；已非候选的淘汰成员直接退出。Hidden 七个自然日内跳过分类；到期非候选退出。新进入 section 的成员在队首。
 - 日分类改动使用 `tests/test_list_rules.py` 的现有真实截面/名单及真实 SQLite 做定向验证；不为此连接真实券商或建立 Mock。
-- `snaptrade.py`只获取原始账户数据；`holdings.py`统一买卖归属、余仓估值、当日清仓与日期规则；`workbench.py`复用共用Quote基准和时钟。HTTP/UI不另算会计，不通过其他历史ticker扩大范围。
-- Holdings修改优先核对现有真实快照/服务，仅补充相关`test_holdings.py`和`test_holdings_integration.py`；失败保持已接受快照，不增加轮询任务或恢复框架。
 
-- Schwab Trade 的唯一规范为 [docs/schwab-trade.md](../docs/schwab-trade.md)。schwab_backend.py 维护原交易内核；trade.py 投影独立账户/订单、低频历史并组合明确的固定卖出流程；trade_history.py 只做带订单号的正股/ETF成交、轮次和FIFO展示派生，失败不阻塞核心持仓；chart_cache.py/Workbench 只从现有图表、Quote 与交易日历提供参考，网关保留固定 Stop 数量/延迟参数和单次写入，不读取 SnapTrade 账本、不增加写重试。Workbench 管理第三模式、生命周期与当前账户风险角色；认证、内存、恢复及网关协议维护于 [docs/schwab-backend.md](../docs/schwab-backend.md)，定向测试位于 tests/test_schwab_backend.py、tests/test_trade.py、tests/test_trade_strategies.py、tests/test_trade_history.py；金融写入只做离线协议验证，实际券商新能力由本人测试。
+- Schwab 账户与交易 的唯一规范为 [docs/schwab.md](../docs/schwab.md)。schwab_backend.py 维护原交易内核；schwab.py 提供原生账户/订单、低频历史并组合明确的固定卖出流程；schwab_history.py 只做带订单号的正股/ETF成交、轮次和FIFO展示派生，失败不阻塞核心持仓；chart_cache.py/Workbench 只从现有图表、Quote 与交易日历提供参考，网关保留固定 Stop 数量/延迟参数和单次写入，不增加写重试。Workbench组合Scan/Monitor、行情与Schwab生命周期；认证、内存、恢复及网关协议维护于 [docs/schwab-backend.md](../docs/schwab-backend.md)，定向测试位于 tests/test_schwab_backend.py、tests/test_schwab.py、tests/test_trade_strategies.py、tests/test_schwab_history.py；金融写入只做离线协议验证，实际券商新能力由本人测试。
 
 - 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

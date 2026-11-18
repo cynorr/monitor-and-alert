@@ -4,7 +4,7 @@ import { attentionState, attentionAppearance } from './attention.js';
 import { adrText, adrTitle, compareRank, stateAppearance, volumeBadge } from './intraday-state.js';
 import { HoldingsLayout } from './holdings-layout.js';
 import { numeric, openPercent, entryAmount, holdingTags, holdingDetails } from './schwab-data.js';
-export function orderedTradeRows(rows, sort, intraday) {
+export function orderedAccountRows(rows, sort, intraday) {
     const kind = { entry: 0, holding: 1, order: 2, sold: 3 };
     const value = (r) => sort === 'symbol' ? r.ticker : sort === 'percent' ? openPercent(r.position) : sort === 'holding_days' ? r.days_over_year ? Infinity : r.holding_days : numeric(sort in r ? r[sort] : r.position?.[sort]);
     return [...rows].sort((a, b) => {
@@ -39,7 +39,7 @@ export class SchwabHoldings {
     details = new Map();
     order = '';
     layout;
-    ordered() { return orderedTradeRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
+    ordered() { return orderedAccountRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
     constructor(select, active, cancel, width) {
         this.select = select;
         this.active = active;

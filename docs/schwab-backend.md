@@ -1,11 +1,11 @@
 # Schwab Local Trading Backend
 ## 后端设计与 API 规范
 
-**状态：已迁入 Market Monitor 的后端网关设计与协议参考。当前产品和集成入口见 [Schwab Trade](schwab-trade.md)。认证、内存状态、恢复、订单规范、风控和零写重试规则继续维护于本文；保留的 FastAPI/SSE 协议用于网关兼容及离线协议测试，正式服务使用现有 8765 HTTP/WebSocket，不启动 5678 独立服务。**  
+**状态：已迁入 Market Monitor 的后端网关设计与协议参考。当前产品和集成入口见 [Schwab账户与交易](schwab.md)。认证、内存状态、恢复、订单规范、风控和零写重试规则继续维护于本文；保留的 FastAPI/SSE 协议用于网关兼容及离线协议测试，正式服务使用现有 8765 HTTP/WebSocket，不启动 5678 独立服务。**
 **语言：Python 3.12+**  
 **运行环境：macOS / Mac mini**  
 **主程序：`data_service/schwab_backend.py`；网关测试：`tests/test_schwab_backend.py`**  
-**正式服务：`127.0.0.1:8765`；启动和授权命令见 [Schwab Trade](schwab-trade.md)**
+**正式服务：`127.0.0.1:8765`；启动和授权命令见 [Schwab账户与交易](schwab.md)**
 
 ---
 
@@ -40,7 +40,7 @@
 
 **底层交易写入边界**
 
-每个底层网关函数最多发起一次 Schwab 写请求；工作台接入层只组合 [Schwab Trade](schwab-trade.md) 明确规定的卖出流程。
+每个底层网关函数最多发起一次 Schwab 写请求；工作台接入层只组合 [Schwab账户与交易](schwab.md) 明确规定的卖出流程。
 
 不隐藏取消、替换或其他交易操作。
 
@@ -52,7 +52,7 @@ Schwab 原生 OTO 父子订单视为一次交易请求。
 
 **人工确认**
 
-网关只执行明确提交的参数。工作台 ATR/EMA 自动模式在 Send 时按所选固定公式取参考价和全仓数量；手动目标始终采用提交的价格，具体规则见 [Schwab Trade](schwab-trade.md)。
+网关只执行明确提交的参数。工作台 ATR/EMA 自动模式在 Send 时按所选固定公式取参考价和全仓数量；手动目标始终采用提交的价格，具体规则见 [Schwab账户与交易](schwab.md)。
 
 **最小必要校验**
 
@@ -171,7 +171,7 @@ Mac mini 可以锁屏、睡眠、关机或断网。
 
 ### 3.3 保留的本地协议层
 
-以下为 `create_app()` 保留的 FastAPI/SSE 协议，不是正式工作台的启动配置。正式接入和路由只在 [Schwab Trade](schwab-trade.md) 维护。
+以下为 `create_app()` 保留的 FastAPI/SSE 协议，不是正式工作台的启动配置。正式接入和路由只在 [Schwab账户与交易](schwab.md) 维护。
 
 ```text
 Host: 127.0.0.1
@@ -452,7 +452,7 @@ state = {
 |---|---|
 | Account + Positions | 5 秒 |
 | Orders | 5 秒 |
-| Transactions | 接入层按 Schwab Trade 规范低频读取，仅展示使用 |
+| Transactions | 接入层按 Schwab账户与交易 规范低频读取，仅展示使用 |
 | Quotes | 按需 |
 
 Account 与 Positions 共用：
@@ -476,7 +476,7 @@ toEnteredTime = 当前时间
 
 不添加 `status=WORKING` 过滤。
 
-SchwabREST.transactions(start,end) 仅新增 TRADE 历史 GET，复用原认证与解析。调用、缓存、FIFO 与失败隔离由 trade.py/trade_history.py 负责，交易网关不依赖该历史；详细范围只在 [Schwab Trade](schwab-trade.md) 维护。
+SchwabREST.transactions(start,end) 仅新增 TRADE 历史 GET，复用原认证与解析。调用、缓存、FIFO 与失败隔离由 schwab.py/schwab_history.py 负责，交易网关不依赖该历史；详细范围只在 [Schwab账户与交易](schwab.md) 维护。
 
 正常基础请求量约：
 
@@ -835,7 +835,7 @@ Backend：
 - 确认卖出数量不超过持有的多头数量。
 - 提交 MARKET SELL。
 
-sell_market 底层仍只检查持仓并发送一次 MARKET SELL。工作台的 Stop 占用判断、必要撤单及确认顺序由 trade.py 负责，规则只在 [Schwab Trade](schwab-trade.md#卖出策略) 维护。
+sell_market 底层仍只检查持仓并发送一次 MARKET SELL。工作台的 Stop 占用判断、必要撤单及确认顺序由 schwab.py 负责，规则只在 [Schwab账户与交易](schwab.md#卖出策略) 维护。
 
 ### 10.6 显式复合流程
 
@@ -880,7 +880,7 @@ Child
 4. 仅重建 session、duration、orderType、orderStrategyType、stopPrice、orderLegCollection 及必要 releaseTime，保留显式 taxLotMethod/specialInstruction。不回填查询元数据或 positionEffect 等状态字段。
 5. PUT 一次，201 + Location 提取新 ID，触发后台刷新并返回 verified:false。底层函数不自动撤单或重建。
 
-接入层额外刷新持仓/订单，检查新数量不超出可用持仓、目标低于新 Bid；普通修改不增加交易时段门禁。完整接入契约见 [Schwab Trade](schwab-trade.md)。
+接入层额外刷新持仓/订单，检查新数量不超出可用持仓、目标低于新 Bid；普通修改不增加交易时段门禁。完整接入契约见 [Schwab账户与交易](schwab.md)。
 
 ---
 
@@ -1008,7 +1008,7 @@ ORDER_RESULT_UNKNOWN
 
 # Part 3 — 保留的 REST 与 SSE 协议
 
-以下描述 `create_app()` 的兼容协议和原生字段映射；正式集成的 `/v1/trade` 路由及 WebSocket 接入见 [Schwab Trade](schwab-trade.md)，不另起服务。
+以下描述 `create_app()` 的兼容协议和原生字段映射；正式集成的 `/v1/trade` 路由及 WebSocket 接入见 [Schwab账户与交易](schwab.md)，不另起服务。
 
 ## 16. 通用规范
 
@@ -1551,9 +1551,9 @@ Streaming 断线不意味着整个 Backend 不可用。
 
 ```text
 data_service/schwab_backend.py
-data_service/trade.py
+data_service/schwab.py
 tests/test_schwab_backend.py
-tests/test_trade.py
+tests/test_schwab.py
 ```
 
 单个 Backend 文件内部按职责分区：
@@ -1612,7 +1612,7 @@ tests/test_trade.py
 
 ## 24. 最终设计约束
 
-底层网关配置（正式集成启动与职责见 Schwab Trade）：
+底层网关配置（正式集成启动与职责见 Schwab账户与交易）：
 
 ```text
 Deployment:

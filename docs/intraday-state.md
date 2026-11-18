@@ -6,8 +6,8 @@
 
 - 这是 symbol 当前状态的监控和描述。颜色持续同步状态，条件变化立即更新；不闪几秒、不锁定当天最高等级，不要求手动关闭或重新设置。
 - 仅使用当前 Regular 行情，后台持续工作，不依赖浏览器或 Scan/Monitor 展示。完整监控范围为 Focus 候选与当前余仓 Holdings；具体上游订阅只在 [Longbridge 数据要求](longbridge-data.md) 维护。Discover/Excluded 的 Quote-only 不进入本模块。
-- 当前账户角色由最近选择的 Monitor/Trade 决定：Monitor 使用 SnapTrade 余仓，Trade 使用 Schwab 余仓；Scan 延续上次账户角色。两套账户不累加数量，切换角色后沿用静默首状态。Schwab Entries/Sold Today 不作为 holding，已进入其交易显示区的 symbol 不重复作为 Focus 候选报警。
-- 同 symbol 只计算一次，Holdings 优先于 Candidate。多持仓批次同步显示、声音去重；当天已清仓批次只保留复盘，不发持仓风险声音，也不因仍在 Focus 而作为候选重复提醒。
+- 持仓风险身份始终使用Schwab真实余仓，与Scan/Monitor展示模式无关。Entries和Sold Today不作为holding，已进入账户展示区的symbol不重复作为Focus候选报警。
+- 同 symbol 只计算一次，Holdings 优先于 Candidate。同symbol声音去重；当天已清仓记录只保留复盘，不发持仓风险声音，也不因仍在 Focus 而作为候选重复提醒。
 - 当前 Scan Focus 可以显示同一份 Longbridge 状态；Scan 日图仍使用 Massive，不用 Massive 指标或日 K 补充盘中计算。历史 Scan 不展示当前盘中状态。
 - 只描述关注等级，不自动识别 Pivot、确认主升或作清仓指令；不下单、不接 Atomic feature 自动设置，不建设通用策略框架。
 
@@ -77,7 +77,7 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 - Focus价格与量能分区、低倍数隐藏、强色文字及未读波浪只在[UI Symbol模板](ui.md#symbol-row-template)维护；隐藏低值只影响显示，不改等级、rank和触发。
 - 自动提取的In Play成员不参与人工拖动/Shift改序，不能拖入In Play修改真实section；其他原section保留原有编辑规则，Pin顺序仍可人工调整。重排复用节点，保持选中symbol、图表、焦点和滚动位置。
 - Tag/Filter与搜索仍只影响可见结果，不停止后台监控。搜索沿用原名单查找，不建立另一种可选展示模式。
-- Holdings独立显示，按既定风险等级优先排序，再按量能离散等级和已选列；明细/清仓尾部保持原语义。价格／财务胶囊边界见Holdings UI，未读与声音按symbol共享。
+- Holdings独立显示，按既定风险等级优先排序，再按量能离散等级和已选列；明细/清仓尾部保持原语义。价格／财务胶囊边界见Schwab 持仓 UI，未读与声音按symbol共享。
 
 ## 实现与验证边界
 

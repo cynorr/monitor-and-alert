@@ -3,11 +3,11 @@ import { symbolRow } from './symbol-row.js';
 import { attentionState, attentionAppearance } from './attention.js';
 import { adrText, adrTitle, compareRank, stateAppearance, volumeBadge, type IntradayState } from './intraday-state.js';
 import { HoldingsLayout } from './holdings-layout.js';
-import { numeric, openPercent, entryAmount, holdingTags, holdingDetails, type TradeState, type TradeRow, type Position, type HoldingDetail } from './schwab-data.js';
+import { numeric, openPercent, entryAmount, holdingTags, holdingDetails, type SchwabState, type AccountRow, type Position, type HoldingDetail } from './schwab-data.js';
 
-export function orderedTradeRows(rows: TradeRow[], sort: string, intraday: IntradayState) {
+export function orderedAccountRows(rows: AccountRow[], sort: string, intraday: IntradayState) {
     const kind = { entry: 0, holding: 1, order: 2, sold: 3 };
-    const value = (r: TradeRow) => sort === 'symbol' ? r.ticker : sort === 'percent' ? openPercent(r.position) : sort === 'holding_days' ? r.days_over_year ? Infinity : r.holding_days : numeric(sort in r ? r[sort as 'change_percent'] : r.position?.[sort as keyof Position]);
+    const value = (r: AccountRow) => sort === 'symbol' ? r.ticker : sort === 'percent' ? openPercent(r.position) : sort === 'holding_days' ? r.days_over_year ? Infinity : r.holding_days : numeric(sort in r ? r[sort as 'change_percent'] : r.position?.[sort as keyof Position]);
     return [...rows].sort((a, b) => {
         if (kind[a.kind] !== kind[b.kind]) return kind[a.kind] - kind[b.kind];
         if (a.kind === 'sold') return 0;
@@ -25,7 +25,7 @@ const formatted = (v: number | null, percent = false) => v == null ? '—' : `${
 export class SchwabHoldings {
     selected = '';
     attention = attentionState();
-    private data: TradeState | null = null;
+    private data: SchwabState | null = null;
     private states: IntradayState = { enabled: false, symbols: {} };
     private regular = false;
     private expanded = new Set<string>();
@@ -35,7 +35,7 @@ export class SchwabHoldings {
     private details = new Map<string, HTMLTableRowElement>();
     private order = '';
     private layout: HoldingsLayout;
-    private ordered() { return orderedTradeRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
+    private ordered() { return orderedAccountRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
     constructor(private select: (symbol: string, key: string) => void, private active: () => boolean,
                 private cancel: (id: string) => void, width: (value: number) => void) {
         this.layout = new HoldingsLayout($('schwab-table') as HTMLTableElement, () => this.regular && this.states.enabled ? 9 : 8, width);
@@ -54,7 +54,7 @@ export class SchwabHoldings {
     has(key: string) { return this.data?.rows.some(r => r.symbol === key) ?? false; }
     first() { const row = this.ordered()[0]; return row ? { symbol: row.symbol, key: row.symbol } : null; }
     jumpUnread() { const row = this.ordered().find(r => r.kind === 'holding' && this.attention.unread.has(r.symbol)); if (row) { this.collapsed = false; this.select(row.symbol, row.symbol); this.render(); } }
-    update(data: TradeState | null, regular: boolean, states?: IntradayState) {
+    update(data: SchwabState | null, regular: boolean, states?: IntradayState) {
         if (this.regular !== regular || this.states.enabled !== !!states?.enabled) this.layout.reset();
         this.data = data; this.regular = regular; this.states = states ?? { enabled: false, symbols: {} }; this.render();
     }
@@ -64,7 +64,7 @@ export class SchwabHoldings {
         node.textContent = time ? new Date(time).toLocaleTimeString('en-GB', { hour12: false }) : 'Loading…';
         node.title = `Schwab account ${time ?? 'not initialized'} · orders ${this.data?.orders_updated_at ?? 'not initialized'}`;
     }
-    private mainRow(item: TradeRow) {
+    private mainRow(item: AccountRow) {
         let row = this.nodes.get(item.symbol);
         if (row) return row;
         row = document.createElement('tr'); row.tabIndex = 0; row.dataset.holding = item.symbol;

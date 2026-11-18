@@ -1,4 +1,4 @@
-"""Schwab-only account projection and integration; no local execution ledger."""
+"""Native Schwab account, history and explicit trading workflows; no local execution ledger."""
 from __future__ import annotations
 
 import asyncio
@@ -11,7 +11,7 @@ from pydantic import Field, field_validator
 
 from .calendar import ET
 from . import schwab_backend as broker
-from .trade_history import transaction_fills, display_fills, analyze
+from .schwab_history import transaction_fills, display_fills, analyze
 
 ACTIVE = {'WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_ORDER',
           'AWAITING_RELEASE_TIME',
@@ -94,7 +94,7 @@ def portfolio(positions, orders, day):
     return sorted(result, key=lambda r: ({'entry': 0, 'holding': 1, 'order': 2, 'sold': 3}[r['kind']], r['ticker']))
 
 
-class SchwabTrade:
+class SchwabService:
     def __init__(self, runtime=None):
         # Root INFO logging must not print account hashes in HTTP request URLs.
         for name in ('httpx', 'aiohttp.access'):
