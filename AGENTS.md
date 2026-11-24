@@ -16,6 +16,7 @@
 - 变更行为同步 behavior；变更职责/契约同步 development；UI 同步 ui 总入口及对应的唯一详细规范，不复制完整规则。验证记录写日期、环境、覆盖和未覆盖范围。
 - Android 原生 App 是后续确定目标，iOS 可能接入。维护跨平台的产品语义、图形含义与数据契约，平台绘制和交互细节另行适配；Logo/Icon 只维护一份当前规范，不在 AGENTS.md 复制数值，不提前引入移动端原生框架。Alert 后台声音按其独立需求实现，不依赖原生通知应用。
 - Schwab的原生账户、只读历史生命周期与显式卖出流程由 `schwab.py` 维护，`schwab_history.py` 独立归一成交并计算 FIFO 展示字段；行情参考复用 Longbridge 图表缓存，网关固定函数保留单次写入与未知结果契约。唯一语义见 Schwab 账户与交易；交易验证不向真实券商提交、修改或撤销订单。
+- 买卖数量共用前端整股档位，数量语义见 [Schwab 交易区](docs/schwab.md#交易区与图上操作)，标尺几何见 [Chart UI](docs/chart-ui.md#trade-ticket)。
 - TypeScript 改动后 npm run build --prefix ui；数据/调度改动只做相关的必要真实数据验证与定向用例。历史记录不能当成本轮 live 证据。
 
 - Symbol 行的选中、价格／量能分区与未读波浪只按 [Symbol row template](docs/ui.md#symbol-row-template)；配色名称见 [Color palette](docs/ui.md#color-palette)，代码复用 `ui/src/palette.ts`。新增行或提醒复用 `symbol-row.ts`、`attention.ts` 与 `AlertEngine.notify`，未读只保留最新一条，按来源处理暂停与 Focus ADR 失效，禁止叠加或保存通知历史。实时价格底色独立于边缘波浪。

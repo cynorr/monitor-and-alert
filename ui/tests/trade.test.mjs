@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { quantityStep, quantityTicks, suggestedBuy, tradeRequest, TradeError, orderFieldsComplete, TradeController } from '../public/trade.js';
+import { quantityScale, quantityStep, quantityTicks, suggestedBuy, tradeRequest, TradeError, orderFieldsComplete, TradeController } from '../public/trade.js';
 import { horizontalLines } from '../public/price-lines.js';
 import { orderedAccountRows } from '../public/schwab-holdings.js';
 import { openPercent, editableStop } from '../public/schwab-data.js';
@@ -19,13 +19,17 @@ test('native P/L percentage does not use the chart price; sold rows stay at the 
     assert.equal(editableStop({order_id:'1',editable:true,instruction:'SELL',order_type:'STOP',strategy_type:'SINGLE',child_orders:[],status:'AWAITING_PARENT_ORDER'}), false);
     for (const editable of [true,false]) assert.equal(editableStop({order_id:'1',editable,instruction:'SELL',order_type:'STOP',strategy_type:'SINGLE',child_orders:[],status:'PENDING_ACTIVATION'}),true);
 });
-test('quantity ticks label both endpoints, preserve exact Sell quantities and avoid crowded labels', () => {
-    const ticks = quantityTicks(23, 5, 270);
-    assert.deepEqual(ticks.map(tick => tick.quantity), [0,5,10,15,20,23]);
-    assert.equal(ticks.at(-1).position, 100);
+test('quantity ticks space slots evenly and label one share and the exact maximum', () => {
+    const ticks = (maximum, step, width = 270) => quantityTicks(quantityScale(maximum, step), width);
+    assert.deepEqual(ticks(30, 10).map(tick => [tick.quantity, Math.round(tick.position)]), [[1, 0], [10, 33], [20, 67], [30, 100]]);
+    assert.deepEqual(ticks(23, 5).map(tick => tick.quantity), [1, 5, 10, 15, 20, 23]);
+    assert.deepEqual(ticks(3, 1).map(tick => [tick.quantity, tick.position]), [[1, 0], [2, 50], [3, 100]]);
+    assert.deepEqual(ticks(1, 5), [{quantity: 1, position: 0, label: true}]);
+    assert.deepEqual(ticks(0, 5), []);
     for (const [maximum, step, width] of [[4500,50,270], [450,5,306], [45,1,270]]) {
-        const labels = quantityTicks(maximum,step,width).filter(tick=>tick.label);
-        assert.equal(labels[0].quantity,0); assert.equal(labels.at(-1).quantity,maximum);
+        const labels = ticks(maximum,step,width).filter(tick=>tick.label);
+        assert.equal(labels[0].quantity,1); assert.equal(labels.at(-1).quantity,maximum);
+        assert.equal(labels.at(-1).position,100);
         for (let i=1;i<labels.length;i++) assert.ok((labels[i].position-labels[i-1].position)/100*width >= 28);
     }
 });
@@ -147,6 +151,66 @@ test('market references never become order prices; the Sell ruler can select all
     assert.deepEqual(writes[1],{path:'/v1/trade/orders/market-sell',method:'POST',body:{symbol:'XYZ',qty:23}});
 });
 
+test('buy and sell left endpoints preview and submit the same single share', async () => {
+    const {node,writes} = await ticket();
+    for (const [mode, estimate, fields] of [
+        ['market-buy', '100', {}],
+        ['breakout-buy', '102', {buy_stop:'102.00',sell_stop:'95.00'}],
+        ['market-sell', '99', {}],
+    ]) {
+        node(mode).onclick();
+        const ruler = node('trade-ruler');
+        assert.equal(node('trade-ruler-ticks').children[0].textContent, '1');
+        ruler.value = '0'; ruler.oninput();
+        assert.equal(node('trade-qty').textContent, '1');
+        assert.equal(node('trade-estimate').textContent, estimate);
+        assert.equal(ruler.attributes['aria-valuetext'], '1 share');
+        node('trade-submit').onclick(); await settle();
+        assert.deepEqual(writes.at(-1), {path:'/v1/trade/orders/'+mode,method:'POST',body:{symbol:'XYZ',qty:1,...fields}});
+    }
+});
+
+test('single-share positions keep every sell preset at one and no position disables Send', async () => {
+    const {node,controller,state,writes} = await ticket();
+    const account = quantity => ({...state, orders:[], rows:[{...state.rows[0], orders:[], position:{quantity}}]});
+    controller.update(account('1'));
+    node('market-sell').onclick();
+    assert.equal(node('trade-qty').textContent, '1');
+    assert.equal(node('trade-percent').textContent, '100%');
+    assert.equal(node('trade-ruler').disabled, true);
+    assert.deepEqual(node('trade-ruler-ticks').children.map(tick => tick.textContent), ['1']);
+    assert.equal(node('trade-submit').disabled, false);
+    for (const percent of [25,30,40,50]) {
+        node('percent-'+percent).onclick();
+        assert.equal(node('trade-qty').textContent, '1');
+        assert.equal(node('trade-percent').textContent, '100%');
+    }
+    controller.update(account('0'));
+    assert.equal(node('trade-qty').textContent, '');
+    assert.deepEqual(node('trade-ruler-ticks').children, []);
+    assert.equal(node('trade-submit').disabled, true);
+    assert.equal(node('percent-25').disabled, true);
+    node('trade-submit').onclick(); await settle();
+    assert.deepEqual(writes, []);
+});
+
+test('the buy amount cap can leave one selectable share or no valid quantity', async () => {
+    const {node,controller,state,writes} = await ticket();
+    const withLimit = buy_amount => ({...state, limits:{...state.limits, buy_amount}});
+    controller.update(withLimit('100'));
+    node('market-buy').onclick();
+    assert.equal(node('trade-qty').textContent, '1');
+    assert.deepEqual(node('trade-ruler-ticks').children.map(tick => tick.textContent), ['1']);
+    assert.equal(node('trade-ruler').disabled, true);
+    assert.equal(node('trade-submit').disabled, false);
+    controller.update(withLimit('99'));
+    assert.equal(node('trade-qty').textContent, '');
+    assert.equal(node('trade-ruler').disabled, true);
+    assert.equal(node('trade-submit').disabled, true);
+    node('trade-submit').onclick(); await settle();
+    assert.deepEqual(writes, []);
+});
+
 test('EMA offers only 10/20, defaults to the higher Daily value and sends the chosen static strategy', async () => {
     const {node,controller,writes,panels}=await ticket();
     const timestamp=Date.parse('2026-10-27T14:00:00Z')/1000;
@@ -182,11 +246,12 @@ test('clicking an existing Stop loads its quantity and supports a quantity-only 
     for (const type of ['pointerdown','pointerup']) for (const handler of host.listeners[type]) handler({button:0,clientX:100,clientY:140,pointerId:1,target:host,preventDefault(){},stopImmediatePropagation(){}});
     assert.equal(node('trade-qty').textContent,'23');
     assert.equal(node('trade-submit').disabled,true);
-    node('trade-ruler').value='10'; node('trade-ruler').oninput();
+    node('trade-ruler').value='0'; node('trade-ruler').oninput();
+    assert.equal(node('trade-qty').textContent,'1');
     assert.equal(node('trade-submit').disabled,false);
     assert.deepEqual(panels[0].tradePrices,[80]);
     node('trade-submit').onclick(); await settle();
-    assert.deepEqual(writes,[{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'80',qty:10}}]);
+    assert.deepEqual(writes,[{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'80',qty:1}}]);
 });
 test('dragging an existing stop switches Send to one explicit replacement without a new order', async () => {
     const {node,panels,drag,writes}=await ticket();
@@ -200,13 +265,15 @@ test('dragging an existing stop switches Send to one explicit replacement withou
     assert.deepEqual(writes,[{path:'/v1/trade/orders/stop-1/stop',method:'PUT',body:{new_stop:'85.00',qty:23}}]);
     assert.equal(node('trade-submit').disabled,true);
 });
-test('pending-activation Stops edit outside Regular even with editable=false and accept the next snapshot', async () => {
+test('pending-activation Stops retain their quantity for price edits without a position snapshot', async () => {
     const {node,panels,drag,writes,controller,state}=await ticket();
     const stop={...state.orders[0],status:'PENDING_ACTIVATION',editable:false};
-    const outside={...state,orders:[stop],rows:[{...state.rows[0],orders:[stop]}]};
+    const outside={...state,orders:[stop],rows:[{...state.rows[0],position:null,orders:[stop]}]};
     controller.update(outside);
     controller.view({symbol:'XYZ.US',server_time:Date.parse('2026-10-28T22:00:00Z')/1000,quote:{regular:null}});
     drag(panels[0],80,-10);
+    assert.equal(node('trade-qty').textContent,'23');
+    assert.equal(node('trade-ruler').disabled,true);
     assert.equal(node('trade-submit').disabled,false);
     assert.deepEqual(panels[1].tradePrices,[85]);
     node('trade-submit').onclick(); await settle();

@@ -10,14 +10,26 @@ export function quantityStep(price) {
 export function suggestedBuy(high, ask) {
     return high != null && ask != null ? Math.max(high, Math.round((ask + .01) * 100) / 100).toFixed(2) : '';
 }
-export function quantityTicks(maximum, step, width) {
-    const count = Math.ceil(maximum / step);
+export function quantityScale(maximum, step) {
+    // Single-share steps start at 1. Coarser steps keep their existing whole multiples.
+    const offset = step === 1 ? 1 : 0;
+    const lastSlot = maximum > 1 ? Math.ceil((maximum - offset) / step) : 0;
+    return {
+        maximum,
+        lastSlot,
+        quantityAt: (slot) => Math.min(maximum, Math.max(1, offset + slot * step)),
+        slotFor: (quantity) => quantity <= 1 ? 0 : Math.min(lastSlot, Math.ceil((quantity - offset) / step)),
+    };
+}
+export function quantityTicks({ maximum, lastSlot: count, quantityAt }, width) {
+    if (maximum < 1)
+        return [];
     if (!count)
-        return [{ quantity: 0, position: 0, label: true }];
+        return [{ quantity: quantityAt(0), position: 0, label: true }];
     const spacing = Math.max(28, String(maximum).length * 5 + 8), slots = Math.max(1, Math.floor(width / spacing));
     const target = count / slots, magnitude = 10 ** Math.floor(Math.log10(target));
     const stride = Math.max(1, [1, 2, 5, 10].find(n => n * magnitude >= target) * magnitude);
-    return Array.from({ length: count + 1 }, (_, index) => ({ quantity: Math.min(maximum, index * step), position: index / count * 100,
+    return Array.from({ length: count + 1 }, (_, index) => ({ quantity: quantityAt(index), position: index / count * 100,
         label: index === 0 || index === count || (index % stride === 0 && (count - index) / count * width >= spacing) }));
 }
 export class TradeError extends Error {
@@ -89,8 +101,7 @@ export class TradeController {
     replacements = new Map();
     mode = null;
     lines;
-    rulerStep = 1;
-    rulerMaximum = 1;
+    rulerScale = quantityScale(0, 1);
     tickSignature = '';
     constructor(panels, appMode) {
         this.appMode = appMode;
@@ -119,8 +130,10 @@ export class TradeController {
         const ruler = $('trade-ruler');
         new ResizeObserver(() => this.renderTicks()).observe(ruler);
         ruler.oninput = () => {
+            if (ruler.disabled)
+                return;
             this.quantityInitialized = true;
-            this.qty = String(Math.min(this.rulerMaximum, Number(ruler.value) * this.rulerStep));
+            this.qty = String(this.rulerScale.quantityAt(Number(ruler.value)));
             this.render();
         };
         $('trade-auto').onclick = () => { this.auto = true; this.follow(); this.render(); };
@@ -140,7 +153,7 @@ export class TradeController {
             };
         });
         document.querySelectorAll('[data-sell-percent]').forEach(button => {
-            button.onclick = () => { this.qty = String(Math.floor(this.held() * Number(button.dataset.sellPercent) / 100)); this.render(); };
+            button.onclick = () => { this.qty = this.sellPresetQuantity(Number(button.dataset.sellPercent)); this.render(); };
         });
         document.querySelectorAll('[data-ema-period]').forEach(button => {
             button.onclick = () => { this.ema = Number(button.dataset.emaPeriod); this.emaInitialized = true; this.auto = true; this.follow(); this.render(); };
@@ -158,6 +171,13 @@ export class TradeController {
     }
     row() { return this.state?.rows.find(r => r.symbol === this.symbol); }
     held() { return Math.floor(Number(this.row()?.position?.quantity ?? 0)); }
+    sellPresetQuantity(percent) {
+        const held = this.held();
+        return held > 0 ? String(Math.max(1, Math.floor(held * percent / 100))) : '';
+    }
+    buyMaximum(reference) {
+        return Math.floor(Number(this.state?.limits.buy_amount ?? 45000) / reference);
+    }
     selectStop(order) {
         if (this.selectedStop === order.order_id)
             return;
@@ -254,11 +274,14 @@ export class TradeController {
         if (!this.quantityInitialized) {
             if (this.mode === 'market-sell') {
                 this.quantityInitialized = true;
-                this.qty = String(Math.floor(this.held() * .3));
+                this.qty = this.sellPresetQuantity(30);
             }
             else if (reference && reference > 0) {
-                this.quantityInitialized = true;
-                this.qty = String(Math.max(1, Math.floor(20_000 / reference)));
+                const maximum = this.buyMaximum(reference);
+                if (maximum > 0) {
+                    this.quantityInitialized = true;
+                    this.qty = String(Math.min(maximum, Math.max(1, Math.floor(20_000 / reference))));
+                }
             }
         }
     }
@@ -296,6 +319,11 @@ export class TradeController {
         }
     }
     pendingStop() { return this.row()?.orders.find(order => order.order_id === this.selectedStop); }
+    quantityAvailable(order) {
+        const qty = Number(this.qty);
+        // An existing Stop can keep its original quantity when only the price is edited.
+        return this.rulerScale.maximum > 0 || (qty > 0 && qty === Number(order?.quantity));
+    }
     stopChanged(order) { return this.previews.has(order.order_id) || Number(this.qty) !== Number(order.quantity); }
     stopValid(price) { const bid = numeric(this.quote.bid), value = numeric(price); return value != null && value > 0 && bid != null && value < bid; }
     fieldsValid() {
@@ -311,12 +339,13 @@ export class TradeController {
     }
     async submit() {
         const stop = this.pendingStop();
+        if (!this.ready() || !this.symbol || !this.quantityAvailable(stop))
+            return;
         if (stop) {
-            if (this.ready())
-                await this.applyStop(stop);
+            await this.applyStop(stop);
             return;
         }
-        if (!this.fieldsValid() || !this.ready())
+        if (!this.fieldsValid())
             return;
         const selection = this.sequence;
         const positionStop = this.mode === 'atr-stop' || this.mode === 'ema-stop';
@@ -342,7 +371,7 @@ export class TradeController {
     }
     ready() { return !!this.state && this.state.health.auth_status === 'valid' && this.state.health.schwab_rest === 'connected' && !this.busy; }
     renderTicks() {
-        const ticks = quantityTicks(this.rulerMaximum, this.rulerStep, $('trade-ruler').clientWidth);
+        const ticks = quantityTicks(this.rulerScale, $('trade-ruler').clientWidth);
         const signature = JSON.stringify(ticks);
         if (signature === this.tickSignature)
             return;
@@ -365,16 +394,15 @@ export class TradeController {
         }
         const pending = this.pendingStop(), active = this.mode != null || !!pending, breakout = this.mode === 'breakout-buy';
         const positionStop = this.mode === 'atr-stop' || this.mode === 'ema-stop';
+        const held = this.held();
         for (const id of ['trade-size', 'trade-preview']) {
             $(id).classList.toggle('trade-inactive', !active);
             $(id).setAttribute('aria-hidden', String(!active));
         }
         $('trade-ticket').dataset.editing = pending ? 'stop' : this.mode ?? 'browse';
-        $('trade-qty').textContent = active ? this.qty : '';
-        $('trade-percent').textContent = active && (pending || this.mode === 'market-sell' || positionStop) && this.held() ? `${(Number(this.qty) / this.held() * 100).toFixed(1).replace(/\.0$/, '')}%` : '';
         $('trade-sell-presets').hidden = this.mode !== 'market-sell';
         $('trade-ema-periods').hidden = this.mode !== 'ema-stop';
-        document.querySelectorAll('[data-sell-percent]').forEach(button => { button.disabled = this.busy; });
+        document.querySelectorAll('[data-sell-percent]').forEach(button => { button.disabled = this.busy || held < 1; });
         document.querySelectorAll('[data-ema-period]').forEach(button => {
             button.classList.toggle('active', Number(button.dataset.emaPeriod) === this.ema);
             button.setAttribute('aria-pressed', String(Number(button.dataset.emaPeriod) === this.ema));
@@ -384,22 +412,25 @@ export class TradeController {
             const selected = button.dataset.tradeMode === this.mode;
             button.classList.toggle('active', selected);
             button.setAttribute('aria-pressed', String(selected));
-            button.disabled = this.busy || !this.symbol || (['market-sell', 'atr-stop', 'ema-stop'].includes(button.dataset.tradeMode) && this.held() <= 0);
+            button.disabled = this.busy || !this.symbol || (['market-sell', 'atr-stop', 'ema-stop'].includes(button.dataset.tradeMode) && held < 1);
         });
         $('trade-auto').disabled = this.busy || !this.mode || this.auto;
         const selling = pending || this.mode === 'market-sell' || positionStop;
-        const reference = pending ? numeric(this.previews.get(pending.order_id) ?? pending.stop_price) : breakout ? numeric(this.buy) : numeric(selling ? this.quote.bid : this.quote.ask), qty = numeric(this.qty);
+        const reference = pending ? numeric(this.previews.get(pending.order_id) ?? pending.stop_price) : breakout ? numeric(this.buy) : numeric(selling ? this.quote.bid : this.quote.ask);
         const ruler = $('trade-ruler');
         if (!ruler.matches(':active')) {
-            this.rulerStep = selling ? 1 : quantityStep(reference && reference > 0 ? reference : 100);
-            this.rulerMaximum = selling ? this.held() : Math.floor(Number(this.state?.limits.buy_amount ?? 45000) / (reference || 100));
-            ruler.step = '1';
-            ruler.max = String(Math.max(1, Math.ceil(this.rulerMaximum / this.rulerStep)));
+            const scalePrice = reference && reference > 0 ? reference : 100;
+            this.rulerScale = selling ? quantityScale(held, 1) : quantityScale(this.buyMaximum(scalePrice), quantityStep(scalePrice));
+            ruler.max = String(this.rulerScale.lastSlot);
         }
-        ruler.value = String(Math.ceil(Number(this.qty) / this.rulerStep));
-        ruler.disabled = this.busy || !active || !this.symbol || positionStop;
+        const quantityAvailable = this.quantityAvailable(pending);
+        const qty = quantityAvailable ? numeric(this.qty) : null;
+        ruler.value = String(this.rulerScale.slotFor(qty ?? 0));
+        ruler.disabled = this.busy || !active || !this.symbol || positionStop || !this.rulerScale.lastSlot;
         this.renderTicks();
-        ruler.setAttribute('aria-valuetext', `${this.qty || '0'} shares`);
+        ruler.setAttribute('aria-valuetext', qty == null ? 'No quantity selected' : qty === 1 ? '1 share' : `${qty} shares`);
+        $('trade-qty').textContent = active && qty != null ? this.qty : '';
+        $('trade-percent').textContent = active && qty != null && selling && held > 0 ? `${(qty / held * 100).toFixed(1).replace(/\.0$/, '')}%` : '';
         const ask = numeric(this.quote.ask), bid = numeric(this.quote.bid), spread = ask != null && bid != null ? ask - bid : null;
         $('trade-ask').textContent = ask?.toFixed(2) ?? '—';
         $('trade-bid').textContent = bid?.toFixed(2) ?? '—';
@@ -420,7 +451,7 @@ export class TradeController {
         $('trade-refresh').hidden = !this.unknown;
         const submit = $('trade-submit');
         submit.setAttribute('aria-busy', String(this.busy));
-        submit.disabled = !this.ready() || !this.symbol || (pending ? !editableStop(pending) || this.replacements.has(pending.order_id) || !this.stopChanged(pending) || !this.stopValid(this.previews.get(pending.order_id) ?? pending.stop_price ?? '') || !Number.isSafeInteger(Number(this.qty)) || Number(this.qty) <= 0 : !this.fieldsValid());
+        submit.disabled = !this.ready() || !this.symbol || !quantityAvailable || (pending ? !editableStop(pending) || this.replacements.has(pending.order_id) || !this.stopChanged(pending) || !this.stopValid(this.previews.get(pending.order_id) ?? pending.stop_price ?? '') || !Number.isSafeInteger(Number(this.qty)) || Number(this.qty) <= 0 : !this.fieldsValid());
         submit.setAttribute('aria-label', pending ? 'Send stop change' : 'Send order');
         const values = [];
         for (const order of this.row() ? activeOrders(this.row()) : [])

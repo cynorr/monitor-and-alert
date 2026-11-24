@@ -90,4 +90,4 @@ Intraday 初始周期按美东开盘经过时间选择，之后保留手工选�
 
 ## Schwab 账户与交易
 
-Monitor整合Longbridge看盘与Schwab账户、订单、成交历史和显式交易。Scan与Monitor使用同一份Schwab持仓风险身份，切换不改变账户口径或停止任务。字段、FIFO Days/整轮Sold/NEW、买卖策略、共用Send及金融写入契约只在 [Schwab账户与交易](schwab.md) 维护。
+Monitor整合Longbridge看盘与Schwab账户、订单、成交历史和显式交易。Scan与Monitor使用同一份Schwab持仓风险身份，切换不改变账户口径或停止任务。字段、FIFO Days/整轮Sold/NEW、买卖数量档位与比例预设、共用Send及金融写入契约只在 [Schwab账户与交易](schwab.md) 维护。

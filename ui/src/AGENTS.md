@@ -21,6 +21,6 @@
 
 - 新增 symbol 行复用 `symbol-row.ts` 的表面及 `attention.ts` 的最新提醒入口，规则见 [Symbol模板](../../docs/ui.md#symbol-row-template)。Grid/Table共用CSS，不复制波浪或按不同列表另造提醒；Holdings区域宽度跟随现有列几何。共享颜色只引用 `palette.ts`，由main安装CSS变量，禁止在Chart/Tag/名单重复默认色值；说明见 [Color palette](../../docs/ui.md#color-palette)。实时状态决定价格底色与文字，未读只决定边缘波浪。Focus 与 Holdings 复用暂停自动报警图标，M 共用 Alert 操作。
 
-- Schwab账户与交易规范见 [docs/schwab.md](../../docs/schwab.md)。schwab-data.ts 维护原生响应、后端FIFO/Days/Sold字段及逐笔显示，不在前端重算历史归属；schwab-holdings.ts 维护Days/Sold列、逐笔明细及Entry/NEW标记；保留原生展示逻辑，复用 holdings-layout/symbol-row/attention/intraday-state；trade.ts 管独立策略胶囊、数量/比例、EMA 周期、原生 Stop 编辑和共用 Send，行情公式只消费服务端图表参考，trade-lines.ts 用公开图表 API 绘制双图交易线，price-lines.ts 与 Alert 共用坐标/命中/绘制。产品模式只有scan/monitor，保持 request_id/source/socket 检查；金融写请求不能复用普通 post 的错误语义或自动重发。
+- Schwab账户与交易规范见 [docs/schwab.md](../../docs/schwab.md)。schwab-data.ts 维护原生响应、后端FIFO/Days/Sold字段及逐笔显示，不在前端重算历史归属；schwab-holdings.ts 维护Days/Sold列、逐笔明细及Entry/NEW标记；保留原生展示逻辑，复用 holdings-layout/symbol-row/attention/intraday-state；trade.ts 管独立策略胶囊、买卖共用的整股档位与比例预设、EMA 周期、原生 Stop 编辑和共用 Send，行情公式只消费服务端图表参考，trade-lines.ts 用公开图表 API 绘制双图交易线，price-lines.ts 与 Alert 共用坐标/命中/绘制。产品模式只有scan/monitor，保持 request_id/source/socket 检查；金融写请求不能复用普通 post 的错误语义或自动重发。
 
 - 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

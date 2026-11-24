@@ -107,11 +107,12 @@ Longbridge完整范围只在 [longbridge-data.md](longbridge-data.md) 维护。M
 Monitor 使用 Daily/Intraday 图表，顶部报价固定在归位按钮左侧，时钟位于共用 List 顶部。底部数量、预估、策略与 Send 的几何只在 [Chart UI](chart-ui.md#trade-ticket) 维护，颜色与图形只在 [UI / Trade 图形](ui.md#trade-图形) 维护。浏览时隐藏数量/预估但保留空间；选择策略不会移动报价或 Send。
 
 - 底部两个独立单行胶囊：蓝色买入 `Market / Stop`，红色卖出 `Market / ATR / EMA`。每项直接选择，再点 Send；无大号 Buy/Sell 标题、二层标签、隐藏类型或 Review。再次点击当前项回到浏览。卡片无悬停说明，保留可访问名称。
-- 买入初始约 $20,000，数量步长约 $500 名义金额。市价卖出默认当前余仓的 30% 向下取整，显示实际股数及占余仓百分比，提供 25/30/40/50% 快捷选择，最右端可准确选全仓。卖出与真实 Stop 编辑步长为一股。ATR/EMA 固定全仓，数量标尺只读。
+- 可编辑的买卖数量标尺共用整股档位，左端为 1 股，右端为精确上限。买入上限由名义金额限制和参考价决定，市价卖出及真实 Stop 数量编辑的上限取当前整股余仓。仅能选 1 股时显示固定单档。没有可选股数时禁用数量标尺与新单 Send。
+- 买入初始约 $20,000，股数受标尺上限约束，数量步长约 $500 名义金额。市价卖出默认 30%，提供 25/30/40/50% 快捷选择。按比例向下取整，有整股余仓时最少选 1 股，显示实际股数及占余仓百分比。卖出与真实 Stop 编辑步长为一股。ATR/EMA 固定全仓，数量标尺只读。
 - 数量轴保持浏览器原生 range 与普通鼠标指针，不接管拖动；拖动期间冻结刻度。Auto 已开启时灰色禁用；拖动草稿线后解除自动跟随，Auto 可恢复所选策略公式，不改变手选数量。
 - Buy Stop 及市价参考线：Buy = max(Longbridge 当天 Regular High, Schwab Ask + 0.01)，Stop = 当天 Regular Low；市价订单不提交参考价格、不附加止损。缺当天 Regular 数据不使用前一天或扩展时段替代。Buy Stop 的父子结构不变。
 - ATR/EMA 只画一条红色目标 Stop；Daily/Intraday 显示和拖动同一份草稿。自动模式在 Send 时取最新参考并冻结为两位小数，手动模式提交可见目标价，不偷偷恢复公式。
-- 已有活动 Stop 常驻，多单分开显示。点击可编辑线即载入该单数量；可只改数量、只拖价格或同时修改，统一点 Send 提交一张 PUT。选另一张 Stop/新策略放弃未提交编辑，Esc 清除编辑。PENDING_ACTIVATION、AWAITING_RELEASE_TIME 均可申请修改，包括 editable=false；AWAITING_PARENT_ORDER 不可编辑。延迟 Stop 的手动修改保留原 DAY/releaseTime。
+- 已有活动 Stop 常驻，多单分开显示。点击可编辑线即载入该单数量。可只改数量、只拖价格或同时修改，统一点 Send 提交一张 PUT。无可选余仓时可使用原单数量只改价格。选另一张 Stop/新策略放弃未提交编辑，Esc 清除编辑。PENDING_ACTIVATION、AWAITING_RELEASE_TIME 均可申请修改，包括 editable=false；AWAITING_PARENT_ORDER 不可编辑。延迟 Stop 的手动修改保留原 DAY/releaseTime。
 - Stop 目标价必须为正且低于当前 Bid，否则 Send 禁用。后端在撤任何旧单之前使用新 Schwab Bid 再校验；失败不撤旧单、不切为市价。新单与真实改单发送期间冻结操作；成功回浏览，真实替换等待新 ID 出现在快照前禁用重复提交。
 
 报价突出 (Ask − Bid) / Bid × 100%，其右侧上方 Ask、下方 Bid，绝对差值在 Bid 右侧底部对齐。百分比严格大于 ui/src/trade.ts 的 SPREAD_WARNING_PERCENT 时使用红色粗体；默认 0.5，单位为百分比数值。显示金额为整数，Risk 保留两位百分比和整数金额；它是价差估算。
