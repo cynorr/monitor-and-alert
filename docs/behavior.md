@@ -62,6 +62,8 @@ Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑�
 
 名单操作直接作用于单只 symbol；机器 Excluded 禁止人工释放，Hidden/Focus 释放后重新分类。快捷键、行按钮和限定自动下一只见 [List 交互](list-interactions.md)。Scan 和 Monitor 的 Focus 共用 Release，Discover 的 Hide 进入 Hidden 七天。
 
+Scan、Monitor 和 Holdings 共用名单导航的鼠标悬停规则。方向键选中一行后，悬停高亮等到鼠标输入恢复。详见 [名单导航](list-interactions.md#导航与快捷键)。
+
 搜索仍使用列表上方Search与/入口。Monitor通过主账号Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整 section，本次不新增 Quote 形态规则。保存失败回退内存并显示错误。
 
 一个watchdog原生事件监听days，新日期workspace出现自动跟随；Monitor始终使用最新名单，历史Scan只读。外部修改自动重读，Focus变更立即同步行情范围；已有行情状态复用，排序/主section移动不重下载。只有同时不在Focus和Holdings才退订；已有行情缓存保留；重新加入按 Longbridge 数据要求初始化。两类实时列表都为空时清空图表并保留搜索入口。`--symbols`会话始终限制指定Focus子集并禁用编辑；模拟器只写临时名单。

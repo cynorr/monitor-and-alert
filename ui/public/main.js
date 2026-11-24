@@ -238,10 +238,19 @@ document.querySelectorAll('[data-tf]').forEach(button => button.addEventListener
     if (symbol)
         void select(symbol, button.dataset.tf);
 }));
+const workspace = $('workspace');
+function restoreRowHover(event) {
+    if (event.pointerType === 'mouse' && workspace.classList.contains('keyboard-row-nav'))
+        workspace.classList.remove('keyboard-row-nav');
+}
+document.addEventListener('pointermove', restoreRowHover, { passive: true });
+document.addEventListener('pointerdown', restoreRowHover, { capture: true, passive: true });
 document.addEventListener('keydown', event => {
     if (event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
         event.target.closest('input,textarea,select,[contenteditable]'))
         return;
+    if (!event.metaKey && event.defaultPrevented && (event.key === 'ArrowUp' || event.key === 'ArrowDown'))
+        workspace.classList.add('keyboard-row-nav');
     if (!event.metaKey && event.code === 'KeyM' &&
         (selectionSource === 'holdings' ? schwab.canPause(symbol) : watchlist.canPause(symbol))) {
         event.preventDefault();

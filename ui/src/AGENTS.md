@@ -4,7 +4,7 @@
 
 - 盘中状态另读 [Intraday State](../../docs/intraday-state.md)，`intraday-state.ts`仅负责格式化、Badge及服务端离散rank比较；In Play复用section，不改真实归属，重排保留节点/选择/焦点/滚动。Holdings当前余仓同步状态，清仓尾部保持灰色。
 - `list.ts`：名单行、section、选择、拖拽、人工 Tag；`scan.ts`：两模式共用 Tag/Filter、日期和草稿编辑；`board.ts`：分组、角标和显示格式；`tags.ts`：Tag 保存与草稿比较；`tag-appearance.ts`：外观默认值、图案与共用 SVG 渲染入口。
-- `layout.ts`：可见图表等宽分配与唯一图表组/List分隔条；`holdings-layout.ts`：持仓自然内容测宽与价格背景几何；`main.ts`：模式和图表选择来源、R重置可见图。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
+- `layout.ts`：可见图表等宽分配与唯一图表组/List分隔条；`holdings-layout.ts`：持仓自然内容测宽与价格背景几何；`main.ts`：模式和图表选择来源、R重置可见图、共用名单悬停开关。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
 - `additional-info.ts`：独立信息身份校验、分类显示精简、可空格式化及纽约自然日倒计时；原始分类保留在数据契约中，数据与显示规则只读 [Additional Info](../../docs/additional-info.md)，不改变bar revision或Ready。
 - `chart.ts`：共用图表、十字线与成交额显示、交易日联动；`daily-chart-view.ts`：Daily 坐标策略、等比缩放、临时全貌和裁切 primitive，唯一需求见 [Daily setup scale](../../docs/chart-ui.md#daily-setup-scale)；`chart-settings.ts`：统一图形参数。修改参数后构建并刷新页面，不增加设置界面。
 - 图表调整首先遵守 [Chart 首要开发准则](../../docs/chart-ui.md#implementation-principle)，优先内置参数和公开 API，保持 vendor 源码原样。

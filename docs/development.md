@@ -181,6 +181,8 @@ List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受
 
 Watchlist.handleKey 维护观察名单键盘入口，ScanControls 管理 Tag/Filter、日期与显示偏好。选股导航使用 Symbol 行的键盘焦点，选中行共用已有整行轮廓。行按钮和快捷键通过 actOnTicker/togglePin 共用单只动作。Focus Release 按名单归属路由，Scan/Monitor 复用 move。Delete/Backspace 通过名单焦点与已选图表提醒线分流。mutate 的 advance 参数按 [List 交互](list-interactions.md#自动下一只限定白名单) 调用。提交前保存可见顺序，等待期间阻止本次删除引起的首行候补，成功后 advanceSelection 选后项或末行。用户换股、切 List 或切模式后保留其选择。Page 导航使用已渲染非空 section 的首个 symbol，展开目标。
 
+Watchlist 与 Holdings 处理上下键选股后，main.ts 根据已消费的按键设置工作区的悬停开关。共用 CSS 控制名单行和仅悬停时显示的操作。鼠标 pointermove 或 pointerdown 恢复悬停，选中和键盘焦点各自保留。
+
 前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口；Scan全局Search目标为Discover置顶，显式Focus section的+保留目标。Scan查询本地只读SQLite并截断到所选日，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 
 ## 必要验证

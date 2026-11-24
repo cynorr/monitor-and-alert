@@ -124,7 +124,7 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .add-button:hover, .group button[data-toggle]:hover { background: #edf0f5; }
 .add-button:disabled, .group button[data-toggle]:disabled { opacity: .35; cursor: default; }
 .symbol-row { width: 100%; height: 28px; padding-top: 2px; padding-bottom: 2px; font-size: var(--font-row); text-align: left; white-space: nowrap; cursor: pointer; user-select: none; touch-action: none; }
-.symbol-row:hover:not(.active) { background: #f3f5f8; }
+:where(.workspace:not(.keyboard-row-nav)) :is(.instrument-row, .search-result, .holding-trade):hover:not(.active) { background: #f3f5f8; }
 .ticker { text-align: left; padding: 0; font-size: inherit; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .warn { color: #b58722; font-size: 10px; margin-left: 3px; }
 .positive { color: var(--color-positive); }
@@ -132,13 +132,14 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .row-actions { display: flex; align-items: center; gap: 10px; }
 .hide-ticker, .release-ticker, .pin-ticker { width: 24px; height: 24px; color: #7a838e; }
 .row-actions button, .auto-alert { opacity: 0; }
-.instrument-row:is(.active, :hover, :focus-within) :is(.row-actions button, .auto-alert),
+.instrument-row:is(.active, :focus-within) :is(.row-actions button, .auto-alert),
+:where(.workspace:not(.keyboard-row-nav)) .instrument-row:hover :is(.row-actions button, .auto-alert),
 :is(.pin-ticker, .auto-alert)[aria-pressed="true"] { opacity: 1; }
-.pin-ticker:hover, .pin-ticker[aria-pressed="true"] { color: var(--color-blue); background: #eaf1ff; }
-.hide-ticker:hover { color: #d33838; background: #ffe9e9; }
-.release-ticker:hover { color: var(--color-ink); }
+:where(.workspace:not(.keyboard-row-nav)) .pin-ticker:hover, .pin-ticker[aria-pressed="true"] { color: var(--color-blue); background: #eaf1ff; }
+:where(.workspace:not(.keyboard-row-nav)) .hide-ticker:hover { color: #d33838; background: #ffe9e9; }
+:where(.workspace:not(.keyboard-row-nav)) .release-ticker:hover { color: var(--color-ink); }
 .auto-alert { width: 24px; height: 24px; color: var(--color-tag-neutral); }
-.auto-alert:hover { background: var(--color-volume-low); color: var(--color-ink); }
+:where(.workspace:not(.keyboard-row-nav)) .auto-alert:hover { background: var(--color-volume-low); color: var(--color-ink); }
 .auto-alert[aria-pressed="true"] { color: var(--color-red-strong); }
 .auto-alert:not([aria-pressed="true"]) .auto-alert-bell { mask: none; }
 .auto-alert:not([aria-pressed="true"]) .auto-alert-slash { display: none; }
@@ -155,7 +156,6 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 
 /* Inline candidate shares the watchlist surface; Enter and click use one action. */
 .search-result { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; width: 100%; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-.search-result:hover { background: #f3f5f8; }
 .search-result strong { color: var(--color-blue); }
 .search-result .security-name { grid-column: 1 / -1; color: #747c87; font-size: var(--font-small); }
 .search-result:disabled { opacity: .6; cursor: wait; }
@@ -171,7 +171,6 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .holdings-table th { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: #68727f; font-size: var(--font-small); font-weight: 400; }
 .holdings-table th:first-child, .holdings-table td:first-child { text-align: left; padding-left: 16px; position: relative; }
 .holdings-table tbody tr[data-holding] { cursor: pointer; }
-.holdings-table tbody tr:hover:not(.active) { background: #f3f5f8; }
 .holdings-table tbody td { border-top: 1px solid transparent; border-bottom: 1px solid transparent; }
 .holdings-table tbody td:first-child { border-left: 1px solid transparent; }
 .holdings-table tbody td:last-child { border-right: 1px solid transparent; }
@@ -248,7 +247,7 @@ button:disabled { cursor: default; opacity: .45; }
 .tag-logo .tag-ma { stroke-width: 1.6; }
 .tag-overflow { font-size: 10px; color: #747c87; }
 .tag-edit { position: absolute; top: 50%; transform: translateY(-50%); right: 0; font-size: 10px; line-height: 12px; color: #747c87; padding: 0 2px; opacity: 0; }
-.symbol-row:hover .tag-edit, .symbol-row:focus-within .tag-edit { opacity: 1; }
+:where(.workspace:not(.keyboard-row-nav)) .symbol-row:hover .tag-edit, .symbol-row:focus-within .tag-edit { opacity: 1; }
 .manual-tag-editor { padding: 4px 8px 8px; display: flex; gap: 4px; flex-wrap: wrap; }
 .manual-tag-editor button { border: 1px solid #d6dce4; padding: 3px 6px; border-radius: 999px; font-size: var(--font-small); }
 .manual-tag-editor button[aria-pressed="true"] { color: #2d5d96; background: #eaf2ff; border-color: #abc9ee; }

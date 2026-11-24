@@ -1,5 +1,9 @@
 # 验证记录
 
+## 2026-11-24：方向键选股与鼠标悬停
+
+本机 macOS 正式页面验证 Monitor 和 Scan。鼠标停在原行时按方向键，原行仍匹配浏览器 hover，但灰底与仅悬停时显示的操作消失。用鼠标点回原行的 Tags 控件后灰底恢复，选中仍在键盘切到的行。验证后恢复 Monitor。Holdings 当时为空，本轮未实测持仓行。TypeScript 构建、8 项名单交互用例和 git diff --check 通过。
+
 ## 2026-11-24：暂停自动报警图标
 
 本机 macOS 完成 TypeScript 构建、最新未读定向用例及 git diff --check。Focus 和 Holdings 继续使用同一个铃铛 SVG，只有暂停状态显示斜杠。本次未在正式页面切换暂停状态。
