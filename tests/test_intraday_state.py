@@ -250,9 +250,9 @@ def test_quote_at_boundary_cannot_freeze_the_previous_volume_rank(state):
 
 def test_data_service_forwards_quotes_and_resets_automatic_baselines(state, tmp_path):
     from data_service.config import Ticker
-    from data_service.monitor import MonitorService
+    from data_service.market import MarketService
     value, now, sound = state
-    service = MonitorService([Ticker('TEST.US', 'TEST', 'focus')], tmp_path / 'service', clock=lambda: now[0])
+    service = MarketService([Ticker('TEST.US', 'TEST', 'focus')], tmp_path / 'service', clock=lambda: now[0])
     service.intraday = value
     try:
         service.apply_quote('TEST.US', {'trade_session': 'Intraday', 'timestamp': now[0], 'last_price': 101, 'open': 100, 'high': 110, 'low': 100})

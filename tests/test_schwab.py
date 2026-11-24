@@ -12,10 +12,15 @@ from aiohttp import ClientSession, web
 
 from data_service import schwab_backend as broker
 from data_service.http_api import create_app
-from data_service.trade import SchwabTrade, portfolio
+from data_service.schwab import SchwabService, portfolio
 from data_service.workbench import Workbench
 from data_service.workspace import Workspace
 from test_scan_integration import app_data, mock_data, FakeBroker
+
+
+class TradeTestBroker(FakeBroker):
+    async def aclose(self):
+        self.close()
 
 
 class MemoryStore:
@@ -70,7 +75,7 @@ def test_sold_today_keeps_original_filled_and_new_york_date_scope():
 async def test_schwab_financial_fields_survive_longbridge_quotes_and_subscriptions_do_not_get_quotes():
     calls = []
     value = runtime(lambda r: (calls.append(r), httpx.Response(200, json={}))[1])
-    trade = SchwabTrade(value)
+    trade = SchwabService(value)
     value.state.positions = [position()]
     original = copy.deepcopy(value.state.positions)
     now = datetime(2026, 10, 26, 15, tzinfo=timezone.utc).timestamp()
@@ -93,8 +98,8 @@ async def test_integrated_routes_validate_before_write_and_preserve_unknown_with
             return httpx.Response(200, json={'XYZ': {'assetMainType': 'EQUITY', 'quote': {'askPrice': '11.90', 'bidPrice': '11.80'}}})
         raise httpx.ReadTimeout('synthetic', request=request)
     value = runtime(transport)
-    trade = SchwabTrade(value)
-    service = SimpleNamespace(mode='trade', trade=trade, symbols=['XYZ.US'])
+    trade = SchwabService(value)
+    service = SimpleNamespace(mode='monitor', schwab=trade, symbols=['XYZ.US'])
     runner = web.AppRunner(create_app(service))
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', 0)
@@ -112,7 +117,7 @@ async def test_integrated_routes_validate_before_write_and_preserve_unknown_with
             response = await session.post(base + '/v1/trade/orders/breakout-buy', json=payload)
             assert response.status == 504 and (await response.json())['result'] == 'unknown'
             assert [r.method for r in calls] == ['GET', 'POST']
-            service.mode = 'monitor'
+            service.mode = 'scan'
             response = await session.delete(base + '/v1/trade/orders/1')
             assert response.status == 409 and len(calls) == 2
     finally:
@@ -120,29 +125,37 @@ async def test_integrated_routes_validate_before_write_and_preserve_unknown_with
         await value.close()
 
 
-def test_trade_mode_scope_and_sold_today_do_not_duplicate_holding_role(app_data):
+def test_monitor_uses_schwab_scope_and_sold_today_do_not_duplicate_holding_role(app_data):
     async def scenario():
         ws = Workspace(root=app_data / 'days')
         value = runtime()
-        trade = SchwabTrade(value)
-        app = Workbench(ws, app_data, app_data / 'daily.sqlite3', lambda allowed: FakeBroker(allowed, app.calendar), trade_factory=lambda: trade)
+        trade = SchwabService(value)
+        app = Workbench(ws, app_data, app_data / 'daily.sqlite3', lambda allowed: TradeTestBroker(allowed, app.calendar), schwab_factory=lambda: trade)
         try:
-            app.start_monitor()
-            app.monitor.now = lambda: int(datetime(2026, 10, 26, 15, tzinfo=timezone.utc).timestamp())
+            app.start_market()
+            app.market.now = lambda: int(datetime(2026, 10, 26, 15, tzinfo=timezone.utc).timestamp())
             value.state.positions = [position()]
             value.state.orders = [order(), order('3', symbol='SOLD')]
-            await app.switch_mode('trade')
-            rows = app.list_state()['trade']['rows']
-            assert len([r for r in rows if r['symbol'] == 'XYZ.US']) == 1
-            assert app.monitor.intraday.holdings == {'XYZ.US'}
-            assert 'SOLD.US' not in app.monitor.intraday.focus | app.monitor.intraday.holdings
-            assert {'XYZ.US', 'SOLD.US'} <= set(app.monitor.symbols)
-            assert app.list_state()['holdings'] is None
-            assert app.view('XYZ.US', '5m')['app_mode'] == 'trade'
-            await app.switch_mode('scan')
-            assert app.monitor.intraday.holdings == {'XYZ.US'}
             await app.switch_mode('monitor')
-            assert app.list_state()['trade'] is None
+            rows = app.list_state()['schwab']['rows']
+            assert len([r for r in rows if r['symbol'] == 'XYZ.US']) == 1
+            assert app.market.intraday.holdings == {'XYZ.US'}
+            assert 'SOLD.US' not in app.market.intraday.focus | app.market.intraday.holdings
+            assert {'XYZ.US', 'SOLD.US'} <= set(app.market.symbols)
+            assert 'holdings' not in app.list_state()
+            assert app.view('XYZ.US', '5m')['app_mode'] == 'monitor'
+            with pytest.raises(ValueError, match='Choose Scan or Monitor'):
+                await app.switch_mode('trade')
+            assert app.mode == 'monitor'
+            assert (await app.api('/v1/schwab', {}))['rows'] == rows
+            for removed in ('/v1/holdings', '/v1/trade'):
+                with pytest.raises(KeyError):
+                    await app.api(removed, {})
+            await app.switch_mode('scan')
+            assert app.market.intraday.holdings == {'XYZ.US'}
+            assert app.list_state()['schwab'] is None
+            await app.switch_mode('monitor')
+            assert app.list_state()['schwab'] is not None
         finally:
             await app.close()
             await value.close()

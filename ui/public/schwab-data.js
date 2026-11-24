@@ -14,11 +14,11 @@ export function flattenOrders(orders) {
     visit(orders);
     return [...found.values()];
 }
-const active = new Set(['WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_ORDER', 'PENDING_ACTIVATION', 'QUEUED', 'PENDING_REPLACE', 'PENDING_CANCEL', 'PARTIALLY_FILLED', 'ACCEPTED', 'PENDING_ACKNOWLEDGEMENT']);
+const active = new Set(['WORKING', 'AWAITING_STOP_CONDITION', 'AWAITING_PARENT_ORDER', 'AWAITING_RELEASE_TIME', 'PENDING_ACTIVATION', 'QUEUED', 'PENDING_REPLACE', 'PENDING_CANCEL', 'PARTIALLY_FILLED', 'ACCEPTED', 'PENDING_ACKNOWLEDGEMENT']);
 export const activeOrders = (row) => flattenOrders(row.orders).filter(order => order.status != null && active.has(order.status) && order.symbol === row.ticker);
 export const entryOrders = (row) => activeOrders(row).filter(order => order.instruction === 'BUY');
 export function editableStop(order) {
-    return !!order.order_id && (order.editable === true || order.status === 'PENDING_ACTIVATION') && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION'].includes(order.status ?? '');
+    return !!order.order_id && (order.editable === true || ['PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '')) && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '');
 }
 export function entryPreview(order) {
     const qty = numeric(order.quantity), price = numeric(order.stop_price);
@@ -32,7 +32,7 @@ export function entryAmount(row) {
     return values.length && values.every(value => value != null) ? values.reduce((sum, value) => sum + value, 0) : null;
 }
 export function holdingTags(row) {
-    return [...(entryOrders(row).length ? ['Entry'] : []), ...(row.position && numeric(row.position.quantity) > 0 && numeric(row.sold_today?.quantity) > 0 ? ['Trim'] : [])];
+    return [...(entryOrders(row).length ? ['Entry'] : []), ...(row.is_new ? ['NEW'] : [])];
 }
 export function holdingDetails(row) {
     const result = [], position = row.position, average = numeric(position?.average_price);
@@ -40,27 +40,21 @@ export function holdingDetails(row) {
         const difference = kind !== 'Buy' && average != null && average > 0 && price != null ? price - average : null;
         const pnl = difference != null ? qty * difference : null;
         const pnlPercent = difference != null ? difference / average * 100 : null;
-        result.push({ key, kind, qty, price, stop: null, amount: price != null ? qty * price : null, pnlPercent, pnl, riskPercent: null, risk: null, cancelId: order?.cancelable && order.order_id ? order.order_id : null });
+        result.push({ key, kind, date: null, days: null, qty, price, stop: null, amount: price != null ? qty * price : null, pnlPercent, pnl, riskPercent: null, risk: null, cancelId: order?.cancelable && order.order_id ? order.order_id : null });
     };
-    if (position && numeric(position.quantity) > 0 && numeric(position.average_price) != null)
-        add('buy', 'Buy', Number(position.quantity), Number(position.average_price));
-    // Sold Today retains the backend's FILLED scope, grouped by real broker order.
-    const sales = new Map();
-    for (const fill of row.sold_today?.executions ?? []) {
-        const previous = sales.get(fill.order_id) ?? { qty: 0, amount: 0 };
-        previous.qty += Number(fill.quantity);
-        previous.amount += Number(fill.quantity) * Number(fill.price);
-        sales.set(fill.order_id, previous);
+    for (const trade of row.trades ?? []) {
+        const sold = trade.side === 'SELL';
+        result.push({ key: 'trade-' + trade.order_id, kind: sold ? 'Sold' : 'Buy', date: trade.date,
+            days: sold ? trade.holding_days : null, qty: Number(trade.quantity), price: numeric(trade.price),
+            stop: null, amount: numeric(trade.amount), pnlPercent: sold ? numeric(trade.pnl_percent) : null,
+            pnl: sold ? numeric(trade.pnl) : null, riskPercent: null, risk: null, cancelId: null });
     }
-    for (const [id, sale] of sales)
-        if (sale.qty > 0)
-            add('sold-' + id, 'Sold', sale.qty, sale.amount / sale.qty);
     const entries = entryOrders(row), attached = new Set(entries.flatMap(order => flattenOrders(order.child_orders).map(child => child.order_id)));
     for (const order of entries) {
         const value = entryPreview(order);
         if (value.qty == null)
             continue;
-        result.push({ key: 'entry-' + order.order_id, kind: 'Entry', ...value, qty: value.qty, pnlPercent: null, pnl: null, cancelId: order.cancelable ? order.order_id : null });
+        result.push({ key: 'entry-' + order.order_id, kind: 'Entry', date: null, days: null, ...value, qty: value.qty, pnlPercent: null, pnl: null, cancelId: order.cancelable ? order.order_id : null });
     }
     for (const order of activeOrders(row))
         if (order.instruction === 'SELL' && order.order_type === 'STOP' && !attached.has(order.order_id) && numeric(order.quantity) != null)

@@ -1,4 +1,4 @@
-"""Monitor orchestration: scoped market data, history tasks and consumer views."""
+"""Scoped market data, history tasks and consumer views."""
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +32,7 @@ class SyncState:
     loading: bool = False
 
 
-class MonitorService:
+class MarketService:
     def __init__(self, tickers, runtime: Path, broker=None, calendar=None, clock=None, *, bars_path=None, alerts=None, intraday=False):
         self.tickers = tickers
         self.holdings_symbols = []
@@ -117,7 +117,7 @@ class MonitorService:
         self.check_windows()
 
     def list_state(self):
-        return {'board': self.board(), 'mode': self.mode,
+        return {'board': self.board(), 'mode': self.mode, 'app_mode': 'monitor', 'trading_enabled': False,
                 'current_regular_session': self.calendar.is_open(int(self.now())),
                 'editable': self.workspace is not None and self.workspace_subset is None,
                 'workspace_error': self.workspace.error if self.workspace else None}
@@ -395,7 +395,7 @@ class MonitorService:
             charts[period] = self.charts.chart(symbol, period, now,
                 known_revision=None if revisions is None else revisions.get(period))
         status = self.status(symbol, now)
-        return {'symbol': symbol, 'timeframe': tf, 'server_time': now, 'run_id': self.run_id, 'mode': self.mode,
+        return {'symbol': symbol, 'timeframe': tf, 'server_time': now, 'run_id': self.run_id, 'mode': self.mode, 'app_mode': 'monitor',
                 'charts': charts, 'quote': self.quote(symbol, now), 'status': status,
                 'summary': self.charts.summary(symbol, now)}
 

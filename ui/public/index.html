@@ -10,29 +10,29 @@
 <main id="workspace" class="workspace" aria-label="Charts and watchlist">
   <article class="chart-panel" id="daily-panel" aria-label="Daily chart">
     <div class="chart-header">
-      <div class="chart-toolbar"><div class="instrument-title"><strong class="symbol">—</strong><span id="daily-company-name" class="company-name" hidden></span></div><span id="daily-earnings" class="earnings-clock" hidden><span id="daily-earnings-label"></span><span id="daily-earnings-countdown"></span></span><button id="daily-latest" class="latest icon-button" aria-label="Daily: go to latest" title="Go to latest">↦</button></div>
+      <div class="chart-toolbar"><div class="instrument-title"><strong class="symbol">—</strong><span id="daily-company-name" class="company-name" hidden></span></div><span id="daily-earnings" class="earnings-clock" hidden><span id="daily-earnings-label"></span><span id="daily-earnings-countdown"></span></span><button id="daily-latest" class="latest icon-button" aria-label="Daily: reset view and go to latest" title="Reset view &amp; go to latest · Hold F for 1-year overview">↦</button></div>
       <div class="company-details"><span id="daily-classification" hidden></span></div>
-      <div class="metrics"><span>ADR20 <b class="adr">—</b></span><span>ADV20 <b class="adv">—</b></span><div class="spread" hidden><span class="bid"></span><span class="ask"></span></div></div>
+      <div class="metrics"><span>ADR20 <b class="adr">—</b></span><span>MDV20 <b class="mdv">—</b></span><div class="spread" hidden><span class="bid"></span><span class="ask"></span></div></div>
       <div class="header-bottom"><div id="daily-legend" class="legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma50">SMA 50</span></div><span id="daily-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
     </div>
     <div id="daily-ohlc" class="ohlc">—</div>
     <div class="chart-host" id="daily-chart"><div class="volume-label" id="daily-volume">V —</div></div><div class="chart-empty" id="daily-empty">Loading</div>
   </article>
-  <div class="divider" id="divider-0" role="separator" aria-orientation="vertical" aria-label="Resize Daily and Intraday" tabindex="0"></div>
+  <div class="chart-gap" id="chart-gap" aria-hidden="true"></div>
   <article class="chart-panel" id="intraday-panel" aria-label="Intraday chart">
     <div class="chart-header">
-      <div class="chart-toolbar"><strong class="last-price">—</strong><button id="intraday-latest" class="latest icon-button" aria-label="Intraday: go to latest" title="Go to latest">↦</button></div>
+      <div class="chart-toolbar"><strong class="last-price">—</strong><button id="intraday-latest" class="latest icon-button" aria-label="Intraday: reset view and go to latest" title="Reset view &amp; go to latest">↦</button></div>
       <div class="period-row"><div class="timeframes" role="group" aria-label="Intraday period"><button data-tf="5m" class="active" aria-pressed="true">5m</button><button data-tf="15m" aria-pressed="false">15m</button><button data-tf="30m" aria-pressed="false">30m</button><button data-tf="1h" aria-pressed="false">1h</button><button data-tf="2h" aria-pressed="false">2h</button></div></div>
       <div class="intraday-details"><span id="intraday-market-cap" hidden></span><div class="spread" hidden><span class="bid"></span><span class="ask"></span></div></div>
       <div class="header-bottom"><div id="intraday-legend" class="legend"><span class="ema10">EMA 10</span><span class="ema20">EMA 20</span><span class="sma65">SMA 65</span></div><span id="intraday-state" class="state" role="status"></span><span class="quality" tabindex="0" hidden aria-label="Data warning">!</span></div>
       <section id="trade-ticket" class="trade-ticket" aria-label="Trade ticket" hidden>
         <div class="trade-quotes"><span id="trade-spread-percent" aria-label="Bid ask spread"></span><div class="trade-prices"><span id="trade-ask" aria-label="Schwab Ask">—</span><span id="trade-bid" aria-label="Schwab Bid">—</span></div><span id="trade-spread-value" aria-label="Bid ask difference"></span></div>
-        <div id="trade-size" class="trade-size trade-inactive" aria-hidden="true"><output id="trade-qty" for="trade-ruler"></output><div class="trade-ruler-axis"><input id="trade-ruler" type="range" min="0" max="1000" step="1" value="0" aria-label="Order quantity"><div id="trade-ruler-ticks" aria-hidden="true"></div></div></div>
+        <div id="trade-size" class="trade-size trade-inactive" aria-hidden="true"><div class="trade-quantity"><output id="trade-qty" for="trade-ruler"></output><span id="trade-percent"></span></div><div class="trade-parameters"><div id="trade-sell-presets" hidden><button data-sell-percent="25" type="button">25%</button><button data-sell-percent="30" type="button">30%</button><button data-sell-percent="40" type="button">40%</button><button data-sell-percent="50" type="button">50%</button></div><div id="trade-ema-periods" class="mode-switch" role="group" aria-label="Daily EMA period" hidden><button data-ema-period="10" type="button">10</button><button data-ema-period="20" type="button">20</button></div></div><div class="trade-ruler-axis"><input id="trade-ruler" type="range" min="0" max="1000" step="1" value="0" aria-label="Order quantity"><div id="trade-ruler-ticks" aria-hidden="true"></div></div></div>
         <div id="trade-preview" class="trade-preview trade-inactive" aria-hidden="true"><span id="trade-estimate"></span><span id="trade-risk"></span></div>
         <div class="trade-actions">
           <div class="trade-side" role="group" aria-label="Order type">
-            <div class="trade-buy-side"><span class="trade-buy-label" aria-hidden="true">Buy</span><button type="button" data-trade-mode="breakout-buy" aria-label="Buy Stop" aria-pressed="false"><span>stop</span></button><button type="button" data-trade-mode="market-buy" aria-label="Buy Market" aria-pressed="false"><span>market</span></button></div>
-            <button type="button" class="trade-sell-side" data-trade-mode="market-sell" aria-label="Sell market" aria-pressed="false">Sell</button>
+            <div class="trade-buy-side" role="group" aria-label="Buy"><button type="button" data-trade-mode="market-buy" aria-label="Buy Market" aria-pressed="false">Market</button><button type="button" data-trade-mode="breakout-buy" aria-label="Buy Stop" aria-pressed="false">Stop</button></div>
+            <div class="trade-sell-side" role="group" aria-label="Sell"><button type="button" data-trade-mode="market-sell" aria-label="Sell Market" aria-pressed="false">Market</button><button type="button" data-trade-mode="atr-stop" aria-label="Full holding ATR Stop" aria-pressed="false">ATR</button><button type="button" data-trade-mode="ema-stop" aria-label="Full holding delayed EMA Stop" aria-pressed="false">EMA</button></div>
           </div>
           <div class="trade-commit-actions"><button id="trade-auto" class="icon-button" type="button" aria-label="Restore automatic prices" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></svg></button><div class="mode-switch trade-send-pill"><button id="trade-submit" class="active" type="button" disabled>Send</button></div></div>
         </div>
@@ -45,7 +45,7 @@
   <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
   <aside class="watchlist" aria-label="Watchlist">
     <div class="list-header">
-    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="monitor" class="active">Monitor</button><button data-app-mode="scan">Scan</button><button data-app-mode="trade">Trade</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span><div class="market-clock"><time class="clock"></time></div></div>
+    <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="scan">Scan</button><button data-app-mode="monitor" class="active">Monitor</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span><div class="market-clock"><time class="clock"></time></div></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
     <div id="list-tools" class="list-tools" hidden><button id="filter-toggle" aria-expanded="false" aria-controls="filter-editor">Filters <span id="filter-count"></span></button><div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div></div><button id="tag-add" class="add-button" aria-label="Create Tag">+</button></div>
     </div>
@@ -56,7 +56,7 @@
         <div class="scan-date-controls"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button></div>
       </div>
       <section id="filter-editor" aria-label="Tag and Filter editor" hidden><span id="tag-unsaved" hidden>Unsaved</span>
-        <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><select id="tag-role" aria-label="Tag role"><option value="setup">Setup</option><option value="extended">Extended</option><option value="broken">Broken</option><option value="under50">Under-50</option><option value="label">Label</option></select><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
+        <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><select id="tag-role" aria-label="Tag role"><option value="setup">Setup</option><option value="earnings">In 14 Days</option><option value="extended">Extended</option><option value="broken">Broken</option><option value="under50">Under-50</option><option value="label">Label</option></select><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
         <div class="tag-appearance-editor" aria-label="Tag appearance">
           <label>Icon<select id="tag-icon" aria-label="Tag icon"></select></label>
           <label>Line color<input id="tag-color" type="color" aria-label="Tag line color"></label>
@@ -72,45 +72,7 @@
     <div id="list-notice" class="list-message" role="status"></div>
     <section id="schwab-holdings" class="holdings-list" aria-label="Schwab holdings and orders" hidden>
       <div class="holdings-heading"><button id="schwab-toggle" type="button" aria-expanded="true"><span id="schwab-arrow">▾</span>Holdings <span id="schwab-count" class="count-badge"></span></button><div class="holdings-meta"><time id="schwab-updated"></time><b id="schwab-account" aria-label="Schwab account value">—</b></div></div>
-      <div id="schwab-content"><div class="holdings-scroll"><table id="schwab-table" class="holdings-table schwab-table" aria-label="Schwab holdings and orders"><thead><tr id="schwab-head"></tr></thead><tbody id="schwab-rows"></tbody><tfoot><tr><td>Total</td><td id="schwab-total-value"></td><td id="schwab-total-percent"></td><td id="schwab-total-pnl"></td><td></td><td data-field="extended_percent"></td><td id="schwab-total-day" title="Schwab current-position day P/L; excludes realized sales"></td><td data-field="adr"></td><td data-field="cum"></td><td data-field="local"></td></tr></tfoot></table></div><div id="schwab-empty" class="list-message"></div></div>
-    </section>
-    <section id="holdings" class="holdings-list" aria-label="Holdings" hidden>
-      <div class="holdings-heading">
-        <button id="holdings-toggle" aria-expanded="true" aria-controls="holdings-content"><span id="holdings-arrow" aria-hidden="true">▾</span>Holdings <span id="holdings-count" class="count-badge"></span></button>
-        <div class="holdings-meta">
-          <time id="holdings-updated" role="status" hidden></time>
-          <div id="holdings-error" class="holdings-error" hidden>
-            <button id="holdings-warning" class="holdings-warning" aria-label="Holdings refresh error" aria-expanded="false" aria-controls="holdings-error-details" title="Show holdings refresh error">!</button>
-            <div id="holdings-error-details" class="holdings-error-details" role="region" aria-label="Holdings refresh error details" hidden>
-              <strong id="holdings-error-reason"></strong>
-              <p id="holdings-error-action"></p>
-              <pre id="holdings-error-detail" tabindex="0" aria-label="Error details"></pre>
-            </div>
-          </div>
-          <b id="holdings-account" aria-label="Account value">—</b>
-        </div>
-      </div>
-      <div id="holdings-content">
-        <div class="holdings-scroll">
-          <table id="holdings-table" class="holdings-table" aria-label="Holdings and trades by buy order">
-            <thead><tr>
-              <th scope="col" aria-sort="none"><button data-holdings-sort="symbol">Symbol</button></th>
-              <th scope="col" aria-sort="none" title="Shares held × latest price"><button data-holdings-sort="market_value">Net Liq</button></th>
-              <th scope="col" aria-sort="none"><button data-holdings-sort="holding_days">Days</button></th>
-              <th scope="col" aria-sort="none" title="Remaining position profit / remaining cost; closed rows show realized return"><button data-holdings-sort="total_pnl_percent">P/L %</button></th>
-              <th scope="col" aria-sort="none" title="Remaining position profit; closed rows show realized profit"><button data-holdings-sort="total_pnl">P/L</button></th>
-              <th scope="col" aria-sort="none"><button data-holdings-sort="sold_percent">Sold</button></th>
-              <th scope="col" aria-sort="none" title="Regular price change from previous daily close"><button data-holdings-sort="change_percent">Chg%</button></th>
-              <th scope="col" aria-sort="none" title="Latest extended price change from regular close"><button data-holdings-sort="extended_percent">Ext</button></th>
-              <th scope="col" aria-sort="none" title="Remaining shares: today's buys use entry cost, older shares use previous regular close; closed rows show realized daily profit"><button data-holdings-sort="day_pnl">P/L Day</button></th>
-              <th scope="col">ADR</th><th scope="col">CumVol</th><th scope="col">LocalVol</th>
-            </tr></thead>
-            <tbody id="holdings-rows"></tbody>
-            <tfoot><tr><td>Total</td><td id="holdings-total-value">—</td><td></td><td id="holdings-total-percent">—</td><td id="holdings-total-pnl">—</td><td></td><td></td><td></td><td id="holdings-total-day">—</td><td></td><td></td><td></td></tr></tfoot>
-          </table>
-        </div>
-        <div id="holdings-empty" class="empty-list">Loading…</div>
-      </div>
+      <div id="schwab-content"><div class="holdings-scroll"><table id="schwab-table" class="holdings-table schwab-table" aria-label="Schwab holdings and orders"><thead><tr id="schwab-head"></tr></thead><tbody id="schwab-rows"></tbody><tfoot><tr><td>Total</td><td></td><td id="schwab-total-value"></td><td></td><td id="schwab-total-percent"></td><td id="schwab-total-pnl"></td><td></td><td data-field="extended_percent"></td><td id="schwab-total-day" title="Schwab current-position day P/L; excludes realized sales"></td><td data-field="adr"></td><td data-field="cum"></td><td data-field="local"></td></tr></tfoot></table></div><div id="schwab-empty" class="list-message"></div></div>
     </section>
     <div id="list-columns" class="list-columns"></div>
     <div class="list-body">

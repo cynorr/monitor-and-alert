@@ -1,6 +1,7 @@
 import { palette } from './palette.js';
 import { $, money, compact, dayKey } from './types.js';
 import { BAR_SPACING, VOLUME_PANE_RATIO } from './chart-settings.js';
+import { DailyChartView } from './daily-chart-view.js';
 const L = window.LightweightCharts;
 const dateFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -38,6 +39,7 @@ export class Panel {
     hoveredTime;
     precision = 2;
     tradePrices = [];
+    dailyView;
     linkedPrice;
     quotePrice;
     onHover = () => { };
@@ -67,27 +69,38 @@ export class Panel {
         const colors = { ema10: palette.blue, ema20: palette.yellow, [daily ? 'sma50' : 'sma65']: palette.red };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-        this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
+        this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'custom', minMove: .01, formatter: (value) => '$' + compact(value) }, priceLineVisible: false, lastValueVisible: false }, 1);
         this.chart.panes()[0].setStretchFactor(1 - VOLUME_PANE_RATIO);
         this.chart.panes()[1].setStretchFactor(VOLUME_PANE_RATIO);
+        if (daily)
+            this.dailyView = new DailyChartView(this);
+        let observedPane = null;
         const volumePosition = () => {
+            const pane = this.chart.panes()[0].getHTMLElement();
+            if (pane && pane !== observedPane) {
+                if (observedPane)
+                    observer.unobserve(observedPane);
+                observer.observe(pane);
+                observedPane = pane;
+            }
             const label = $(id + '-volume');
             label.style.top = `${this.chart.panes()[0].getHeight() + 5}px`;
             label.style.right = `${this.chart.priceScale('right').width() + 8}px`;
+            this.dailyView?.sync();
         };
         const observer = new ResizeObserver(volumePosition);
         observer.observe($(id + '-chart'));
-        const mainPane = this.chart.panes()[0].getHTMLElement();
-        if (mainPane)
-            observer.observe(mainPane);
         this.chart.subscribeCrosshairMove(param => {
             const candle = param.seriesData.get(this.candles);
-            // The library supplies the time; the original row owns Vol and its comparison.
+            // The library supplies the time; the original row owns turnover and its comparison.
             const time = candle ? Number(candle.time) : undefined;
             const row = time === this.active?.time ? this.active ?? undefined : this.rows.find(row => row.time === time);
             this.showHover(row);
             // Link the pointer's value, never the candle close or histogram value.
             if (param.sourceEvent) {
+                const crosshair = this.chart.options().crosshair;
+                $(id + '-chart').classList.toggle('chart-inspecting', !!param.point && !!(this.rows.length || this.active) &&
+                    crosshair.mode !== L.CrosshairMode.Hidden && (crosshair.vertLine.visible || crosshair.horzLine.visible));
                 const paneIndex = param.paneIndex ?? 0;
                 const series = paneIndex === 1 ? this.volume : this.candles;
                 const price = param.point ? series.coordinateToPrice(param.point.y) : null;
@@ -100,19 +113,25 @@ export class Panel {
                 this.onSelect({ ...row, time: Number(row.time), volume: null });
         });
         $(id + '-chart').addEventListener('mouseleave', () => {
+            $(id + '-chart').classList.remove('chart-inspecting');
             this.showHover();
             this.onHover();
         });
-        $(id + '-latest').addEventListener('click', () => {
-            this.chart.timeScale().scrollToRealTime();
-            const latest = this.active ?? this.rows.at(-1);
-            if (latest)
-                this.onSelect(latest);
-        });
+        $(id + '-latest').addEventListener('click', () => this.resetLatest());
+    }
+    resetLatest() {
+        if (this.dailyView)
+            this.dailyView.resetLatest();
+        else {
+            this.chart.timeScale().applyOptions({ barSpacing: BAR_SPACING });
+            this.chart.priceScale('right').applyOptions({ autoScale: true });
+            this.chart.timeScale().scrollToPosition(1, false);
+        }
     }
     reset(key) {
         if (this.key === key)
             return;
+        this.dailyView?.reset();
         this.key = key;
         this.rows = [];
         this.days.clear();
@@ -121,6 +140,7 @@ export class Panel {
         this.setQuotePrice();
         this.fitted = false;
         this.hoveredTime = undefined;
+        $(this.id + '-chart').classList.remove('chart-inspecting');
         this.clearLinkedPrice();
         this.chart.clearCrosshairPosition();
         this.candles.setData([]);
@@ -157,7 +177,7 @@ export class Panel {
         else
             this.quotePrice = { line: this.candles.createPriceLine(options), price };
     }
-    histogram(row) { return row.volume == null ? { time: row.time } : { time: row.time, value: row.volume, color: row.close >= row.open ? palette.candleUp + '99' : palette.candleDown + '99' }; }
+    histogram(row) { return row.turnover == null ? { time: row.time } : { time: row.time, value: row.turnover, color: row.close >= row.open ? palette.candleUp + '99' : palette.candleDown + '99' }; }
     render(data) {
         const next = data.active;
         const rebuild = data.bars !== undefined || this.active?.time !== next?.time;
@@ -210,6 +230,7 @@ export class Panel {
             scale.scrollToPosition(1, false);
             this.fitted = true;
         }
+        this.dailyView?.update(this.rows, this.active);
         $(this.id + '-empty').hidden = !!latest;
         const hovered = this.hoveredTime === next?.time ? next : this.rows.find(row => row.time === this.hoveredTime);
         this.showCandleInfo(hovered ?? latest);
@@ -221,12 +242,14 @@ export class Panel {
     }
     showCandleInfo(row) {
         const volume = $(this.id + '-volume');
-        const comparison = row?.volume_comparison;
+        const comparison = row?.turnover_comparison;
         const percent = comparison?.percent;
-        volume.textContent = `Vol ${compact(row?.volume)} · 5D Avg ${percent == null ? '—' : Math.trunc(percent) + '%'}`;
-        volume.title = row?.time === this.active?.time && row ? (row.volume == null ? 'Current candle volume unavailable'
-            : this.daily ? 'Current daily cumulative volume' : 'Volume for the current intraday candle') : 'Volume for this candle';
-        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${compact(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average.`
+        const dollars = (amount) => amount == null ? '—' : '$' + compact(amount);
+        volume.textContent = `Dollar Vol ${dollars(row?.turnover)} · 5D Avg ${percent == null ? '—' : Math.trunc(percent) + '%'}`;
+        volume.title = row?.time === this.active?.time && row ? (row.turnover == null ? 'Current candle turnover unavailable'
+            : this.daily ? 'Current daily cumulative turnover' : 'Turnover for the current intraday candle') : 'Turnover for this candle';
+        volume.title += `\nShares ${compact(row?.volume)}`;
+        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${dollars(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average turnover.`
             : '\nPrevious 5 trading days: comparison unavailable.';
         const node = $(this.id + '-ohlc');
         if (!row) {

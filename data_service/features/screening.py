@@ -1,11 +1,12 @@
 """Existing scan metrics and candidate selection, independent of storage."""
 
 def apply_filter(scan, config):
-    scan["adr_pass"] = scan["adr20"] >= config.adr20_min_pct
-    scan["adv_pass"] = scan["adv20"] >= config.adv20_min_usd
+    scan["adr_pass"] = scan["adr20"] >= config.minimum_adr20_percent
+    scan["mdv_pass"] = scan["mdv20"] >= config.minimum_mdv20_usd
+    scan["price_pass"] = scan["close"] > config.close_price_above_usd
 
-    scan["eligible"] = (scan["adr_pass"] & scan["adv_pass"] & scan["etf_pass"]
-                        & scan["history_pass"])
+    scan["eligible"] = (scan["adr_pass"] & scan["mdv_pass"] & scan["etf_pass"]
+                        & scan["history_pass"] & scan["price_pass"])
 
     return scan
 
@@ -24,7 +25,7 @@ def add_rank(scan):
 
 def mark_candidate(scan, config):
     scan["candidate"] = (
-        scan[["rfl1m_rank", "rfl3m_rank", "rfl6m_rank"]].le(config.rfl_top_n).any(axis=1)
+        scan[["rfl1m_rank", "rfl3m_rank", "rfl6m_rank"]].le(config.momentum_top_n).any(axis=1)
     )
 
     return scan

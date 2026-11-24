@@ -77,9 +77,9 @@ test('scan progress hides Ready and shows only target-date preparation or errors
     assert.equal(scanProgress(state).title, state.error);
 });
 
-test('all 38 conditions have unique fields and numeric slider stops', () => {
-    assert.equal(catalog.length, 38);
-    assert.equal(new Set(catalog.map(field => field.key)).size, 38);
+test('all 36 conditions have unique fields and numeric slider stops', () => {
+    assert.equal(catalog.length, 36);
+    assert.equal(new Set(catalog.map(field => field.key)).size, 36);
     for (const field of catalog.filter(field => field.type === 'number')) {
         const values = sliderValues(field, [], {});
         assert.ok(values.length > 1 && values.includes(field.default));
@@ -95,7 +95,7 @@ test('signed numeric boundaries are inclusive, conjunctive and reject active mis
     assert.equal(matchesFilters({ extended_k: null, below_days: 0 }, filters), false);
     assert.ok(matchesFilters({}, { extended_k: {} }));
     assert.equal(matchesFilters({ extended_k: Infinity }, { extended_k: { min: 0 } }), false);
-    assert.equal(matchesFilters({ close: 10 }, { close: { min: 5, max: 10, maxExclusive: true } }), false);
+    assert.equal(matchesFilters({ extended_k: 10 }, { extended_k: { min: 5, max: 10, maxExclusive: true } }), false);
 });
 
 test('MA classification options are OR within a field and AND with numeric conditions', () => {
@@ -108,11 +108,9 @@ test('MA classification options are OR within a field and AND with numeric condi
 });
 
 test('sliders cover outliers and preserve saved fractional thresholds in display units', () => {
-    const adv = catalog.find(field => field.key === 'adv20');
-    const values = sliderValues(adv, [{ adv20: 70_000_100_000 }], { min: 12_345_678 });
-    assert.ok(values.includes(12.345678) && values.at(-1) >= 70000.1);
     const distance = catalog.find(field => field.key === 'extended_k');
     assert.ok(sliderValues(distance, [{ extended_k: -21.5 }], {}).includes(-22));
+    assert.ok(sliderValues(distance, [], { min: 12.345678 }).includes(12.345678));
 });
 
 test('draft edits leave saved filters intact until explicit save, and cancellation restores them', () => {
@@ -148,8 +146,9 @@ test('setup sections preserve Tag order; renamed negative and helper labels rema
     ];
     assert.deepEqual(listSections(true, 'focus', tags).map(section => section.id), ['first','second','unclassified']);
     const excluded = listSections(true, 'excluded', tags);
-    assert.deepEqual(excluded.map(section => section.id), ['broken','extended','under50','hidden']);
-    assert.equal(excluded[2].name, 'Under-50');
+    assert.deepEqual(excluded.map(section => section.id), ['earnings','broken','extended','under50','hidden']);
+    assert.equal(excluded[0].name, 'In 14 Days');
+    assert.equal(excluded[3].name, 'Under-50');
     assert.deepEqual(listSections(false, 'discover', tags).map(section => section.list), ['focus','focus','focus']);
     assert.equal(sectionKey({ status: 'focus', section: 'second', tags: ['first','second'] }), 'focus:second');
     assert.equal(tagRole(tags[1]), 'extended');

@@ -152,7 +152,7 @@ export class AlertController {
     preview?: { id: string; cents: number };
     private layers: AlertChart[];
     private error = '';
-    constructor(panels: Panel[], public symbol: () => string, private mode: () => 'scan' | 'monitor' | 'trade',
+    constructor(panels: Panel[], public symbol: () => string, private mode: () => 'scan' | 'monitor',
                 private created: (symbol: string) => Promise<void>, private changed: (value: AlertState) => void) {
         this.layers = panels.map(panel => new AlertChart(panel, this));
         document.addEventListener('keydown', event => {

@@ -11,7 +11,7 @@ from data_service.calendar import ET, PHASES, TradingCalendar
 from data_service.config import Ticker, load_tickers
 from data_service.longbridge.history import BarDownloader
 from data_service.longbridge.realtime import RealtimeFeed
-from data_service.monitor import MonitorService
+from data_service.market import MarketService
 from data_service.storage import Bar, BarStore
 from data_service.longbridge.history import HistoryValidator
 
@@ -111,7 +111,7 @@ def test_quote_is_cumulative_separated_and_monotonic(cal):
 
 
 def test_api_blocks_nonuniverse_and_returns_lightweight_chart_rows(tmp_path, cal):
-    service = MonitorService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, calendar=cal)
+    service = MarketService([Ticker('PAYS.US', 'PAYS', 'focus')], tmp_path, calendar=cal)
     try:
         with pytest.raises(ValueError, match='outside Focus and Holdings'):
             asyncio.run(service.api('/v1/bars', {'symbol': ['AAPL.US']}))
@@ -176,3 +176,24 @@ def test_snapshot_failure_does_not_claim_live(cal):
     with pytest.raises(RuntimeError, match='No quote snapshot'):
         asyncio.run(quotes.connect())
     assert quotes.connection_health == 'CONNECTING'
+
+
+def test_independent_membership_shares_market_state_and_never_changes_workspace(tmp_path, cal):
+    service = MarketService([Ticker('XYZ.US', 'XYZ', 'focus')], tmp_path, calendar=cal)
+    try:
+        existing = service.sync['XYZ.US', '5m']
+        service.update_holdings(['XYZ.US', 'OTHER.US'])
+        assert service.symbols == ['XYZ.US', 'OTHER.US'] and len(service.sync) == 2 * len(PHASES)
+        assert service.sync['XYZ.US', '5m'] is existing
+        assert [row['ticker'] for row in service.board()] == ['XYZ']
+        service.update_tickers([])
+        assert service.symbols == ['XYZ.US', 'OTHER.US']
+        assert service.sync['XYZ.US', '5m'] is existing
+        service.select('OTHER.US', '2h')
+        assert set(service.view('OTHER.US', '2h')['charts']) == {'1d', '2h'}
+        service.update_holdings(['XYZ.US'])
+        assert 'OTHER.US' not in service.store.allowed and service.focus[0] == 'XYZ.US'
+        service.update_holdings([])
+        assert service.symbols == [] and not service.sync
+    finally:
+        service.store.close()

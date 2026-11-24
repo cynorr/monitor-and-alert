@@ -15,7 +15,7 @@ from .calendar import TradingCalendar, ET
 from .paths import RuntimePaths
 from .preferences import INITIAL_PREFERENCES, validate_preferences
 from .scan import candidates, previous_candidates, read_snapshot, build_day, publish_day, daily_chart, connect_daily, latest_completed_date, workspace_scope, enrich_snapshot, day_start
-from .monitor import MonitorService
+from .market import MarketService
 from .workspace import derive_day_view, normalize_ticker
 from .storage import atomic_json
 from .additional_info import AdditionalInfo
@@ -23,25 +23,25 @@ from .alerts import AlertEngine, price_cents
 from .alerts.engine import symbol_key
 from .alerts.sound import AlertSound
 from .list_rules import apply_rules, focus_classification
+from .features.events import days_to_earnings
 
 log = logging.getLogger(__name__)
 
 
 class Workbench:
     def __init__(self, workspace, runtime, daily_path, broker_factory, *, calendar=None, mock=False, only=None,
-                 holdings_factory=None, pipeline=None, bars_path=None, sound=None, additional_info=None, trade_factory=None):
+                 pipeline=None, bars_path=None, sound=None, additional_info=None, schwab_factory=None):
         self.workspace, self.runtime, self.daily_path = workspace, runtime, daily_path
         self.broker_factory, self.calendar = broker_factory, calendar or TradingCalendar()
         self.mock, self.only = mock, only
         self.bars_path = bars_path or RuntimePaths(runtime).bars_db
         self.pipeline = pipeline if not mock and only is None else None
         self.pipeline_task = None
-        self.mode, self.monitor, self.monitor_task = 'scan', None, None
-        self.holdings_factory = holdings_factory if not mock and only is None else None
-        self.holdings, self.holdings_task = None, None
-        self.trade = trade_factory() if trade_factory and not mock and only is None else None
-        self.trade_task = None
-        self.account_mode = "monitor"
+        self.mode, self.market, self.market_task = 'scan', None, None
+        self.schwab = schwab_factory() if schwab_factory and not mock and only is None else None
+        if self.schwab:
+            self.schwab.reference = self.trade_reference
+        self.schwab_task = None
         self.focus = ('', '5m')
         self.run_id = uuid.uuid4().hex
         self.started_at = int(time.time())
@@ -51,6 +51,8 @@ class Workbench:
         self.preferences_path = runtime / 'preferences.json'
         self.additional = additional_info or AdditionalInfo(RuntimePaths(runtime).additional_info_dir, enabled=False)
         self.additional_task = None
+        self.earnings_day = datetime.fromtimestamp(self.additional.now(), ET).date()
+        self.additional.on_earnings_change = self.earnings_changed
         self.preferences = validate_preferences(json.loads(self.preferences_path.read_text()) if self.preferences_path.exists() else deepcopy(INITIAL_PREFERENCES))
         self.list_context = self._list_context()
         self.sound = sound if sound is not None else AlertSound() if not mock and only is None else None
@@ -59,51 +61,40 @@ class Workbench:
         self.workspace_changed()
 
     def refresh_list_quotes(self):
-        if self.monitor:
+        if self.market:
             symbols = [row['symbol'] for row in self.scan_board(self.workspace.date)] if (
                 not self.mock and self.only is None) else []
-            self.monitor.update_quote_symbols(symbols)
+            self.market.update_quote_symbols(symbols)
 
     def refresh_alert_scope(self):
-        now = int(self.monitor.now()) if self.monitor else int(time.time())
-        day = datetime.fromtimestamp(now, ET).date().isoformat()
-        snap_symbols = set(self.holdings.symbols_for(day)) if self.holdings else set()
-        trade_symbols = set(self.trade.symbols(now)) if self.trade else set()
-        symbols = snap_symbols | trade_symbols
+        now = int(self.market.now()) if self.market else int(time.time())
+        account_symbols = set(self.schwab.symbols(now)) if self.schwab else set()
         focus = {t.symbol for t in self.workspace.tickers()}
-        if self.trade:
-            self.trade.subscribe(focus | trade_symbols)
-        if self.monitor:
-            self.monitor.update_holdings(sorted(symbols))
-            if self.monitor.intraday:
-                if self.account_mode == 'trade' and self.trade:
-                    open_symbols = self.trade.held_symbols()
-                    displayed = trade_symbols
-                else:
-                    open_symbols = {symbol_key(h['ticker']) for h in self.holdings.base['holdings']
-                                    if any(not s['closed_today'] for s in h['sequences'])} if self.holdings and self.holdings.base else set()
-                    displayed = snap_symbols
+        if self.schwab:
+            self.schwab.subscribe(focus | account_symbols)
+        if self.market:
+            self.market.update_holdings(sorted(account_symbols))
+            if self.market.intraday:
+                open_symbols = self.schwab.held_symbols() if self.schwab else set()
                 # Sold Today / Entries provide charts, never a holding-risk role.
-                self.monitor.intraday.scope(focus - displayed, open_symbols)
+                self.market.intraday.scope(focus - account_symbols, open_symbols)
         if self.alerts:
-            known = (self.holdings_factory is None or (self.holdings is not None and self.holdings.base is not None))
-            if self.trade:
-                known = known and self.trade.runtime.state.account_updated_at is not None
-            self.alerts.maintain(focus | symbols, known)
+            known = self.schwab is None or self.schwab.runtime.state.account_updated_at is not None
+            self.alerts.maintain(focus | account_symbols, known)
 
-    def trade_state(self):
-        if not self.trade:
+    def schwab_state(self):
+        if not self.schwab:
             return None
-        now = int(self.monitor.now()) if self.monitor else int(time.time())
-        quotes = {symbol: self.monitor.quote(symbol, now) for symbol in self.trade.symbols(now)} if self.monitor else {}
-        return self.trade.state(now, quotes)
+        now = int(self.market.now()) if self.market else int(time.time())
+        quotes = {symbol: self.market.quote(symbol, now) for symbol in self.schwab.symbols(now)} if self.market else {}
+        return self.schwab.state(now, quotes)
 
     def alert_state(self):
         return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'unread': [], 'eligible_symbols': [],
                 'scope_known': True, 'sound': {'enabled': False, 'error': None, 'playing': []}, 'error': None}
 
     def focus_classifications(self, tickers):
-        rows = {row['symbol'].removesuffix('.US'): row for row in self.snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
+        rows = {row['symbol'].removesuffix('.US'): row for row in self.list_snapshot(self.workspace.date)['rows']} if self.has_snapshot(self.workspace.date) else {}
         return {ticker: focus_classification(rows.get(ticker, {}), self.preferences) for ticker in tickers}
 
     def _list_context(self):
@@ -125,12 +116,15 @@ class Workbench:
                 atomic_json(self.workspace.root / value / 'scan.json', updated)
                 self.snapshot_cache.pop(value, None)
                 self.chart_cache.clear()
-                snapshot = updated
         if self.workspace.date == value:
-            self.workspace.reclassify(snapshot, self.preferences)
+            self.workspace.reclassify(self.list_snapshot(value), self.preferences)
+
+    def earnings_changed(self):
+        self.earnings_day = datetime.fromtimestamp(self.additional.now(), ET).date()
+        self.workspace_changed()
 
     def workspace_changed(self):
-        if self.only is None and self.has_snapshot(self.workspace.date) and self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences):
+        if self.only is None and self.has_snapshot(self.workspace.date) and self.workspace.reclassify(self.list_snapshot(self.workspace.date), self.preferences):
             return  # The save callback publishes the completed classification.
         context = self._list_context()
         if context != self.list_context:
@@ -139,34 +133,32 @@ class Workbench:
         if self.selected_date == self.latest_date:
             self.selected_date = self.workspace.date
         self.latest_date = self.workspace.date
-        if self.monitor:
+        if self.market:
             tickers = self.workspace.tickers()
             if self.only:
                 wanted = {symbol if symbol.endswith('.US') else symbol + '.US' for symbol in self.only}
                 tickers = [ticker for ticker in tickers if ticker.symbol in wanted]
-            self.monitor.update_tickers(tickers)
+            self.market.update_tickers(tickers)
         self.refresh_alert_scope()
         self.refresh_list_quotes()
 
     async def switch_mode(self, mode):
-        if mode not in ('scan', 'monitor', 'trade'):
-            raise ValueError('Choose Scan, Monitor or Trade')
-        if mode == 'trade' and self.trade is None:
-            raise ValueError('Trade is unavailable in this session')
+        if mode not in ('scan', 'monitor'):
+            raise ValueError('Choose Scan or Monitor')
+        if self.mock and mode != 'scan':
+            raise ValueError('Scan Mock only supports Scan mode')
         if self.switching:
             raise ValueError('Mode switch in progress')
         if mode == self.mode:
             return self.list_state()
         self.switching = True
         try:
-            if mode in ('monitor', 'trade'):
-                self.start_monitor()
+            if mode == 'monitor':
+                self.start_market()
             elif self.mock:
-                # Mock Scan stays offline; only an explicit Monitor switch may connect.
-                await self.stop_monitor()
+                # Scan Mock never starts live market data.
+                await self.stop_market()
             self.mode = mode
-            if mode != 'scan':
-                self.account_mode = mode
             self.refresh_alert_scope()
             self.refresh_list_quotes()
             self.run_id = uuid.uuid4().hex
@@ -175,23 +167,18 @@ class Workbench:
         finally:
             self.switching = False
 
-    def start_monitor(self):
-        if self.monitor is not None:
+    def start_market(self):
+        if self.market is not None:
             return
         tickers = self.workspace.tickers()
         if self.only:
             wanted = {s if s.endswith('.US') else s + '.US' for s in self.only}
             tickers = [t for t in tickers if t.symbol in wanted]
         broker = self.broker_factory({ticker.symbol for ticker in tickers})
-        self.monitor = MonitorService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path,
+        self.market = MarketService(tickers, self.runtime, broker, self.calendar, bars_path=self.bars_path,
                                    alerts=self.alerts, intraday=self.only is None)
         self.workspace_changed()
-        self.monitor_task = asyncio.create_task(self.monitor.run())
-        if self.holdings_factory:
-            if self.holdings is None:
-                self.holdings = self.holdings_factory()
-            self.holdings_changed()
-            self.holdings_task = asyncio.create_task(self.holdings.run(self.holdings_changed))
+        self.market_task = asyncio.create_task(self.market.run())
 
     async def start_background(self):
         if self.only is None:
@@ -200,12 +187,12 @@ class Workbench:
             except (OSError, ValueError, sqlite3.Error):
                 self.workspace.error = 'Could not refresh List from local Daily'
                 log.warning('Local List preparation failed; keeping the saved workspace')
-        if not self.mock or self.mode in ('monitor', 'trade'):
-            self.start_monitor()
+        if not self.mock:
+            self.start_market()
         if self.pipeline and self.pipeline_task is None:
             self.pipeline_task = asyncio.create_task(self.pipeline.run(on_publish=self.scan_published))
-        if self.trade and self.trade_task is None:
-            self.trade_task = asyncio.create_task(self.trade.run(self.holdings_changed))
+        if self.schwab and self.schwab_task is None:
+            self.schwab_task = asyncio.create_task(self.schwab.run(self.account_changed))
             self.refresh_alert_scope()
         if self.additional_task is None:
             self.additional_task = asyncio.create_task(self.additional.run())
@@ -217,45 +204,30 @@ class Workbench:
         self.chart_cache.clear()
         self.previous_cache.clear()
         if self.has_snapshot(self.workspace.date):
-            self.workspace.reclassify(self.snapshot(self.workspace.date), self.preferences)
+            self.workspace.reclassify(self.list_snapshot(self.workspace.date), self.preferences)
         self.refresh_list_quotes()
         self.run_id = uuid.uuid4().hex
 
-    async def stop_monitor(self):
-        if self.holdings_task:
-            self.holdings_task.cancel()
-            await asyncio.gather(self.holdings_task, return_exceptions=True)
-            self.holdings_task = None
-        if self.monitor_task:
-            self.monitor_task.cancel()
-            await asyncio.gather(self.monitor_task, return_exceptions=True)
-            self.monitor_task = None
-        if self.monitor:
-            self.monitor.broker.close()
-            self.monitor.store.close()
-            self.monitor = None
+    async def stop_market(self):
+        if self.market_task:
+            self.market_task.cancel()
+            await asyncio.gather(self.market_task, return_exceptions=True)
+            self.market_task = None
+        if self.market:
+            await self.market.broker.aclose()
+            self.market.store.close()
+            self.market = None
 
-    def holdings_changed(self):
+    def account_changed(self):
         self.refresh_alert_scope()
 
-    def holdings_state(self):
-        if self.mode != 'monitor' or self.holdings is None:
-            return None
-        quotes = {}
-        now = int(self.monitor.now())
-        for symbol in self.holdings.symbols:
-            quote = self.monitor.quote(symbol, now)
-            # Share the watchlist's official Daily-close correction for Chg%.
-            quotes[symbol] = {'Intraday': quote['regular'], **quote['extended']} if quote['regular'] else quote['extended']
-        return self.holdings.state(quotes, as_of=datetime.fromtimestamp(now, ET).date().isoformat())
-
     async def close(self):
-        if self.trade_task:
-            self.trade_task.cancel()
-            await asyncio.gather(self.trade_task, return_exceptions=True)
-            self.trade_task = None
-        if self.trade:
-            await self.trade.runtime.close()
+        if self.schwab_task:
+            self.schwab_task.cancel()
+            await asyncio.gather(self.schwab_task, return_exceptions=True)
+            self.schwab_task = None
+        if self.schwab:
+            await self.schwab.runtime.close()
         if self.additional_task:
             self.additional_task.cancel()
             await asyncio.gather(self.additional_task, return_exceptions=True)
@@ -266,7 +238,7 @@ class Workbench:
             self.pipeline_task = None
         if self.pipeline:
             await self.pipeline.close()
-        await self.stop_monitor()
+        await self.stop_market()
         if self.sound:
             await self.sound.close()
         if self.alerts:
@@ -274,8 +246,10 @@ class Workbench:
 
     async def run(self):
         while True:
+            if datetime.fromtimestamp(self.additional.now(), ET).date() != self.earnings_day:
+                self.earnings_changed()
             self.refresh_alert_scope()
-            for name, task in (('Monitor', self.monitor_task), ('Holdings', self.holdings_task)):
+            for name, task in (('Market', self.market_task),):
                 if task and task.done():
                     task.result()
                     raise RuntimeError(f'{name} task stopped unexpectedly')
@@ -298,11 +272,25 @@ class Workbench:
                 self.run_id = uuid.uuid4().hex
         return self.snapshot_cache[value][1]
 
+    def list_snapshot(self, value):
+        snapshot = self.snapshot(value)
+        if value != self.workspace.date:
+            return snapshot
+        today = datetime.fromtimestamp(self.additional.now(), ET).date()
+        rows = {row['symbol']: row for row in snapshot['rows']}
+        symbols = {symbol for symbol, row in rows.items() if row.get('candidate')}
+        symbols.update(ticker + '.US' for ticker in self.workspace.data['statuses'])
+        for symbol in sorted(symbols):
+            event = self.additional.next_earnings(symbol, today.isoformat())
+            rows[symbol] = {**rows.get(symbol, {'symbol': symbol, 'candidate': False}),
+                            'days_to_earnings': days_to_earnings(event['date'] if event else None, today)}
+        return {**snapshot, 'rows': list(rows.values())}
+
     def scan_board(self, value=None):
         value = value or self.selected_date
         if not self.has_snapshot(value):
             return []
-        snapshot = self.snapshot(value)
+        snapshot = self.list_snapshot(value)
         data = self.workspace.data if value == self.workspace.date else apply_rules(
             json.loads((self.workspace.root / value / 'workspace.json').read_text()), snapshot, self.preferences)
         prior = previous_candidates(self.workspace.root, value) if value != self.selected_date else self.previous()
@@ -321,10 +309,10 @@ class Workbench:
                                'is_new': ticker in view.new})
         return result
 
-    def monitor_board(self):
+    def focus_board(self):
         local = {row['symbol']: row for row in self.scan_board(self.workspace.date)}
         result = []
-        for row in self.monitor.board() if self.monitor else []:
+        for row in self.market.board() if self.market else []:
             state = self.workspace.data['statuses'].get(row['ticker'], {})
             result.append({**local.get(row['symbol'], {}), **state, **row,
                            'section': state.get('section', 'unclassified'), 'tags': state.get('tags', []),
@@ -338,8 +326,8 @@ class Workbench:
 
     @property
     def symbols(self):
-        if self.mode in ('monitor', 'trade'):
-            return self.monitor.symbols if self.monitor else []
+        if self.mode == 'monitor':
+            return self.market.symbols if self.market else []
         return [row['symbol'] for row in self.scan_board()]
 
     @property
@@ -348,39 +336,51 @@ class Workbench:
 
     def list_state(self):
         massive = self.pipeline.state() if self.pipeline else None
-        now = int(self.monitor.now()) if self.monitor else int(time.time())
-        holding_symbols = self.trade.symbols(now) if self.mode == 'trade' and self.trade else (
-            self.holdings.symbols_for(datetime.fromtimestamp(now, ET).date().isoformat()) if self.holdings else [])
-        return {'board': self.monitor_board() if self.mode in ('monitor', 'trade') else self.scan_board(),
-                'mode': self.monitor.mode if self.mode in ('monitor', 'trade') and self.monitor else self.mode, 'app_mode': self.mode,
-                'editable': self.only is None and (self.mode in ('monitor', 'trade') or (self.has_snapshot() and self.selected_date == self.workspace.date)),
-                'workspace_error': self.workspace.error, 'date': self.workspace.date if self.mode in ('monitor', 'trade') else self.selected_date,
+        now = int(self.market.now()) if self.market else int(time.time())
+        holding_symbols = self.schwab.symbols(now) if self.schwab else []
+        return {'board': self.focus_board() if self.mode == 'monitor' else self.scan_board(),
+                'mode': self.market.mode if self.mode == 'monitor' and self.market else self.mode, 'app_mode': self.mode,
+                'editable': self.only is None and (self.mode == 'monitor' or (self.has_snapshot() and self.selected_date == self.workspace.date)),
+                'workspace_error': self.workspace.error, 'date': self.workspace.date if self.mode == 'monitor' else self.selected_date,
                 'dates': sorted((p.parent.name for p in self.workspace.root.glob('*/scan.json')), reverse=True),
                 'preferences': self.preferences, 'mock': self.scan_mock if self.mode == 'scan' else False,
-                'holdings': self.holdings_state(), 'massive': massive,
-                'trade': self.trade_state() if self.mode == 'trade' else None,
-                'trade_enabled': self.trade is not None,
+                'massive': massive,
+                'schwab': self.schwab_state() if self.mode == 'monitor' else None,
+                'trading_enabled': self.schwab is not None,
                 'intraday': self.intraday_state(),
                 'holding_symbols': holding_symbols, 'current_regular_session': self.calendar.is_open(now),
                 'scan_running': self.generating or bool(massive and massive['running'])}
 
     def intraday_state(self):
-        if self.monitor and self.monitor.intraday and (self.mode in ('monitor', 'trade') or self.selected_date == self.workspace.date):
-            return self.monitor.intraday.state()
+        if self.market and self.market.intraday and (self.mode == 'monitor' or self.selected_date == self.workspace.date):
+            return self.market.intraday.state()
         return {'enabled': False, 'symbols': {}}
 
     def select(self, symbol, timeframe, source='watchlist'):
-        if self.mode in ('monitor', 'trade'):
+        if self.mode == 'monitor':
             if symbol not in self.symbols:
                 raise ValueError('Ticker is outside this Monitor workspace')
-            self.monitor.select(symbol, timeframe)
+            self.market.select(symbol, timeframe)
         elif symbol not in self.symbols:
             raise ValueError('Ticker is outside this Scan workspace')
         self.focus = symbol, timeframe
 
+    def trade_reference(self, symbol):
+        now = int(self.market.now())
+        regular = self.market.quote(symbol, now).get('regular')
+        today = datetime.fromtimestamp(now, ET).date()
+        current = regular and datetime.fromtimestamp(regular['timestamp'], ET).date() == today
+        session = self.calendar.session(today)
+        return {**self.market.charts.trade_reference(symbol, now),
+                'high': regular.get('high') if current else None,
+                'low': regular.get('low') if current else None,
+                'server_time': now, 'session_close': session[1] if session else None,
+                'release_at': session[1] - 1800 if session else None}
+
     def view(self, symbol, tf, revisions=None, source='watchlist'):
-        if self.mode in ('monitor', 'trade'):
-            return {**self.monitor.view(symbol, tf, revisions), 'app_mode': self.mode}
+        if self.mode == 'monitor':
+            return {**self.market.view(symbol, tf, revisions), 'app_mode': self.mode,
+                    **({'trade_reference': self.trade_reference(symbol)} if self.mode == 'monitor' else {})}
         value = self.selected_date
         key = value, symbol
         if key not in self.chart_cache:
@@ -394,11 +394,11 @@ class Workbench:
                 'quote': self.scan_quote(symbol)}
 
     def scan_quote(self, symbol):
-        if (self.selected_date != self.workspace.date or self.mock or not self.monitor or
-                symbol not in self.monitor.quotes.all_symbols):
+        if (self.selected_date != self.workspace.date or self.mock or not self.market or
+                symbol not in self.market.quotes.all_symbols):
             return {'regular': None, 'extended': {}, 'latest': None,
                     'connection_health': 'OFFLINE', 'error': None}
-        return self.monitor.quotes.output(symbol, int(self.monitor.now()))
+        return self.market.quotes.output(symbol, int(self.market.now()))
 
     def additional_info(self, symbol):
         return self.additional.info(symbol)
@@ -416,8 +416,8 @@ class Workbench:
             return self.list_state()
         if action in ('lookup','add'):
             ticker = normalize_ticker(payload['ticker'])
-            if self.mode in ('monitor', 'trade'):
-                info = await self.monitor.broker.validate_ticker(ticker)
+            if self.mode == 'monitor':
+                info = await self.market.broker.validate_ticker(ticker)
             else:
                 with closing(connect_daily(self.daily_path)) as db:
                     exists = db.execute("SELECT 1 FROM bars WHERE symbol=? AND timeframe='1d' AND ts<=? LIMIT 1",
@@ -535,7 +535,7 @@ class Workbench:
                     # Ready data stays cached; explicit Refresh still resets the daily manual layer.
                     self.workspace.reload()
                     if value == self.workspace.date and (not self.pipeline or self.pipeline.state()['ready']):
-                        self.workspace.reclassify(self.snapshot(value), self.preferences, reset=True)
+                        self.workspace.reclassify(self.list_snapshot(value), self.preferences, reset=True)
                     if value and value != self.selected_date:
                         self.selected_date = value
                         self.run_id = uuid.uuid4().hex
@@ -557,27 +557,28 @@ class Workbench:
             return self.additional_info(query['symbol'][0]) if 'symbol' in query else self.additional.state()
         if path == '/v1/alerts':
             return self.alert_state()
-        if path == '/v1/trade':
-            return self.trade_state()
-        if path == '/v1/holdings':
-            return self.holdings_state()
+        if path == '/v1/schwab':
+            return self.schwab_state()
         if path == '/health':
-            monitor = await self.monitor.api(path, query) if self.monitor else {}
-            return {**monitor, 'service': 'running', 'mode': self.mode, 'broker_active': self.monitor is not None,
+            monitor = await self.market.api(path, query) if self.market else {}
+            return {**monitor, 'service': 'running', 'mode': self.mode, 'broker_active': self.market is not None,
                     'quote_health': monitor.get('quote_health', 'OFFLINE'),
                     'mock': self.scan_mock if self.mode == 'scan' else False,
                     'alerts': {'enabled': self.alerts is not None, 'count': len(self.alerts.alerts) if self.alerts else 0,
                                'error': self.alerts.error if self.alerts else None},
                     'massive': self.pipeline.state() if self.pipeline else None,
-                    'additional_info': self.additional.state(),
-                    'holdings_task_active': bool(self.holdings_task and not self.holdings_task.done())}
+                    'additional_info': self.additional.state()}
         if path == '/v1/scan':
             return self.list_state()
         if path == '/v1/filter-catalog':
             from .preferences import CATALOG
             return CATALOG
-        if self.mode in ('monitor', 'trade'):
-            return await self.monitor.api(path, query)
+        if path == '/v1/chart' and self.mode == 'monitor':
+            symbol = query['symbol'][0]
+            self.market.store.check(symbol)
+            return self.view(symbol, query.get('timeframe', ['5m'])[0])
+        if self.mode == 'monitor':
+            return await self.market.api(path, query)
         if path == '/v1/chart':
             symbol = query['symbol'][0]
             if symbol not in self.symbols:

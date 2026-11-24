@@ -1,4 +1,4 @@
-// DOM geometry shared by both native account views; never measures allocated scrollWidth.
+// Holdings table DOM geometry; never measures allocated scrollWidth.
 export class HoldingsLayout {
     private signature = '';
     private minimum = 0;

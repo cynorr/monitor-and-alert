@@ -4,13 +4,12 @@ import type { MassiveState } from './types.js';
 import { tagRole, type Preferences } from './tags.js';
 import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
-import type { HoldingsState } from './holdings.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey, type ListColumn, type ListSection } from './board.js';
 import { attentionState, attentionAppearance } from './attention.js';
 import { symbolRow } from './symbol-row.js';
 import { rankedRows, stateAppearance, adrText, adrTitle, volumeBadge, type IntradayState } from './intraday-state.js';
 
-export type ListState = { trade?: import('./schwab-data.js').TradeState | null; trade_enabled?: boolean; type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor' | 'trade'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holdings?: HoldingsState | null; holding_symbols?: string[]; current_regular_session?: boolean; massive?: MassiveState | null; scan_running?: boolean; intraday?: IntradayState };
+export type ListState = { schwab?: import('./schwab-data.js').SchwabState | null; trading_enabled?: boolean; type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holding_symbols?: string[]; current_regular_session?: boolean; massive?: MassiveState | null; scan_running?: boolean; intraday?: IntradayState };
 
 type Candidate = { ticker: string; name: string };
 type Search = { list: string; section: string; candidate?: Candidate; message: string; lookup?: Promise<Candidate | null> };
@@ -514,7 +513,7 @@ export class Watchlist {
         if (scan) {
             value('price', money(ticker.close));
             value('adr', ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%');
-            value('adv', ticker.adv20 == null ? '—' : '$' + compact(ticker.adv20));
+            value('mdv', ticker.mdv20 == null ? '—' : '$' + compact(ticker.mdv20));
             row.querySelectorAll<HTMLElement>('[data-growth]').forEach(cell => { cell.textContent = growthValue(ticker[cell.dataset.growth!]); });
             return;
         }

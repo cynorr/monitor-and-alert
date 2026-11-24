@@ -1,6 +1,7 @@
-"""Explicit, bounded Longbridge check using one context and a temporary database."""
+"""Bounded real Longbridge check with a temporary bars DB and the normal usage ledger."""
 import argparse
 import asyncio
+import fcntl
 import json
 import sys
 import tempfile
@@ -12,9 +13,9 @@ from aiohttp import ClientSession
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from data_service.longbridge.client import LongbridgeClient
-from data_service.config import load_tickers
+from data_service.config import load_tickers, DEFAULT_CREDENTIALS
 from data_service.http_api import start_http
-from data_service.monitor import MonitorService
+from data_service.market import MarketService
 from data_service.storage import atomic_json
 from data_service.workspace import resolve_latest_workspace
 
@@ -30,8 +31,8 @@ async def run(args):
             requests.append({'symbol': symbol, 'timeframe': timeframe, 'count': count,
                              'returned': len(rows), 'seconds': round(time.monotonic() - started, 3)})
             return rows
-    broker = ObservedBroker(ROOT / 'longbridge-token.txt', {t.symbol for t in tickers}, runtime)
-    service = MonitorService(tickers, runtime, broker)
+    broker = ObservedBroker(DEFAULT_CREDENTIALS, {t.symbol for t in tickers}, ROOT / 'runtime')
+    service = MarketService(tickers, runtime, broker)
     runner = await start_http(service, args.port)
     task = asyncio.create_task(service.run())
     counts = {'messages': 0, 'history_snapshots': 0}
@@ -66,6 +67,7 @@ async def run(args):
         await asyncio.gather(task, return_exceptions=True)
         await runner.cleanup()
         service.store.close()
+        await broker.aclose()
 
 
 if __name__ == '__main__':
@@ -76,4 +78,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if not 0 < args.duration <= 600:
         parser.error('duration must be in (0, 600] seconds')
-    asyncio.run(asyncio.wait_for(run(args), args.duration + 45))
+    with (ROOT / 'runtime/service.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            parser.error('Stop the service before running live_check with the same usage ledger')
+        asyncio.run(asyncio.wait_for(run(args), args.duration + 45))

@@ -4,9 +4,9 @@ import { attentionState, attentionAppearance } from './attention.js';
 import { adrText, adrTitle, compareRank, stateAppearance, volumeBadge } from './intraday-state.js';
 import { HoldingsLayout } from './holdings-layout.js';
 import { numeric, openPercent, entryAmount, holdingTags, holdingDetails } from './schwab-data.js';
-export function orderedTradeRows(rows, sort, intraday) {
+export function orderedAccountRows(rows, sort, intraday) {
     const kind = { entry: 0, holding: 1, order: 2, sold: 3 };
-    const value = (r) => sort === 'symbol' ? r.ticker : sort === 'percent' ? openPercent(r.position) : numeric(sort in r ? r[sort] : r.position?.[sort]);
+    const value = (r) => sort === 'symbol' ? r.ticker : sort === 'percent' ? openPercent(r.position) : sort === 'holding_days' ? r.days_over_year ? Infinity : r.holding_days : numeric(sort in r ? r[sort] : r.position?.[sort]);
     return [...rows].sort((a, b) => {
         if (kind[a.kind] !== kind[b.kind])
             return kind[a.kind] - kind[b.kind];
@@ -19,8 +19,8 @@ export function orderedTradeRows(rows, sort, intraday) {
         return sort === 'symbol' ? String(y).localeCompare(String(x)) : x == null ? y == null ? 0 : 1 : y == null ? -1 : Number(y) - Number(x);
     });
 }
-const fields = ['symbol', 'market_value', 'percent', 'open_profit_loss', 'change_percent', 'extended_percent', 'day_profit_loss', 'adr', 'cum', 'local'];
-const labels = ['Symbol', 'Net Liq', 'P/L %', 'P/L', 'Chg%', 'Ext', 'P/L Day', 'ADR', 'CumVol', 'LocalVol'];
+const fields = ['symbol', 'sold_percent', 'market_value', 'holding_days', 'percent', 'open_profit_loss', 'change_percent', 'extended_percent', 'day_profit_loss', 'adr', 'cum', 'local'];
+const labels = ['Symbol', '', 'Net Liq', 'Days', 'P/L %', 'P/L', 'Chg%', 'Ext', 'P/L Day', 'ADR', 'CumVol', 'LocalVol'];
 const integer = (value) => value?.toLocaleString('en-US', { maximumFractionDigits: 0 }) ?? '';
 const formatted = (v, percent = false) => v == null ? '—' : `${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: percent ? 1 : 0, minimumFractionDigits: percent ? 1 : 0 })}${percent ? '%' : ''}`;
 export class SchwabHoldings {
@@ -39,12 +39,12 @@ export class SchwabHoldings {
     details = new Map();
     order = '';
     layout;
-    ordered() { return orderedTradeRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
+    ordered() { return orderedAccountRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
     constructor(select, active, cancel, width) {
         this.select = select;
         this.active = active;
         this.cancel = cancel;
-        this.layout = new HoldingsLayout($('schwab-table'), () => this.regular && this.states.enabled ? 7 : 6, width);
+        this.layout = new HoldingsLayout($('schwab-table'), () => this.regular && this.states.enabled ? 9 : 8, width);
         try {
             this.collapsed = localStorage.getItem('schwab-holdings-collapsed') === 'true';
         }
@@ -54,7 +54,7 @@ export class SchwabHoldings {
         }
         catch { } this.render(); };
         const header = $('schwab-head');
-        labels.forEach((label, index) => { const th = document.createElement('th'), button = document.createElement('button'); th.dataset.field = fields[index]; button.textContent = label; button.onclick = () => { this.sort = this.sort === fields[index] ? '' : fields[index]; this.render(); }; if (index < 7)
+        labels.forEach((label, index) => { const th = document.createElement('th'), button = document.createElement('button'); th.dataset.field = fields[index]; button.textContent = label; button.setAttribute('aria-label', label || 'Sold percentage'); button.onclick = () => { this.sort = this.sort === fields[index] ? '' : fields[index]; this.render(); }; if (index < 9)
             th.append(button);
         else
             th.textContent = label; header.append(th); });
@@ -127,7 +127,15 @@ export class SchwabHoldings {
         if (row.dataset.columns !== String(columns)) {
             row.replaceChildren();
             row.dataset.columns = String(columns);
-            for (const part of ['kind', 'amount', 'pnlPercent', 'pnl', 'qty'])
+            const label = row.insertCell();
+            label.className = 'holding-detail-label';
+            const node = document.createElement('span');
+            node.className = 'holding-history-node';
+            node.setAttribute('aria-hidden', 'true');
+            const kind = document.createElement('span');
+            kind.dataset.part = 'kind';
+            label.append(node, kind);
+            for (const part of ['qty', 'amount', 'days', 'pnlPercent', 'pnl'])
                 row.insertCell().dataset.part = part;
             const priceCell = row.insertCell(), price = document.createElement('span');
             price.dataset.part = 'price';
@@ -136,25 +144,32 @@ export class SchwabHoldings {
             cancel.className = 'icon-button holding-cancel';
             cancel.type = 'button';
             cancel.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-            const cancelCell = columns > 6 ? row.insertCell() : priceCell;
+            const cancelCell = columns > 7 ? row.insertCell() : priceCell;
             if (cancelCell === priceCell)
                 cancel.classList.add('inline-cancel');
             cancelCell.append(cancel);
-            const cell = columns > 7 ? row.insertCell() : cancelCell;
-            if (columns > 7)
-                cell.colSpan = columns - 7;
+            const cell = columns > 8 ? row.insertCell() : cancelCell;
+            if (columns > 8)
+                cell.colSpan = columns - 8;
             const line = document.createElement('div');
-            line.className = 'schwab-detail-values' + (columns <= 7 ? ' inline' : '');
+            line.className = 'schwab-detail-values' + (columns <= 8 ? ' inline' : '');
             for (const part of ['stop', 'riskPercent', 'risk']) {
                 const span = document.createElement('span');
                 span.dataset.part = part;
                 line.append(span);
             }
             cell.append(line);
+            const date = document.createElement('time');
+            date.dataset.part = 'date';
+            (this.regular ? cancelCell : cell).append(date);
         }
         row.classList.toggle('holding-closed', closed);
-        const values = { kind: value.kind, qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), stop: value.stop == null ? '' : money(value.stop), amount: integer(value.amount), pnlPercent: value.pnlPercent == null ? '' : formatted(value.pnlPercent, true), pnl: value.pnl == null ? '' : formatted(value.pnl), riskPercent: value.riskPercent == null ? '' : value.riskPercent.toFixed(2) + '%', risk: integer(value.risk) };
-        const titles = { kind: '', qty: 'Quantity', price: value.kind === 'Buy' ? 'Average cost' : 'Price', stop: 'Stop price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', pnlPercent: '', pnl: '', riskPercent: 'Risk percent', risk: 'Risk amount' };
+        const history = value.kind === 'Buy' || value.kind === 'Sold';
+        row.classList.toggle('holding-history', history);
+        row.dataset.detailKind = value.kind;
+        row.querySelector('.holding-history-node').hidden = !history;
+        const values = { kind: value.kind, date: value.date ?? '', days: value.days == null ? '' : String(value.days), qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), stop: value.stop == null ? '' : money(value.stop), amount: integer(value.amount), pnlPercent: value.pnlPercent == null ? '' : formatted(value.pnlPercent, true), pnl: value.pnl == null ? '' : formatted(value.pnl), riskPercent: value.riskPercent == null ? '' : value.riskPercent.toFixed(2) + '%', risk: integer(value.risk) };
+        const titles = { kind: '', date: '', days: '', qty: 'Quantity', price: 'Price', stop: 'Stop price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', pnlPercent: '', pnl: '', riskPercent: 'Risk percent', risk: 'Risk amount' };
         row.querySelectorAll('[data-part]').forEach(span => {
             const part = span.dataset.part;
             span.textContent = values[part];
@@ -165,6 +180,9 @@ export class SchwabHoldings {
                 span.classList.toggle('negative', pnl != null && pnl < 0);
             }
         });
+        const date = row.querySelector('[data-part="date"]');
+        date.hidden = !value.date;
+        date.dateTime = value.date ?? '';
         const cancel = row.querySelector('button');
         cancel.hidden = !value.cancelId;
         cancel.setAttribute('aria-label', `Cancel ${value.kind.toLowerCase()} order for ${symbol.replace('.US', '')}`);
@@ -207,25 +225,32 @@ export class SchwabHoldings {
             toggle.setAttribute('aria-expanded', String(this.expanded.has(item.symbol)));
             const tags = row.querySelector('.holding-tags'), nextTags = holdingTags(item);
             if (tags.textContent !== nextTags.join('')) {
-                tags.replaceChildren(...nextTags.map(tag => { const span = document.createElement('small'); span.className = 'symbol-flag' + (tag === 'Entry' ? ' entry' : ''); span.textContent = tag; return span; }));
+                tags.replaceChildren(...nextTags.map(tag => { const span = document.createElement('small'); span.className = 'symbol-flag ' + (tag === 'Entry' ? 'entry' : 'new'); span.textContent = tag; return span; }));
             }
             const p = item.position, value = p ? numeric(p.market_value) : item.kind === 'entry' ? entryAmount(item) : item.kind === 'sold' ? 0 : null;
             const values = [value, openPercent(p), numeric(p?.open_profit_loss), numeric(item.change_percent), numeric(item.extended_percent), numeric(p?.day_profit_loss)];
-            values.forEach((value, i) => { const cell = row.cells[i + 1]; cell.textContent = i === 0 ? integer(value) || '—' : formatted(value, [1, 3, 4].includes(i)); cell.className = i > 0 && value != null ? value > 0 ? 'positive' : value < 0 ? 'negative' : '' : ''; cell.title = i === 0 && item.kind === 'entry' ? 'Entry value' : i === 3 || i === 4 ? 'Longbridge quote' : 'Schwab account snapshot'; });
+            const cells = [2, 4, 5, 6, 7, 8];
+            values.forEach((value, i) => { const cell = row.cells[cells[i]]; cell.textContent = i === 0 ? integer(value) || '—' : formatted(value, [1, 3, 4].includes(i)); cell.className = i > 0 && value != null ? value > 0 ? 'positive' : value < 0 ? 'negative' : '' : ''; cell.title = i === 0 && item.kind === 'entry' ? 'Entry value' : i === 3 || i === 4 ? 'Longbridge quote' : 'Schwab account snapshot'; });
+            row.cells[3].textContent = item.days_over_year ? '>1y' : item.holding_days == null ? '—' : String(item.holding_days);
+            const sold = numeric(item.sold_percent);
+            row.cells[1].textContent = sold == null || sold === 0 ? '' : sold < .5 ? '<1%' : Math.round(sold) + '%';
             const state = this.regular && item.kind === 'holding' ? this.states.symbols[item.symbol] : undefined;
             stateAppearance(row, state);
             attentionAppearance(row, item.kind === 'holding' ? item.symbol : '', this.attention);
-            row.cells[7].textContent = adrText(state);
-            row.cells[7].title = adrTitle(state);
-            volumeBadge(row.cells[8], state?.cum_vol);
-            volumeBadge(row.cells[9], state?.local_vol);
+            row.cells[9].textContent = adrText(state);
+            row.cells[9].title = adrTitle(state);
+            volumeBadge(row.cells[10], state?.cum_vol);
+            volumeBadge(row.cells[11], state?.local_vol);
             desired.push(row);
-            if (this.expanded.has(item.symbol))
+            if (this.expanded.has(item.symbol)) {
+                const lastHistory = detail.filter(value => value.kind === 'Buy' || value.kind === 'Sold').pop()?.key;
                 for (const value of detail) {
                     const child = this.detailRow(item.symbol, value, item.kind === 'sold', columns);
+                    child.classList.toggle('history-last', value.key === lastHistory);
                     desired.push(child);
                     detailKeys.add(child.dataset.detail);
                 }
+            }
         }
         for (const key of this.nodes.keys())
             if (!keep.has(key)) {

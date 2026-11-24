@@ -10,7 +10,7 @@ from aiohttp import ClientSession, web
 from data_service.longbridge.client import LongbridgeClient, RateLimiter
 from data_service.http_api import create_app
 from data_service.longbridge.realtime import RealtimeFeed
-from data_service.monitor import MonitorService
+from data_service.market import MarketService
 from data_service.workspace import Workspace, normalize_ticker, resolve_latest_workspace
 from test_data_service import cal, at
 
@@ -102,7 +102,7 @@ def test_broker_rechecks_whitelist_after_waiting_for_request_budget():
         broker = object.__new__(LongbridgeClient)
         broker.allowed = frozenset({'PAYS.US'})
         broker.timeout, broker.secrets = 2, ()
-        broker.limiter, broker.inflight = Limiter(), asyncio.Semaphore(5)
+        broker.primary = SimpleNamespace(limiter=Limiter(), inflight=asyncio.Semaphore(5))
         calls = []
         async def request(): calls.append(True)
         task = asyncio.create_task(broker.call(request, symbols=['PAYS.US']))
@@ -156,7 +156,7 @@ def test_native_events_reload_and_switch_new_day_without_writing(tmp_path):
 def test_dynamic_universe_retains_existing_state_cancels_removed_and_supports_empty(tmp_path, cal):
     async def scenario():
         ws = Workspace(write(tmp_path / 'workspace.json', document()))
-        service = MonitorService(ws.tickers(), tmp_path, calendar=cal)
+        service = MarketService(ws.tickers(), tmp_path, calendar=cal)
         service.attach_workspace(ws)
         try:
             state = service.sync['PAYS.US', '5m']
@@ -188,16 +188,15 @@ def test_static_info_uses_same_context_and_does_not_authorize_market_data():
             return [SimpleNamespace(symbol='NVDA.US', name_en='NVIDIA')]
     broker = object.__new__(LongbridgeClient)
     broker.allowed = frozenset()
-    broker._context = Context()
+    broker.primary = SimpleNamespace(context=Context(), limiter=RateLimiter(), inflight=asyncio.Semaphore(5))
     broker.timeout, broker.secrets = 2, ()
-    broker.limiter, broker.inflight, broker.background = RateLimiter(), asyncio.Semaphore(5), asyncio.Semaphore(3)
     assert asyncio.run(broker.validate_ticker('NVDA'))['name'] == 'NVIDIA'
     with pytest.raises(ValueError):
         broker.check(['NVDA.US'])
     class Missing(Context):
         async def static_info(self, symbols):
             return []
-    broker._context = Missing()
+    broker.primary.context = Missing()
     with pytest.raises(ValueError, match='not found'):
         asyncio.run(broker.validate_ticker('NVDA'))
 
@@ -250,7 +249,7 @@ def test_list_http_mutations_validation_failure_origin_and_empty_stream(tmp_path
             return {'name': 'Validated stock'}
     async def scenario():
         wsfile = Workspace(write(tmp_path / 'workspace.json', document([], [])))
-        service = MonitorService([], tmp_path, Fake(), calendar=cal, clock=lambda: at('2026-09-18T13:44:45'))
+        service = MarketService([], tmp_path, Fake(), calendar=cal, clock=lambda: at('2026-09-18T13:44:45'))
         service.attach_workspace(wsfile)
         runner = web.AppRunner(create_app(service))
         await runner.setup()

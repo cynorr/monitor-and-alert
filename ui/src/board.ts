@@ -14,7 +14,7 @@ export function listColumns(scan: boolean, regular: boolean, intraday = false): 
         { field: 'local-vol', label: 'LocalVol', width: '62px' },
     ] : [];
     if (scan) return [symbol, price, { field: 'adr', label: 'ADR20', width: 'minmax(64px,.7fr)' },
-        { field: 'adv', label: 'ADV20', width: 'minmax(68px,.8fr)' },
+        { field: 'mdv', label: 'MDV20', width: 'minmax(68px,.8fr)' },
         { field: 'growth', label: '', width: 'minmax(144px,1.5fr)' }, ...state, tags, actions];
     return [symbol, price, { field: 'change', label: 'Chg%', width: 'minmax(64px,.7fr)' },
         ...(!regular ? [{ field: 'ext', label: 'Ext', width: 'minmax(68px,.8fr)' }] : []), ...state, tags, actions];
@@ -28,7 +28,7 @@ export function listSections(scan: boolean, list: string, tags: Tag[]): ListSect
         .concat({ list: name, id: 'unclassified', name: 'Unclassified', key: `${name}:unclassified` });
     if (!scan) return sections('focus');
     if (list !== 'excluded') return sections(list);
-    return ['broken', 'extended', 'under50', 'hidden'].map(id => ({ list, id, name: id === 'under50' ? 'Under-50' : id[0].toUpperCase() + id.slice(1), key: `${list}:${id}` }));
+    return ['earnings', 'broken', 'extended', 'under50', 'hidden'].map(id => ({ list, id, name: id === 'earnings' ? 'In 14 Days' : id === 'under50' ? 'Under-50' : id[0].toUpperCase() + id.slice(1), key: `${list}:${id}` }));
 }
 
 export function growthValue(value: unknown) {

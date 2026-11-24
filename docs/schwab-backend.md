@@ -1,11 +1,11 @@
 # Schwab Local Trading Backend
-## V1.2 后端设计与 API 规范
+## 后端设计与 API 规范
 
-**状态：已迁入 Market Monitor 的后端网关设计与协议参考。当前产品和集成入口见 [Schwab Trade](schwab-trade.md)。认证、内存状态、恢复、订单规范、风控和零写重试规则继续维护于本文；保留的 FastAPI/SSE 协议用于网关兼容及离线协议测试，正式服务使用现有 8765 HTTP/WebSocket，不启动 5678 独立服务。**  
+**状态：已迁入 Market Monitor 的后端网关设计与协议参考。当前产品和集成入口见 [Schwab账户与交易](schwab.md)。认证、内存状态、恢复、订单规范、风控和零写重试规则继续维护于本文；保留的 FastAPI/SSE 协议用于网关兼容及离线协议测试，正式服务使用现有 8765 HTTP/WebSocket，不启动 5678 独立服务。**
 **语言：Python 3.12+**  
 **运行环境：macOS / Mac mini**  
 **主程序：`data_service/schwab_backend.py`；网关测试：`tests/test_schwab_backend.py`**  
-**正式服务：`127.0.0.1:8765`；启动和授权命令见 [Schwab Trade](schwab-trade.md)**
+**正式服务：`127.0.0.1:8765`；启动和授权命令见 [Schwab账户与交易](schwab.md)**
 
 ---
 
@@ -38,9 +38,9 @@
 
 内存缓存不构成独立交易账本。
 
-**交易操作原子化**
+**底层交易写入边界**
 
-每个交易函数最多发起一次 Schwab 写请求。
+每个底层网关函数最多发起一次 Schwab 写请求；工作台接入层只组合 [Schwab账户与交易](schwab.md) 明确规定的卖出流程。
 
 不隐藏取消、替换或其他交易操作。
 
@@ -52,7 +52,7 @@ Schwab 原生 OTO 父子订单视为一次交易请求。
 
 **人工确认**
 
-Backend 只执行调用方明确提交的交易参数，不自动决定交易价格或数量。
+网关只执行明确提交的参数。工作台 ATR/EMA 自动模式在 Send 时按所选固定公式取参考价和全仓数量；手动目标始终采用提交的价格，具体规则见 [Schwab账户与交易](schwab.md)。
 
 **最小必要校验**
 
@@ -99,7 +99,7 @@ Mac mini 可以锁屏、睡眠、关机或断网。
 - 本地 Margin 计算模型。
 - 多账户切换。
 - 公网访问及远程用户。
-- 自动组合撤单、改单、下单。
+- 未经明确选择的复合交易操作。
 - 自动重试交易写请求。
 - 复杂交易状态机。
 - 复杂网络安全系统。
@@ -171,7 +171,7 @@ Mac mini 可以锁屏、睡眠、关机或断网。
 
 ### 3.3 保留的本地协议层
 
-以下为 `create_app()` 保留的 FastAPI/SSE 协议，不是正式工作台的启动配置。正式接入和路由只在 [Schwab Trade](schwab-trade.md) 维护。
+以下为 `create_app()` 保留的 FastAPI/SSE 协议，不是正式工作台的启动配置。正式接入和路由只在 [Schwab账户与交易](schwab.md) 维护。
 
 ```text
 Host: 127.0.0.1
@@ -452,6 +452,7 @@ state = {
 |---|---|
 | Account + Positions | 5 秒 |
 | Orders | 5 秒 |
+| Transactions | 接入层按 Schwab账户与交易 规范低频读取，仅展示使用 |
 | Quotes | 按需 |
 
 Account 与 Positions 共用：
@@ -474,6 +475,8 @@ toEnteredTime = 当前时间
 ```
 
 不添加 `status=WORKING` 过滤。
+
+SchwabREST.transactions(start,end) 仅新增 TRADE 历史 GET，复用原认证与解析。调用、缓存、FIFO 与失败隔离由 schwab.py/schwab_history.py 负责，交易网关不依赖该历史；详细范围只在 [Schwab账户与交易](schwab.md) 维护。
 
 正常基础请求量约：
 
@@ -567,7 +570,7 @@ OrderFillCompleted
 
 ### 7.4 Symbol 订阅
 
-V1 采用按需订阅。
+采用按需订阅。
 
 首次调用：
 
@@ -590,7 +593,7 @@ Backend：
 
 重连后使用 `SUBS` 恢复内存中的 Symbol 集合。
 
-V1 不实现自动退订。
+不自动退订。
 
 ### 7.5 实时行情内存
 
@@ -679,44 +682,18 @@ Backend 始终使用客户端最终提交的价格。
 
 ## 8. 固定交易函数
 
-V1 仅提供五个函数：
+固定底层函数：
 
 ```python
-def buy_market(
-    symbol: str,
-    qty: int
-) -> OrderResult:
-    ...
-
-
-def sell_market(
-    symbol: str,
-    qty: int
-) -> OrderResult:
-    ...
-
-
-def buy_breakout(
-    symbol: str,
-    qty: int,
-    buy_stop: Decimal,
-    sell_stop: Decimal
-) -> OrderResult:
-    ...
-
-
-def replace_stop(
-    order_id: int,
-    new_stop: Decimal
-) -> OrderResult:
-    ...
-
-
-def cancel_order(
-    order_id: int
-) -> OrderResult:
-    ...
+buy_market(symbol, qty)
+sell_market(symbol, qty)
+buy_breakout(symbol, qty, buy_stop, sell_stop)
+replace_stop(order_id, new_stop, new_qty=None, *, duration=None, release_time=None)
+place_stop(symbol, qty, stop, *, duration="GOOD_TILL_CANCEL", release_time=None)
+cancel_order(order_id)
 ```
+
+place_stop 只创建普通股票 NORMAL Sell Stop。duration/release_time 仅供固定 ATR/EMA 接入流程调用，客户端不能提交通用券商 payload。
 
 价格使用 Decimal。
 
@@ -739,7 +716,8 @@ SESSION = "NORMAL"
 | Sell Market | MARKET | DAY |
 | Breakout Parent | BUY STOP | DAY |
 | Breakout Child | SELL STOP | GOOD_TILL_CANCEL |
-| Replace Stop | SELL STOP | 保留原值 |
+| Replace Stop | SELL STOP | 默认保留原值；ATR/EMA 固定流程可更新 |
+| Position Stop | SELL STOP | ATR 为 GOOD_TILL_CANCEL；EMA 为 DAY + releaseTime |
 
 所有订单均为 `NORMAL` Session。
 
@@ -857,26 +835,11 @@ Backend：
 - 确认卖出数量不超过持有的多头数量。
 - 提交 MARKET SELL。
 
-对于已有 GTC Sell Stop：
+sell_market 底层仍只检查持仓并发送一次 MARKET SELL。工作台的 Stop 占用判断、必要撤单及确认顺序由 schwab.py 负责，规则只在 [Schwab账户与交易](schwab.md#卖出策略) 维护。
 
-- 不自动取消。
-- 不自动修改。
-- 不自动合并操作。
-- 不假定 Schwab 一定拒绝重复卖出。
+### 10.6 显式复合流程
 
-现有活动卖单通过 Orders API 提供，供调用方在人工确认时查看。
-
-### 10.6 不增加自动复合操作
-
-例如：
-
-```text
-Cancel Stop → Market Sell
-```
-
-必须是两次独立操作。
-
-`replace_stop()` 同样不能在 PUT 失败后，自动执行 DELETE + POST。
+仅工作台已明确选择的 Market/ATR/EMA 卖出策略可以组合固定底层函数。普通 replace_stop 不执行 Cancel + Place；EMA 接入层仅在明确不能替换时才使用撤旧新建。结果未知时停止，不自动重试或回滚。调用方不能传入任意交易步骤。
 
 ---
 
@@ -909,35 +872,15 @@ Child
 
 ## 12. Replace Stop
 
-允许目标：
+允许普通 NORMAL、SINGLE、单腿 EQUITY SELL STOP，无子策略，状态为 WORKING、AWAITING_STOP_CONDITION、QUEUED、ACCEPTED、PENDING_ACTIVATION 或 AWAITING_RELEASE_TIME。后两者允许 editable=false 的原生替换申请；其余仍要求 editable=true。AWAITING_PARENT_ORDER、已成交/取消/替换完成或非标准触发条件拒绝。
 
-- 普通已激活 Sell Stop。
-- 父 Buy Order 已成交后激活的 Sell Stop 子单。
-- Schwab 当前订单状态允许替换。
+1. GET 原订单并校验类型、状态、标准触发和原有效期。
+2. Stop 价格使用指定 Decimal；可选新数量为正整股，未指定则保留原数量。原数量优先读腿部、缺失读顶层，有限正整数才接受，不截断。
+3. 普通手动改价/改数量保留 duration 与 releaseTime；ATR/EMA 固定流程可显式给出新的 duration/release_time，ATR 清除原延迟设置。
+4. 仅重建 session、duration、orderType、orderStrategyType、stopPrice、orderLegCollection 及必要 releaseTime，保留显式 taxLotMethod/specialInstruction。不回填查询元数据或 positionEffect 等状态字段。
+5. PUT 一次，201 + Location 提取新 ID，触发后台刷新并返回 verified:false。底层函数不自动撤单或重建。
 
-当前接入也允许 `PENDING_ACTIVATION` 的普通 `NORMAL` Sell Stop：可在盘前、盘后或夜盘申请修改等待常规时段激活的止损价格，该状态不以 `editable=false` 作为本地拒绝条件。`AWAITING_PARENT_ORDER` 仍不允许；其他支持状态仍要求 `editable=true`。保持原有效期、数量、标准触发方式和一次 PUT，不改变执行 Session，也不改用 Cancel + Place；实际接受或拒绝由 Schwab 响应决定。
-
-不修改：
-
-- `AWAITING_PARENT_ORDER` 的子单。
-- 尚未独立激活的子单。
-- 已成交、取消或替换完成的订单。
-
-执行：
-
-1. GET 原订单。
-2. 校验类型和状态。
-3. 仅修改 Stop Price。
-4. PUT Replace 一次。
-5. 提取新 Order ID。
-6. 触发后台 REST 刷新。
-7. 立即返回 `verified: false`，订单快照由后台查询更新。
-
-数量优先读取订单腿部，缺失时回退至顶层。确认是有限正整数后转为整数，仅放入请求腿部的 `quantity`；非整股数量不截断。缺少数量或原有效期时返回明确的 `ORDER_CONFLICT`，不猜测参数。
-
-普通 STOP 仅用 session、duration、orderType、orderStrategyType、stopPrice、orderLegCollection 重建请求，不回填或校验路由、复合策略和 positionEffect 等状态字段；价格保持精确十进制字符串。显式税批次（包括 FIFO）和非空特殊指令继续保留。数量必须以股数计；仅支持固定价格、标准触发的 STOP，自定义触发依据、联动或激活条件返回 ORDER_CONFLICT，避免改价时重置触发方式。替换请求使用默认路由，不保留手动指定的执行路由。
-
-不手动执行 Cancel + Place。
+接入层额外刷新持仓/订单，检查新数量不超出可用持仓、目标低于新 Bid；普通修改不增加交易时段门禁。完整接入契约见 [Schwab账户与交易](schwab.md)。
 
 ---
 
@@ -1065,7 +1008,7 @@ ORDER_RESULT_UNKNOWN
 
 # Part 3 — 保留的 REST 与 SSE 协议
 
-以下描述 `create_app()` 的兼容协议和原生字段映射；正式集成的 `/v1/trade` 路由及 WebSocket 接入见 [Schwab Trade](schwab-trade.md)，不另起服务。
+以下描述 `create_app()` 的兼容协议和原生字段映射；正式集成的 `/v1/trade` 路由及 WebSocket 接入见 [Schwab账户与交易](schwab.md)，不另起服务。
 
 ## 16. 通用规范
 
@@ -1270,7 +1213,7 @@ Response：
 
 `cancelable` 在没有可靠返回值时允许 `null`。
 
-保留 Schwab 原始订单状态及父子关系。
+保留 Schwab 原始订单状态及父子关系。release_time 原样映射 releaseTime（可空），包括 AWAITING_RELEASE_TIME 的未释放延迟 Stop。
 
 #### 逐笔成交
 
@@ -1389,9 +1332,12 @@ Request：
 
 ```json
 {
-  "new_stop": "138.00"
+  "new_stop": "138.00",
+  "qty": 100
 }
 ```
+
+qty 可省略，省略时保留原数量。duration/releaseTime 不由此兼容路由暴露。
 
 ### 18.5 Cancel Order
 
@@ -1605,9 +1551,9 @@ Streaming 断线不意味着整个 Backend 不可用。
 
 ```text
 data_service/schwab_backend.py
-data_service/trade.py
+data_service/schwab.py
 tests/test_schwab_backend.py
-tests/test_trade.py
+tests/test_schwab.py
 ```
 
 单个 Backend 文件内部按职责分区：
@@ -1666,7 +1612,7 @@ tests/test_trade.py
 
 ## 24. 最终设计约束
 
-V1.2 的核心配置：
+底层网关配置（正式集成启动与职责见 Schwab账户与交易）：
 
 ```text
 Deployment:
@@ -1700,6 +1646,7 @@ Trading:
     Market Sell
     Breakout Buy
     Replace Stop
+    Place Position Stop
     Cancel Order
 
 Risk:
@@ -1717,7 +1664,7 @@ Excluded:
     database
     complex state machine
     automatic write retry
-    automatic composite trading operations
+    unrequested composite trading operations
     low-price special rules
     price deviation limits
     hardware power management
@@ -1731,7 +1678,7 @@ Excluded:
 
 **一、不得增加隐式交易操作。**
 
-每个函数只执行其名称对应的交易动作。
+底层函数只执行其名称对应的交易动作；接入层只组合已明确约定的固定卖出策略，不增加隐式交易决策。
 
 **二、不得增加通用订单参数。**
 
@@ -1755,12 +1702,6 @@ Excluded:
 
 ---
 
-**V1.2 文档结束。**
-
-这次修订之后，架构仍然保持原有规模。真正新增的只有一把 Token 刷新锁、WebSocket 心跳与重连、启动初始化重试，以及 Keychain 重新授权检测。
-
-这四项不会改变业务 API，也不需要数据库或复杂状态机。它们解决的是同一个具体问题：**Mac mini 停止运行一段时间后，恢复网络时 Backend 不应需要人工修复才能继续工作。**
-
 需要保留的实现边界是：睡眠和断网期间不提供实时监控，恢复后重新同步；已经提交到 Schwab 的服务器端订单不依赖本地 Backend 持续运行。
 
 **主要核查依据：**
@@ -1771,4 +1712,4 @@ Excluded:
 - [Schwab Streaming 字段及订阅参考](https://github.com/tylerebowers/schwabdev/blob/main/docs/pages-raw/stream.md)
 - [Python websockets 官方客户端及重连文档](https://websockets.readthedocs.io/en/latest/reference/asyncio/client.html)
 
-**文档状态：V1.2 可作为开发基准；券商相关执行行为以 Production 验收结果为准。**
+**券商相关执行行为以本人实盘验收结果为准。**

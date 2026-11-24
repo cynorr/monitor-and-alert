@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
+import math
+import pandas as pd
 
 from .calendar import ET
-from .indicators import series, preview, daily_summary, volume_context, volume_comparison
+from .indicators import series, preview, daily_summary, turnover_context, turnover_comparison, true_range, wilder_atr
 from .storage import Bar, bar_row
 
 
@@ -14,6 +16,7 @@ class ChartCache:
         self.store, self.calendar, self.now = store, calendar, clock
         self.live, self.live_revisions = {}, {}
         self.history, self.dependencies, self.summaries = {}, {}, {}
+        self.trade_atrs = {}
 
     def apply_candle(self, symbol, tf, row):
         return self.apply_candles(symbol, tf, [row])
@@ -38,7 +41,7 @@ class ChartCache:
         self.dependencies.clear()
 
     def remove(self, symbol):
-        for cache in (self.live, self.live_revisions, self.history, self.dependencies, self.summaries):
+        for cache in (self.live, self.live_revisions, self.history, self.dependencies, self.summaries, self.trade_atrs):
             for key in list(cache):
                 if key == symbol or isinstance(key, tuple) and key[0] == symbol:
                     cache.pop(key)
@@ -53,14 +56,14 @@ class ChartCache:
                       if datetime.fromtimestamp(ts, ET).date() == today and self.calendar.bar_end(ts, tf) <= now}
             merged.update((bar.ts, bar_row(bar)) for bar in self.store.window(symbol, tf))
             rows = [dict(merged[ts]) for ts in sorted(merged)]
-            volume = volume_context(rows, tf)
+            amounts = turnover_context(rows, tf)
             for row in rows:
-                row['volume_comparison'] = volume_comparison(row, tf, self.calendar, volume)
+                row['turnover_comparison'] = turnover_comparison(row, tf, self.calendar, amounts)
             previous = self.history.get(key)
             if previous is None or previous[1] != rows:
                 revision = previous[0] + 1 if previous else 1
                 base = series(rows, sma_period=50 if tf == '1d' else 65)
-                base['volume_context'] = volume
+                base['turnover_context'] = amounts
                 bars = [Bar(symbol, tf, row['time'], row['open'], row['high'], row['low'],
                             row['close'], row['volume'], row.get('turnover')) for row in rows]
                 self.history[key] = revision, rows, base, bars
@@ -76,7 +79,7 @@ class ChartCache:
         revision, rows, base, _ = self.closed(symbol, tf)
         active = self.forming(symbol, tf, now)
         if active:
-            active['volume_comparison'] = volume_comparison(active, tf, self.calendar, base['volume_context'])
+            active['turnover_comparison'] = turnover_comparison(active, tf, self.calendar, base['turnover_context'])
         result = {'symbol': symbol, 'timeframe': tf, 'revision': revision,
                   'active': active, 'indicator_preview': preview(base, active)}
         if known_revision != revision:
@@ -89,3 +92,20 @@ class ChartCache:
         if symbol not in self.summaries or self.summaries[symbol][0] != key:
             self.summaries[symbol] = key, daily_summary(bars, self.calendar, now)
         return self.summaries[symbol][1]
+
+    def trade_reference(self, symbol, now):
+        """Same Daily EMA as the chart; ATR excludes today's session, even after close."""
+        revision, rows, base, _ = self.closed(symbol, '1d')
+        day = datetime.fromtimestamp(now, ET).date()
+        key = revision, day
+        if symbol not in self.trade_atrs or self.trade_atrs[symbol][0] != key:
+            previous = [row for row in rows if datetime.fromtimestamp(row['time'], ET).date() < day]
+            value = wilder_atr(true_range(pd.DataFrame(previous))).iloc[-1] if len(previous) >= 20 else None
+            self.trade_atrs[symbol] = key, float(value) if value is not None and math.isfinite(value) else None
+        latest = preview(base, self.forming(symbol, '1d', now))
+        result = {'atr20': self.trade_atrs[symbol][1]}
+        for period in (10, 20):
+            name = f'ema{period}'
+            points = base['series'][name]
+            result[name] = latest[name]['value'] if name in latest else points[-1]['value'] if points else None
+        return result

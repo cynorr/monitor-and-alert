@@ -20,7 +20,7 @@ def workbench(tmp_path, monkeypatch):
         'orders': {'discover': [], 'focus': ['XYZ'], 'excluded': []},
     })
     atomic_json(day / 'scan.json', {'date': '2026-09-30', 'mock': True, 'rows': [
-        {'symbol': 'XYZ.US', 'candidate': False, 'close': 10, 'adr20': 5, 'adv20': 6000000}
+        {'symbol': 'XYZ.US', 'candidate': False, 'close': 10, 'adr20': 5, 'mdv20': 6000000}
     ]})
     def no_broker(*_): pytest.fail('Additional info must not construct a broker')
     info = AdditionalInfo(tmp_path / 'additional-info', enabled=False)
@@ -41,7 +41,7 @@ def test_optional_info_never_changes_chart_revision_and_get_does_not_fetch(workb
     second = app.view('XYZ.US', '5m', {'1d': 1})
     assert 'security_name' not in first and 'bars' not in second['charts']['1d']
     assert asyncio.run(app.api('/v1/additional-info', {'symbol': ['XYZ.US']}))['company_name'] == 'XYZ Inc.'
-    assert app.monitor is None
+    assert app.market is None
 
 
 def test_background_start_does_not_wait_for_optional_feed(workbench, monkeypatch):
@@ -85,7 +85,7 @@ def test_websocket_additional_message_has_selection_identity_and_preserves_cache
                     assert response.status == 403 and not app.additional.force
                     response = await client.post(base + '/v1/additional-info', json={'action': 'refresh'})
                     assert response.status == 200 and (await response.json())['running']
-                    assert app.additional.wakeup.is_set() and app.monitor is None
+                    assert app.additional.wakeup.is_set() and app.market is None
                     await ws.send_json({'type': 'select', 'symbol': 'XYZ.US', 'timeframe': '5m',
                                         'request_id': 31, 'mode': 'scan', 'source': 'watchlist'})
                     first = await receive(ws, 'additional_info')

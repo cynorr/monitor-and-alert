@@ -22,7 +22,7 @@ class Broker:
         return self
 
     def set_on_quote(self, callback): self.on_quote = callback
-    def set_on_candlestick(self, callback): self.on_candle = callback
+    def set_on_candlestick(self, callback, on_account_change=None): self.on_candle = callback
     def check(self, symbols): pass
     def close(self): pass
 
@@ -39,11 +39,11 @@ class Broker:
     async def snapshot(self, ctx, symbols):
         return [SimpleNamespace(symbol=s, timestamp=datetime.now(ET), last_done=10, volume=100) for s in symbols]
 
-    async def subscribe_candles(self, ctx, symbol, timeframe):
+    async def subscribe_candles(self, symbol, timeframe):
         self.calls.append(('candle', symbol, timeframe))
         return []
 
-    async def unsubscribe_candles(self, ctx, symbol, timeframe):
+    async def unsubscribe_candles(self, symbol, timeframe):
         self.calls.append(('remove_candle', symbol, timeframe))
 
 
@@ -79,7 +79,7 @@ def test_scan_quote_keeps_latest_received_price_without_clock_filtering(cal, clo
     app.mock = False
     app.workspace = SimpleNamespace(date='2026-10-22')
     app.selected_date = app.workspace.date
-    app.monitor = SimpleNamespace(now=lambda: now, quotes=quotes)
+    app.market = SimpleNamespace(now=lambda: now, quotes=quotes)
     result = app.scan_quote('PAYS.US')
     assert result['latest'] == values['Post']
     assert result['regular'] == values['Intraday']
@@ -110,7 +110,7 @@ def test_broker_scan_scope_allows_quote_but_rejects_trade_and_candles():
         with pytest.raises(ValueError, match='Focus and Holdings'):
             await broker.candles('SCAN.US', '1d')
         with pytest.raises(ValueError, match='Focus and Holdings'):
-            await broker.subscribe_candles(ctx, 'SCAN.US', '1d')
+            await broker.subscribe_candles('SCAN.US', '1d')
         assert len(calls) == 1
     asyncio.run(scenario())
 
@@ -124,11 +124,10 @@ def test_broker_rechecks_full_scope_while_symbol_remains_quote_only():
         broker = LiveBroker.__new__(LiveBroker)
         broker.allowed = broker.candle_allowed = frozenset({'CORE.US'})
         broker.timeout, broker.secrets = 1, ()
-        broker.limiter, broker.inflight = Limiter(), asyncio.Semaphore(5)
+        broker.primary = SimpleNamespace(limiter=Limiter(), inflight=asyncio.Semaphore(5))
         calls = []
         async def candles(*args): calls.append(args)
-        broker._context = SimpleNamespace(candlesticks=candles)
-        task = asyncio.create_task(broker.candles('CORE.US', '1d'))
+        task = asyncio.create_task(broker.call(candles, 'CORE.US', symbols=['CORE.US'], full=True))
         await asyncio.sleep(0)
         broker.candle_allowed = frozenset()  # It moved from Focus to Scan-only while awaiting budget.
         gate.set()

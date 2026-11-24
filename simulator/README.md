@@ -2,8 +2,10 @@
 
 双击 start.command 或在仓库运行 `./simulator/start.command --speed 30`，打开 http://127.0.0.1:18765/ 并确认 SIM 标签。一个命令同时启动行情与网页；不需启动正式服务。
 
-模拟器按 workspace focus/wait 生成 Quote、六周期 closed 与 open candle，复用实际调度、校验、指标与同一 UI。使用实例级交易时钟，不修改系统时钟。行情数据只在临时 SQLite，列表操作只写入启动时复制的临时 workspace.json，退出删除；新增返回模拟证券信息，不表示 Longbridge 验证通过；不读取凭证、不连 Longbridge。
+模拟器默认读取最新runtime/days下的workspace（--workspace可覆盖），复制到临时目录后按Focus生成 Quote、六周期 closed 与 open candle，复用实际调度、校验、指标与同一 UI。使用实例级交易时钟，不修改系统时钟。行情数据只在临时 SQLite，列表操作只写入启动时复制的临时 workspace.json，退出删除；新增返回模拟证券信息，不表示 Longbridge 验证通过；不读取凭证、不连 Longbridge。
 
 参数：`--workspace`、`--symbols`（当前白名单子集）、`--port`、`--speed`、`--start`（ET 盘中，例如 2026-09-18T13:44:45）。30 倍时 5m 约 10 秒；休市自动跳到下一交易日。
 
 不扩展故障注入、录制回放或真实数据回退。文件职责和检查见 [开发维护](../docs/development.md)。
+
+模拟器使用只读Monitor双图与共用MarketService；SIM标识常驻，模式切换禁用，不创建Schwab Runtime，不开放金融写入。

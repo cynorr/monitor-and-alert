@@ -41,7 +41,7 @@ def check_number(value, name):
 
 
 def check_data(data, day):
-    if not isinstance(data, dict) or data.get('status') != 'OK' or data.get('adjusted') is not False:
+    if not isinstance(data, dict) or data.get('status') not in ('OK', 'DELAYED') or data.get('adjusted') is not False:
         raise ValueError('Expected successful unadjusted Massive daily data')
     rows = data.get('results')
     count = data.get('resultsCount')

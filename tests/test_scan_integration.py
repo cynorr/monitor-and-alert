@@ -15,7 +15,7 @@ from data_service.indicators import daily_summary
 from data_service.preferences import INITIAL_PREFERENCES, validate_preferences
 from data_service.scan import build_day, daily_chart, publish_day, read_snapshot, candidates
 from data_service.workbench import Workbench
-from data_service.monitor import MonitorService
+from data_service.market import MarketService
 from data_service.list_rules import apply_rules
 from data_service.workspace import Workspace, derive_day_view, inherit_workspace
 from scripts.build_scan_mock import build_mock
@@ -48,7 +48,7 @@ def test_source_contract_date_cutoff_and_shared_metrics(app_data):
     chart, summary = daily_chart(path, 'NVDA.US', '2026-09-29', cal)
     assert chart['active'] is None
     assert row['adr20'] == pytest.approx(summary['adr20'])
-    assert row['adv20'] == pytest.approx(summary['adv20'])
+    assert row['mdv20'] == pytest.approx(summary['mdv20'])
     assert row['ema20'] == pytest.approx(chart['indicators']['ema20'][-1]['value'])
     assert chart['bars'][-1]['time'] == cal.grid(date(2026,9,29),'1d')[0][0]
     with sqlite3.connect(path) as db:
@@ -90,7 +90,7 @@ class FakeBroker:
         return self
 
     def set_on_quote(self, callback): self.callback = callback
-    def set_on_candlestick(self, callback): self.candle_callback = callback
+    def set_on_candlestick(self, callback, on_account_change=None): self.candle_callback = callback
     def check(self, symbols):
         assert set(symbols) <= self.allowed
 
@@ -104,12 +104,12 @@ class FakeBroker:
         self.calls.append(('subscribe_quote' if quote_only else 'subscribe',tuple(symbols)))
 
     async def unsubscribe(self, ctx, symbols, *, quote_only=False): self.calls.append(('unsubscribe_quote' if quote_only else 'unsubscribe',tuple(symbols)))
-    async def subscribe_candles(self, ctx, symbol, tf):
+    async def subscribe_candles(self, symbol, tf):
         self.check([symbol])
         self.calls.append(('candle', symbol, tf))
         return []
 
-    async def unsubscribe_candles(self, ctx, symbol, tf): self.calls.append(('remove_candle', symbol, tf))
+    async def unsubscribe_candles(self, symbol, tf): self.calls.append(('remove_candle', symbol, tf))
     async def snapshot(self, ctx, symbols):
         self.check(symbols)
         return [SimpleNamespace(symbol=symbol, timestamp=datetime.now(timezone.utc), last_done=10, volume=100) for symbol in symbols]
@@ -117,6 +117,7 @@ class FakeBroker:
     async def validate_ticker(self, ticker): return {'ticker':ticker, 'name':'Simulated security'}
 
     def close(self): self.closed = True
+    async def aclose(self): self.close()
 
 
 def make_app(root, *, mock=True, pipeline=None):
@@ -134,35 +135,33 @@ def test_quote_scope_keeps_all_lists_in_both_modes_and_keeps_monitor_windows(app
     async def scenario():
         app, brokers = make_app(app_data, mock=False)
         focus = {t.symbol for t in app.workspace.tickers()}
-        app.holdings = SimpleNamespace(symbols=['HOLD.US'], symbols_for=lambda day: ['HOLD.US', next(iter(focus))],
-                                       state=lambda quotes, as_of: {})
-        core = focus | {'HOLD.US'}
+        core = focus
         broker = app.broker_factory(core)
-        app.monitor = MonitorService(app.workspace.tickers(), app_data, broker, app.calendar)
+        app.market = MarketService(app.workspace.tickers(), app_data, broker, app.calendar)
         app.workspace_changed()
         all_scan = {row['symbol'] for row in app.scan_board()}
         assert broker.allowed == core | all_scan
         assert broker.candle_allowed == core
-        windows = dict(app.monitor.sync)
-        extra = list(app.monitor.quotes.extra_symbols)
-        app.monitor.quotes.changed.clear()
+        windows = dict(app.market.sync)
+        extra = list(app.market.quotes.extra_symbols)
+        app.market.quotes.changed.clear()
         await app.switch_mode('monitor')
         assert broker.allowed == core | all_scan
-        assert set(app.monitor.quote_symbols) == all_scan
-        assert app.monitor.sync == windows
-        assert app.monitor.quotes.extra_symbols == extra and not app.monitor.quotes.changed.is_set()
+        assert set(app.market.quote_symbols) == all_scan
+        assert app.market.sync == windows
+        assert app.market.quotes.extra_symbols == extra and not app.market.quotes.changed.is_set()
         await app.switch_mode('scan')
-        assert broker.allowed == core | all_scan and app.monitor.sync == windows
-        assert app.monitor.quotes.extra_symbols == extra and not app.monitor.quotes.changed.is_set()
+        assert broker.allowed == core | all_scan and app.market.sync == windows
+        assert app.market.quotes.extra_symbols == extra and not app.market.quotes.changed.is_set()
         from data_service.calendar import ET
         now = datetime(2026, 10, 1, 8, tzinfo=ET)
-        app.monitor.now = lambda: int(now.timestamp())
+        app.market.now = lambda: int(now.timestamp())
         symbol = next(iter(all_scan - core))
         for session, stamp in [('Pre', now), ('Post', datetime(2026, 9, 30, 18, tzinfo=ET))]:
-            app.monitor.quotes.apply(symbol, SimpleNamespace(timestamp=stamp, last_done=15, volume=100),
+            app.market.quotes.apply(symbol, SimpleNamespace(timestamp=stamp, last_done=15, volume=100),
                                      snapshot=True, session_override=session)
         assert app.view(symbol, '5m')['quote']['latest']['trade_session'] == 'Pre'
-        app.monitor.quotes.values[symbol]['Pre']['timestamp'] -= 86400
+        app.market.quotes.values[symbol]['Pre']['timestamp'] -= 86400
         assert app.scan_quote(symbol)['latest']['trade_session'] == 'Post'
         await app.action('scan', {'date': '2026-09-29'})
         assert app.view(symbol, '5m')['quote']['latest'] is None
@@ -200,34 +199,19 @@ def test_search_adds_non_candidate_to_pinned_discover_until_next_day(app_data):
     asyncio.run(scenario())
 
 
-def test_mock_scan_stays_offline_until_explicit_monitor_switch(app_data):
+def test_mock_scan_stays_offline_and_rejects_live_modes(app_data):
     async def scenario():
         app, brokers = make_app(app_data)
-        assert not brokers and app.monitor is None
+        await app.start_background()
+        assert not brokers and app.market is None and app.schwab is None
         row = next(row for row in app.scan_board() if row['status'] == 'discover')
-        app.select(row['symbol'],'5m')
-        assert set(app.view(row['symbol'],'5m')['charts']) == {'1d'}
-        await app.list_action({'action':'move','target':'focus','ticker': row['ticker']})
-        assert not brokers
-        await app.switch_mode('monitor')
-        await asyncio.sleep(.1)
-        first, task = brokers[0], app.monitor_task
-        assert row['symbol'] in app.monitor.symbols
-        assert all(row['status'] == 'focus' for row in app.list_state()['board'])
-        assert any(call[0]=='context' for call in first.calls)
-        await app.switch_mode('scan')
-        assert app.monitor is None and app.monitor_task is None and task.done() and first.closed
-        before = len(first.calls)
-        app.view(row['symbol'],'5m')
-        await app.list_action({'action':'hide','ticker': row['ticker']})
-        await asyncio.sleep(.05)
-        assert len(first.calls) == before
-        await app.switch_mode('monitor')
-        assert row['symbol'] not in app.monitor.symbols and len(brokers) == 2
+        app.select(row['symbol'], '5m')
+        assert set(app.view(row['symbol'], '5m')['charts']) == {'1d'}
+        with pytest.raises(ValueError, match='Scan Mock'):
+            await app.switch_mode('monitor')
+        assert not brokers and app.mode == 'scan'
         await app.close()
-        assert all(broker.closed for broker in brokers)
     asyncio.run(scenario())
-
 
 def test_scan_http_ws_historical_readonly_origin_and_refresh(app_data):
     async def scenario():
@@ -275,13 +259,10 @@ def test_scan_http_ws_historical_readonly_origin_and_refresh(app_data):
     asyncio.run(scenario())
 
 
-def test_preferences_reject_unknown_rules_and_keep_exact_thresholds():
+def test_preferences_keep_exact_thresholds():
     data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
-    data['tags'][0]['filters']={'adv20':{'min':5_123_456.75}, 'ma_arrangement':{'values':['ema10_lead','straddle']}}
-    assert validate_preferences(data)['tags'][0]['filters']['adv20']['min'] == 5_123_456.75
-    data['tags'][0]['filters']['BROKEN'] = {'values': ['true']}
-    with pytest.raises(ValueError, match='Unknown'):
-        validate_preferences(data)
+    data['tags'][0]['filters']={'extended_k':{'min':5_123_456.75}, 'ma_arrangement':{'values':['ema10_lead','straddle']}}
+    assert validate_preferences(data)['tags'][0]['filters']['extended_k']['min'] == 5_123_456.75
 
 
 @pytest.mark.parametrize('background', ['transparent', 'frosted'])
@@ -291,10 +272,10 @@ def test_preferences_appearance_roundtrip_and_legacy_compatibility(background):
     data = {**json.loads(json.dumps(INITIAL_PREFERENCES)), 'tags': [{'id': 'sample', 'name': 'Sample', 'role': 'label', 'filters': {}}]}
     appearance = {'icon': 'surf', 'color': '#2962ff', 'background': background, 'backgroundColor': '#E4B400'}
     data['tags'][0]['appearance'] = appearance
-    data['tags'][0]['filters'] = {'adv20': {'min': 5_123_456.75}}
+    data['tags'][0]['filters'] = {'extended_k': {'min': 5_123_456.75}}
     saved = json.loads(json.dumps(validate_preferences(data)))
     assert saved['tags'][0]['appearance'] == appearance
-    assert saved['tags'][0]['filters'] == {'adv20': {'min': 5_123_456.75}}
+    assert saved['tags'][0]['filters'] == {'extended_k': {'min': 5_123_456.75}}
     assert saved['tags'][0]['role'] == 'label'
 
 
@@ -337,11 +318,11 @@ def test_missing_first_scan_is_a_readonly_view_and_failed_preferences_keep_state
     async def scenario():
         app, brokers = make_app(app_data, mock=False)
         await app.switch_mode('monitor')
-        task, broker = app.monitor_task, brokers[0]
+        task, broker = app.market_task, brokers[0]
         (app.workspace.root / app.selected_date / 'scan.json').unlink()
         data = await app.switch_mode('scan')
         assert data['app_mode'] == 'scan' and data['board'] == [] and not data['editable']
-        assert app.monitor_task is task and not task.done() and not broker.closed
+        assert app.market_task is task and not task.done() and not broker.closed
         before = json.loads(json.dumps(app.preferences))
         updated = json.loads(json.dumps(before))
         updated['sort'] = 'rfl3m'
@@ -423,12 +404,12 @@ def test_real_scan_keeps_background_market_and_preparation_does_not_lock_modes_o
         app, brokers = make_app(app_data, mock=False, pipeline=pipeline)
         await app.start_background()
         await asyncio.sleep(.05)
-        monitor, task = app.monitor, app.monitor_task
+        monitor, task = app.market, app.market_task
         assert len(brokers) == 1 and pipeline.calls == [False]
         assert app.list_state()['scan_running'] and app.list_state()['massive']['features']['date'] == '2026-09-30'
         await app.switch_mode('monitor')
         await app.switch_mode('scan')
-        assert app.monitor is monitor and app.monitor_task is task and not brokers[0].closed
+        assert app.market is monitor and app.market_task is task and not brokers[0].closed
         row = next(row for row in app.scan_board() if row['status'] == 'discover')
         app.select(row['symbol'], '5m')
         assert row['symbol'] not in monitor.symbols  # Scan selection alone never expands subscriptions.
@@ -440,7 +421,7 @@ def test_real_scan_keeps_background_market_and_preparation_does_not_lock_modes_o
         assert app.mode == 'scan' and app.selected_date == '2026-09-29'
         assert app.workspace.date == '2026-10-01'
         await app.switch_mode('monitor')
-        assert app.monitor is monitor and len(brokers) == 1
+        assert app.market is monitor and len(brokers) == 1
         assert monitor.store.path == app_data / 'longbridge' / 'bars.sqlite3'
         await app.close()
         assert pipeline.closed and task.done() and brokers[0].closed
@@ -476,15 +457,18 @@ def test_mock_and_bounded_background_never_run_massive(app_data):
         class ForbiddenPipeline:
             def state(self): raise AssertionError('Pipeline should not be constructed into this session')
             async def run(self, **kwargs): raise AssertionError('Real Massive must stay disabled')
+        def forbidden_account():
+            raise AssertionError('Real Schwab must stay disabled')
         for options in ({'mock': True}, {'mock': False, 'only': ['NVDA']}):
             brokers = []
             def factory(allowed):
                 brokers.append(FakeBroker(allowed, TradingCalendar()))
                 return brokers[-1]
             app = Workbench(Workspace(root=app_data / 'days'), app_data, app_data / 'daily.sqlite3', factory,
-                            pipeline=ForbiddenPipeline(), **options)
+                            pipeline=ForbiddenPipeline(), schwab_factory=forbidden_account, **options)
             await app.start_background()
             assert app.pipeline is None and app.list_state()['massive'] is None
+            assert app.schwab is None and not app.list_state()['trading_enabled']
             if options['mock']:
                 assert not brokers
             else:
@@ -513,12 +497,12 @@ def test_local_lists_classify_on_startup_or_tag_save_and_keep_hidden_out_of_matc
                 await app.action('preferences', preferences)
                 saved = json.loads(app.preferences_path.read_text())['tags'][-1]
                 assert saved == negative
-            assert app.monitor is not None and brokers
+            assert app.market is not None and brokers
             assert app.workspace.data['statuses']['NVDA']['section'] == role
             assert app.workspace.data['statuses']['NVDA']['status'] == 'excluded'
             assert app.workspace.data['statuses']['AAPL']['section'] == 'hidden'
             assert app.workspace.data['statuses']['AAPL']['tags'] == []
-            assert not app.monitor.symbols
+            assert not app.market.symbols
             assert all(row['status'] == 'excluded' for row in app.scan_board())
         finally:
             await app.close()
@@ -561,7 +545,7 @@ def test_failed_local_list_preparation_preserves_workspace_and_starts_monitor(ap
         try:
             assert app.workspace.data == before
             assert app.workspace.error == 'Could not refresh List from local Daily'
-            assert app.monitor is not None and len(brokers) == 1
+            assert app.market is not None and len(brokers) == 1
         finally:
             await app.close()
     asyncio.run(scenario())

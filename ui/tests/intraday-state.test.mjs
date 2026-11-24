@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rankedRows, compareRank, adrText, adrTitle, volumeBadge } from '../public/intraday-state.js';
-import { sortedHoldingRows } from '../public/holdings.js';
+import { orderedAccountRows } from '../public/schwab-holdings.js';
 import { listColumns } from '../public/board.js';
 import { attentionAppearance, attentionState } from '../public/attention.js';
 
@@ -24,12 +24,12 @@ test('pins keep owner order; price, cumulative and local discrete tiers precede 
     assert.equal(compareRank(state([2, 1, 1], { up_adr: .61 }), state([2, 1, 1], { up_adr: .99 })), 0);
 });
 
-test('holdings risk sorts ahead of potential, duplicates stay together and closed lots remain at tail', () => {
-    const holding = (ticker, ids) => ({ ticker, sequences: ids.map(id => ({ buy_ids: [id], closed_today: id === 'closed' })) });
-    const data = [holding('UP', ['up']), holding('RISK', ['one', 'closed', 'two']), holding('NOTICE', ['warning'])];
+test('holdings risk sorts ahead of potential while sold symbols remain at the tail', () => {
+    const holding = (ticker, kind = 'holding') => ({ ticker, symbol: ticker + '.US', kind });
+    const data = [holding('UP'), holding('RISK'), holding('SOLD', 'sold'), holding('NOTICE')];
     const states = { 'UP.US': state([2, 3, 3]), 'RISK.US': state([4, 0, 0]), 'NOTICE.US': state([3, 0, 0]) };
-    assert.deepEqual(sortedHoldingRows(data, null, states).map(r => r.sequence.buy_ids[0]), ['one', 'two', 'warning', 'up', 'closed']);
-    assert.deepEqual(sortedHoldingRows(data, null).map(r => r.sequence.buy_ids[0]), ['up', 'one', 'two', 'warning', 'closed']);
+    assert.deepEqual(orderedAccountRows(data, '', { enabled: true, symbols: states }).map(r => r.ticker), ['RISK', 'NOTICE', 'UP', 'SOLD']);
+    assert.deepEqual(orderedAccountRows(data, '', { enabled: false, symbols: {} }).map(r => r.ticker), ['UP', 'RISK', 'NOTICE', 'SOLD']);
 });
 
 test('ADR label describes the displayed direction while tooltip keeps both values and percentage units', () => {

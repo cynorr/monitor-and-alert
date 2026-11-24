@@ -42,7 +42,8 @@ export type Row = {
     low: number;
     close: number;
     volume: number | null;
-    volume_comparison?: {
+    turnover?: number | null;
+    turnover_comparison?: {
         average: number | null;
         samples: number;
         percent: number | null;
@@ -94,9 +95,12 @@ export type Ticker = {
     errors?: string[];
     close?: number | null;
     adr20?: number | null;
-    adv20?: number | null;
+    mdv20?: number | null;
+    days_to_earnings?: number | null;
 };
 export type View = {
+    trade_reference?: { atr20: number | null; ema10: number | null; ema20: number | null;
+        high: number | null; low: number | null; server_time: number; session_close: number | null; release_at: number | null };
     type?: string;
     request_id?: number;
     symbol: string;
@@ -104,14 +108,14 @@ export type View = {
     server_time: number;
     run_id: string;
     mode?: string;
-    app_mode?: 'scan' | 'monitor' | 'trade';
+    app_mode?: 'scan' | 'monitor';
     mock?: boolean;
     date?: string;
     charts: Record<string, ChartData>;
     quote: Quote;
     summary: {
         adr20: number | null;
-        adv20: number | null;
+        mdv20: number | null;
         samples: number;
     };
     status: {
@@ -125,5 +129,5 @@ export function extendedQuote(quote?: Quote) {
     return latest && latest.trade_session !== 'Intraday' ? latest : undefined;
 }
 
-export const selectionRequest = (symbol: string, timeframe: string, request_id: number, mode: 'scan' | 'monitor' | 'trade', source: 'watchlist' | 'holdings') =>
+export const selectionRequest = (symbol: string, timeframe: string, request_id: number, mode: 'scan' | 'monitor', source: 'watchlist' | 'holdings') =>
     ({ type: 'select', symbol, timeframe, request_id, mode, source });

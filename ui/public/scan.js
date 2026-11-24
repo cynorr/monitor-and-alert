@@ -246,7 +246,7 @@ export class ScanControls {
             button.classList.toggle('active', group === this.activeList);
             button.disabled = this.pending;
         });
-        const displayPriority = (tag) => tagRole(tag) === 'setup' ? 0 : ['extended', 'broken', 'under50'].includes(tagRole(tag)) ? 2 : 1;
+        const displayPriority = (tag) => tagRole(tag) === 'setup' ? 0 : ['earnings', 'extended', 'broken', 'under50'].includes(tagRole(tag)) ? 2 : 1;
         $('scan-tags').replaceChildren(...[...this.preferences.tags].sort((a, b) => displayPriority(a) - displayPriority(b)).map(tag => {
             const button = document.createElement('button');
             button.dataset.tag = tag.id;

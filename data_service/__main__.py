@@ -7,9 +7,10 @@ import json
 import logging
 import re
 import sqlite3
+import time
 from pathlib import Path
 
-from .config import load_tickers
+from .config import load_tickers, DEFAULT_CREDENTIALS, credential_section
 from .paths import RuntimePaths
 from .storage import atomic_json
 from .workspace import Workspace, resolve_latest_workspace
@@ -17,14 +18,12 @@ from .workspace import Workspace, resolve_latest_workspace
 
 def parser():
     result = argparse.ArgumentParser(description='Scan and Monitor workbench')
-    result.add_argument('command', choices=('universe', 'serve', 'reconcile', 'verify', 'scan', 'massive'))
+    result.add_argument('command', choices=('universe', 'serve', 'reconcile', 'verify', 'scan', 'massive', 'longbridge-usage'))
     result.add_argument('--workspace', type=Path, help='Pin a workspace file instead of following the latest Scan day')
-    result.add_argument('--credentials', type=Path, default=Path('longbridge-token.txt'))
-    result.add_argument('--holdings-credentials', type=Path, default=Path('snaptrade-token.txt'))
-    result.add_argument('--massive-credentials', type=Path, default=Path('massive-token.txt'))
-    result.add_argument('--holdings-rules', type=Path, help='Buy/sell rules; defaults to runtime/holdings')
+    result.add_argument('--credentials', type=Path, default=DEFAULT_CREDENTIALS,
+                        help='Backend credential JSON grouped by provider')
     result.add_argument('--runtime', type=Path, default=Path('runtime'))
-    result.add_argument('--mode', choices=('monitor','scan','trade'), default='monitor')
+    result.add_argument('--mode', choices=('scan','monitor'), default='monitor')
     result.add_argument('--daily-db', type=Path, help='Read-only external daily SQLite; disables the built-in Massive pipeline')
     result.add_argument('--date', help='Completed trading date; scan defaults to upstream metadata.completed_date')
     result.add_argument('--force', action='store_true', help='Force the Massive splits/bars/features refresh; existing raw daily files are kept')
@@ -40,7 +39,7 @@ def parser():
 async def run(args, tickers):
     from .longbridge.client import LongbridgeClient
     from .http_api import start_http
-    from .monitor import MonitorService
+    from .market import MarketService
 
     if args.command == 'serve':
         from .workbench import Workbench
@@ -49,28 +48,21 @@ async def run(args, tickers):
         pipeline = None
         if not args.external_daily_db and not args.mock_scan and args.symbols is None:
             from .massive.pipeline import MassivePipeline
-            pipeline = MassivePipeline(paths, credentials=args.massive_credentials)
-        def holdings_factory():
-            from .snaptrade import SnapTrade, read_snaptrade_credentials
-            from .holdings import Holdings
-            return Holdings(SnapTrade(*read_snaptrade_credentials(args.holdings_credentials),
-                                      paths.holdings_dir / 'latest.json'),
-                            args.holdings_rules or paths.holdings_dir)
-        from .trade import SchwabTrade
+            pipeline = MassivePipeline(paths, credentials=args.credentials)
+        from .schwab import SchwabService
         workspace = Workspace(args.workspace, root=args.days)
         service = Workbench(workspace, args.runtime, args.daily_db,
                             lambda allowed: LongbridgeClient(args.credentials, allowed, args.runtime, args.region),
                             mock=args.mock_scan, only=args.symbols,
-                            holdings_factory=holdings_factory if args.holdings_credentials.exists() else None,
-                            pipeline=pipeline, bars_path=paths.bars_db, trade_factory=SchwabTrade,
+                            pipeline=pipeline, bars_path=paths.bars_db,
+                            schwab_factory=SchwabService,
                             additional_info=AdditionalInfo(paths.additional_info_dir,
                                                            enabled=not args.mock_scan and args.symbols is None))
         server = None
         try:
-            if args.mode == "trade" and service.trade is None:
-                raise ValueError("Trade is unavailable for mock or symbol-subset sessions")
+            if args.mock_scan and args.mode != 'scan':
+                raise ValueError('Use Scan mode for Scan Mock')
             service.mode = args.mode
-            service.account_mode = "trade" if args.mode == "trade" else "monitor"
             workspace.start_watcher()
             server = await start_http(service, args.port, args.cors_origin)
             await service.start_background()
@@ -82,8 +74,8 @@ async def run(args, tickers):
                     pass
             else:
                 await service.run()
-            if service.monitor:
-                summary = {s: service.monitor.validate(s) for s in service.monitor.symbols}
+            if service.market:
+                summary = {s: service.market.validate(s) for s in service.market.symbols}
                 atomic_json(args.runtime / 'last_run_report.json', {'health': await service.api('/health', {}), 'readiness': summary})
                 return 0 if summary and all(c['complete'] for s in summary.values() for c in s.values()) else 2
             return 0
@@ -94,7 +86,7 @@ async def run(args, tickers):
             await service.close()
 
     broker = None if args.command == 'verify' else LongbridgeClient(args.credentials, {t.symbol for t in tickers}, args.runtime, args.region)
-    service = MonitorService(tickers, args.runtime, broker, bars_path=RuntimePaths(args.runtime).bars_db)
+    service = MarketService(tickers, args.runtime, broker, bars_path=RuntimePaths(args.runtime).bars_db)
     try:
         if args.command == 'verify':
             for symbol in service.symbols:
@@ -107,7 +99,7 @@ async def run(args, tickers):
     finally:
         service.store.close()
         if broker:
-            broker.close()
+            await broker.aclose()
 
 
 def main(argv=None):
@@ -115,6 +107,15 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
     try:
         paths = RuntimePaths(args.runtime)
+        if args.command == 'longbridge-usage':
+            from .longbridge.usage import SymbolUsage, month_of, MONTH_ZONE
+            accounts = credential_section(args.credentials, 'longbridge')['accounts']
+            usage = SymbolUsage(paths.longbridge_usage, [account['id'] for account in accounts])
+            counts = usage.counts()
+            print(json.dumps({'month': month_of(time.time()), 'timezone': str(MONTH_ZONE),
+                              'accounts': counts, 'total_symbols': sum(counts.values()),
+                              'path': str(paths.longbridge_usage)}, indent=2))
+            return 0
         args.external_daily_db = args.daily_db is not None
         args.daily_db = args.daily_db or (args.runtime / 'daily.sqlite3' if args.mock_scan else paths.daily_db)
         args.days = args.workspace.parent.parent if args.workspace and re.fullmatch(r'\d{4}-\d{2}-\d{2}', args.workspace.parent.name) else args.runtime / 'days'
@@ -129,7 +130,7 @@ def main(argv=None):
                 except BlockingIOError:
                     raise ValueError('Stop the service before running the Massive command') from None
                 async def prepare():
-                    pipeline = MassivePipeline(paths, credentials=args.massive_credentials)
+                    pipeline = MassivePipeline(paths, credentials=args.credentials)
                     try:
                         await pipeline.run(force=args.force)
                         return pipeline.state()
