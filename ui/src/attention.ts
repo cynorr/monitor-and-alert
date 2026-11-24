@@ -8,11 +8,22 @@ export const attentionState = (state?: AlertState): Attention => ({
     paused: new Set(state?.paused_auto_symbols),
 });
 
+let autoAlertIconId = 0;
+
 export function autoAlertButton(symbol: string, toggle: (symbol: string) => void) {
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'icon-button auto-alert'; button.hidden = true;
     button.setAttribute('aria-keyshortcuts', 'M');
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v4l-2 4h16l-2-4V8M10 20h4"/><path class="auto-alert-slash" d="M4 4l16 16"/></svg>';
+    const mask = `auto-alert-cut-${++autoAlertIconId}`;
+    const slash = 'M4 4l16 16';
+    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <mask id="${mask}" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+            <rect width="24" height="24" fill="white" stroke="none"/>
+            <path d="${slash}" stroke="black" stroke-width="4.4"/>
+        </mask>
+        <path class="auto-alert-bell" mask="url(#${mask})" d="M18 9a6 6 0 0 0-12 0v4l-2 3h16l-2-3V9M10 20h4"/>
+        <path class="auto-alert-slash" d="${slash}"/>
+    </svg>`;
     button.onclick = event => { event.stopPropagation(); toggle(symbol); };
     return button;
 }

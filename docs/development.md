@@ -75,7 +75,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 - sound.py每次play建立独立任务，一次afplay播放完整两段WAV。beat_offsets是资源生成与播放节拍的共同来源；播放器启动后按实际本机时钟发布pulse_at，沿用现有Alert WS。playing每symbol仅输出最新任务的symbol/fired_at/pulse_at；旧任务仍可自然播放完，前端只响应当前未读fired_at的节拍。没有队列、抢占、历史或逐帧消息。退出取消任务并终止播放器；scripts/build_alert_sounds.py只用于离线准备资源。
 - GET /v1/alerts 和 WS alerts 提供 revision、alerts、unread、eligible_symbols、paused_auto_symbols、scope_known、sound、error。unread 项包含 symbol、direction、level、fired_at。POST 接受 create、rearm、delete、read 和 pause_auto，pause_auto 携带 symbol 与布尔 paused。M 与共用圆形按钮调用同一操作。
 - 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
-- ui/src/symbol-row.ts为Grid名单和Table持仓创建同一price-surface/price-wave；attention.ts仅应用最新提醒方向／等级及本次pulse_at，通过Web Animations短暂改变同一波浪亮度，不聚合标题。main.ts所有select及当前chart更新仍直接read。列表表面用Grid列范围定位；持仓表面挂在首个td，宽度由现有列几何计算，holdings-layout.ts的table ResizeObserver只同步这一个范围，背景原点计入首个td的实际边框。选中轮廓、状态底色与提醒独立。底色和文字只取 data-intraday。data-alert 控制边缘波浪。
+- ui/src/symbol-row.ts为Grid名单和Table持仓创建同一price-surface/price-wave；attention.ts应用最新未读与本次pulse_at，并按后端 paused_auto_symbols 更新共用图标。main.ts所有select及当前chart更新直接read。列表表面用Grid列范围定位；持仓表面挂在首个td，宽度由现有列几何计算，holdings-layout.ts的table ResizeObserver只同步这一个范围，背景原点计入首个td的实际边框。底色和文字取 data-intraday，data-alert 控制边缘波浪。
 - End/Home与Command+G/U在main.ts归一后路由到原名单jumpUnread，单键Home/End取消原生页面滚动，文本编辑不拦截。Watchlist.sections同时供render与完整Focus导航使用；ScanControls.visible可指定Focus并忽略显示筛选，showList可保留Tag草稿。Watchlist.update仅在成员退出当前List或转入Holdings时自动候补，Tag遮住的已选chart不因后台推送跳走；用户主动修改筛选仍沿用原反馈。Holdings复用ordered与choose，不增加已访问集合。
 
 ## 模式与上游数据
@@ -179,7 +179,7 @@ List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受
 
 新日 inherit_workspace 与显式 Refresh 共用 reset_daily_workspace，去掉当日人工层及排序，然后 apply_rules；机器 Excluded 不落盘。新日额外更新 carried，同日不改其含义。Workbench 在准备成功（包括 Ready 跳过）后重读当前 workspace，并 reclassify(reset=True)；不新增获取或准备状态。普通 publish_day 同日发布仍保留人工层，GET、报价更新、启动准备和保存 Tag 不触发用户 Refresh 的清理。正式默认 days 为 runtime/days。
 
-Watchlist.handleKey 维护观察名单键盘入口，ScanControls 仅管理 Tag/Filter、日期与显示偏好，不再持有成员勾选状态。行按钮和快捷键通过 actOnTicker/togglePin 共用单只动作。Focus Release 按名单归属路由，Scan/Monitor 复用 move；Delete/Backspace 通过名单焦点与已选图表提醒线分流。mutate 的 advance 参数按 [List 交互](list-interactions.md#自动下一只限定白名单) 调用。提交前保存可见顺序，等待期间阻止本次删除引起的首行候补，成功后 advanceSelection 选后项或末行；用户换股/切 List/模式后不抢选择。其余选择路径不改。Page 导航使用已渲染非空 section 的首个 symbol，展开目标；不引入全局事件或选择框架。
+Watchlist.handleKey 维护观察名单键盘入口，ScanControls 管理 Tag/Filter、日期与显示偏好。选股导航使用 Symbol 行的键盘焦点，选中行共用已有整行轮廓。行按钮和快捷键通过 actOnTicker/togglePin 共用单只动作。Focus Release 按名单归属路由，Scan/Monitor 复用 move。Delete/Backspace 通过名单焦点与已选图表提醒线分流。mutate 的 advance 参数按 [List 交互](list-interactions.md#自动下一只限定白名单) 调用。提交前保存可见顺序，等待期间阻止本次删除引起的首行候补，成功后 advanceSelection 选后项或末行。用户换股、切 List 或切模式后保留其选择。Page 导航使用已渲染非空 section 的首个 symbol，展开目标。
 
 前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口；Scan全局Search目标为Discover置顶，显式Focus section的+保留目标。Scan查询本地只读SQLite并截断到所选日，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 

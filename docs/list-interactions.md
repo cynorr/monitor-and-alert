@@ -32,6 +32,7 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | Scan · Focus | Shift + ← / → | 无操作 |
 
 - Page 导航只在当前 List 内进行，不切 Discover/Focus/Excluded。Pinned、In Play 参与 section 导航，空组跳过，目标折叠时展开。
+- ↑ / ↓ 和 Page 导航让目标 Symbol 行获得键盘焦点，选中外观走整行轮廓。行内按钮可以单独用 Tab 聚焦。
 - Shift 移动复用原人工排序范围：Default order 的普通 setup section、Pinned；Scan RFL 排序时普通组不重排，机器 Excluded 普通组与 In Play 保持自动顺序。拖动及其原选择行为不变。
 - 已置顶再按置顶、未置顶再按取消，均无操作、不跳下一只。取消置顶回到真实 section；若当前满足 In Play，仍按现有聚集规则显示。
 - 输入框、搜索及可编辑内容保留文本编辑行为；历史 Scan 与受限会话不可修改名单，导航仍可用。

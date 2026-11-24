@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-11-24：暂停自动报警图标
+
+本机 macOS 完成 TypeScript 构建、最新未读定向用例及 git diff --check。Focus 和 Holdings 继续使用同一个铃铛 SVG，只有暂停状态显示斜杠。本次未在正式页面切换暂停状态。
+
+斜杠留缝以正式 Monitor 中已暂停的 REPL.US 做浏览器只读验证。暂停铃铛应用遮罩，普通铃铛保持完整，原暂停设定保留。TypeScript 构建和 git diff --check 通过。
+
+## 2026-11-24：名单焦点与盘前暂停图标
+
+- 美东约 04:52 的正式服务仍在运行旧后端，Alert 接口不含暂停字段，库中没有暂停表。按原工作目录与参数平稳重启后，确认 Monitor 运行、Longbridge CONNECTED，Alert 接口返回暂停字段。
+- 盘前在正式页面用上下键切换真实名单，Scan 与 Monitor 均确认焦点在整行，ticker 文字无额外 outline。按 M 暂停 PRG.US，切到另一行时红色禁止符号仍可见，点图标恢复。浏览器计算样式确认未暂停的普通行默认隐藏铃铛，激活行显示铃铛，暂停行只显示禁止图案。验证后恢复 Monitor 与 PRG 的原暂停状态。
+- TypeScript 构建、15 项前端相关用例和 git diff --check 通过。本轮实测覆盖盘前状态切换，未覆盖 Regular 自动触发或声音播放。
+
 ## 2026-11-24：Focus Release 与自动报警
 
 环境为本机 macOS、Python 3.13、TypeScript 和 Node。美东凌晨现有 8765 服务未响应。复用现有 Longbridge 与 Alert SQLite 的只读输入验证，写入只落临时库。

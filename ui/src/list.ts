@@ -188,7 +188,7 @@ export class Watchlist {
 
     private selectRow(symbol: string) {
         this.onSelect(symbol);
-        this.rows.get(symbol)?.querySelector<HTMLButtonElement>('.ticker')?.focus({ preventScroll: true });
+        this.rows.get(symbol)?.focus({ preventScroll: true });
     }
 
     private jumpSection(direction: number) {
@@ -411,6 +411,7 @@ export class Watchlist {
 
     private createRow(ticker: Ticker, columns: ListColumn[], scan: boolean) {
         const row = document.createElement('div'); row.className = 'symbol-row';
+        row.tabIndex = -1;
         row.dataset.renderKey = this.rowKey(ticker);
         row.dataset.symbol = ticker.symbol; row.dataset.ticker = ticker.ticker; row.dataset.list = ticker.status;
         row.dataset.pinned = String(!!ticker.pinned);

@@ -242,7 +242,7 @@ export class Watchlist {
     }
     selectRow(symbol) {
         this.onSelect(symbol);
-        this.rows.get(symbol)?.querySelector('.ticker')?.focus({ preventScroll: true });
+        this.rows.get(symbol)?.focus({ preventScroll: true });
     }
     jumpSection(direction) {
         const sections = Array.from($('symbols').querySelectorAll('[data-section]'));
@@ -489,6 +489,7 @@ export class Watchlist {
     createRow(ticker, columns, scan) {
         const row = document.createElement('div');
         row.className = 'symbol-row';
+        row.tabIndex = -1;
         row.dataset.renderKey = this.rowKey(ticker);
         row.dataset.symbol = ticker.symbol;
         row.dataset.ticker = ticker.ticker;

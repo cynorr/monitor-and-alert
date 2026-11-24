@@ -131,15 +131,17 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .negative { color: var(--color-negative); }
 .row-actions { display: flex; align-items: center; gap: 10px; }
 .hide-ticker, .release-ticker, .pin-ticker { width: 24px; height: 24px; color: #7a838e; }
-.row-actions button { opacity: 0; }
-.symbol-row:hover .row-actions button, .symbol-row:focus-within .row-actions button, .pin-ticker[aria-pressed="true"] { opacity: 1; }
+.row-actions button, .auto-alert { opacity: 0; }
+.instrument-row:is(.active, :hover, :focus-within) :is(.row-actions button, .auto-alert),
+:is(.pin-ticker, .auto-alert)[aria-pressed="true"] { opacity: 1; }
 .pin-ticker:hover, .pin-ticker[aria-pressed="true"] { color: var(--color-blue); background: #eaf1ff; }
 .hide-ticker:hover { color: #d33838; background: #ffe9e9; }
 .release-ticker:hover { color: var(--color-ink); }
 .auto-alert { width: 24px; height: 24px; color: var(--color-tag-neutral); }
-.row-actions .auto-alert { opacity: 1; }
-.auto-alert:hover, .auto-alert[aria-pressed="true"] { background: var(--color-volume-low); color: var(--color-ink); }
-.auto-alert[aria-pressed="false"] .auto-alert-slash { display: none; }
+.auto-alert:hover { background: var(--color-volume-low); color: var(--color-ink); }
+.auto-alert[aria-pressed="true"] { color: var(--color-red-strong); }
+.auto-alert:not([aria-pressed="true"]) .auto-alert-bell { mask: none; }
+.auto-alert:not([aria-pressed="true"]) .auto-alert-slash { display: none; }
 .schwab-table .auto-alert { width: 18px; height: 18px; margin-left: 4px; vertical-align: middle; }
 .schwab-table .auto-alert svg { width: 13px; height: 13px; }
 .dragging { opacity: .45; }
@@ -264,6 +266,7 @@ button:disabled { cursor: default; opacity: .45; }
 
 /* Shared symbol row: one price surface, one selection outline, one latest-alert wave. */
 .instrument-row { position:relative; isolation:isolate; border-radius:999px; }
+.instrument-row.active:focus-visible { outline: none; }
 .instrument-row.active::after { content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 0 0 1px var(--color-ink),var(--row-shadow); pointer-events:none; z-index:1; }
 .price-surface { position:absolute; top:2px; bottom:2px; border-radius:999px; background:var(--price-background,transparent); pointer-events:none; z-index:-1; overflow:hidden; }
 .symbol-row > .price-surface { grid-column:1 / var(--price-end); grid-row:1; left:0; right:-10px; }

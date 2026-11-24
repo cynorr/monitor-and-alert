@@ -55,7 +55,7 @@ ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，
 
 背景与设计哲学：在有限行高中突出 Symbol、价格和有效提醒，减少无效数字与装饰。Chart 采用大圆角容器，名单采用胶囊；共用颜色与轻阴影语言，按信息密度调整阴影强度。行的选择、实时价格状态、最新未读报警分别表达，不增加新的选中模式或点击区域。
 
-- Focus、Holdings、Discover、Excluded 共用 Symbol 起始缩进，给半圆端部和 Holdings 展开三角留白。选中始终作用于整行，使用黑色细胶囊轮廓和轻微外阴影，不改背景；未选中 hover 为浅灰，不能覆盖价格状态。普通行与量能胶囊不额外加阴影。
+- Focus、Holdings、Discover、Excluded 共用 Symbol 起始缩进，给半圆端部和 Holdings 展开三角留白。选中始终作用于整行，使用黑色细胶囊轮廓和轻微外阴影。方向键选股时由整行接收键盘焦点，选中轮廓同时表示行焦点。Tab 单独聚焦操作按钮时仍使用按钮焦点提示。未选中 hover 为浅灰，不能覆盖价格状态。普通行与量能胶囊不额外加阴影。
 - 价格区域为连续胶囊。Monitor Focus 覆盖 Symbol、Last、Chg%、ADR；非 Regular 的 Ext 也属于价格区域。Tags、量能与操作独立。Scan 保持自身数据列，使用相同模板，不为两种量能重排列。Holdings 的区域边界只在 [Schwab 持仓 UI](schwab.md#列与格式) 维护。
 - 底色及文字始终表达当前实时状态。Blue Soft / Blue 对应上行关注／增强，Yellow Soft / Red Strong 对应回撤预警／紧急。强蓝、深红价格区域使用白字。Candidate Chg% 使用 Positive / Negative，强底色时继承白字。其他字段保持本色。
 - 最新未读用价格胶囊两侧横向流动的渐变波浪表达。浅底上的上行关注用 Blue 与 White 的 68% 混色，上行增强用 Blue，回撤预警用 Yellow，回撤紧急用 Red Strong。深底使用对应方向的浅色波浪以保留对比。同方向的紧急未读与强底色同时存在时，波浪用 White。
@@ -103,7 +103,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | 各 List 置顶 | 向上箭头推至顶线，置顶后蓝色、改为向下取消箭头 | Pin / Unpin：仅改变当日显示位置，保留 section |
 | Discover 行操作 | 轮廓垃圾桶 | Hide：人工屏蔽七个自然日 |
 | Focus / Hidden 行操作 | 列表轮廓和向外箭头 | Release：移出 Focus 或结束人工屏蔽 |
-| Focus / Holdings 自动报警 | 圆形轮廓铃铛，暂停时加斜杠 | 同一位置暂停／恢复当天的自动报警，仅悬停及辅助技术显示英文名称 |
+| Focus / Holdings 自动报警 | 圆形按钮，启用时为铃铛，暂停时为红色斜杠铃铛，铃身轮廓在斜杠两侧留出细缝 | 仅在行选中、悬停或获得焦点时显示启用图案。暂停图案持续显示。两种状态共用一个位置 |
 | Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
@@ -180,7 +180,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 - Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑只提供 Setup/Label，修改当日人工补充；Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
 - NEW 使用 Symbol 旁的小标记，颜色与 EMA10 一致为蓝色 **#2962ff**。ticker 不显示 `.US`。不显示成员勾选框。
 - Scan Price 是完成日收盘价，ADR20/MDV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。
-- 选中、hover 与价格区域外观共用 [Symbol row template](#symbol-row-template)。操作与 Tag 编辑按钮 hover/键盘 focus 时可见；报价更新保留行结构，仅刷新值。
+- 选中、hover 与价格区域外观共用 [Symbol row template](#symbol-row-template)。行操作在选中、悬停或获得焦点时可见，已置顶和已暂停自动报警的按钮持续显示。Tag 编辑按钮在悬停或键盘聚焦时可见。报价更新保留行结构，仅刷新值。
 
 ### Section、顺序与选择
 
