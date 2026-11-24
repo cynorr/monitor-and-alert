@@ -135,6 +135,13 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .symbol-row:hover .row-actions button, .symbol-row:focus-within .row-actions button, .pin-ticker[aria-pressed="true"] { opacity: 1; }
 .pin-ticker:hover, .pin-ticker[aria-pressed="true"] { color: var(--color-blue); background: #eaf1ff; }
 .hide-ticker:hover { color: #d33838; background: #ffe9e9; }
+.release-ticker:hover { color: var(--color-ink); }
+.auto-alert { width: 24px; height: 24px; color: var(--color-tag-neutral); }
+.row-actions .auto-alert { opacity: 1; }
+.auto-alert:hover, .auto-alert[aria-pressed="true"] { background: var(--color-volume-low); color: var(--color-ink); }
+.auto-alert[aria-pressed="false"] .auto-alert-slash { display: none; }
+.schwab-table .auto-alert { width: 18px; height: 18px; margin-left: 4px; vertical-align: middle; }
+.schwab-table .auto-alert svg { width: 13px; height: 13px; }
 .dragging { opacity: .45; }
 .drop-before { box-shadow: inset 0 2px var(--color-blue); }
 .drop-after { box-shadow: inset 0 -2px var(--color-blue); }
@@ -265,17 +272,20 @@ button:disabled { cursor: default; opacity: .45; }
 [data-intraday="up-urgent"] { --price-background:var(--color-blue); }
 [data-intraday="down-notice"] { --price-background:var(--color-yellow-soft); }
 [data-intraday="down-urgent"] { --price-background:var(--color-red-strong); }
-.instrument-row[data-intraday$="urgent"]:not([data-alert]) > .price-cell,
-.holdings-table tr[data-intraday$="urgent"]:not([data-alert]) > td:nth-child(-n+10) { color:var(--color-white); }
-.instrument-row[data-intraday$="urgent"]:not([data-alert]) .price-cell .ticker,
-.instrument-row[data-intraday$="urgent"]:not([data-alert]) .price-cell .symbol-flag,
-.holdings-table tr[data-intraday$="urgent"]:not([data-alert]) .ticker,
-.holdings-table tr[data-intraday$="urgent"]:not([data-alert]) .holdings-trades { color:inherit; }
+.instrument-row[data-intraday$="urgent"] > .price-cell,
+.holdings-table tr[data-intraday$="urgent"] > td:nth-child(-n+10) { color:var(--color-white); }
+.instrument-row[data-intraday$="urgent"] .price-cell .ticker,
+.instrument-row[data-intraday$="urgent"] .price-cell .symbol-flag,
+.holdings-table tr[data-intraday$="urgent"] .ticker,
+.holdings-table tr[data-intraday$="urgent"] .holdings-trades { color:inherit; }
 [data-alert="up-notice"] { --alert-color:color-mix(in srgb,var(--color-blue) 68%,var(--color-white)); }
 [data-alert="up-urgent"] { --alert-color:var(--color-blue); }
 [data-alert="down-notice"] { --alert-color:var(--color-yellow); }
 [data-alert="down-urgent"] { --alert-color:var(--color-red-strong); }
-.instrument-row[data-alert] .price-surface { background:var(--color-white); }
+[data-intraday$="urgent"][data-alert^="up-"] { --alert-color:var(--color-blue-soft); }
+[data-intraday$="urgent"][data-alert^="down-"] { --alert-color:var(--color-yellow-soft); }
+[data-intraday="up-urgent"][data-alert="up-urgent"],
+[data-intraday="down-urgent"][data-alert="down-urgent"] { --alert-color:var(--color-white); }
 .price-wave { display:none; position:absolute; inset:0; border-radius:inherit; }
 .instrument-row[data-alert] .price-wave {
     display:block; background-image:repeating-linear-gradient(100deg,var(--alert-color) 0px,transparent 68px,var(--alert-color) 136px);

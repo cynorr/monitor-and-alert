@@ -33,9 +33,10 @@ def level(value, low, high):
 
 
 class IntradayState:
-    def __init__(self, charts, *, notify=None, clock=time.time, config_path=None):
+    def __init__(self, charts, *, notify=None, withdraw_focus_adr=None, clock=time.time, config_path=None):
         self.charts, self.calendar, self.now = charts, charts.calendar, clock
         self.config, self.notify = load_config(config_path), notify
+        self.withdraw_focus_adr = withdraw_focus_adr
         self.volume = VolumeHistory(charts)
         self.focus, self.holdings = set(), set()
         self.quotes, self.previous, self.values, self.ranks, self.baselines = {}, {}, {}, {}, {}
@@ -115,6 +116,9 @@ class IntradayState:
             return
         value = self.price(symbol, now)
         old = self.previous.get(symbol)
+        if value is not None and value['role'] == 'candidate' and self.withdraw_focus_adr and (
+                old is None or value['up_level'] < old['up_level']):
+            self.withdraw_focus_adr(symbol, value['up_level'])
         if value is not None and old is not None:
             up = value['up_level'] > old['up_level']
             down = value['down_level'] > old['down_level']
@@ -130,10 +134,10 @@ class IntradayState:
             else:
                 direction, severity = ('up' if up or ema else None), 1
             if direction:
-                if self.notify:
-                    self.notify(symbol, direction, severity)
-                log.info('Intraday State %s %s level=%s price=%.4f up=%.2f down=%.2f', symbol, direction, severity,
-                         value['price'], value['up_adr'], value['down_adr'])
+                source = ('focus-adr' if value['role'] == 'candidate' else 'adr') if up or down else 'ema'
+                if not self.notify or self.notify(symbol, direction, severity, source=source):
+                    log.info('Intraday State %s %s level=%s price=%.4f up=%.2f down=%.2f', symbol, direction, severity,
+                             value['price'], value['up_adr'], value['down_adr'])
         if value is not None:
             self.previous[symbol] = value
             if self.values.get(symbol, {}).get('state') is None:

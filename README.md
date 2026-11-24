@@ -126,7 +126,7 @@ Longbridge账号按列表顺序使用，主报价使用首项；K线选号、月
 Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，无需安装独立应用或授权系统通知。继续使用上面的 `data_service serve` 命令启动；后台保持运行即可，Safari/Chrome 关闭或在后台不影响检测和声音。symbol未读提醒仅在所属Regular内持久化，收盘失效；选图或图表更新即已读，恢复时不重播声音。声音与运行要求见 [Alert 后台声音](docs/alert.md#后台声音与运行)。
 
 - 图表按住 **Command + Option** 左键创建，价格取鼠标水平线；点击横线选中后 **Backspace** 删除，上下拖动改价并重新激活。
-- Regular到达/穿越后价格线立即变灰，拖动重新激活；Symbol 未读波浪在任意方式选图或图表更新时清除，两者独立。Focus/Holdings未读导航保留Tag筛选，快捷键见[List交互](docs/list-interactions.md#未读-alert-导航)。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
+- Regular到达/穿越后价格线立即变灰，拖动重新激活；Symbol 未读波浪在任意方式选图或图表更新时清除，两者独立。Focus/Holdings未读导航保留Tag筛选。当前symbol可用 M 暂停当天的自动报警，手动线照常工作。快捷键见[List交互](docs/list-interactions.md#未读-alert-导航)。Scan Discover/Excluded 创建先按当前 Tag 规则加入 Focus。
 
 - 列表面板内切换Scan/Monitor；后台Monitor任务、订阅和Schwab刷新持续运行。两个SQLite来源共用读取/计算，不拼接历史。
 - Scan：Discover/Focus/Excluded与日期、Refresh同排，36项形态/财报Filters、保存的Tags；RFL排序位于增长数据列头。按 [Massive 配置](docs/massive-data.md#独立配置与处理顺序) 初筛后，三组Top75 RFL排名取并集；Close严格大于$5。候选、当日人工Discover、Focus与有效Hidden均有完整特征及Growth使用的三种RFL数值，不为继承名单另行排名，详见 [计算范围](docs/massive-data.md#名单完整特征范围)。直接操作当前选中 symbol，快捷键与行为见 [List 交互](docs/list-interactions.md)。历史日期名单只读；Refresh 跳过已准备数据但重新分类名单。

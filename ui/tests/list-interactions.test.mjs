@@ -34,6 +34,16 @@ test('keyboard routes Scan removal, directional admission, swap and Command pin 
     list.handleKey(key('ArrowLeft', { shiftKey: true }));
     list.handleKey(key('ArrowUp', { shiftKey: true, metaKey: true }));
     assert.deepEqual(calls, [['pin', true]]);
+    calls.length = 0; list.tickers[0].status = 'focus';
+    const focusedList = { target: { closest: selector => selector === '#symbols' } };
+    for (const scan of [false, true]) {
+        list.scan.enabled = scan;
+        list.handleKey(key('Backspace'));
+        list.handleKey(key('Backspace', focusedList));
+        list.handleKey(key('Delete', focusedList));
+        list.handleKey(key('Delete', { ...focusedList, repeat: true }));
+    }
+    assert.deepEqual(calls, ['remove', 'remove', 'remove', 'remove']);
     calls.length = 0; list.editable = false;
     list.handleKey(key('ArrowUp', { shiftKey: true, metaKey: true }));
     list.handleKey(key('ArrowDown', { shiftKey: true }));
@@ -56,7 +66,7 @@ test('single-row actions only advance for the agreed whitelist; machine release 
         [['hide', undefined, 'A'], ['move', 'discover', 'A'], ['move', 'focus', 'A'], ['move', 'discover', 'A'], ['pin', false, 'A']]);
     calls.length = 0; list.scan.enabled = false; a.status = 'focus'; a.section = 'unclassified';
     await list.actOnTicker(a, 'remove');
-    assert.deepEqual(calls, [[{ action: 'hide', ticker: 'A' }, undefined]]);
+    assert.deepEqual(calls, [[{ action: 'move', ticker: 'A', target: 'discover' }, 'A']]);
 });
 
 test('next uses pre-action visible order, stays at the tail, clears empty and never overrides another selection', () => {
@@ -64,7 +74,7 @@ test('next uses pre-action visible order, stays at the tail, clears empty and ne
     list.selected = 'B.US';
     list.advancing = { symbol: 'B.US', list: 'discover', scan: true, order: ['A.US', 'B.US', 'C.US'] };
     list.onSelect = symbol => choices.push(symbol);
-    const rows = names => new Map(names.map(n => [n + '.US', { scrollIntoView() {} }]));
+    const rows = names => new Map(names.map(n => [n + '.US', { querySelector: () => null, scrollIntoView() {} }]));
     list.rows = rows(['B', 'A', 'C']); list.advanceSelection(); // Pin B before A.
     list.rows = rows(['A']); list.advanceSelection(); // Last survivor; no wrap to unrelated list.
     list.rows = rows([]); list.advanceSelection();
@@ -79,7 +89,7 @@ test('Page navigation unfolds the next section and does not wrap', () => {
     const list = listFixture(), choices = [];
     const groups = ['A', 'B'].map(name => ({ dataset: { firstSymbol: name + '.US' },
         querySelector: () => ({ dataset: { toggle: name } }) }));
-    list.rows = new Map(groups.map((group, i) => [[...['A.US', 'B.US']][i], { closest: () => group, scrollIntoView() {} }]));
+    list.rows = new Map(groups.map((group, i) => [[...['A.US', 'B.US']][i], { closest: () => group, querySelector: () => null, scrollIntoView() {} }]));
     list.collapsed.add('B'); list.render = () => {};
     list.onSelect = symbol => { list.selected = symbol; choices.push(symbol); };
     globalThis.document = { getElementById: () => ({ querySelectorAll: () => groups }) };
@@ -96,7 +106,7 @@ test('saving skips transient first-row fallback; failure and ordinary edits do n
     const nodes = new Map();
     globalThis.document = { getElementById: id => { if (!nodes.has(id)) nodes.set(id, {}); return nodes.get(id); } };
     list.tickers.push(ticker('B')); list.visible = () => list.tickers;
-    list.render = () => { list.rows = new Map(list.tickers.map(t => [t.symbol, { scrollIntoView() {} }])); };
+    list.render = () => { list.rows = new Map(list.tickers.map(t => [t.symbol, { querySelector: () => null, scrollIntoView() {} }])); };
     list.onSelect = symbol => { list.selected = symbol; choices.push(symbol); };
     list.onUpdate = data => list.update(data); list.render();
     const a = list.tickers[0];

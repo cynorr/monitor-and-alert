@@ -8,6 +8,7 @@ Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-
 
 - 显式 Refresh 与跨日首次分类共用人工状态清理，不重复准备 Ready 数据；清理后 Focus 接受自动淘汰。普通重分类与用户 Refresh 分开，详细边界见 List 设计。
 - `workspace.py` 管三名单归属、顺序、迁移与同步保存；`list_rules.py` 只做纯条件匹配和分类，不请求行情；财报日期由Workbench在当前名单的list_snapshot统一补入，纯日期算子位于features/events.py，不写回行情截面。
+- Scan/Monitor 的 Focus Release 共用现有名单移动及重新分类。自动报警暂停与撤回由 AlertEngine 负责，交易网关保持独立。
 - 手动与 Alert 移入 Focus 共用 [统一入选规则](../docs/list-design.md#统一移入-focus)；不继承来源 Tag/人工 section，不由 Alert 另写分类逻辑。
 - `preferences.py` 向前端提供 `filter-catalog.json`；条件由前端目录生成，后端原样保存，不重复增加条件字段/规则格式校验。Tag 的 `role` 决定用途，名称可以改。
 - 完整实时行情只含Focus与独立Holdings；Scan/Monitor始终为完整Discover/Excluded保留Quote-only订阅，切模式不退订。Daily 仍读 Massive，不授权其 Trade/candle 或 Alert。Quote开启Overnight，统一latest按timestamp选价，来源直接保留trade_session，无新价保留最后值；范围只在 Longbridge 数据要求维护。

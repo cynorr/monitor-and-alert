@@ -1,6 +1,6 @@
 import { $, money } from './types.js';
 import { symbolRow } from './symbol-row.js';
-import { attentionState, attentionAppearance } from './attention.js';
+import { attentionState, attentionAppearance, autoAlertButton } from './attention.js';
 import { adrText, adrTitle, compareRank, stateAppearance, volumeBadge, type IntradayState } from './intraday-state.js';
 import { HoldingsLayout } from './holdings-layout.js';
 import { numeric, openPercent, entryAmount, holdingTags, holdingDetails, type SchwabState, type AccountRow, type Position, type HoldingDetail } from './schwab-data.js';
@@ -37,7 +37,8 @@ export class SchwabHoldings {
     private layout: HoldingsLayout;
     private ordered() { return orderedAccountRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
     constructor(private select: (symbol: string, key: string) => void, private active: () => boolean,
-                private cancel: (id: string) => void, width: (value: number) => void) {
+                private cancel: (id: string) => void, width: (value: number) => void,
+                private toggleAutoPause: (symbol: string) => void) {
         this.layout = new HoldingsLayout($('schwab-table') as HTMLTableElement, () => this.regular && this.states.enabled ? 9 : 8, width);
         try { this.collapsed = localStorage.getItem('schwab-holdings-collapsed') === 'true'; } catch { }
         $('schwab-toggle').onclick = () => { this.collapsed = !this.collapsed; try { localStorage.setItem('schwab-holdings-collapsed', String(this.collapsed)); } catch { } this.render(); };
@@ -52,6 +53,9 @@ export class SchwabHoldings {
         });
     }
     has(key: string) { return this.data?.rows.some(r => r.symbol === key) ?? false; }
+    canPause(symbol: string) {
+        return this.attention.eligible.has(symbol) && this.data?.rows.some(row => row.symbol === symbol && row.kind === 'holding');
+    }
     first() { const row = this.ordered()[0]; return row ? { symbol: row.symbol, key: row.symbol } : null; }
     jumpUnread() { const row = this.ordered().find(r => r.kind === 'holding' && this.attention.unread.has(r.symbol)); if (row) { this.collapsed = false; this.select(row.symbol, row.symbol); this.render(); } }
     update(data: SchwabState | null, regular: boolean, states?: IntradayState) {
@@ -72,7 +76,8 @@ export class SchwabHoldings {
         const toggle = document.createElement('button'); toggle.className = 'holdings-trades';
         toggle.onclick = event => { event.stopPropagation(); this.expanded.has(item.symbol) ? this.expanded.delete(item.symbol) : this.expanded.add(item.symbol); this.render(); };
         const ticker = document.createElement('span'); ticker.className = 'ticker'; ticker.textContent = item.ticker;
-        const tags = document.createElement('span'); tags.className = 'holding-tags'; row.cells[0].append(toggle, ticker, tags);
+        const tags = document.createElement('span'); tags.className = 'holding-tags';
+        row.cells[0].append(toggle, ticker, tags, autoAlertButton(item.symbol, this.toggleAutoPause));
         row.onclick = () => this.select(item.symbol, item.symbol);
         this.nodes.set(item.symbol, row); return row;
     }

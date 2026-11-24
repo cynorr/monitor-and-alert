@@ -46,7 +46,9 @@ class MarketService:
         self.validator = HistoryValidator(self.store, self.calendar)
         self.charts = ChartCache(self.store, self.calendar, clock=self.now)
         self.alerts = alerts
-        self.intraday = IntradayState(self.charts, notify=alerts.notify if alerts else None, clock=self.now) if intraday else None
+        self.intraday = IntradayState(self.charts, notify=alerts.notify if alerts else None,
+                                     withdraw_focus_adr=alerts.withdraw_focus_adr if alerts else None,
+                                     clock=self.now) if intraday else None
         self.downloader = BarDownloader(broker, self.store, self.calendar, clock=self.now) if broker else None
         self.quotes = RealtimeFeed(broker, self.symbols, self.calendar, on_quote=self.apply_quote,
                                    on_reconnect=self.check_windows, on_reset=self.reset_realtime,

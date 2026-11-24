@@ -10,7 +10,7 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 ## Intraday State
 
-盘中状态是现有后台中的独立监控，Focus候选与当前余仓共享symbol计算，手动Alert生命周期保持独立。已读时Regular底色表达当前事实，未读时以最新一次报警方向／等级的边缘波浪提示；新报警覆盖旧记录，不保存通知历史。声音只随规则进入/升级发出，降级和恢复不补报。持仓未进入预警时，ADR数值仍按较强的上下行方向显示，不固定为上行；数值方向不等于报警等级。In Play自动聚集只改变展示顺序，不改workspace、section或Tag；全部报警共享仅显示于symbol row的未读提醒，section与Holdings标题不参与闪烁或驻留，任何方式选图或更新当前chart都标记该symbol已读，不区分主动/自动或等待加载，灰线不变。未读仅在所属Regular内有效，实际收盘即失效，睡眠跨收盘在唤醒后清理；不依赖Massive或Refresh。Focus/Holdings未读导航见[List交互](list-interactions.md#未读-alert-导航)。当前Scan Focus共用同一份Longbridge状态，历史Scan不显示当前状态。完整公式、参数、范围、量比与排序规则只在 [intraday-state.md](intraday-state.md) 维护。
+盘中状态是现有后台中的独立监控，Focus候选与当前余仓共享symbol计算，手动Alert生命周期保持独立。Regular底色始终表达当前状态，边缘波浪表达最新未读；新报警覆盖旧记录，不保存通知历史。声音随规则进入或升级发出。Focus 上行 ADR 未读在触发档位失效时撤回。当天暂停自动报警按 symbol 生效，手动线独立。持仓未进入预警时，ADR数值仍按较强的上下行方向显示，不固定为上行；数值方向不等于报警等级。In Play自动聚集只改变展示顺序，不改workspace、section或Tag；全部报警共享仅显示于symbol row的未读提醒，section与Holdings标题不参与闪烁或驻留，任何方式选图或更新当前chart都标记该symbol已读，不区分主动/自动或等待加载，灰线不变。未读仅在所属Regular内有效，实际收盘即失效，睡眠跨收盘在唤醒后清理；不依赖Massive或Refresh。Focus/Holdings未读导航见[List交互](list-interactions.md#未读-alert-导航)。当前Scan Focus共用同一份Longbridge状态，历史Scan不显示当前状态。完整公式、参数、范围、量比与排序规则只在 [intraday-state.md](intraday-state.md) 维护。
 
 ## 启动与接收
 
@@ -58,7 +58,7 @@ Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑�
 
 规则 Tag 每日重算；人工调整在普通更新/重启时保留，显式 Refresh 与新日首次分类共用清理逻辑，再执行 Focus 淘汰和候选分类。清理范围、Hidden 期限及入选规则只在 [List 设计](list-design.md#每日规则) 维护。Filter 仅影响显示，不改变归属或订阅。
 
-名单操作直接作用于单只 symbol；机器 Excluded 禁止人工释放，Hidden/Focus 释放后重新分类。快捷键、行按钮和限定自动下一只见 [List 交互](list-interactions.md)。Holdings 与 Monitor 的名单删除按键维持既有边界。
+名单操作直接作用于单只 symbol；机器 Excluded 禁止人工释放，Hidden/Focus 释放后重新分类。快捷键、行按钮和限定自动下一只见 [List 交互](list-interactions.md)。Scan 和 Monitor 的 Focus 共用 Release，Discover 的 Hide 进入 Hidden 七天。
 
 搜索仍使用列表上方Search与/入口。Monitor通过主账号Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整 section，本次不新增 Quote 形态规则。保存失败回退内存并显示错误。
 

@@ -78,9 +78,8 @@ Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，最新�
 ## 明确操作
 
 - Add to Focus：清除排除状态、加入队首、开始实时监控；重新匹配与 section 首位规则见下节。
-- Move to Hidden：从 Discover/Focus 或机器 Excluded 明确屏蔽七个自然日；来自 Focus 的名单订阅随归属移除。
-- Move to Discover：结束 Focus 归属，或提前释放 Hidden；仅当天候选返回 Discover，并立即按当前规则分类。机器 Excluded 不提供人工释放到 Discover。
-- Hidden 的 Release：等同从 Hidden 移到 Discover；当前负面规则仍可立即归入机器 section。
+- Hide：在 Discover 人工屏蔽七个自然日，进入 Hidden。
+- Release：在 Scan 或 Monitor 结束 Focus 归属，或从 Hidden 提前结束屏蔽。当天候选按当前规则进入 Discover 或机器 Excluded，其他 symbol 退出名单。Monitor 的截面尚未就绪时可以先移出 Focus，候选由截面就绪后的日分类生成。机器 Excluded 由分类规则释放。
 
 ## 统一移入 Focus
 

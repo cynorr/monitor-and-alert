@@ -1,6 +1,6 @@
 import { $, money } from './types.js';
 import { symbolRow } from './symbol-row.js';
-import { attentionState, attentionAppearance } from './attention.js';
+import { attentionState, attentionAppearance, autoAlertButton } from './attention.js';
 import { adrText, adrTitle, compareRank, stateAppearance, volumeBadge } from './intraday-state.js';
 import { HoldingsLayout } from './holdings-layout.js';
 import { numeric, openPercent, entryAmount, holdingTags, holdingDetails } from './schwab-data.js';
@@ -27,6 +27,7 @@ export class SchwabHoldings {
     select;
     active;
     cancel;
+    toggleAutoPause;
     selected = '';
     attention = attentionState();
     data = null;
@@ -40,10 +41,11 @@ export class SchwabHoldings {
     order = '';
     layout;
     ordered() { return orderedAccountRows(this.data?.rows ?? [], this.sort, this.regular && this.states.enabled ? this.states : { enabled: false, symbols: {} }); }
-    constructor(select, active, cancel, width) {
+    constructor(select, active, cancel, width, toggleAutoPause) {
         this.select = select;
         this.active = active;
         this.cancel = cancel;
+        this.toggleAutoPause = toggleAutoPause;
         this.layout = new HoldingsLayout($('schwab-table'), () => this.regular && this.states.enabled ? 9 : 8, width);
         try {
             this.collapsed = localStorage.getItem('schwab-holdings-collapsed') === 'true';
@@ -73,6 +75,9 @@ export class SchwabHoldings {
         });
     }
     has(key) { return this.data?.rows.some(r => r.symbol === key) ?? false; }
+    canPause(symbol) {
+        return this.attention.eligible.has(symbol) && this.data?.rows.some(row => row.symbol === symbol && row.kind === 'holding');
+    }
     first() { const row = this.ordered()[0]; return row ? { symbol: row.symbol, key: row.symbol } : null; }
     jumpUnread() { const row = this.ordered().find(r => r.kind === 'holding' && this.attention.unread.has(r.symbol)); if (row) {
         this.collapsed = false;
@@ -110,7 +115,7 @@ export class SchwabHoldings {
         ticker.textContent = item.ticker;
         const tags = document.createElement('span');
         tags.className = 'holding-tags';
-        row.cells[0].append(toggle, ticker, tags);
+        row.cells[0].append(toggle, ticker, tags, autoAlertButton(item.symbol, this.toggleAutoPause));
         row.onclick = () => this.select(item.symbol, item.symbol);
         this.nodes.set(item.symbol, row);
         return row;

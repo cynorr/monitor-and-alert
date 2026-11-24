@@ -47,13 +47,20 @@ class AlertEngine:
                 generation INTEGER NOT NULL, state TEXT NOT NULL,
                 created_at REAL NOT NULL, updated_at REAL NOT NULL, expires_at REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS unread (
-                symbol TEXT PRIMARY KEY, direction TEXT NOT NULL, level INTEGER NOT NULL, fired_at REAL NOT NULL);
+                symbol TEXT PRIMARY KEY, direction TEXT NOT NULL, level INTEGER NOT NULL, fired_at REAL NOT NULL,
+                source TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS paused_auto (
+                symbol TEXT PRIMARY KEY, day TEXT NOT NULL);
         ''')
-        if 'level' not in {row['name'] for row in self.db.execute('PRAGMA table_info(unread)')}:
+        columns = {row['name'] for row in self.db.execute('PRAGMA table_info(unread)')}
+        if 'level' not in columns:
             with self.db:
                 self.db.execute('ALTER TABLE unread ADD COLUMN level INTEGER NOT NULL DEFAULT 1')
                 # Old urgent notices did not retain a direction; do not invent one.
                 self.db.execute("DELETE FROM unread WHERE direction='urgent'")
+        if 'source' not in columns:
+            with self.db:
+                self.db.execute("ALTER TABLE unread ADD COLUMN source TEXT NOT NULL DEFAULT 'unknown'")
         self.calendar, self.now, self.sound = calendar, clock, sound
         self.alerts = {row['id']: dict(row) for row in self.db.execute('SELECT * FROM alerts')}
         self.by_symbol = {}
@@ -61,11 +68,13 @@ class AlertEngine:
         self.allowed, self.scope_known = set(), False
         self.revision, self.error = 0, None
         self.watchers = set()
+        self.pause_day, self.paused_auto = None, set()
         if self.sound:
             self.sound.on_change = self._signal
         self.heartbeat = self.now()
         self._index()
         self._clean_unread(self.heartbeat)
+        self._roll_auto_pauses(self.heartbeat)
 
     def _index(self):
         self.by_symbol = {}
@@ -105,6 +114,7 @@ class AlertEngine:
             self.revision += 1
         self.allowed, self.scope_known = allowed, scope_known
         self._clean_unread(now)
+        self._roll_auto_pauses(now)
         removed = [a['id'] for a in self.alerts.values() if a['expires_at'] <= now or
                    (scope_known and a['symbol'] not in allowed)]
         if removed:
@@ -175,17 +185,58 @@ class AlertEngine:
         if changed:
             self._signal()
 
-    def notify(self, symbol, direction, level=1, *, alert=None):
+    def _roll_auto_pauses(self, now):
+        day = datetime.fromtimestamp(now, ET).date().isoformat()
+        if day == self.pause_day:
+            return
+        with self.db:
+            removed = self.db.execute('DELETE FROM paused_auto WHERE day<>?', (day,)).rowcount
+        self.pause_day = day
+        self.paused_auto = {row['symbol'] for row in self.db.execute('SELECT symbol FROM paused_auto')}
+        if removed:
+            self._signal()
+
+    def set_auto_paused(self, symbol, paused):
+        symbol = symbol_key(symbol)
+        if symbol not in self.allowed or type(paused) is not bool:
+            raise ValueError('Choose a current Alert symbol and pause state')
+        self._roll_auto_pauses(self.now())
+        if paused == (symbol in self.paused_auto):
+            return
+        with self.db:
+            if paused:
+                self.db.execute('INSERT INTO paused_auto VALUES (?,?)', (symbol, self.pause_day))
+                self.db.execute("DELETE FROM unread WHERE symbol=? AND source IN ('focus-adr','adr','ema')", (symbol,))
+            else:
+                self.db.execute('DELETE FROM paused_auto WHERE symbol=?', (symbol,))
+        if paused:
+            self.paused_auto.add(symbol)
+        else:
+            self.paused_auto.remove(symbol)
+        self._signal()
+
+    def withdraw_focus_adr(self, symbol, up_level):
+        with self.db:
+            changed = self.db.execute("DELETE FROM unread WHERE symbol=? AND source='focus-adr' AND level>?",
+                                      (symbol, up_level)).rowcount
+        if changed:
+            self._signal()
+
+    def notify(self, symbol, direction, level=1, *, source='manual', alert=None):
         """Shared entry for manual crossings and Intraday State transitions."""
         if symbol not in self.allowed:
             return False
         now = self.now()
+        if source != 'manual':
+            self._roll_auto_pauses(now)
+            if symbol in self.paused_auto:
+                return False
         try:
             with self.db:
                 if alert:
                     self.db.execute("UPDATE alerts SET state='triggered', updated_at=? WHERE id=?", (now, alert['id']))
-                self.db.execute('INSERT OR REPLACE INTO unread (symbol,direction,level,fired_at) VALUES (?,?,?,?)',
-                                (symbol, direction, level, now))
+                self.db.execute('INSERT OR REPLACE INTO unread (symbol,direction,level,fired_at,source) VALUES (?,?,?,?,?)',
+                                (symbol, direction, level, now, source))
         except sqlite3.Error:
             self.error = 'Could not save alert trigger'
             self._signal()
@@ -229,9 +280,12 @@ class AlertEngine:
                     self.baselines[alert['id']] = baseline
 
     def state(self):
-        self._clean_unread(self.now())
+        now = self.now()
+        self._clean_unread(now)
+        self._roll_auto_pauses(now)
         return {'revision': self.revision, 'alerts': list(self.alerts.values()),
                 'unread': [dict(row) for row in self.db.execute('SELECT symbol,direction,level,fired_at FROM unread ORDER BY fired_at DESC')],
+                'paused_auto_symbols': sorted(self.paused_auto),
                 'eligible_symbols': sorted(self.allowed), 'scope_known': self.scope_known,
                 'sound': self.sound.state() if self.sound else {'enabled': False, 'error': None, 'playing': []}, 'error': self.error}
 

@@ -1,11 +1,31 @@
 import type { AlertState, AlertNotice, AlertPlayback } from './alerts.js';
 
-export type Attention = { unread: Map<string, AlertNotice>; playing: Map<string, AlertPlayback> };
+export type Attention = { unread: Map<string, AlertNotice>; playing: Map<string, AlertPlayback>; eligible: Set<string>; paused: Set<string> };
 export const attentionState = (state?: AlertState): Attention => ({
     unread: new Map(state?.unread.map(notice => [notice.symbol, notice]) ?? []),
     playing: new Map(state?.sound.playing.map(beat => [beat.symbol, beat]) ?? []),
+    eligible: new Set(state?.eligible_symbols),
+    paused: new Set(state?.paused_auto_symbols),
 });
+
+export function autoAlertButton(symbol: string, toggle: (symbol: string) => void) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'icon-button auto-alert'; button.hidden = true;
+    button.setAttribute('aria-keyshortcuts', 'M');
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v4l-2 4h16l-2-4V8M10 20h4"/><path class="auto-alert-slash" d="M4 4l16 16"/></svg>';
+    button.onclick = event => { event.stopPropagation(); toggle(symbol); };
+    return button;
+}
+
 export function attentionAppearance(row: HTMLElement, symbol: string, state: Attention) {
+    const button = row.querySelector<HTMLButtonElement>('.auto-alert');
+    if (button) {
+        const paused = state.paused.has(symbol);
+        button.hidden = !state.eligible.has(symbol);
+        button.setAttribute('aria-pressed', String(paused));
+        button.title = paused ? 'Resume Auto Alerts (M)' : 'Pause Auto Alerts Today (M)';
+        button.setAttribute('aria-label', button.title);
+    }
     const notice = state.unread.get(symbol), beat = state.playing.get(symbol);
     if (notice) row.dataset.alert = `${notice.direction}-${notice.level === 2 ? 'urgent' : 'notice'}`;
     else delete row.dataset.alert;

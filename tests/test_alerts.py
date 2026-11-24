@@ -261,6 +261,10 @@ def test_alert_http_origin_and_independent_empty_selection_stream(app_data):
                     if state['type'] == 'alerts': break
                 assert len(state['alerts']) == 1
                 alert = state['alerts'][0]
+                pause = {'action': 'pause_auto', 'symbol': target, 'paused': True}
+                response = await client.post(url + '/v1/alerts', json=pause)
+                assert response.status == 200 and (await response.json())['paused_auto_symbols'] == [target]
+                assert not app.alerts.notify(target, 'up', 2, source='focus-adr')
                 app.alerts.notify(target, 'up', alert=alert)
                 while True:
                     state = await stream.receive_json(timeout=2)
@@ -271,6 +275,8 @@ def test_alert_http_origin_and_independent_empty_selection_stream(app_data):
                 assert not read['unread'] and read['alerts'][0]['state'] == 'triggered'
                 response = await client.post(url + '/v1/alerts', json={'action':'delete','id':state['alerts'][0]['id']})
                 assert response.status == 200 and not (await response.json())['alerts']
+                response = await client.post(url + '/v1/alerts', json={**pause, 'paused': False})
+                assert response.status == 200 and not (await response.json())['paused_auto_symbols']
         finally:
             await runner.cleanup(); await app.close()
     asyncio.run(scenario())
@@ -394,3 +400,23 @@ def test_unread_level_migration_preserves_direction_without_inventing_urgent_his
         assert not sound.calls
     finally:
         value.close()
+
+
+def test_pause_and_withdraw_only_remove_matching_unread(engine):
+    value, _ = engine
+    assert value.notify('NVDA.US', 'up', 2, source='focus-adr')
+    value.withdraw_focus_adr('NVDA.US', 2)
+    assert value.state()['unread'][0]['level'] == 2
+    value.withdraw_focus_adr('NVDA.US', 1)
+    assert not value.state()['unread']
+    for source in ('ema', 'adr', 'manual'):
+        assert value.notify('NVDA.US', 'up', 1, source=source)
+        value.withdraw_focus_adr('NVDA.US', 0)
+        assert value.state()['unread']
+    value.set_auto_paused('NVDA.US', True)
+    assert not value.notify('NVDA.US', 'up', 1, source='ema')
+    assert value.state()['unread'][0]['level'] == 1
+    value.set_auto_paused('NVDA.US', False)
+    assert value.notify('NVDA.US', 'up', 1, source='ema')
+    value.set_auto_paused('NVDA.US', True)
+    assert not value.state()['unread']

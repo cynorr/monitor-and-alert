@@ -20,11 +20,11 @@ let socket = null;
 let reconnectTimer, lastMessage = 0, reconnectDelay = 1000, currentView = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource = 'watchlist', holdingKey = '';
-const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList);
+const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList, toggleAutoPause);
 let appMode = 'monitor', scanDate = '', modePending = false;
 const trade = new TradeController([daily, intraday], () => appMode);
 const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'monitor' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'monitor')
-    layout.setHoldingsWidth(width); });
+    layout.setHoldingsWidth(width); }, toggleAutoPause);
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol))
     select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
@@ -40,6 +40,7 @@ const alerts = new AlertController([daily, intraday], () => symbol, () => appMod
     watchlist.render();
     schwab.render();
 });
+function toggleAutoPause(next) { void alerts.toggleAutoPause(next); }
 function applyList(data) {
     const nextMode = data.app_mode ?? 'monitor';
     const changed = nextMode !== appMode || (nextMode === 'scan' && data.date !== scanDate);
@@ -239,8 +240,15 @@ document.querySelectorAll('[data-tf]').forEach(button => button.addEventListener
 }));
 document.addEventListener('keydown', event => {
     if (event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
-        event.target.closest('input,textarea,select,[contenteditable="true"]'))
+        event.target.closest('input,textarea,select,[contenteditable]'))
         return;
+    if (!event.metaKey && event.code === 'KeyM' &&
+        (selectionSource === 'holdings' ? schwab.canPause(symbol) : watchlist.canPause(symbol))) {
+        event.preventDefault();
+        if (!event.repeat)
+            toggleAutoPause(symbol);
+        return;
+    }
     if (!event.metaKey && event.code === 'KeyR') {
         event.preventDefault();
         if (!event.repeat) {

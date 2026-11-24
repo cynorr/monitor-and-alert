@@ -1,6 +1,6 @@
 # Alert 需求
 
-更新：2026-10-26。提醒方式为后台独立播放声音与仅在所属Regular有效的symbol持久未读提醒。具体覆盖和未覆盖见 [validation.md](validation.md)，macOS 27 仍需实机验收。
+更新：2026-11-24。提醒方式为后台独立播放声音与仅在所属 Regular 有效的 symbol 持久未读提醒。具体覆盖和未覆盖见 [validation.md](validation.md)。
 
 本文件是 Alert 功能范围、触发、生命周期、图表操作、声音和验收的唯一需求入口。开发遵循 [development-principles.md](development-principles.md)，模块维护入口为 [data_service/alerts/AGENTS.md](../data_service/alerts/AGENTS.md)，职责与接口方案见 [development.md 的 Alert 章节](development.md#alert-实现)。移入 Focus 的完整规则只在 [List / 统一移入 Focus](list-design.md#统一移入-focus) 维护；图形与颜色的具体定义只在 [Logo / Icon](ui.md#alert-图形) 维护。
 
@@ -46,7 +46,7 @@
 - Filter、搜索、排序、折叠、选图与展示模式不改变允许范围；Discover/Excluded 的创建操作必须先完成入选 Focus，不能直接给它们订阅行情。
 - 启动重读 workspace，并按当前日期取得有效 Holdings 范围。首次 Holdings 尚未确认时，holdings-only Alert 等待范围确认；请求失败不能被解释为持仓已空，沿用上次已接受范围。
 - 出范围立即停止后续触发并持久化删除，不等 UI 连接；重新加入不会恢复已删除 Alert。
-- 未读提示按symbol持久化，离开已确认的Focus/Holdings联合范围时清理；归属从Focus转入Holdings不清理。到期删除相应价格线，symbol仍在范围时未读提示保留到主动查看。
+- 未读提示按 symbol 持久化，离开已确认的 Focus/Holdings 联合范围时清理。归属从 Focus 转入 Holdings 时保留。价格线到期与未读各自按生命周期清理。
 
 ## 触发语义
 
@@ -104,14 +104,20 @@
 ## 统一未读提醒
 
 - 手动价格、ADR与EMA等全部报警使用同一symbol未读入口，不产生弹出卡片或通知历史。每个symbol只保留最后一条方向、等级及触发时间；直接覆盖，不叠加、不保存通知历史或做逐版本确认。
-- 名单行/持仓主行触发后立即进入白色中心、边缘波浪的未读状态；对应声音每声触发一次短脉冲，声音结束或失败后继续波浪等待。多只symbol可以同时显示；外观只在[Symbol模板](ui.md#symbol-row-template)维护，独立于整行选中和图表价格线。
+- 名单行与持仓主行用边缘波浪显示最新未读，价格底色和文字持续显示实时状态。声音每声触发一次短脉冲，播完后未读继续流动。多只 symbol 可同时显示。共用外观见 [Symbol 模板](ui.md#symbol-row-template)。
 - chart选择或展示哪个symbol，就标记哪个symbol已读。鼠标、键盘、自动候补、页面恢复、切周期及当前图表更新使用同一入口；不判断主动/自动、停留时间、加载成功或是否实际渲染，不等待图表响应才处理选图已读。正在看的symbol再次报警，后续图表更新也会清除其未读。已读只清除该symbol未读，不做事件ID或版本确认，不修改灰线。
 - 多持仓批次共享symbol未读状态；Focus转入Holdings后提示跟随。未读与播放提示仅作用于symbol row，不作用于任何section或Holdings标题；折叠后不在标题汇总提示，展开本身不标记已读。
 - 未读状态立即持久化，仅在触发所属的Regular内有效，达到实际收盘时间即失效，包含提前收盘；不跨夜、周末或休市日保留。睡眠跨过收盘则唤醒后清理，后台关闭则下次启动清理；首次输出状态前清除已失效记录。同一Regular内刷新、重连、后台/Mac重启恢复未读，选中的symbol仍按上述统一已读规则处理。播放状态仅存在于内存，不补报或补播。
 - 清理独立使用后台时钟、现有纽约交易日历与fired_at；复用Alert维护和状态输出入口，不绑定Massive、Refresh、workspace日期或Holdings准备完成，不新增定时服务、数据表或期限字段。收盘清理不改变手动价格线、generation、原七天期限或触发状态。
-- Command+G与Command+U的范围、顺序及折叠/筛选行为只在 [List未读导航](list-interactions.md#未读-alert-导航) 维护。
+- Focus 上行 ADR 的未读恢复与撤回规则见 [Intraday State](intraday-state.md#声音与恢复)。快捷键、顺序及折叠行为见 [List 未读导航](list-interactions.md#未读-alert-导航)。
 - 灰线触发后立即保留，拖动成功重新激活为黑线；普通row点击、声音结束或未读处理均不自动删除价格线。有效期、出范围与主动删除仍按原规则执行。
 - 图形与配色只在 [Logo / Icon](ui.md#alert-图形) 维护；错误提示沿用现有简短错误入口。
+
+## 暂停自动报警
+
+- 当前 Focus 和持仓主行可按 symbol 暂停 ADR 与 EMA 自动报警。圆形按钮仅显示图标，同一位置暂停或恢复，支持 M。状态保存在后台，同一美东自然日重启可恢复，纽约时间午夜自动重置。
+- 暂停时删除该 symbol 最新未读中的自动报警，并阻止之后的自动声音和未读波浪。已经开始的短声自然播完。恢复后等待下一次新触发。
+- 手动价格线、其声音和未读单独生效。暂停期间继续接收行情并计算盘中状态、量比与排序。
 
 ## 后台声音与运行
 
@@ -138,7 +144,7 @@
 - 鼠标水平线价格、两位小数、同 symbol 多 Alert、Scan/Monitor 共用、不同周期同步、选择/退格/拖动与原生图表手势。
 - Discover/全部 Excluded 创建立即入 Focus；丢弃旧自动/人工 Tag 与人工 section，按当前 Focus 规则重新分类；无匹配入 Unclassified，新入组首位；手动移入得到相同结果。
 - 持久化、Triggered 不重复、拖动重新激活、已读不修改价格线/generation、到期及 Focus/Holdings 联合范围、当天清仓保留和次日移除。
-- 未读提醒、所有选图/图表更新统一已读、Regular收盘/提前收盘失效、睡眠/重启恢复、灰线期限独立；浏览器后台或退出时仍有声音；声音只随新触发播放、失败提示和退出清理，以及两版 macOS 的实际听辨。
+- 未读提醒、选图即读、到期、Focus ADR 撤回、当天暂停与手动线独立；浏览器后台或退出时仍有声音；声音只随新触发播放、失败提示和退出清理，以及两版 macOS 的实际听辨。
 - TypeScript 变更后执行 `npm run build --prefix ui`；Python 只跑涉及本次行为的定向用例。真实行情限定当前允许范围中的少量 symbols 并规定结束条件，不建立故障注入、回放或压力测试框架。
 
-后续 Atomic feature 自动设置、真实订单与自动交易均不在本版范围。实现验证与未覆盖范围只在 validation.md 记录，不把离线用例或平台兼容目标当作 Regular live 穿越或 macOS 27 的证据。
+Alert 模块只管理提醒，不经交易接口。Atomic feature 自动设置不在范围内。验证结果以 [validation.md](validation.md) 为准。

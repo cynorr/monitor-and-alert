@@ -1,6 +1,6 @@
 # Intraday State：盘中状态
 
-更新：2026-10-26。本文件是盘中状态、自动提醒、量比与In Play展示的唯一需求入口。手动价格线与统一未读交互只在 [alert.md](alert.md) 维护。开发遵循 [development-principles.md](development-principles.md)，模块入口为 [intraday_state/AGENTS.md](../data_service/intraday_state/AGENTS.md)，职责见 [development.md](development.md#intraday-state-实现)。
+更新：2026-11-24。本文件是盘中状态、自动提醒、量比与In Play展示的唯一需求入口。手动价格线与统一未读交互只在 [alert.md](alert.md) 维护。开发遵循 [development-principles.md](development-principles.md)，模块入口为 [intraday_state/AGENTS.md](../data_service/intraday_state/AGENTS.md)，职责见 [development.md](development.md#intraday-state-实现)。
 
 ## 范围与原则
 
@@ -39,9 +39,10 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 
 - 进入关注等级或升级紧急等级时发声；持续停留不重复，退回再进入自动再次发声，不额外加冷却。
 - EMA10/20 每次由下方到达/上穿都提醒，不要求手动重设。一次更新触发多个条件时只播放最紧急的一种，紧急优先，其次回撤，再其次上行。
-- 任何降级都不发声。回撤颜色退去后露出原本已满足的上行颜色，不凭显示颜色变化误发上行声；根据各项规则自己的前后状态判断。
+- 任何降级都不发声。最新未读来自 Focus 上行 ADR 时，当前等级降到触发等级以下便撤下波浪及未读跳转项。首次取得有效状态也核对同一 Regular 中恢复的 Focus ADR 未读。退档直接清除该条记录，较低档位继续显示实时底色。手动、EMA 和持仓报警不套用此规则。
+- 回撤颜色退去后露出原本已满足的上行颜色，根据各项规则自身前后状态判断是否触发。
 - 首次有效状态、新交易日、范围/角色改变及已知重连/休眠恢复后只建立起点，不补报历史穿越。刷新、重连网页只读状态，不发声。
-- 所有自动报警与手动价格报警共用symbol未读提醒，规则见 [统一未读提醒](alert.md#统一未读提醒)。手动线的触发/灰线/generation保持独立。
+- 自动与手动共用 [symbol 未读](alert.md#统一未读提醒)。[暂停自动报警](alert.md#暂停自动报警) 只关掉该股的自动通知，盘中计算继续运行。
 - 共用[Alert后台声音与节拍](alert.md#后台声音与运行)，方向与等级分开传递；上行增强仍保留上行身份，不因使用紧急声音变成回撤。各报警独立并行，无优先级、排队或同symbol播放替换。来源及许可见 [声音资源](../data_service/alerts/sounds/SOURCES.md)。
 - 声音资源与生成方式只在[声音资源](../data_service/alerts/sounds/SOURCES.md)维护；运行时只调用系统afplay。播放错误沿用Alert现有错误提示/日志，不改变状态或补播历史。
 

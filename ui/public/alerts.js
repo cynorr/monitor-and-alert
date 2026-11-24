@@ -144,12 +144,15 @@ export class AlertChart {
         }
         const previous = hits.findIndex(alert => alert.id === this.controller.selected);
         const alert = capsule ? this.rows().find(alert => alert.id === this.hovered) : hits[(previous + 1) % hits.length];
+        const host = event.currentTarget;
+        host.tabIndex = -1;
+        host.focus({ preventScroll: true });
         this.controller.choose(alert.id);
         this.hover(alert.id);
         this.stop(event);
         this.drag = { alert, pointer: event.pointerId, startY: event.clientY, price: alert.price_cents / 100, moved: false };
         this.controller.preview = { id: alert.id, cents: alert.price_cents };
-        event.currentTarget.setPointerCapture(event.pointerId);
+        host.setPointerCapture(event.pointerId);
     }
     move(event) {
         if (!this.drag) {
@@ -202,16 +205,18 @@ export class AlertController {
         this.changed = changed;
         this.layers = panels.map(panel => new AlertChart(panel, this));
         document.addEventListener('keydown', event => {
-            if (event.target.closest('input,textarea,select,[contenteditable="true"]'))
+            if (event.target.closest('input,textarea,select,[contenteditable]'))
                 return;
             if (event.key === 'Escape') {
                 this.layers.forEach(layer => layer.cancel());
                 this.choose('');
             }
-            if (event.key === 'Backspace' && this.mode() !== 'scan' && this.selected) {
+            if (event.key === 'Backspace' && this.mode() !== 'scan' && this.selected &&
+                !event.target.closest('#symbols')) {
                 event.preventDefault();
                 event.stopImmediatePropagation();
-                void this.mutate({ action: 'delete', id: this.selected });
+                if (!event.repeat)
+                    void this.mutate({ action: 'delete', id: this.selected });
             }
         }, true);
         $('alert-error-close').addEventListener('click', () => { this.error = ''; this.render(); });
@@ -258,6 +263,12 @@ export class AlertController {
     async read(symbol) {
         if (this.value?.unread.some(notice => notice.symbol === symbol))
             await this.mutate({ action: 'read', symbol });
+    }
+    async toggleAutoPause(symbol) {
+        if (this.value?.eligible_symbols.includes(symbol)) {
+            const paused = this.value.paused_auto_symbols?.includes(symbol) ?? false;
+            await this.mutate({ action: 'pause_auto', symbol, paused: !paused });
+        }
     }
     render() {
         const message = this.error || this.value?.error || this.value?.sound.error || '';

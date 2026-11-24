@@ -47,7 +47,7 @@ test('state columns are confined to an enabled current Focus presentation', () =
 test('latest unread direction and grade replace the wave; old playback cannot revive it after read', () => {
     const pulses = [];
     const wave = { dataset: {}, animate: frames => { pulses.push(frames); return {}; } };
-    const node = { dataset: {}, querySelector: () => wave };
+    const node = { dataset: {}, querySelector: selector => selector === '.price-wave' ? wave : null };
     const now = Date.now() / 1000;
     const notice = { symbol:'A.US', direction:'down', level:2, fired_at:now };
     const state = attentionState({ unread:[notice], sound:{ playing:[{symbol:'A.US',fired_at:now-1,pulse_at:now}] } });

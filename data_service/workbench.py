@@ -90,7 +90,7 @@ class Workbench:
         return self.schwab.state(now, quotes)
 
     def alert_state(self):
-        return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'unread': [], 'eligible_symbols': [],
+        return self.alerts.state() if self.alerts else {'revision': 0, 'alerts': [], 'unread': [], 'paused_auto_symbols': [], 'eligible_symbols': [],
                 'scope_known': True, 'sound': {'enabled': False, 'error': None, 'playing': []}, 'error': None}
 
     def focus_classifications(self, tickers):
@@ -450,8 +450,9 @@ class Workbench:
         elif action == 'move' and 'target' in payload:
             ticker = normalize_ticker(payload['ticker'])
             classification = self.focus_classifications([ticker])[ticker] if payload['target'] == 'focus' else None
-            self.workspace.move_member(ticker, payload['target'], candidates(self.snapshot(self.workspace.date)),
-                                       classification=classification)
+            day = self.workspace.date
+            current = candidates(self.snapshot(day)) if self.has_snapshot(day) else set()
+            self.workspace.move_member(ticker, payload['target'], current, classification=classification)
         elif action == 'move':
             sections = {'unclassified', 'focus', 'wait'} | {tag['id'] for tag in self.preferences['tags'] if tag['role'] == 'setup'}
             if payload['section'] not in sections:
@@ -498,6 +499,8 @@ class Workbench:
                 self.alerts.delete(payload['id'])
             elif action == 'read':
                 self.alerts.read(payload['symbol'])
+            elif action == 'pause_auto':
+                self.alerts.set_auto_paused(payload['symbol'], payload['paused'])
             else:
                 raise ValueError('Unknown alert action')
             return self.alert_state()

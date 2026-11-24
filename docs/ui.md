@@ -57,9 +57,9 @@ ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，
 
 - Focus、Holdings、Discover、Excluded 共用 Symbol 起始缩进，给半圆端部和 Holdings 展开三角留白。选中始终作用于整行，使用黑色细胶囊轮廓和轻微外阴影，不改背景；未选中 hover 为浅灰，不能覆盖价格状态。普通行与量能胶囊不额外加阴影。
 - 价格区域为连续胶囊。Monitor Focus 覆盖 Symbol、Last、Chg%、ADR；非 Regular 的 Ext 也属于价格区域。Tags、量能与操作独立。Scan 保持自身数据列，使用相同模板，不为两种量能重排列。Holdings 的区域边界只在 [Schwab 持仓 UI](schwab.md#列与格式) 维护。
-- 已读时底色表达当前实时状态：Blue Soft / Blue 对应上行关注／增强，Yellow Soft / Red Strong 对应回撤预警／紧急；强蓝、深红价格区域使用白字。Candidate Chg% 使用 Positive / Negative，强底色时继承白字；白色未读区域恢复通常文字配色。其他字段保持本色。
-- 未读时价格区域中间为稳定白底，文字不运动；边缘叠加横向流动的渐变波浪。颜色只取最后一次未读报警的方向与等级，直接覆盖，不叠加或保存历史；当前价格状态仍持续更新，已读后立即恢复当时最新底色。上行关注边缘使用 Blue 与 White 的 68% 混色以保证可见，上行增强使用 Blue；下行预警使用 Yellow，紧急使用 Red Strong。手动穿越及 EMA 上穿为相应方向的普通等级。
-- 整条只用一份长边渐变遮罩，取消端部单独拼接、实色色带和虚线。当前 Web 波浪每 2.8s 平移一个周期；遮罩可见峰值 0.48，向内 6px 淡至透明，中央保持白色。波浪没有实色停留段；外层胶囊自然裁切，不另做内圈 border。音频每声通过同一入口触发一次短亮度脉冲，不缩放数字或整行；播放结束后只保留流动波浪。
+- 底色及文字始终表达当前实时状态。Blue Soft / Blue 对应上行关注／增强，Yellow Soft / Red Strong 对应回撤预警／紧急。强蓝、深红价格区域使用白字。Candidate Chg% 使用 Positive / Negative，强底色时继承白字。其他字段保持本色。
+- 最新未读用价格胶囊两侧横向流动的渐变波浪表达。浅底上的上行关注用 Blue 与 White 的 68% 混色，上行增强用 Blue，回撤预警用 Yellow，回撤紧急用 Red Strong。深底使用对应方向的浅色波浪以保留对比。同方向的紧急未读与强底色同时存在时，波浪用 White。
+- 整条只用一份长边渐变遮罩，取消端部单独拼接、实色色带和虚线。当前 Web 波浪每 2.8s 平移一个周期；遮罩可见峰值 0.48，向内 6px 淡至透明，中央保留实时底色。波浪没有实色停留段；外层胶囊自然裁切，不另做内圈 border。音频每声通过同一入口触发一次短亮度脉冲，不缩放数字或整行；播放结束后只保留流动波浪。
 - 仅 symbol 主行承载提醒，section、Holdings 标题、Buy/Sold 明细及 Total 不聚合提醒。已读、期限与声音行为只在 [Alert](alert.md#统一未读提醒) 维护。
 - Web 复用 `symbol-row.ts` 创建 `.price-surface` / `.price-wave`，`attention.ts` 应用最后一条提醒及本次节拍；Grid 与 Holdings Table 使用同一套 CSS。Chart 与行阴影分别由 `--panel-shadow` / `--row-shadow` 集中定义。不为未来功能复制绘制或增加动画框架；平台实现可以调整绘制方式，保留上述语义。
 
@@ -101,8 +101,9 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | 场景 | 当前图形 | 含义 |
 | --- | --- | --- |
 | 各 List 置顶 | 向上箭头推至顶线，置顶后蓝色、改为向下取消箭头 | Pin / Unpin：仅改变当日显示位置，保留 section |
-| Discover / Focus 行操作 | 轮廓垃圾桶 | Move to Hidden：人工屏蔽七个自然日 |
-| Excluded / Hidden 行操作 | `↩` | Release：提前结束屏蔽，仅当天候选回 Discover，再按当前规则分类 |
+| Discover 行操作 | 轮廓垃圾桶 | Hide：人工屏蔽七个自然日 |
+| Focus / Hidden 行操作 | 列表轮廓和向外箭头 | Release：移出 Focus 或结束人工屏蔽 |
+| Focus / Holdings 自动报警 | 圆形轮廓铃铛，暂停时加斜杠 | 同一位置暂停／恢复当天的自动报警，仅悬停及辅助技术显示英文名称 |
 | Section 新增股票 / 新建 Tag | `+` | 按所在控件明确新增目标 |
 | Section / Holdings / 交易明细 | `▸` / `▾` | 已折叠 / 已展开，点击切换，不改变名单归属 |
 | Holdings 列排序 | 列名下的小三角 | 当前降序列，排序只改变显示 |
@@ -127,7 +128,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | Chart Alert | 黑色 **#000000** 细水平线段虚线，右端小箭头进入价格轴：三角形左侧竖边与价格刻度标签左边缘对齐，向右延伸 **6px**；Triggered 时线条/右箭头灰色 **#9ca3af**；虚线统一见 [Chart UI](chart-ui.md#colors-margins-and-reference-lines) | Active / 已触发，生命周期以 alert.md 为准 |
 | Alert 悬停控件 | 白底价格胶囊中心位于绘图区宽度约 **2/3** 处，**1px** 细边框、**11px / 400** 两位小数文字，圆角端部；Active 黑色、Triggered 灰色。鼠标为上下调整光标，不另画上下箭头；胶囊右端为黑色线性垃圾桶，不在价格轴绘制 Alert 数字标签 | 预览价格、拖动改价、删除该条 Alert |
 
-Chart标记使用简单的应用层绘制，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶表示移入 Hidden，Release 回转箭头表示释放归属，方向箭头表示加入 Focus；动作在 [List 交互](list-interactions.md) 维护。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
+Chart标记使用简单的应用层绘制，悬停胶囊使用少量应用层 DOM，视觉对照 TradingView macOS 客户端，不引入图标库、不修改 chart vendor。Alert 垃圾桶复用既有线性轮廓，但其含义是删除 Alert；名单垃圾桶表示移入 Hidden，Release 向外箭头表示释放归属，方向箭头表示加入 Focus；动作在 [List 交互](list-interactions.md) 维护。网页准确使用上述图形；声音由后台播放，状态和错误遵循 Alert 需求。各操作提供英文可访问名称，具体处理语义只在 [alert.md](alert.md) 维护。
 
 Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，与 Chart Alert 水平虚线是不同用途。
 
@@ -204,7 +205,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 
 ### 名单行操作
 
-- 行操作直接针对该行，Scan 提供 Pin/Unpin、Add to Focus 与按归属显示的 Hide/Release；Monitor 保持既有 Pin/Unpin、Hide。布局预留 Scan 三个、Monitor 两个圆形操作按钮。图形见 Logo / Icon，语义与反馈见 [List 交互](list-interactions.md)。
+- 行操作直接针对该行。Focus 在 Scan 和 Monitor 都预留 Pin/Unpin、Release 及暂停自动报警三个圆形按钮。Discover 与 Excluded 按归属提供 Add to Focus、Hide 或 Release。图形见 [Logo / Icon](#logo--icon)，语义见 [List 交互](list-interactions.md)。
 - 保存失败显示简短行内错误；未列入自动下一只白名单的外部更新、Filter、拖动等保持既有选择规则。
 
 ### Search 与 Add
