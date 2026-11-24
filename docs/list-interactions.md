@@ -23,7 +23,8 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | Scan / Monitor | Shift + ↑ / ↓ | 同 section 内向上／下移动一位，保留选中；边界不动 |
 | Scan / Monitor | Shift + Command + ↑ / ↓ | 置顶／取消置顶，明确设置，不是 toggle |
 | Scan · Discover | Delete / Backspace | 移入 Hidden |
-| Scan · Focus | Delete / Backspace | 释放 Focus 归属，按当前规则重新分类 |
+| Scan / Monitor · Focus | Delete / Backspace | 名单获焦时执行 Release，按当前规则重新分类 |
+| Scan / Monitor · 当前 Focus / Holdings symbol | M | 当天暂停／恢复自动报警 |
 | Scan · Hidden | Delete / Backspace | 解除屏蔽，按当前规则重新分类 |
 | Scan · 机器 Excluded | Delete / Backspace | 无操作，不允许人工释放机器排除 |
 | Scan · Discover | Shift + → | 加入 Focus |
@@ -31,21 +32,24 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | Scan · Focus | Shift + ← / → | 无操作 |
 
 - Page 导航只在当前 List 内进行，不切 Discover/Focus/Excluded。Pinned、In Play 参与 section 导航，空组跳过，目标折叠时展开。
+- ↑ / ↓ 和 Page 导航让目标 Symbol 行获得键盘焦点，选中外观走整行轮廓。↑ / ↓ 选股后，各名单暂时清除鼠标悬停高亮，鼠标移动或按下时恢复。行内按钮可以单独用 Tab 聚焦。
 - Shift 移动复用原人工排序范围：Default order 的普通 setup section、Pinned；Scan RFL 排序时普通组不重排，机器 Excluded 普通组与 In Play 保持自动顺序。拖动及其原选择行为不变。
 - 已置顶再按置顶、未置顶再按取消，均无操作、不跳下一只。取消置顶回到真实 section；若当前满足 In Play，仍按现有聚集规则显示。
 - 输入框、搜索及可编辑内容保留文本编辑行为；历史 Scan 与受限会话不可修改名单，导航仍可用。
-- Monitor 不新增 Delete/Backspace 名单操作。Scan 停用 Alert 的 Backspace 删除，只通过横线垃圾桶删除 Alert；Monitor 的既有 Alert 按键原样保留，详情见 [Alert](alert.md#图表交互)。
+- Focus 获得名单焦点时，Delete / Backspace 执行 Release。Monitor 在图表选中手动提醒线后，Backspace 只删除该线。Scan 手动线使用其图表垃圾桶。
+- M 与圆形按钮共用同一暂停动作。长按不重复切换，输入和编辑时保留按键行为。暂停范围与期限见 [Alert](alert.md#暂停自动报警)。
 
 ## 未读 Alert 导航
 
 - 每次按键从当前排列找第一只未读symbol；选图即按 [Alert统一已读](alert.md#统一未读提醒) 清除未读，再按就找到下一只。没有未读时保持原选择，不弹提示；不保存遍历游标、队列或另一套排序。
+- 已撤回的 Focus ADR 报警立即退出未读导航。
 - End与Command+G共用完整Focus导航，不含被Holdings接管显示的symbols；顺序与列表共用Pinned、In Play、原分组及组内顺序。包含折叠组，命中时展开；Scan当前在Discover/Excluded时切到Focus，保持原Tag与Filter。即使目标被Tag筛选隐藏，仍展示其chart，普通后台名单更新保留该选择；目标行可见时滚动定位，不修改筛选、Tag、名单归属或排序。
 - Home与Command+U共用当前Holdings主行顺序，同symbol多批次选第一条主行，共享symbol已读；整体折叠时展开。Scan不跳Holdings、不切模式。这两组快捷键均不受当前选择来源限制；输入框、搜索与可编辑内容保留原键盘行为。
 - Home/End仅单键生效，在Scan/Monitor均取消原生页面翻页／滚动，即使没有未读目标也不滚动。带修饰键的Home/End不映射；文本编辑中的行首／行尾行为保留。
 
 ## 单只名单操作
 
-鼠标按钮和快捷键共用同一动作处理。Scan Discover 提供右箭头 Add to Focus、垃圾桶 Hide；机器 Excluded 提供左箭头 Add to Focus；Hidden 提供 Add to Focus 与回转箭头 Release；Focus 提供 Release。两模式均保留 Pin/Unpin。Monitor 的 Hide 行按钮维持原语义。
+鼠标按钮和快捷键共用同一名单动作。Scan Discover 提供 Add to Focus 与 Hide，机器 Excluded 提供 Add to Focus，Hidden 提供 Add to Focus 与 Release。Scan 和 Monitor 的 Focus 均提供同一个 Release 和自动报警按钮。两模式均保留 Pin/Unpin。
 
 释放不保证返回 Discover：非当天 candidate 退出名单；候选无负面条件进入 Discover，仍有负面条件进入机器 Excluded。入选 Focus 复用后端统一重新匹配及 section 队首规则，不复制来源 Tag。详见 [List 明确操作](list-design.md#明确操作)。
 
@@ -55,7 +59,8 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 
 | 对 active symbol 的操作 | 成功后的反馈 |
 | --- | --- |
-| Scan 隐藏 Discover、释放 Focus / Hidden | 留在来源 List，下一只 |
+| Scan 隐藏 Discover 或释放 Hidden | 留在来源 List，下一只 |
+| Scan / Monitor 释放 Focus | 留在 Focus，下一只 |
 | Scan 从 Discover / Excluded 加入 Focus | 留在来源 List，下一只 |
 | Scan / Monitor 置顶、取消置顶 | 当前 List 下一只 |
 

@@ -5,7 +5,7 @@ import { tagRole, type Preferences } from './tags.js';
 import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey, type ListColumn, type ListSection } from './board.js';
-import { attentionState, attentionAppearance } from './attention.js';
+import { attentionState, attentionAppearance, autoAlertButton } from './attention.js';
 import { symbolRow } from './symbol-row.js';
 import { rankedRows, stateAppearance, adrText, adrTitle, volumeBadge, type IntradayState } from './intraday-state.js';
 
@@ -40,8 +40,12 @@ export class Watchlist {
     attention = attentionState();
     private get stateVisible() { return this.intraday.enabled && this.regularSession && (!this.scan?.enabled || this.scan.activeList === 'focus'); }
     private get inPlayActive() { return this.stateVisible && !this.search; }
+    canPause(symbol: string) {
+        return this.editable && this.attention.eligible.has(symbol) && this.tickers.some(t => t.symbol === symbol && t.status === 'focus');
+    }
 
-    constructor(private onSelect: (symbol: string) => void, private onUpdate: (data: ListState) => void) {
+    constructor(private onSelect: (symbol: string) => void, private onUpdate: (data: ListState) => void,
+                private toggleAutoPause: (symbol: string) => void) {
         this.input.addEventListener('focus', () => { if (!this.search) this.beginSearch(); });
         this.input.addEventListener('input', () => this.changeSearch());
         $('symbols').addEventListener('click', event => {
@@ -74,8 +78,10 @@ export class Watchlist {
             if (target.closest('[data-list-action]')) {
                 const item = this.tickers.find(t => t.symbol === row.dataset.symbol)!;
                 void this.actOnTicker(item, target.closest<HTMLElement>('[data-list-action]')!.dataset.listAction as 'remove' | 'focus');
-            } else if (this.search) { this.endSearch(); this.onSelect(row.dataset.symbol!); }
-            else this.onSelect(row.dataset.symbol!);
+            } else {
+                if (this.search) this.endSearch();
+                this.selectRow(row.dataset.symbol!);
+            }
         });
         $('symbols').addEventListener('pointerdown', event => {
             const target = event.target as HTMLElement;
@@ -144,7 +150,7 @@ export class Watchlist {
             if (event.key === 'Escape') this.endSearch(); else void this.commitSearch();
             return;
         }
-        if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]') ||
+        if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable]') ||
             !this.keyboardEnabled || this.search) return;
         if (['PageUp', 'PageDown'].includes(event.key) && !event.shiftKey) {
             event.preventDefault(); this.jumpSection(event.key === 'PageDown' ? 1 : -1); return;
@@ -156,9 +162,10 @@ export class Watchlist {
             if (canEdit && ticker) void this.togglePin(ticker, event.key === 'ArrowUp');
             return;
         }
-        if (this.scan?.enabled && ['Delete', 'Backspace'].includes(event.key) && !event.shiftKey) {
+        if (['Delete', 'Backspace'].includes(event.key) && !event.shiftKey && ticker &&
+            (ticker.status === 'focus' ? (event.target as HTMLElement).closest('#symbols') : this.scan?.enabled)) {
             event.preventDefault();
-            if (canEdit && ticker) void this.actOnTicker(ticker, 'remove');
+            if (canEdit && !event.repeat) void this.actOnTicker(ticker, 'remove');
             return;
         }
         if (this.scan?.enabled && event.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
@@ -175,8 +182,13 @@ export class Watchlist {
         if (!rows.length) return;
         const index = rows.findIndex(row => row.dataset.symbol === this.selected);
         const next = Math.max(0, Math.min(rows.length - 1, index + direction));
-        this.onSelect(rows[next].dataset.symbol!);
+        this.selectRow(rows[next].dataset.symbol!);
         rows[next].scrollIntoView({ block: 'nearest' });
+    }
+
+    private selectRow(symbol: string) {
+        this.onSelect(symbol);
+        this.rows.get(symbol)?.focus({ preventScroll: true });
     }
 
     private jumpSection(direction: number) {
@@ -187,7 +199,7 @@ export class Watchlist {
         if (!target) return;
         this.collapsed.delete(target.querySelector<HTMLElement>('[data-toggle]')!.dataset.toggle!);
         const symbol = target.dataset.firstSymbol!;
-        this.render(); this.onSelect(symbol);
+        this.render(); this.selectRow(symbol);
         this.rows.get(symbol)?.scrollIntoView({ block: 'nearest' });
     }
 
@@ -212,8 +224,8 @@ export class Watchlist {
             if (item.status === 'focus') return;
             await this.mutate({ action: 'move', ticker: item.ticker, target: 'focus' }, item);
         } else if (item.status === 'excluded' && item.section !== 'hidden') return;
-        else if (item.section === 'hidden' || (this.scan?.enabled && item.status === 'focus'))
-            await this.mutate({ action: 'move', ticker: item.ticker, target: 'discover' }, this.scan?.enabled ? item : undefined);
+        else if (item.section === 'hidden' || item.status === 'focus')
+            await this.mutate({ action: 'move', ticker: item.ticker, target: 'discover' }, item);
         else await this.mutate({ action: 'hide', ticker: item.ticker }, this.scan?.enabled ? item : undefined);
     }
 
@@ -367,7 +379,7 @@ export class Watchlist {
         const { symbol, order } = this.advancing!;
         const after = order.slice(order.indexOf(symbol) + 1);
         const next = after.find(symbol => this.rows.has(symbol)) ?? [...this.rows.keys()].at(-1) ?? '';
-        this.onSelect(next);
+        this.selectRow(next);
         this.rows.get(next)?.scrollIntoView({ block: 'nearest' });
     }
 
@@ -399,6 +411,7 @@ export class Watchlist {
 
     private createRow(ticker: Ticker, columns: ListColumn[], scan: boolean) {
         const row = document.createElement('div'); row.className = 'symbol-row';
+        row.tabIndex = -1;
         row.dataset.renderKey = this.rowKey(ticker);
         row.dataset.symbol = ticker.symbol; row.dataset.ticker = ticker.ticker; row.dataset.list = ticker.status;
         row.dataset.pinned = String(!!ticker.pinned);
@@ -450,9 +463,10 @@ export class Watchlist {
                 if (ticker.status !== 'excluded' || ticker.section === 'hidden') {
                     const action = document.createElement('button');
                     action.dataset.listAction = 'remove';
-                    if (ticker.section === 'hidden' || (scan && ticker.status === 'focus')) {
+                    if (ticker.section === 'hidden' || ticker.status === 'focus') {
                         action.className = 'release-ticker icon-button';
-                        action.textContent = '↩'; action.title = `Release ${ticker.ticker} to automatic classification`;
+                        action.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5H4v14h7M8 9h3M8 15h3M11 12h9m-4-4 4 4-4 4"/></svg>';
+                        action.title = ticker.status === 'focus' ? 'Release from Focus' : 'Release from Hidden';
                     } else {
                         action.className = 'hide-ticker icon-button';
                         action.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
@@ -460,6 +474,7 @@ export class Watchlist {
                     }
                     action.setAttribute('aria-label', action.title); cell.append(action);
                 }
+                if (ticker.status === 'focus') cell.append(autoAlertButton(ticker.symbol, this.toggleAutoPause));
             }
             row.append(cell);
         }

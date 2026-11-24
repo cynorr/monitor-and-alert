@@ -40,7 +40,7 @@
 
 Total Net Liq / P/L / P/L Day 仅汇总当前券商余仓；P/L Day Total 不合并已清仓交易，保持券商当前持仓口径。主行盈亏、账户净值和行情不等待历史整理成功；FIFO、Days、Sold 或明细成本不可用时只影响相应派生字段。账户、订单和历史分别保留自己的成功时间，不把视图生成时间当刷新时间。
 
-表面复用 Symbol row template、palette、attention 和 holdings-layout.ts 的纯 DOM 自然测宽。内容宽度由隐藏自然宽度副本决定，不使用已分配 scrollWidth 反推最小宽度。普通报价更新复用节点，顺序或明细结构变化才重排。
+实时价格颜色、未读波浪及持仓主行的暂停自动报警圆形按钮复用 [Symbol 行模板](ui.md#symbol-row-template)。表面复用 palette、attention 和 holdings-layout.ts 的纯 DOM 自然测宽。内容宽度由隐藏自然宽度副本决定，不使用已分配 scrollWidth 反推最小宽度。普通报价更新复用节点，顺序或明细结构变化才重排。
 
 ## 持仓布局、选择与自然宽度
 

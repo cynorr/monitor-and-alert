@@ -20,10 +20,10 @@ let socket: WebSocket | null = null;
 let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, currentView: View | null = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource: 'watchlist' | 'holdings' = 'watchlist', holdingKey = '';
-const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList);
+const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList, toggleAutoPause);
 let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 const trade = new TradeController([daily, intraday], () => appMode);
-const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'monitor' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'monitor') layout.setHoldingsWidth(width); });
+const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'monitor' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'monitor') layout.setHoldingsWidth(width); }, toggleAutoPause);
 const scan = new ScanControls(applyList, () => { watchlist.render(); const rows = scan.visible(watchlist.tickers); if (selectionSource === 'watchlist' && !rows.some(row => row.symbol === symbol)) select(rows[0]?.symbol ?? '', timeframe); });
 watchlist.scan = scan;
 const alerts = new AlertController([daily, intraday], () => symbol, () => appMode, async selected => {
@@ -35,6 +35,7 @@ const alerts = new AlertController([daily, intraday], () => symbol, () => appMod
     watchlist.attention = schwab.attention = attentionState(value);
     watchlist.render(); schwab.render();
 });
+function toggleAutoPause(next: string) { void alerts.toggleAutoPause(next); }
 
 function applyList(data: ListState) {
     const nextMode = data.app_mode ?? 'monitor';
@@ -190,9 +191,24 @@ function connect() {
 }
 document.querySelectorAll<HTMLButtonElement>('[data-tf]').forEach(button => button.addEventListener('click', () => { if (symbol)
     void select(symbol, button.dataset.tf!); }));
+const workspace = $('workspace');
+function restoreRowHover(event: PointerEvent) {
+    if (event.pointerType === 'mouse' && workspace.classList.contains('keyboard-row-nav'))
+        workspace.classList.remove('keyboard-row-nav');
+}
+document.addEventListener('pointermove', restoreRowHover, { passive: true });
+document.addEventListener('pointerdown', restoreRowHover, { capture: true, passive: true });
 document.addEventListener('keydown', event => {
     if (event.ctrlKey || event.altKey || event.shiftKey || event.isComposing ||
-        (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
+        (event.target as HTMLElement).closest('input,textarea,select,[contenteditable]')) return;
+    if (!event.metaKey && event.defaultPrevented && (event.key === 'ArrowUp' || event.key === 'ArrowDown'))
+        workspace.classList.add('keyboard-row-nav');
+    if (!event.metaKey && event.code === 'KeyM' &&
+        (selectionSource === 'holdings' ? schwab.canPause(symbol) : watchlist.canPause(symbol))) {
+        event.preventDefault();
+        if (!event.repeat) toggleAutoPause(symbol);
+        return;
+    }
     if (!event.metaKey && event.code === 'KeyR') {
         event.preventDefault();
         if (!event.repeat) { daily.resetLatest(); if (appMode !== 'scan') intraday.resetLatest(); }

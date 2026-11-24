@@ -8,7 +8,7 @@ import { horizontalLines, nearPriceLine, panePoint, priceAtPointer } from './pri
 export type PriceAlert = { id: string; symbol: string; price_cents: number; generation: number; state: 'active' | 'triggered'; expires_at: number };
 export type AlertNotice = { symbol: string; direction: 'up' | 'down'; level: 1 | 2; fired_at: number };
 export type AlertPlayback = { symbol: string; fired_at: number; pulse_at: number };
-export type AlertState = { revision: number; alerts: PriceAlert[]; unread: AlertNotice[]; eligible_symbols: string[]; scope_known: boolean; error: string | null; sound: { enabled: boolean; error: string | null; playing: AlertPlayback[] } };
+export type AlertState = { revision: number; alerts: PriceAlert[]; unread: AlertNotice[]; eligible_symbols: string[]; paused_auto_symbols: string[]; scope_known: boolean; error: string | null; sound: { enabled: boolean; error: string | null; playing: AlertPlayback[] } };
 export const alertPrice = (cents: number) => (cents / 100).toFixed(2);
 const previewCents = (price: number) => {
     const [digits, exponent = '0'] = price.toString().split('e');
@@ -111,12 +111,15 @@ export class AlertChart {
         if (!hits.length && !capsule) { this.controller.choose(''); this.suppressed = false; return; }
         const previous = hits.findIndex(alert => alert.id === this.controller.selected);
         const alert = capsule ? this.rows().find(alert => alert.id === this.hovered)! : hits[(previous + 1) % hits.length];
+        const host = event.currentTarget as HTMLElement;
+        host.tabIndex = -1;
+        host.focus({ preventScroll: true });
         this.controller.choose(alert.id);
         this.hover(alert.id);
         this.stop(event);
         this.drag = { alert, pointer: event.pointerId, startY: event.clientY, price: alert.price_cents / 100, moved: false };
         this.controller.preview = { id: alert.id, cents: alert.price_cents };
-        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+        host.setPointerCapture(event.pointerId);
     }
     private move(event: PointerEvent) {
         if (!this.drag) {
@@ -156,9 +159,13 @@ export class AlertController {
                 private created: (symbol: string) => Promise<void>, private changed: (value: AlertState) => void) {
         this.layers = panels.map(panel => new AlertChart(panel, this));
         document.addEventListener('keydown', event => {
-            if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
+            if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable]')) return;
             if (event.key === 'Escape') { this.layers.forEach(layer => layer.cancel()); this.choose(''); }
-            if (event.key === 'Backspace' && this.mode() !== 'scan' && this.selected) { event.preventDefault(); event.stopImmediatePropagation(); void this.mutate({ action: 'delete', id: this.selected }); }
+            if (event.key === 'Backspace' && this.mode() !== 'scan' && this.selected &&
+                !(event.target as HTMLElement).closest('#symbols')) {
+                event.preventDefault(); event.stopImmediatePropagation();
+                if (!event.repeat) void this.mutate({ action: 'delete', id: this.selected });
+            }
         }, true);
         $('alert-error-close').addEventListener('click', () => { this.error = ''; this.render(); });
     }
@@ -186,6 +193,12 @@ export class AlertController {
     }
     async read(symbol: string) {
         if (this.value?.unread.some(notice => notice.symbol === symbol)) await this.mutate({ action: 'read', symbol });
+    }
+    async toggleAutoPause(symbol: string) {
+        if (this.value?.eligible_symbols.includes(symbol)) {
+            const paused = this.value.paused_auto_symbols?.includes(symbol) ?? false;
+            await this.mutate({ action: 'pause_auto', symbol, paused: !paused });
+        }
     }
     private render() {
         const message = this.error || this.value?.error || this.value?.sound.error || '';

@@ -1,5 +1,31 @@
 # 验证记录
 
+## 2026-11-24：方向键选股与鼠标悬停
+
+本机 macOS 正式页面验证 Monitor 和 Scan。鼠标停在原行时按方向键，原行仍匹配浏览器 hover，但灰底与仅悬停时显示的操作消失。用鼠标点回原行的 Tags 控件后灰底恢复，选中仍在键盘切到的行。验证后恢复 Monitor。Holdings 当时为空，本轮未实测持仓行。TypeScript 构建、8 项名单交互用例和 git diff --check 通过。
+
+## 2026-11-24：暂停自动报警图标
+
+本机 macOS 完成 TypeScript 构建、最新未读定向用例及 git diff --check。Focus 和 Holdings 继续使用同一个铃铛 SVG，只有暂停状态显示斜杠。本次未在正式页面切换暂停状态。
+
+斜杠留缝以正式 Monitor 中已暂停的 REPL.US 做浏览器只读验证。暂停铃铛应用遮罩，普通铃铛保持完整，原暂停设定保留。TypeScript 构建和 git diff --check 通过。
+
+## 2026-11-24：名单焦点与盘前暂停图标
+
+- 美东约 04:52 的正式服务仍在运行旧后端，Alert 接口不含暂停字段，库中没有暂停表。按原工作目录与参数平稳重启后，确认 Monitor 运行、Longbridge CONNECTED，Alert 接口返回暂停字段。
+- 盘前在正式页面用上下键切换真实名单，Scan 与 Monitor 均确认焦点在整行，ticker 文字无额外 outline。按 M 暂停 PRG.US，切到另一行时红色禁止符号仍可见，点图标恢复。浏览器计算样式确认未暂停的普通行默认隐藏铃铛，激活行显示铃铛，暂停行只显示禁止图案。验证后恢复 Monitor 与 PRG 的原暂停状态。
+- TypeScript 构建、15 项前端相关用例和 git diff --check 通过。本轮实测覆盖盘前状态切换，未覆盖 Regular 自动触发或声音播放。
+
+## 2026-11-24：Focus Release 与自动报警
+
+环境为本机 macOS、Python 3.13、TypeScript 和 Node。美东凌晨现有 8765 服务未响应。复用现有 Longbridge 与 Alert SQLite 的只读输入验证，写入只落临时库。
+
+- 使用 11 月 23 日 ALGT.US 的真实 Regular 5m K 线前 57 根和此前 20 根完成日 K，在临时 Alert Engine 核对实际价格及当日可见高低。0.677× 进入关注，1.017× 升至紧急，回落到 0.965× 清除紧急未读并保留关注状态，之后重新进入紧急档可触发。当天暂停时真实样本价格跨过手动线，手动线正常触发且未读保留。暂停经重启保留，美东午夜重置。这项检查使用真实缓存，采样粒度为 5m。
+- 57 项后端定向用例通过，覆盖来源准确性、未读撤回、暂停与手动提醒隔离、HTTP/WS 及真实名单分类。原 Alert SQLite 的只读副本确认可增补来源及暂停表，验证时原库没有手动线记录。
+- 在 11 月 23 日真实名单和截面副本上调用共用 Release，Scan、Monitor 均将 ALGT.US 重新归入 Discover。Monitor 无截面时可先移出 Focus。三次都没有进入 Hidden，离开联合监控范围后的价格线正常清理。
+- 15 项前端定向用例、TypeScript 构建及 git diff --check 通过。键盘用例覆盖 Scan/Monitor Focus 的 Delete/Backspace、名单焦点、Discover Hide 和同一 Release 路由。未实测浏览器按键、颜色对比、实时行情触发或实际播放声音。
+- 交易后端、交易票据及订单接口路径不在改动范围。测试期间未向券商提交、修改或取消订单。
+
 ## 2026-11-18：单一 Schwab 账户与新版 Monitor
 
 环境：本机macOS、Python3.13.1、TypeScript5.9.3、正式127.0.0.1:8765。先归档并移除旧账户和独占持仓UI，再统一为Scan/Monitor、MarketService/SchwabService；账户快照使用/v1/schwab、schwab/trading_enabled，报价消息使用schwab_quote。金融操作路径和订单协议保留。
