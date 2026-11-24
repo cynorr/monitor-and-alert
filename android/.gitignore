@@ -1,0 +1,10 @@
+.gradle/
+.tools/
+local.properties
+**/build/
+app/src/main/assets/seed.zip
+app/src/main/assets/provision.json
+app/src/androidTest/assets/scan-reference.json
+output/
+.idea/
+*.iml

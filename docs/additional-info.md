@@ -1,5 +1,7 @@
 # Additional Info
 
+Android prototype 转译本文件的处理与刷新语义，使用独立缓存；单图市值位置见 [UI / Android](ui.md#android-prototype)。选股仍只读缓存，不依赖 Mac 服务或其代理。
+
 更新：2026-10-30。本文件是附加信息定位、数据源、处理和刷新规则的唯一维护入口。模块入口为 [data_service/additional_info/AGENTS.md](../data_service/additional_info/AGENTS.md)，实现契约见 [development.md](development.md)，具体图表排版只在 [chart-ui.md](chart-ui.md#headers-and-information) 维护。
 
 ## 定位

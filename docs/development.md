@@ -1,5 +1,11 @@
 # 开发维护手册
 
+## Android prototype
+
+独立工程在 `android/`：Kotlin / Compose、Android SQLite 和单个本地 Lightweight Charts WebView。指标、排名、名单规则直接转译现有 Python，并用相同真实数据对照；WebView 只绘图。不抽取或修改 Mac 服务，不启动额外 Python 进程，不连接 Mac HTTP / WebSocket。源码职责与构建见 [Android README](../android/README.md#源码)。
+
+准备脚本只读现有数据与账号 2 / Massive 凭证，输出仅在 Android 目录；初始数据库用只读备份，不能写主 runtime。私用 APK 的凭证默认值由本人明确授权，asset 排除 Git，原生侧以 Keystore 加密保存，不传入 WebView。Android 数据与生命周期独立。
+
 更新：2026-11-17。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 行情要求只在 [longbridge-data.md](longbridge-data.md) 维护，多账号与访问台账只在 [longbridge-accounts.md](longbridge-accounts.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [schwab.md](schwab.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖

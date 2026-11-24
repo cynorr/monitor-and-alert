@@ -1,5 +1,7 @@
 # Longbridge 多账号与访问台账
 
+Android prototype 固定只用账号 2 的 Quote。2026-11-19 本人明确要求假定账号 2 空闲、两设备不同时使用，不处理冲突，不调整下文 Mac 选号、context 或访问台账。Android 不请求 K 线；私用 APK 的默认凭证按授权独立生成，不能改写本机配置。
+
 本文件是 Longbridge 账号配置、K 线选号、访问统计与保存规则的唯一维护入口。行情范围、复权、缓存与恢复见 [Longbridge 数据说明](longbridge-data.md)；实现职责见 [开发维护](development.md)。
 
 ## 账号与连接

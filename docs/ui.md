@@ -1,5 +1,11 @@
 # UI layout and interactions
 
+## Android prototype
+
+仅适配 OPPO 平板横屏，扣除系统栏后左侧单个 Daily 图占 **55%**、右侧 List 占 **45%**。使用原生 Compose 控件与触摸菜单，图表由原生传入实际尺寸，不依赖 WebView 初始 CSS 百分比高度。沿用现有语义配色、黑色选中胶囊和 Tag 轮廓，字体 / 行高 / 触摸区域按平台适配。
+
+保留已保存 Tag 和完整字段筛选，暂缓完整 Tag 编辑器、拖拽及桌面快捷键。单图信息区合并公司、分类、市值与财报；数据范围见 [运行逻辑](behavior.md#android-prototype)。不显示未实现的盘中状态或未读提醒。启动器暂用现有 Surf 轮廓绘制原生矢量图，不新增页头或品牌系统。
+
 Updated: 2026-11-17. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [schwab.md](schwab.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [schwab.md](schwab.md).
 
 ## Layout

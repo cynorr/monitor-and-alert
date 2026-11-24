@@ -2,6 +2,8 @@
 
 个人美股工作台：Scan使用Massive日线筛选，Monitor使用Longbridge双图持续看盘，整合Schwab持仓、提醒和交易。两个模式共用Focus和UI；切页不停止行情与账户后台任务。单进程Python、SQLite、同源WebSocket。
 
+独立平板首版见 [Android prototype](android/README.md)。Android 在独立目录构建 APK，使用自己的本地数据和账号 2；不改变或依赖现有 Mac 主服务。
+
 [Schwab 账户与交易](docs/schwab.md) · [开发准则](docs/development-principles.md) · [List 需求与设计](docs/list-design.md) · [List UI](docs/ui.md#list-ui) · [List 交互](docs/list-interactions.md) · [Alert 需求](docs/alert.md) · [Chart UI](docs/chart-ui.md) · [Schwab 账户数据](docs/schwab.md) · [Schwab 持仓 UI](docs/schwab.md) · [Logo / Icon](docs/ui.md#logo--icon) · [运行逻辑](docs/behavior.md) · [开发维护](docs/development.md) · [UI 总入口](docs/ui.md) · [验证记录](docs/validation.md) · **[Longbridge 数据要求](docs/longbridge-data.md)** · [Longbridge 多账号与访问台账](docs/longbridge-accounts.md) · **[Massive 数据要求](docs/massive-data.md)** · [共用数据契约](docs/upstream-daily-data.md)
 
 Alert 与统一移入 Focus 已实现；完整需求分别见 [Alert](docs/alert.md) 与 [List 入选规则](docs/list-design.md#统一移入-focus)，模块维护入口为 [data_service/alerts/AGENTS.md](data_service/alerts/AGENTS.md)。

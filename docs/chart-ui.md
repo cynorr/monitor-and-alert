@@ -1,5 +1,7 @@
 # Chart UI
 
+Android prototype 仅保留完成日单图，布局见 [UI / Android](ui.md#android-prototype)。同口径指标由原生 Kotlin 计算，WebView 只绘图；触摸缩放、长按十字线及 Reset 使用公开 API。独立 Quote 只更新价格显示，不改 bars / 指标；历史日期隐藏 Quote。市值并入单图信息区，来源要求仍见 [Additional Info](additional-info.md)。
+
 Updated: 2026-11-17. This is the only current specification for general chart appearance and interaction. Alert-specific requirements are maintained only in [alert.md](alert.md) and are implemented. [ui.md](ui.md) is the UI entry point; panel widths are defined in [List UI / 宽度与视觉](ui.md#宽度与视觉). Longbridge data requirements are maintained only in [longbridge-data.md](longbridge-data.md); indicator calculations remain in [behavior.md](behavior.md) and [development.md](development.md). The product UI is English only.
 
 ## Implementation principle

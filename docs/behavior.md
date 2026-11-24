@@ -1,5 +1,11 @@
 # 看盘服务运行逻辑
 
+## Android prototype
+
+2026-11-19 确认：独立 Android APK 保留完成日 Daily、完整本机 Scan、三名单、现有筛选 / Tag 使用和 Additional Info；账号 2 只提供实时 Quote，不合成日 K。不含分钟 K、Holdings、交易、提醒、Intraday State、In Play 或熄屏监控。前台执行数据任务，恢复前台重连；选图只读缓存。历史 Scan 只读，不用当前财报重分类，也不显示当前 Quote。
+
+首次导入现有历史、workspace 与偏好后独立更新保存，不做双端同步。按本人要求，私用 APK 预置必要凭证，安装即用。Mac 主服务的代码、配置、运行数据、选号、连接与进程均不改变。安装见 [Android README](../android/README.md)。
+
 更新：2026-11-17。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [schwab.md](schwab.md)。
 
 ## Alert 与入选规则
