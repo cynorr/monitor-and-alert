@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { matchesFilters, sliderValues } from '../public/filters.js';
 import { withSavedTag, tagChanged, tagRole } from '../public/tags.js';
-import { scanProgress, selectionRequest, extendedQuote } from '../public/types.js';
-import { collapseKey, growthValue, listSections, sectionKey } from '../public/board.js';
+import { scanProgress, selectionRequest, extendedQuote, mdvText } from '../public/types.js';
+import { collapseKey, growthValue, listColumns, listSections, sectionKey } from '../public/board.js';
 import { matchesTag, ScanControls } from '../public/scan.js';
 import { Watchlist } from '../public/list.js';
 import { tagAppearance } from '../public/tag-appearance.js';
@@ -157,9 +157,9 @@ test('setup sections preserve Tag order; renamed negative and helper labels rema
     assert.equal(tagRole({ id: 'under', name: 'Under-50', role: 'label', filters: {} }), 'label');
 });
 
-test('manual Tags match the saved Tag filter; unsaved rule preview still requires the draft conditions', () => {
+test('saved Tag filtering uses computed matches; draft preview requires the edited conditions', () => {
     const tag = { id: 'surf', name: 'Surf', filters: { below_days: { max: 1 } } };
-    const row = { tags: ['surf'], below_days: 3 };
+    const row = { tags: ['surf'] };
     assert.ok(matchesTag(row, tag));
     assert.equal(matchesTag(row, tag, false), false);
     assert.ok(matchesTag({ below_days: 1 }, tag, false));
@@ -167,7 +167,7 @@ test('manual Tags match the saved Tag filter; unsaved rule preview still require
     assert.ok(tagChanged(tag, { ...tag, role: 'label' }));
 });
 
-test('appearance edits save independently, survive renaming, and preserve manually assigned filter members', () => {
+test('appearance edits save independently, survive renaming, and preserve computed filter members', () => {
     const saved = { id: 'surf', name: 'Surf-20', filters: { below_days: { max: 1 } } };
     saved.appearance = tagAppearance(saved);
     assert.equal(saved.appearance.icon, 'surf');
@@ -185,10 +185,21 @@ test('appearance edits save independently, survive renaming, and preserve manual
     controls.holdingSymbols = new Set();
     controls.preferences = { activeTag: saved.id, tags: [saved] };
     controls.draft = draft;
-    const row = { status: 'focus', tags: ['surf'], manual_tags: ['surf'], below_days: 3 };
+    const row = { status: 'focus', tags: ['surf'] };
     assert.deepEqual(controls.visible([row]), [row]);
     draft.filters.below_days.max = 2;
     assert.deepEqual(controls.visible([row]), []);
+});
+
+test('the Tag track is shared by both modes and MDV20 uses rounded compact amounts', () => {
+    const tagColumn = columns => columns.find(column => column.field === 'tags');
+    const monitor = tagColumn(listColumns(false, false));
+    assert.equal(monitor.label, '');
+    assert.deepEqual(tagColumn(listColumns(false, true, true)), monitor);
+    assert.deepEqual(tagColumn(listColumns(true, true, true)), monitor);
+    assert.equal(mdvText(15_600_000), '16M');
+    assert.equal(mdvText(999_950), '1M');
+    assert.equal(mdvText(null), '—');
 });
 
 

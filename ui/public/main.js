@@ -1,6 +1,6 @@
 import { attentionState } from './attention.js';
 import { installPalette } from './palette.js';
-import { $, money, compact, nyTime, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
+import { $, money, mdvText, nyTime, defaultTimeframe, scanProgress, selectionRequest } from './types.js';
 import { Panel, linkTradingDay } from './chart.js';
 import { Watchlist } from './list.js';
 import { initLayout } from './layout.js';
@@ -126,6 +126,12 @@ function showState(view) {
         state(Date.now() - readySince < 3000 ? 'Ready' : '', 'full');
     document.querySelectorAll('.quality').forEach(node => { node.hidden = !errors.length; node.title = errors.join('\n'); });
 }
+function showDailyMdv(value) {
+    const formatted = mdvText(value);
+    const unit = formatted.match(/[KMBT]$/)?.[0] ?? '';
+    $('daily-mdv-value').textContent = unit ? formatted.slice(0, -1) : formatted;
+    $('daily-mdv-unit').textContent = unit;
+}
 function apply(view) {
     if (view.symbol !== symbol || view.timeframe !== timeframe || (view.app_mode && view.app_mode !== appMode))
         return;
@@ -143,7 +149,7 @@ function apply(view) {
     const bid = quote?.bid_price, ask = quote?.ask_price;
     document.querySelectorAll('.spread').forEach(node => { node.hidden = !bid && !ask; const sell = node.querySelector('.bid'), buy = node.querySelector('.ask'); sell.hidden = !bid; buy.hidden = !ask; sell.textContent = `Sell ${money(bid)}`; buy.textContent = `Buy ${money(ask)}`; });
     document.querySelectorAll('.adr').forEach(node => node.textContent = view.summary.adr20 == null ? '—' : view.summary.adr20.toFixed(2) + '%');
-    document.querySelectorAll('.mdv').forEach(node => node.textContent = view.summary.mdv20 == null ? '—' : '$' + compact(view.summary.mdv20));
+    showDailyMdv(view.summary.mdv20);
     $('simulation').hidden = view.mode !== 'simulation';
     showState(view);
     trade.view(view);
@@ -166,7 +172,8 @@ function select(next, tf, source = selectionSource, key = holdingKey) {
     intraday.reset(symbol + '/' + tf);
     document.querySelectorAll('.symbol').forEach(node => node.textContent = symbol.replace('.US', '') || '—');
     additional.update(null);
-    document.querySelectorAll('.last-price,.adr,.adv').forEach(node => node.textContent = '—');
+    document.querySelectorAll('.last-price,.adr').forEach(node => node.textContent = '—');
+    showDailyMdv();
     document.querySelectorAll('.spread,.quality').forEach(node => node.hidden = true);
     document.querySelectorAll('[data-tf]').forEach(button => { button.classList.toggle('active', button.dataset.tf === tf); button.setAttribute('aria-pressed', String(button.dataset.tf === tf)); });
     watchlist.selected = source === 'watchlist' ? symbol : '';

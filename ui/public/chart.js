@@ -1,5 +1,5 @@
 import { palette } from './palette.js';
-import { $, money, compact, dayKey } from './types.js';
+import { $, money, compact, dollarVolText, dayKey } from './types.js';
 import { BAR_SPACING, VOLUME_PANE_RATIO } from './chart-settings.js';
 import { DailyChartView } from './daily-chart-view.js';
 const L = window.LightweightCharts;
@@ -69,7 +69,7 @@ export class Panel {
         const colors = { ema10: palette.blue, ema20: palette.yellow, [daily ? 'sma50' : 'sma65']: palette.red };
         for (const [name, color] of Object.entries(colors))
             this.lines[name] = this.chart.addSeries(L.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-        this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'custom', minMove: .01, formatter: (value) => '$' + compact(value) }, priceLineVisible: false, lastValueVisible: false }, 1);
+        this.volume = this.chart.addSeries(L.HistogramSeries, { priceFormat: { type: 'custom', minMove: .01, formatter: dollarVolText }, priceLineVisible: false, lastValueVisible: false }, 1);
         this.chart.panes()[0].setStretchFactor(1 - VOLUME_PANE_RATIO);
         this.chart.panes()[1].setStretchFactor(VOLUME_PANE_RATIO);
         if (daily)
@@ -85,7 +85,7 @@ export class Panel {
             }
             const label = $(id + '-volume');
             label.style.top = `${this.chart.panes()[0].getHeight() + 5}px`;
-            label.style.right = `${this.chart.priceScale('right').width() + 8}px`;
+            label.style.setProperty('--volume-axis-width', `${this.chart.priceScale('right').width()}px`);
             this.dailyView?.sync();
         };
         const observer = new ResizeObserver(volumePosition);
@@ -243,13 +243,15 @@ export class Panel {
     showCandleInfo(row) {
         const volume = $(this.id + '-volume');
         const comparison = row?.turnover_comparison;
-        const percent = comparison?.percent;
-        const dollars = (amount) => amount == null ? '—' : '$' + compact(amount);
-        volume.textContent = `Dollar Vol ${dollars(row?.turnover)} · 5D Avg ${percent == null ? '—' : Math.trunc(percent) + '%'}`;
+        const percent = comparison?.percent == null ? null : Math.trunc(comparison.percent);
+        const comparisonValue = $(this.id + '-volume-comparison');
+        $(this.id + '-turnover').textContent = dollarVolText(row?.turnover);
+        comparisonValue.textContent = percent == null ? '—' : `${percent}%`;
+        comparisonValue.dataset.aboveAverage = String(percent != null && percent > 100);
         volume.title = row?.time === this.active?.time && row ? (row.turnover == null ? 'Current candle turnover unavailable'
             : this.daily ? 'Current daily cumulative turnover' : 'Turnover for the current intraday candle') : 'Turnover for this candle';
         volume.title += `\nShares ${compact(row?.volume)}`;
-        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${dollars(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average turnover.`
+        volume.title += comparison ? `\nPrevious 5 trading days${this.daily ? '' : ', same regular-session time slot'}: average ${dollarVolText(comparison.average)}, ${comparison.samples} available sample${comparison.samples === 1 ? '' : 's'}. 100% = average turnover.`
             : '\nPrevious 5 trading days: comparison unavailable.';
         const node = $(this.id + '-ohlc');
         if (!row) {

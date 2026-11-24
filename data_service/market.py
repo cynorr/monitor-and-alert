@@ -152,8 +152,6 @@ class MarketService:
             self.workspace.move_ticker(ticker, section, payload.get('index'), list_name=payload.get('list_name', 'focus'))
         elif action == 'keep':
             self.workspace.add_ticker(ticker, 'focus')
-        elif action == 'tag':
-            self.workspace.set_manual_tags(ticker, payload.get('tags', []))
         elif action == 'pin':
             self.workspace.pin_ticker(ticker, payload['pinned'])
         elif action == 'pin_move':

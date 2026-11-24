@@ -34,10 +34,9 @@ def active_tag(tag):
                                         for rule in tag.get('filters', {}).values())
 
 
-def matched_tags(row, definitions, manual=()):
+def matched_tags(row, definitions):
     return [tag for tag in definitions
-            if (tag['id'] in manual and tag_role(tag) in ('setup', 'label')) or
-            (active_tag(tag) and matches_filters(row, tag['filters']))]
+            if active_tag(tag) and matches_filters(row, tag['filters'])]
 
 
 def focus_classification(row, preferences):
@@ -55,7 +54,6 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
     rows = {row['symbol'].removesuffix('.US'): row for row in snapshot['rows']}
     candidates = {ticker for ticker, row in rows.items() if row.get('candidate')}
     definitions = preferences['tags']
-    manual_ids = {tag['id'] for tag in definitions if tag_role(tag) in ('setup', 'label')}
     setup_sections = {'unclassified'} | {tag['id'] for tag in definitions if tag_role(tag) == 'setup'}
     manual_discover = {ticker for ticker, state in states.items()
                        if state.get('status') == 'discover' and state.get('manual_discover_date') == selected_date}
@@ -68,25 +66,14 @@ def apply_rules(workspace, snapshot, preferences, selected_date=None):
         state.setdefault('status', 'discover')
         if is_hidden(state, selected_date):
             state['tags'] = []
-            state.pop('manual_tags', None)
-            state.pop('manual_tags_date', None)
             continue
 
         if state.get('status') == 'excluded' and state.get('section') == 'hidden':
             state.update(status='discover', section='unclassified')
             state.pop('excluded_at', None)
 
-        if state.get('manual_tags_date') != selected_date:
-            state.pop('manual_tags', None)
-            state.pop('manual_tags_date', None)
-        manual = [tag for tag in state.get('manual_tags', []) if tag in manual_ids]
-        if manual:
-            state['manual_tags'] = manual
-        else:
-            state.pop('manual_tags', None)
-            state.pop('manual_tags_date', None)
         row = rows.get(ticker, {})
-        matched = matched_tags(row, definitions, manual)
+        matched = matched_tags(row, definitions)
         state['tags'] = [tag['id'] for tag in matched]
         potential = [tag['id'] for tag in matched if tag_role(tag) == 'setup']
         negative = next((role for role in NEGATIVE_ROLES if any(tag_role(tag) == role for tag in matched)), None)

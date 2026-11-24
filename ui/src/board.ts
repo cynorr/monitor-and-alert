@@ -6,7 +6,7 @@ export type ListColumn = { field: string; label: string; width: string };
 export function listColumns(scan: boolean, regular: boolean, intraday = false): ListColumn[] {
     const symbol = { field: 'symbol', label: 'Symbol', width: `minmax(${scan ? 84 : 100}px,1.1fr)` };
     const price = { field: 'price', label: scan ? 'Price' : 'Last', width: 'minmax(62px,.7fr)' };
-    const tags = { field: 'tags', label: 'Tags', width: 'minmax(110px,1.15fr)' };
+    const tags = { field: 'tags', label: '', width: 'minmax(80px,.45fr)' };
     const actions = { field: 'actions', label: '', width: '98px' };
     const state = intraday ? [
         { field: 'state-adr', label: 'ADR', width: '64px' },
@@ -19,7 +19,7 @@ export function listColumns(scan: boolean, regular: boolean, intraday = false): 
     return [symbol, price, { field: 'change', label: 'Chg%', width: 'minmax(64px,.7fr)' },
         ...(!regular ? [{ field: 'ext', label: 'Ext', width: 'minmax(68px,.8fr)' }] : []), ...state, tags, actions];
 }
-export const rowTags = (row: Ticker) => row.tags ?? row.tag_ids ?? [];
+export const rowTags = (row: Ticker) => row.tags ?? [];
 export const potentialTags = (tags: Tag[]) => tags.filter(tag => tagRole(tag) === 'setup');
 export const collapseKey = (scan: boolean, key: string) => `${scan ? 'scan' : 'monitor'}:${key}`;
 export const sectionKey = (row: Ticker) => `${row.status}:${row.section ?? 'unclassified'}`;

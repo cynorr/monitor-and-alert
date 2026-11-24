@@ -1,6 +1,6 @@
 # 开发维护手册
 
-更新：2026-11-17。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 行情要求只在 [longbridge-data.md](longbridge-data.md) 维护，多账号与访问台账只在 [longbridge-accounts.md](longbridge-accounts.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [schwab.md](schwab.md) 维护。历史证据见 [validation.md](validation.md)。
+更新：2026-11-24。开发先遵循 [development-principles.md](development-principles.md)。此文件供 Codex/Claude Code 和维护者使用；产品行为以 [behavior.md](behavior.md) 为准；Longbridge 行情要求只在 [longbridge-data.md](longbridge-data.md) 维护，多账号与访问台账只在 [longbridge-accounts.md](longbridge-accounts.md) 维护，Alert 独立需求见 [alert.md](alert.md)。UI 总入口为 [ui.md](ui.md)，通用图表详细要求只在 [chart-ui.md](chart-ui.md)、持仓 UI 只在 [schwab.md](schwab.md) 维护。历史证据见 [validation.md](validation.md)。
 
 ## 文件与依赖
 
@@ -60,7 +60,7 @@ List 显示要求见 [List UI](ui.md#list-ui)，操作规则只在 [List 交互]
 
 共享语义配色的唯一代码来源为 `ui/src/palette.ts`，Chart/Alert/Tag默认值直接引用，main启动安装对应CSS变量；名称和用途只在[Color palette](ui.md#color-palette)维护。Symbol共用模板见[UI](ui.md#symbol-row-template)，不复制行绘制、波浪或默认色值。
 
-Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted',backgroundColor}`，不从显示名称反推已保存外观，也不影响 role、filters、分类与订阅。前端只为旧偏好中缺失的外观初始化默认值，下次偏好保存持久化；后端校验内置 icon、背景枚举与六位 HEX 颜色，不接收任意 SVG/URL/CSS。列表和编辑 preview 复用 `tag-appearance.ts`，无外部图标依赖。固定展示数量不引入测宽监听。Save/Cancel 检查完整 Tag 草稿，筛选预览只检查条件变化，外观编辑保留人工匹配成员。图形要求统一见 [Logo / Icon](ui.md#logo--icon)，名单排布见 [List UI](ui.md#list-ui)。
+Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted',backgroundColor}`，不从显示名称反推已保存外观，也不影响 role、filters、分类与订阅。前端只为旧偏好中缺失的外观初始化默认值，下次偏好保存持久化；后端校验内置 icon、背景枚举与六位 HEX 颜色，不接收任意 SVG/URL/CSS。列表和编辑 preview 复用 `tag-appearance.ts`，无外部图标依赖。固定展示数量不引入测宽监听。Save/Cancel 检查完整 Tag 草稿，筛选预览只检查条件变化，外观编辑使用已计算的 Tag 匹配结果。图形要求统一见 [Logo / Icon](ui.md#logo--icon)，名单排布见 [List UI](ui.md#list-ui)。
 
 后续客户端明确包含 Android 原生 App，iOS 可能接入。迁移时以 behavior/list-design 的产品语义、本文件的接口与保存契约、ui 的设计要求为入口；保留 Tag Icon ID、外观和名单操作含义，按平台重做绘制、密度与触摸交互。Web 的 DOM/CSS/SVG 和 px 仅是当前实现参考；不提前建设移动端原生工程或通用适配层。Alert 后台声音按下节实现。
 
@@ -122,10 +122,10 @@ Daily、SQLite、状态、账户缓存、凭证与临时文件Git忽略，唯一
 
 watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 watcher；线程仅把事件派发回 asyncio loop。默认跟随 days 最新文件；显式 --workspace 监听该文件父目录并固定文件。创建、修改、移动、删除事件触发重读，无定时扫描。自身写入产生的事件在 JSON 相同情况下不重复更新。
 
-List完整需求见 [list-design.md](list-design.md)。Workspace V3继续直接维护JSON。内存statuses包含完整当日分类；persistent_workspace供Workspace.save和publish_day共用，落盘时移除机器Excluded成员身份、section和计算Tag，只保留人工Tag注记及独立Pin。Discover/Focus/Hidden的状态和人工顺序沿用现有字段，excluded_at仅属于Hidden。inherit_workspace只继承Focus和有效Hidden；apply_rules统一匹配Tag并生成当天候选归属，保留Focus自动淘汰，非候选淘汰后删除。无需保存历史机器section或未知特征恢复状态。derive_day_view只投影已分类结果及NEW。新section成员置前，同section人工顺序保留。Workspace.reload比较同一持久投影，忽略自身保存引发的文件事件；外部变化由Workbench.workspace_changed同步重建分类并更新行情范围。旧wait/hidden的V2读取迁移仍只在内存。
+List完整需求见 [list-design.md](list-design.md)。Workspace V3继续直接维护JSON。内存statuses包含完整当日分类；persistent_workspace供Workspace.save和publish_day共用，落盘时移除机器 Excluded 的成员身份、section 和计算 Tag，Pin 独立保存。Discover/Focus/Hidden的状态和人工顺序沿用现有字段，excluded_at仅属于Hidden。inherit_workspace只继承Focus和有效Hidden；apply_rules统一匹配Tag并生成当天候选归属，保留Focus自动淘汰，非候选淘汰后删除。无需保存历史机器section或未知特征恢复状态。derive_day_view只投影已分类结果及NEW。新section成员置前，同section人工顺序保留。Workspace.reload比较同一持久投影，忽略自身保存引发的文件事件；外部变化由Workbench.workspace_changed同步重建分类并更新行情范围。旧wait/hidden的V2读取迁移仍只在内存。
 
 
-preferences的activeTag为Tag ID或null，tags可为空、最多十个。前端草稿独立，空选择仍可编辑并保存新Tag；点击已选Tag保存null，全部定义仍参与分类。role为setup/earnings/extended/broken/under50/label；负面优先级earnings → broken → extended → under50，Setup顺序决定主section。manual_tags只允许setup/label，Workbench同时校验，apply_rules清理失效或负面人工ID。manual_tags_date/manual_section_date/manual_focus_date仅当前名单交易日有效；删除或改用途后的人工section回归有效setup/unclassified。写失败恢复原内存，沿用同步保存与单watcher。数据缺失不淘汰Focus。
+preferences的activeTag为Tag ID或null，tags可为空、最多十个。前端草稿独立，空选择仍可编辑并保存新Tag；点击已选Tag保存null，全部定义仍参与分类。role为setup/earnings/extended/broken/under50/label；负面优先级earnings → broken → extended → under50，Setup顺序决定主section。逐股 Tag 全部由 `apply_rules` 计算。`manual_section_date` 和 `manual_focus_date` 仅当前名单交易日有效。删除或改用途后的人工section回归有效setup/unclassified。写失败恢复原内存，沿用同步保存与单watcher。数据缺失不淘汰Focus。
 
 Workbench.start_background先异步补本地成员feature并分类，再启动正式Focus行情；本地准备失败保留名单、显示错误并继续原行情与Massive准备。新截面成功发布、Tag保存及显式编辑后重评；list_state/GET不写盘、不下载，不增加定时分类。Monitor board只输出Focus，图表统一来自实时MarketService；Scan图表使用本地Massive Daily。HTTP/WS保留watchlist/holdings选择来源隔离；_list_context使用日期与Focus成员变化更新run_id并清WS revision。
 
@@ -173,7 +173,7 @@ list_state使用schwab字段传递原生账户快照，trading_enabled表达是�
 
 workspace.json 的根字段 `pinned:[ticker,...]` 为当日有序软状态；按 ticker 当前归属投影到各 List，保留原 statuses/section/orders。reset_daily_workspace 统一清理当日人工层，inherit_workspace 新日调用并设置 carried，Workspace.reclassify(reset=True) 在显式 Refresh 调用但保留当日 carried；apply_rules 去掉消失或跨 List 的成员。pin_ticker/move_pin 使用原同步保存与错误回滚，置顶动作不重跑分类或获取数据。Workbench board 返回 pinned:boolean、pin_index:number|null；独立 MarketService 仅在自身附带 Workspace 时提供置顶字段，不覆盖 Workbench 持有的名单状态；list_state 增加 holding_symbols（两模式均提供、含当日清仓）与 current_regular_session（calendar.is_open，不依赖个股Quote）。两字段只提供显示信息，不改变后端名单。
 
-List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,list_name,section}`、`{action:"hide",ticker}`、`{action:"move",ticker,list_name,section,index}`（section为潜力Tag ID或unclassified），以及`{action:"move",ticker,target}`（target 为 discover/focus，来源取当前 workspace；机器 Excluded 不能手动释放，Hidden 可释放，任一 Excluded 可入 Focus）、`{action:"tag",ticker,tags:[Setup/Label ID]}`、`{action:"keep",ticker}`、`{action:"pin",ticker,pinned:boolean}`、`{action:"pin_move",ticker,index}`。pin_move的index为移除主动ticker后、同List完整置顶区的零基位置（含当前筛选不可见成员）。index 为移除主动ticker后目标section的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
+List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受只读候选查询 `{action:"lookup",ticker}`（返回 `{ticker,name}`，不修改 workspace/白名单/订阅/调度）及 `{action:"add",ticker,list_name,section}`、`{action:"hide",ticker}`、`{action:"move",ticker,list_name,section,index}`（section为潜力Tag ID或unclassified），以及`{action:"move",ticker,target}`（target 为 discover/focus，来源取当前 workspace；机器 Excluded 不能手动释放，Hidden 可释放，任一 Excluded 可入 Focus）、`{action:"keep",ticker}`、`{action:"pin",ticker,pinned:boolean}`、`{action:"pin_move",ticker,index}`。pin_move的index为移除主动ticker后、同List完整置顶区的零基位置（含当前筛选不可见成员）。index 为移除主动ticker后目标section的零基位置。修改动作返回 `{board,editable,mode,workspace_error,notice?}`，成功响应前已同步落盘；WS `{type:"list",...}` 复用同一结构。校验同源 Origin；诊断 GET 继续只读。`--symbols` 仅跟踪指定子集，禁用 mutation 以保持验收范围。
 
 单只跨 List 使用 Workspace.move_member；删除批量 tickers/source 协议与 move_members。列表状态增加 app_mode、date、dates、preferences 和 mock；历史 Scan 或 --symbols 不可写。POST /v1/mode 切换模式，POST /v1/scan 选择/准备日期，POST /v1/preferences 同步保存完整偏好；写入共用同源检查和 64KiB body 限制。
 

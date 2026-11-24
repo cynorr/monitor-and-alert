@@ -134,7 +134,7 @@ Alert 声音由 Python 后台直接播放，使用 macOS 自带音频命令，�
 - 共用Daily日 K：所有图使用统一默认bar spacing；Daily按近期收盘锚点与统一线性百分比比例等比缩放，右上角重置本图，R重置全部可见图，按住F临时看一年全貌。EMA10/20、SMA50、OHLC/Range、ADR20/MDV20、成交额随十字线切换（tooltip保留股数）。常规可见历史长度随间距与面板宽度变化。Scan为所选日的closed数据；Monitor增加SDK活跃日 K。背景、显示与集中人工参数只在 [Chart UI / Daily setup scale](docs/chart-ui.md#daily-setup-scale) 维护。
 - Monitor：5m/15m/30m/1h/2h、SMA65、交易日联动、实时行情；当天SDK candle先显示，官方closed随后校验覆盖，图表与盘中指标共用最新序列。同日重启复用已确认历史，ADR随Quote计算，分钟量比逐股独立就绪；缓存与准备时机见Longbridge数据要求。
 - Search 和 section 的 + 共用内联输入；Scan候选查询只读本地库，Monitor使用主账号Longbridge context的static_info，确认后才保存。Scan全局搜索新股加入当日Discover置顶，普通重启保留，显式 Refresh 或新交易日清理；需要跨日关注时使用现有移入Focus操作。快捷键和新增位置见 [List 交互](docs/list-interactions.md)。
-- Monitor与Scan共享Focus分组、Tag/Filter、拖动、Shift+上下排序与折叠。Tag按钮再次点击取消选择，空选择显示全部；每行允许补充当日Setup/Label。Monitor显示Focus与独立Holdings，Scan显示三名单。
+- Monitor与Scan共享Focus分组、Tag/Filter、拖动、Shift+上下排序与折叠。Tag 按钮再次点击取消选择，空选择显示全部。行内图标展示规则计算的 Tag。Monitor显示Focus与独立Holdings，Scan显示三名单。
 - Monitor的Holdings只使用Schwab原生账户，一个symbol一行，支持Days、Sold%、NEW、逐笔FIFO历史链、Entry/Stop和Sold Today；券商当前持仓盈亏不依赖历史推导。数据、刷新与UI唯一规范见 [Schwab账户与交易](docs/schwab.md)。
 - ADR20 = 最近最多20根`(H-L)/L × 100`均值；MDV20 = 最近最多20根已完成记录的`turnover`中位数（窗口内缺金额则缺失），两模式同公式。
 - Monitor 缓存刷新与 Ready 的数据含义见 [Longbridge 数据要求](docs/longbridge-data.md)，弱提示和颜色见 [Chart status](docs/chart-ui.md#chart-status)。Scan 图表显示所选日期，准备状态只在未完成或失败时显示。
@@ -161,7 +161,7 @@ reconcile是有界真实近期窗口初始化，verify不联网。live验收需�
 | POST /v1/scan | 选择日期`{"date":"D"}`；补齐并打开最新可用日`{"generate":true}`；指定日重算只用 CLI |
 | POST /v1/preferences | 同步保存完整Tag/显示偏好 |
 | GET /v1/filter-catalog | 唯一36字段目录 |
-| POST /v1/list | 查询、新增、删除、拖动、当日置顶/取消/置顶区调序；两模式共用三列表/主section移动及当日Tag补充 |
+| POST /v1/list | 查询、新增、删除、拖动、当日置顶/取消/置顶区调序；两模式共用三列表/主 section 移动 |
 | GET /v1/chart?symbol=PAYS.US&timeframe=2h | 只读图表；Scan只含Daily |
 | GET /v1/universe、/v1/quotes、/v1/bars、/v1/readiness | Monitor诊断 |
 | GET /v1/schwab | 原生账户、订单、持仓和历史派生；只读已成功快照 |

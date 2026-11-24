@@ -509,7 +509,7 @@ def test_local_lists_classify_on_startup_or_tag_save_and_keep_hidden_out_of_matc
     asyncio.run(scenario())
 
 
-def test_shared_actions_save_primary_section_manual_tags_and_daily_exclusion(app_data):
+def test_shared_actions_keep_primary_section_independent_of_rule_tags(app_data):
     async def scenario():
         app, brokers = make_app(app_data)
         app.preferences['tags'].extend([
@@ -521,12 +521,12 @@ def test_shared_actions_save_primary_section_manual_tags_and_daily_exclusion(app
         # Existing Discover membership is recomputed on entry; the source/target override is discarded.
         assert app.workspace.data['statuses']['TSLA']['section'] == 'unclassified'
         assert app.workspace.data['orders']['focus'][0] == 'TSLA'
-        await app.list_action({'action': 'tag', 'ticker': 'TSLA', 'tags': ['setup']})
+        await app.list_action({'action': 'move', 'ticker': 'TSLA', 'list_name': 'focus', 'section': 'setup', 'index': 0})
         row = next(row for row in app.scan_board() if row['ticker'] == 'TSLA')
-        assert row['tags'] == ['setup'] and row['manual_tags'] == ['setup']
+        assert row['tags'] == [] and row['section'] == 'setup'
         before = app.workspace.path.read_bytes()
-        with pytest.raises(ValueError, match='Setup or Label'):
-            await app.list_action({'action': 'tag', 'ticker': 'NVDA', 'tags': ['ext']})
+        with pytest.raises(ValueError, match='Unknown list action'):
+            await app.list_action({'action': 'tag', 'ticker': 'TSLA', 'tags': ['setup']})
         assert app.workspace.path.read_bytes() == before
         await app.list_action({'action': 'hide', 'ticker': 'TSLA'})
         assert app.workspace.data['statuses']['TSLA']['section'] == 'hidden'

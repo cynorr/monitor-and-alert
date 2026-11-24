@@ -59,7 +59,7 @@ def test_new_date_inherits_only_focus_and_unexpired_hidden(real_data):
     expected = {t for t, s in data['statuses'].items() if s['status'] == 'focus' or is_hidden(s, day)}
     assert set(inherited['statuses']) == expected
     assert inherited['pinned'] == []
-    assert all(not any(k in s for k in ('manual_focus_date', 'manual_discover_date', 'manual_tags'))
+    assert all(not any(k in s for k in ('manual_focus_date', 'manual_discover_date'))
                for s in inherited['statuses'].values())
 
 
@@ -110,11 +110,6 @@ def test_real_machine_pin_hidden_release_and_focus_round_trip(saved_real_workspa
     ws.pin_ticker(ticker, True)
     saved = json.loads(ws.path.read_text())
     assert ticker not in saved['statuses'] and ticker in saved['pinned']
-    tag = next(t['id'] for t in preferences['tags'] if tag_role(t) in ('setup', 'label'))
-    ws.set_manual_tags(ticker, [tag])
-    ws.reclassify(snapshot, preferences)
-    annotation = json.loads(ws.path.read_text())['statuses'][ticker]
-    assert annotation == {'manual_tags': [tag], 'manual_tags_date': ws.date}
     before = deepcopy(ws.data)
     ws.reload()
     assert ws.data == before  # Own file writes must not discard the in-memory projection.
@@ -122,7 +117,7 @@ def test_real_machine_pin_hidden_release_and_focus_round_trip(saved_real_workspa
     restored.reclassify(snapshot, preferences)
     assert ticker in restored.data['pinned']
     assert restored.section(ticker) == 'excluded'
-    assert tag in restored.data['statuses'][ticker]['tags']
+    assert restored.data['statuses'][ticker]['tags'] == before['statuses'][ticker]['tags']
     restored.hide_ticker(ticker)
     restored.reclassify(snapshot, preferences)
     assert json.loads(ws.path.read_text())['statuses'][ticker]['section'] == 'hidden'
@@ -152,6 +147,28 @@ def test_real_publication_and_feature_scope(saved_real_workspace, real_data):
     assert {t: (s['status'], s['section'], s['tags']) for t, s in loaded.data['statuses'].items()} == {
         t: (s['status'], s['section'], s['tags']) for t, s in ws.data['statuses'].items()}
     assert persistent_workspace(loaded.data) == saved
+
+
+def test_real_publication_discards_legacy_annotations(saved_real_workspace, real_data):
+    ws = saved_real_workspace
+    _, snapshot, _ = real_data
+    saved = json.loads(ws.path.read_text())
+    member = next(t for t, state in saved['statuses'].items() if state['status'] == 'focus')
+    machine = next(t for t, state in ws.data['statuses'].items()
+                   if state['status'] == 'excluded' and state['section'] != 'hidden')
+    former_tag = 'old-manual-label'
+    annotation = {'manual_tags': [former_tag], 'manual_tags_date': ws.date}
+    saved['statuses'][member]['tags'].append(former_tag)
+    saved['statuses'][member].update(annotation)
+    saved['statuses'][machine] = annotation
+    ws.path.write_text(json.dumps(saved))
+
+    imported = Workspace(ws.path, root=ws.root)
+    assert machine not in imported.data['statuses']
+    assert not imported.data['statuses'][member]['tags']
+    publish_day(ws.root, snapshot)
+    cleaned = json.loads(ws.path.read_text())
+    assert cleaned == persistent_workspace(ws.data)
 
 
 def test_real_search_discover_is_same_day_only(saved_real_workspace, real_data):
@@ -185,7 +202,6 @@ def test_explicit_refresh_resets_real_manual_state_like_new_day(saved_real_works
     ws.add_ticker(extra, 'discover')
     ws.pin_ticker(machine, True)
     setup = next(t['id'] for t in preferences['tags'] if tag_role(t) == 'setup')
-    ws.set_manual_tags(machine, [setup])
     ws.move_ticker(machine, setup, 0)
     ws.reclassify(snapshot, preferences)
     expiry = ws.data['statuses'][hidden]['excluded_at']

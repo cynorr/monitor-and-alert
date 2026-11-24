@@ -29,6 +29,21 @@ test('calendar days use New York rather than browser timezone, including the DST
         at('2026-11-03T04:30:00Z')).text, 'Last earnings report · Today');
 });
 
+test('earnings tone uses the displayed event and the 30-day boundaries', () => {
+    const now = at('2026-10-31T16:00:00Z');
+    const tone = (last, next) => earningsText({ ...info, earnings: {
+        last: last ? event(last) : null, next: next ? event(next) : null,
+    } }, now).tone;
+    assert.equal(tone(null, '2026-10-31'), 'upcoming');
+    assert.equal(tone(null, '2026-11-30'), 'upcoming');
+    assert.equal(tone(null, '2026-12-01'), 'default');
+    assert.equal(tone('2026-10-31'), 'reported');
+    assert.equal(tone('2026-10-02'), 'reported');
+    assert.equal(tone('2026-10-01'), 'default');
+    assert.equal(tone('2026-10-24', '2026-11-05'), 'reported');
+    assert.equal(tone('2026-10-23', '2026-11-05'), 'upcoming');
+});
+
 test('metadata requires matching selection identity independently of chart revisions', () => {
     const selected = { symbol: 'XYZ.US', request_id: 10, mode: 'monitor', source: 'holdings' };
     assert.ok(acceptsAdditional({ ...info, ...selected, type: 'additional_info' }, selected));
@@ -55,10 +70,13 @@ test('nullable fields hide safely and names render as text', () => {
     assert.equal(nodes.get('daily-company-name').textContent, 'XYZ & Co. <name>');
     assert.equal(nodes.get('daily-classification').textContent, 'Technology · Semiconductors');
     assert.equal(nodes.get('intraday-market-cap').textContent, 'Market Cap 1.2B');
+    assert.match(nodes.get('intraday-market-cap').title, /^Market Cap 1,200,000,000 ·/);
     assert.equal(nodes.get('daily-earnings-countdown').textContent, '· 6 days ago');
+    assert.equal(nodes.get('daily-earnings')['data-tone'], 'reported');
     display.update(null);
     assert.ok(['daily-company-name', 'daily-classification', 'intraday-market-cap', 'daily-earnings'].every(id => nodes.get(id).hidden));
     assert.equal(nodes.get('daily-earnings-label').textContent, '');
     assert.equal(nodes.get('daily-earnings-countdown').textContent, '');
+    assert.equal(nodes.get('daily-earnings')['data-tone'], 'default');
     for (const cap of [null, '0', '-1', 'NaN', 'Infinity']) assert.equal(marketCap(cap), '');
 });

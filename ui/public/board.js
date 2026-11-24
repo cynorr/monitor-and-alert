@@ -2,7 +2,7 @@ import { tagRole } from './tags.js';
 export function listColumns(scan, regular, intraday = false) {
     const symbol = { field: 'symbol', label: 'Symbol', width: `minmax(${scan ? 84 : 100}px,1.1fr)` };
     const price = { field: 'price', label: scan ? 'Price' : 'Last', width: 'minmax(62px,.7fr)' };
-    const tags = { field: 'tags', label: 'Tags', width: 'minmax(110px,1.15fr)' };
+    const tags = { field: 'tags', label: '', width: 'minmax(80px,.45fr)' };
     const actions = { field: 'actions', label: '', width: '98px' };
     const state = intraday ? [
         { field: 'state-adr', label: 'ADR', width: '64px' },
@@ -16,7 +16,7 @@ export function listColumns(scan, regular, intraday = false) {
     return [symbol, price, { field: 'change', label: 'Chg%', width: 'minmax(64px,.7fr)' },
         ...(!regular ? [{ field: 'ext', label: 'Ext', width: 'minmax(68px,.8fr)' }] : []), ...state, tags, actions];
 }
-export const rowTags = (row) => row.tags ?? row.tag_ids ?? [];
+export const rowTags = (row) => row.tags ?? [];
 export const potentialTags = (tags) => tags.filter(tag => tagRole(tag) === 'setup');
 export const collapseKey = (scan, key) => `${scan ? 'scan' : 'monitor'}:${key}`;
 export const sectionKey = (row) => `${row.status}:${row.section ?? 'unclassified'}`;

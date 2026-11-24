@@ -315,8 +315,7 @@ class Workbench:
         for row in self.market.board() if self.market else []:
             state = self.workspace.data['statuses'].get(row['ticker'], {})
             result.append({**local.get(row['symbol'], {}), **state, **row,
-                           'section': state.get('section', 'unclassified'), 'tags': state.get('tags', []),
-                           'manual_tags': state.get('manual_tags', []) if state.get('manual_tags_date') == self.workspace.date else []})
+                           'section': state.get('section', 'unclassified'), 'tags': state.get('tags', [])})
         return result
 
     def previous(self):
@@ -443,10 +442,6 @@ class Workbench:
             self.workspace.hide_ticker(normalize_ticker(payload['ticker']))
         elif action == 'keep':
             self.workspace.keep_ticker(normalize_ticker(payload['ticker']))
-        elif action == 'tag':
-            if not set(payload['tags']) <= {tag['id'] for tag in self.preferences['tags'] if tag['role'] in ('setup', 'label')}:
-                raise ValueError('Manual Tags must be Setup or Label')
-            self.workspace.set_manual_tags(normalize_ticker(payload['ticker']), payload['tags'])
         elif action == 'move' and 'target' in payload:
             ticker = normalize_ticker(payload['ticker'])
             classification = self.focus_classifications([ticker])[ticker] if payload['target'] == 'focus' else None

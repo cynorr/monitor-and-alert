@@ -1,6 +1,12 @@
 export const $ = (id) => document.getElementById(id);
 export const money = (n) => n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 });
-export const compact = (n) => n == null ? '—' : Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(n);
+function compactFormat(maximumFractionDigits, minimumFractionDigits = 0) {
+    const formatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits, minimumFractionDigits });
+    return (n) => n == null ? '—' : formatter.format(n);
+}
+export const compact = compactFormat(2);
+export const mdvText = compactFormat(0);
+export const dollarVolText = compactFormat(1, 1);
 const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 export const dayKey = (time) => dayFormat.format(new Date(time * 1000));
 export const nyTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });

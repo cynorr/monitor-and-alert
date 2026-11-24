@@ -25,7 +25,7 @@ export function tagAppearance(tag) {
     return { icon, color: ma === '10' ? palette.blue : ma === '20' ? palette.yellow : ma === '50' || icon === 'under50' ? palette.red : palette.tagNeutral,
         background: 'frosted', backgroundColor: palette.volumeLow };
 }
-export function tagLogo(tag, manual = false) {
+export function tagLogo(tag) {
     const appearance = tagAppearance(tag);
     const logo = document.createElement('span');
     logo.className = 'tag-logo';
@@ -34,10 +34,8 @@ export function tagLogo(tag, manual = false) {
     logo.style.color = appearance.color;
     // The user chooses a hue; opacity stays subtle so tags remain secondary.
     logo.style.backgroundColor = appearance.background === 'transparent' ? 'transparent' : appearance.backgroundColor + '33';
-    const label = tag.name + (manual ? ' · Manual · today only' : '');
-    logo.title = label;
     logo.setAttribute('role', 'img');
-    logo.setAttribute('aria-label', label);
+    logo.setAttribute('aria-label', tag.name);
     logo.innerHTML = '<svg viewBox="0 0 36 20" fill="none" stroke="currentColor" aria-hidden="true">' + paths[appearance.icon] + '</svg>';
     return logo;
 }

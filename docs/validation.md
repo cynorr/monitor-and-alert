@@ -1,5 +1,29 @@
 # 验证记录
 
+## 2026-11-24 · 成交额图例透明背景
+
+本机 macOS 在美东 10:16 使用正式 Monitor 行情检查 Daily 与 Intraday，两个图例的计算样式均为完全透明。验证覆盖 Monitor 双图，`git diff --check` 通过。
+
+## 2026-11-24 · 成交额图例右侧留白与超均值强调
+
+本机 macOS 使用美东 10:13 的正式 Monitor 行情。Daily 与 Intraday 实测两列间距 8px，图例离右轴 2px，右内距 2px。IBTA 的盘中 293% 显示为 EMA10 蓝色粗体，低于 100% 的显示值用黑色常规字。TypeScript 构建和 6 项图表用例通过，用例覆盖显示为 100% 的边界及离开十字线后的样式复位。正式页面验证范围为 Monitor 双图。
+
+## 2026-11-24 · MDV20 单位颜色与成交额列对齐
+
+本机 macOS 正式 Monitor 页面使用美东 10:06 的真实行情。浏览器确认 Daily 的 MDV20 单位与标题同为 `#727a85`，Daily 与 Intraday 的成交额图例均为名称右对齐、数值左对齐，两列间距 4px。范围为 Monitor 双图的样式核对，`git diff --check` 通过。
+
+## 2026-11-24 · Daily MDV20 与成交额图例
+
+本机 macOS 正式 Monitor 页面使用美东 09:59 的真实 Longbridge 行情。浏览器核对 Daily MDV20 的数字 15px、单位 13px 和 2px 间距。Daily 与 Intraday 图例在各自成交额 pane 右上角按两行显示，名称靠左，数值靠右。TypeScript 构建、21 项图表与 Scan 定向用例和 `git diff --check` 通过。浏览器验证覆盖 Monitor 双图。
+
+## 2026-11-24 · 名单 Tag、财报与金额格式
+
+本机 macOS 使用正式服务、2026-11-23 Massive 截面、Longbridge 实时行情与本地 Nasdaq 财报缓存。按原参数重启后，Longbridge 恢复 CONNECTED，正式名单 API 不再返回人工 Tag 字段。检查 41 份当前及历史 workspace，未发现旧字段。使用真实截面的临时副本验证旧注记清理、重新计算与落盘。
+
+- 美东 09:23 至 09:31 在 Scan 与 Monitor 检查了盘前和 Regular。盘前 Ext 到首个 Tag 图标为 16px。开盘后两模式都显示盘中状态列，首个图标仍逐行对齐。Monitor 的 680px 面板可见 Tag。Scan Focus 同宽需要横向滚动，拉宽后可见完整列。实际样本每行最多三个图标。
+- 真实财报样本验证整句灰色常规字和亮红粗体。检查 Scan 与 Daily 的整数 MDV20，以及 Daily、Intraday 的一位小数 Dollar Vol，并在浏览器确认成交额坐标轴和 tooltip 省略美元符号。30 天边界、当天文案和轴格式另有定向用例覆盖。
+- TypeScript 构建、42 项前端定向用例、17 项后端定向用例和 `git diff --check` 通过。真实持仓行及订单写入未做本轮实测。
+
 ## 2026-11-24：方向键选股与鼠标悬停
 
 本机 macOS 正式页面验证 Monitor 和 Scan。鼠标停在原行时按方向键，原行仍匹配浏览器 hover，但灰底与仅悬停时显示的操作消失。用鼠标点回原行的 Tags 控件后灰底恢复，选中仍在键盘切到的行。验证后恢复 Monitor。Holdings 当时为空，本轮未实测持仓行。TypeScript 构建、8 项名单交互用例和 git diff --check 通过。

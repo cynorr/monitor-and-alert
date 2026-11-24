@@ -1,7 +1,7 @@
-import { $, money, compact, extendedQuote, type Ticker } from './types.js';
+import { $, money, mdvText, extendedQuote, type Ticker } from './types.js';
 import type { ScanControls } from './scan.js';
 import type { MassiveState } from './types.js';
-import { tagRole, type Preferences } from './tags.js';
+import type { Preferences } from './tags.js';
 import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey, type ListColumn, type ListSection } from './board.js';
@@ -21,7 +21,6 @@ export class Watchlist {
     keyboardEnabled = true;
     private editable = false;
     private collapsed = new Set<string>();
-    private manualEditor = '';
     private preferences?: Preferences;
     private rows = new Map<string, HTMLElement>();
     private key = '';
@@ -57,15 +56,6 @@ export class Watchlist {
             }
             const add = target.closest<HTMLElement>('[data-add]');
             if (add) { this.beginSearch(add.dataset.add!, add.dataset.list ?? 'focus'); return; }
-            const edit = target.closest<HTMLElement>('[data-tag-edit]');
-            if (edit) { this.manualEditor = this.manualEditor === edit.dataset.tagEdit ? '' : edit.dataset.tagEdit!; this.render(); return; }
-            const tagToggle = target.closest<HTMLElement>('[data-manual-tag]');
-            if (tagToggle) {
-                const item = this.tickers.find(t => t.ticker === tagToggle.dataset.ticker)!;
-                const tags = new Set(item.manual_tags ?? []);
-                if (tags.has(tagToggle.dataset.manualTag!)) tags.delete(tagToggle.dataset.manualTag!); else tags.add(tagToggle.dataset.manualTag!);
-                void this.mutate({ action: 'tag', ticker: item.ticker, tags: [...tags] }); return;
-            }
             if (target.closest('[data-candidate]')) { void this.commitSearch(); return; }
             const toggle = target.closest<HTMLElement>('[data-toggle]');
             if (toggle) {
@@ -86,7 +76,7 @@ export class Watchlist {
         $('symbols').addEventListener('pointerdown', event => {
             const target = event.target as HTMLElement;
             const row = target.closest<HTMLElement>('[data-symbol]');
-            if (!row || target.closest('button:not(.ticker),input,.manual-tag-editor') || !this.editable || this.busy || event.button !== 0 ||
+            if (!row || target.closest('button:not(.ticker),input') || !this.editable || this.busy || event.button !== 0 ||
                 (row.dataset.pinned !== 'true' && (row.dataset.inPlay === 'true' || !this.scan?.manualOrder || row.dataset.list === 'excluded'))) return;
             this.dragStart = { ticker: row.dataset.ticker!, x: event.clientX, y: event.clientY };
         });
@@ -437,17 +427,7 @@ export class Watchlist {
                 }
             } else if (column.field === 'tags') {
                 cell.className = 'row-tags';
-                const ids = rowTags(ticker);
-                for (const id of ids.slice(0, 3)) cell.append(tagLogo(definitions.get(id) ?? { name: id }, ticker.manual_tags?.includes(id)));
-                if (ids.length > 3) {
-                    const more = document.createElement('span'); more.className = 'tag-overflow'; more.textContent = '+' + (ids.length - 3);
-                    more.title = ids.slice(3).map(id => (definitions.get(id)?.name ?? id) +
-                        (ticker.manual_tags?.includes(id) ? ' · Manual · today only' : '')).join('\n');
-                    more.setAttribute('aria-label', more.title); cell.append(more);
-                }
-                const edit = document.createElement('button'); edit.dataset.tagEdit = ticker.ticker; edit.className = 'tag-edit'; edit.textContent = 'Tags';
-                edit.title = 'Add manual Tags for today'; edit.hidden = ticker.section === 'hidden'; edit.disabled = !this.editable;
-                edit.setAttribute('aria-expanded', String(this.manualEditor === ticker.ticker)); cell.append(edit);
+                for (const id of rowTags(ticker).slice(0, 4)) cell.append(tagLogo(definitions.get(id) ?? { name: id }));
             } else if (column.field === 'actions') {
                 cell.className = 'row-actions'; cell.hidden = !this.editable;
                 const pin = document.createElement('button'); pin.className = 'pin-ticker icon-button'; pin.dataset.pin = ticker.ticker;
@@ -489,18 +469,6 @@ export class Watchlist {
         return row;
     }
 
-    private appendManualEditor(section: HTMLElement, ticker: Ticker) {
-        if (this.manualEditor !== ticker.ticker || !this.editable || ticker.section === 'hidden') return;
-        const editor = document.createElement('div'); editor.className = 'manual-tag-editor';
-        for (const tag of this.preferences?.tags ?? []) {
-            if (!['setup', 'label'].includes(tagRole(tag))) continue;
-            const button = document.createElement('button'); button.dataset.manualTag = tag.id; button.dataset.ticker = ticker.ticker;
-            button.textContent = tag.name; button.setAttribute('aria-pressed', String(ticker.manual_tags?.includes(tag.id) ?? false));
-            button.title = 'Manual · today only'; editor.append(button);
-        }
-        section.append(editor);
-    }
-
     private updateRow(ticker: Ticker, row: HTMLElement, scan: boolean) {
         const state = this.stateVisible ? this.intraday.symbols[ticker.symbol] : undefined;
         stateAppearance(row, state);
@@ -528,7 +496,7 @@ export class Watchlist {
         if (scan) {
             value('price', money(ticker.close));
             value('adr', ticker.adr20 == null ? '—' : ticker.adr20.toFixed(1) + '%');
-            value('mdv', ticker.mdv20 == null ? '—' : '$' + compact(ticker.mdv20));
+            value('mdv', mdvText(ticker.mdv20));
             row.querySelectorAll<HTMLElement>('[data-growth]').forEach(cell => { cell.textContent = growthValue(ticker[cell.dataset.growth!]); });
             return;
         }
@@ -542,7 +510,7 @@ export class Watchlist {
     }
 
     private rowKey(ticker: Ticker) {
-        return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.manual_tags, ticker.is_new]);
+        return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.is_new]);
     }
 
     private sections(original: Ticker[], list = this.scan?.activeList ?? 'focus', inPlay = this.inPlayActive) {
@@ -589,7 +557,7 @@ export class Watchlist {
         $('list-columns').hidden = !!this.search && !visible.length;
         if (this.search) $('list-notice').textContent = this.search.message;
         const key = JSON.stringify([visible.map(t => [this.rowKey(t), extracted.has(t.symbol)]), columnsKey,
-            [...this.collapsed], this.editable, tags, this.manualEditor, this.search?.section, showCandidate ? candidate : null]);
+            [...this.collapsed], this.editable, tags, this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
             const scroller = $('symbols').parentElement!, top = scroller.scrollTop, left = scroller.scrollLeft;
             const focused = document.activeElement as HTMLElement | null;
@@ -624,7 +592,7 @@ export class Watchlist {
                         const old = oldRows.get(ticker.symbol);
                         const row = reuse && old?.dataset.renderKey === this.rowKey(ticker) ? old : this.createRow(ticker, columns, scan);
                         row.dataset.inPlay = String(!!group.inPlay);
-                        this.rows.set(ticker.symbol, row); section.append(row); this.appendManualEditor(section, ticker);
+                        this.rows.set(ticker.symbol, row); section.append(row);
                     }
                 }
                 fragment.append(section);
@@ -638,7 +606,6 @@ export class Watchlist {
         }
         const result = $('symbols').querySelector<HTMLButtonElement>('[data-candidate]');
         if (result) result.disabled = this.busy;
-        $('symbols').querySelectorAll<HTMLButtonElement>('[data-manual-tag]').forEach(button => { button.disabled = this.busy; });
         for (const ticker of visible) {
             const row = this.rows.get(ticker.symbol);
             if (row) this.updateRow(ticker, row, scan);

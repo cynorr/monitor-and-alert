@@ -115,7 +115,7 @@ test('saving skips transient first-row fallback; failure and ordinary edits do n
         await list.mutate({ action: 'hide', ticker: 'A' }, a);
         assert.deepEqual(choices, ['B.US']);
         choices.length = 0;
-        await list.mutate({ action: 'tag', ticker: 'B', tags: [] });
+        await list.mutate({ action: 'move', ticker: 'B', list_name: 'discover', section: 'unclassified', index: 0 });
         assert.deepEqual(choices, []);
         globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: 'Could not save' }) });
         await list.mutate({ action: 'hide', ticker: 'B' }, list.tickers[0]);

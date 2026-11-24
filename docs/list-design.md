@@ -22,7 +22,7 @@ Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为
 
 ## 每日规则
 
-新完成交易日只继承 Focus 与未满七个自然日的 Hidden。 用户点击 Refresh Scan 使用同一清理与分类逻辑：只保留这些成员作为输入，清除人工 Discover、人工 Focus 当日豁免、人工 Setup/Label、人工主 section、全部 Pin 与人工排序，随后重新匹配；Focus 仍接受下表自动淘汰。Hidden 保留原 excluded_at，不重新计时。已有数据准备状态继续复用，不重复下载或构建；保存的 Tag 定义与显示 Filter 不清除。同日 Refresh 不更改交易日期或将当天新成员伪装成跨日 carried。Discover 与自动 Excluded 每日按当天 candidate 和保存的 Tag 规则生成，不维护跨日机器排除成员名单。完整 feature 和 Growth 范围只在 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 维护。
+新完成交易日只继承 Focus 与未满七个自然日的 Hidden。 用户点击 Refresh Scan 使用同一清理与分类逻辑：只保留这些成员作为输入，清除人工 Discover、人工 Focus 当日豁免、人工主 section、全部 Pin 与人工排序，随后重新匹配；Focus 仍接受下表自动淘汰。Hidden 保留原 excluded_at，不重新计时。已有数据准备状态继续复用，不重复下载或构建；保存的 Tag 定义与显示 Filter 不清除。同日 Refresh 不更改交易日期或将当天新成员伪装成跨日 carried。Discover 与自动 Excluded 每日按当天 candidate 和保存的 Tag 规则生成，不维护跨日机器排除成员名单。完整 feature 和 Growth 范围只在 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 维护。
 
 | 输入 | 完成日判断 | 最终归属 |
 | --- | --- | --- |
@@ -39,13 +39,13 @@ Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为
 
 Hidden 保留七个自然日，期间即使不在 candidate 中也保留并计算完整特征，可以提前 Release 或加入 Focus。到期的非候选无需继续计算特征或追踪。
 
-人工加入 / 保留 Focus 当天优先，显式 Refresh 或次日首次分类重新接受规则；机器标签仍如实显示。当日人工 Discover 沿用搜索新增约定。人工 Setup/Label、主 section、Pin 与顺序在显式 Refresh 或新日清理前按当日规则保存；这些人工信息不因自动 section 仅存在于内存而丢失。
+人工加入 / 保留 Focus 当天优先，显式 Refresh 或次日首次分类重新接受规则；机器标签仍如实显示。当日人工 Discover 沿用搜索新增约定。人工主 section、Pin 与顺序在显式 Refresh 或新日清理前按当日规则保存。
 
 ## Tag、Section 与 Filter
 
-Tag 使用现有 atomic feature 和财报倒计时条件，允许同时匹配多个。每日重算结果，禁止继承昨天的形态结论；人工补充只允许 Setup/Label，只对当前交易日有效；负面 Tag 完全由扫描条件决定。
+逐股 Tag 由保存的 atomic feature 和财报倒计时条件计算，可同时匹配多个。每日从当前截面重新计算。
 
-潜力 section 来自保存的潜力 Tag，例如 Surf-10、Surf-20、Bounce-10、Bounce-20。多标签按保存顺序选主 section，人工可拖拽调整；同一 symbol 只显示一行。
+潜力 section 来自保存的潜力 Tag，例如 Surf-10、Surf-20、Bounce-10、Bounce-20。多标签按保存顺序选主 section。拖拽可调整主 section 和顺序，逐股 Tag 仍按条件匹配。同一 symbol 只显示一行。
 
 Tag 的用途固定为 Setup、Earnings、Extended、Broken、Under-50 或 Label；Earnings对应In 14 Days机器section。Setup 用于 Discover/Focus 的潜力 section；Label 仅辅助观察，适合后续 prior-run 等局部特征。显示名称可修改，用途不随改名变化。缺少用途的旧定义按名字识别 Extended / Broken / Under-50，其余已有形态 Tag 转为 Setup；已保存的用途优先。当前 Under-50 Tag 使用 `ma_arrangement = under50` 条件，均线排列含义见 [Atomic Feature 参考](atomic-feature-reference.md#3-ma-arrangement)。分类使用保存的条件，不按名称硬编码条件。
 
@@ -86,7 +86,7 @@ Scan 三列表日 K、指标与日分类均使用本地 Massive Daily，最新�
 这是手动与 Alert 入选 Focus 的唯一分类规则入口。实现：workspace._focus 清理来源结果，Workbench.focus_classifications 通过 list_rules.focus_classification 重新匹配，手动与 Alert 共用并一次保存。
 
 - 从 Discover 或任一 Excluded section 移入 Focus，都使用同一流程，包括手动 Add to Focus、单只 Move to Focus，以及 [Alert 创建引起的入选](alert.md#创建时的名单处理)。
-- 丢弃来源保存的 `tags`、`manual_tags`、`manual_tags_date`、原主 section 与 `manual_section_date`，解除排除状态；不复制 Discover/Excluded 的分类结果。只清该 symbol 的成员结果，不删除或修改 Tag 定义。
+- 丢弃来源保存的 `tags`、原主 section 与 `manual_section_date`，解除排除状态；不复制 Discover/Excluded 的分类结果。只清该 symbol 的成员结果，不删除或修改 Tag 定义。
 - 使用当前有效 workspace 对应的本地特征和当前已保存的 Tag 定义，复用 Focus 现有匹配逻辑重新计算全部匹配 Tag；不使用来源已保存的 Tag 列表、未保存编辑草稿或历史 Scan 的分类结果。
 - 主 section 仅从重新匹配的 Setup Tag 中选取，多个匹配按当前保存的 Setup 顺序选择第一个，例如 Surf、Bounce；没有匹配则为 Unclassified。缺失特征沿用现有 Missing 匹配语义，不猜测、不为入选触发网络下载。
 - 显式入选沿用当前的当日人工 Focus 优先：当天保留 Focus，重新算出的负面 Tag 可显示，但不会因本次入选立即回到 Excluded；显式 Refresh 或次日首次分类恢复自动名单规则。这不新增 Alert 策略或新的 Tag 判定条件。

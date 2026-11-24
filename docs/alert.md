@@ -142,7 +142,7 @@
 
 - Regular 两方向、到达、跳价、同秒不同价格、重复/旧 snapshot；扩展时段不触发、不更新起点，新 Regular 日和重启/恢复首价不补报。
 - 鼠标水平线价格、两位小数、同 symbol 多 Alert、Scan/Monitor 共用、不同周期同步、选择/退格/拖动与原生图表手势。
-- Discover/全部 Excluded 创建立即入 Focus；丢弃旧自动/人工 Tag 与人工 section，按当前 Focus 规则重新分类；无匹配入 Unclassified，新入组首位；手动移入得到相同结果。
+- Discover/全部 Excluded 创建立即入 Focus；丢弃来源 Tag 和人工 section，按当前 Focus 规则重新分类；无匹配入 Unclassified，新入组首位；手动移入得到相同结果。
 - 持久化、Triggered 不重复、拖动重新激活、已读不修改价格线/generation、到期及 Focus/Holdings 联合范围、当天清仓保留和次日移除。
 - 未读提醒、选图即读、到期、Focus ADR 撤回、当天暂停与手动线独立；浏览器后台或退出时仍有声音；声音只随新触发播放、失败提示和退出清理，以及两版 macOS 的实际听辨。
 - TypeScript 变更后执行 `npm run build --prefix ui`；Python 只跑涉及本次行为的定向用例。真实行情限定当前允许范围中的少量 symbols 并规定结束条件，不建立故障注入、回放或压力测试框架。

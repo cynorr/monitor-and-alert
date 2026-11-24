@@ -13,6 +13,8 @@ export function categoryText(sector, industry) {
     return labels.filter((label, index) => index === 0 || label.toLowerCase() !== labels[0].toLowerCase()).join(' · ');
 }
 const dayNumber = (day) => Date.parse(day + 'T00:00:00Z') / 86400000;
+const EARNINGS_HIGHLIGHT_DAYS = 30;
+const emptyEarnings = { text: '', title: '', label: '', countdown: '', tone: 'default' };
 export function earningsText(info, now = info.server_time) {
     const today = dayNumber(dayKey(now));
     const last = info.earnings.last, next = info.earnings.next;
@@ -21,8 +23,10 @@ export function earningsText(info, now = info.server_time) {
     const recent = last && ago >= 0 && (ago <= 7 || until < 0);
     const event = recent ? last : until >= 0 ? next : null;
     if (!event)
-        return { text: '', title: '', label: '', countdown: '' };
+        return emptyEarnings;
     const days = recent ? ago : until, units = days === 1 ? 'day' : 'days';
+    const tone = recent ? (days < EARNINGS_HIGHLIGHT_DAYS ? 'reported' : 'default') :
+        (days <= EARNINGS_HIGHLIGHT_DAYS ? 'upcoming' : 'default');
     const label = recent ? 'Last earnings report' : days === 0 ? 'Earnings today' : 'Next earnings report';
     const countdown = recent ? days === 0 ? 'Today' : `${days} ${units} ago` : days === 0 ? '' : `In ${days} ${units}`;
     const text = [label, countdown].filter(Boolean).join(' · ');
@@ -30,7 +34,7 @@ export function earningsText(info, now = info.server_time) {
     const title = [recent ? 'Reported earnings' : 'Estimated earnings date', event.date, session,
         event.fiscal_period ? 'Fiscal quarter ending ' + event.fiscal_period : '',
         info.earnings_updated_at ? 'Updated ' + info.earnings_updated_at : ''].filter(Boolean).join(' · ');
-    return { text, title, label, countdown };
+    return { text, title, label, countdown, tone };
 }
 export class AdditionalInfoDisplay {
     value = null;
@@ -49,17 +53,18 @@ export class AdditionalInfoDisplay {
         classification.hidden = !category;
         const cap = marketCap(info?.market_cap ?? null), node = $('intraday-market-cap');
         node.textContent = cap ? 'Market Cap ' + cap : '';
-        node.title = cap ? 'Market Cap $' + Number(info.market_cap).toLocaleString('en-US') +
+        node.title = cap ? 'Market Cap ' + Number(info.market_cap).toLocaleString('en-US') +
             (info?.companies_updated_at ? ' · Updated ' + info.companies_updated_at : '') : '';
         node.hidden = !cap;
         this.tick();
     }
     tick() {
-        const label = this.value ? earningsText(this.value, (Date.now() + this.offset) / 1000) : { text: '', title: '', label: '', countdown: '' };
+        const label = this.value ? earningsText(this.value, (Date.now() + this.offset) / 1000) : emptyEarnings;
         const node = $('daily-earnings');
         $('daily-earnings-label').textContent = label.label;
         $('daily-earnings-countdown').textContent = label.countdown ? '· ' + label.countdown : '';
         node.setAttribute('aria-label', label.text);
+        node.setAttribute('data-tone', label.tone);
         node.title = label.title;
         node.hidden = !label.text;
     }

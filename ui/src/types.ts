@@ -1,6 +1,12 @@
 export const $ = (id: string) => document.getElementById(id)!;
 export const money = (n?: number | null) => n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 });
-export const compact = (n?: number | null) => n == null ? '—' : Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(n);
+function compactFormat(maximumFractionDigits: number, minimumFractionDigits = 0) {
+    const formatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits, minimumFractionDigits });
+    return (n?: number | null) => n == null ? '—' : formatter.format(n);
+}
+export const compact = compactFormat(2);
+export const mdvText = compactFormat(0);
+export const dollarVolText = compactFormat(1, 1);
 const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 export const dayKey = (time: number) => dayFormat.format(new Date(time * 1000));
 export const nyTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
@@ -86,8 +92,6 @@ export type Ticker = {
     status: string;
     section?: string;
     tags?: string[];
-    tag_ids?: string[];
-    manual_tags?: string[];
     pinned?: boolean;
     pin_index?: number;
     excluded_at?: string;

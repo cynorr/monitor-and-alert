@@ -1,6 +1,6 @@
 # UI layout and interactions
 
-Updated: 2026-11-17. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [schwab.md](schwab.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [schwab.md](schwab.md).
+Updated: 2026-11-24. This file is the UI entry point and the only current specification for shared layout, List UI and Logo / Icon. General Chart and Holdings details are maintained only in [chart-ui.md](chart-ui.md) and [schwab.md](schwab.md). Alert interactions and lifecycle are maintained only in [alert.md](alert.md). The product UI is English only. List lifecycle and classification rules are maintained in [list-design.md](list-design.md); backend behavior is maintained in [behavior.md](behavior.md), with Holdings data requirements in [schwab.md](schwab.md).
 
 ## Layout
 
@@ -9,9 +9,14 @@ Updated: 2026-11-17. This file is the UI entry point and the only current specif
 - White floating cards with generous corners on a neutral background. Black header/column rules and divider handles; internal chart panes follow [Chart UI](chart-ui.md#colors-margins-and-reference-lines).
 - Search, period selector, price-session labels and resize handles use pills.
 
+## 金额格式
+
+- 前端美元金额统一省略 `$`，包括名单、交易和持仓界面、图表坐标轴、十字线标签及 tooltip。
+- MDV20 在 Scan 列表和 Daily 图表使用 `K/M/B` 等紧凑单位，四舍五入至整数。Dollar Vol 使用相同单位，固定一位小数。精度只作用于显示。
+
 ## Chart UI
 
-Chart layout, colors, margins, headers, [turnover and five-day comparison](chart-ui.md#turnover-comparison), [Daily setup scale, coupled zoom, Reset and F overview](chart-ui.md#daily-setup-scale), linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak status hint while existing charts and valid values remain visible. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; normal visible history depends on that spacing and panel width.
+Chart layout, colors, margins, [headers and metric typography](chart-ui.md#headers-and-information), [turnover readout and five-day comparison](chart-ui.md#turnover-comparison), [Daily setup scale, coupled zoom, Reset and F overview](chart-ui.md#daily-setup-scale), linked trading day and status are maintained in [chart-ui.md](chart-ui.md). Longbridge cache freshness is defined only in [longbridge-data.md](longbridge-data.md); refresh uses a weak status hint while existing charts and valid values remain visible. Optional company names, concise category labels, market cap and earnings are governed by [Additional Info](additional-info.md), independently of chart data and Ready. All charts use the same manually adjustable default spacing; normal visible history depends on that spacing and panel width.
 
 ## Alert UI
 
@@ -29,18 +34,18 @@ ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，
 
 | 名称 | 色值 | 当前用途 |
 | --- | --- | --- |
-| Blue / 主蓝 | `#2962ff` | EMA10、MA10 Tag、NEW、上行增强底色 |
+| Blue / 主蓝 | `#2962ff` | EMA10、5D Avg 超均值强调、MA10 Tag、NEW、上行增强底色 |
 | Blue Soft / 浅蓝 | `#e8f1ff` | 上行关注底色 |
 | Yellow / 主黄 | `#e4b400` | EMA20、MA20 Tag、Pre 价格标签 |
 | Yellow Text / 黄文字 | `#b89100` | Chart EMA20 图例文字；比主黄深 |
 | Yellow Soft / 浅黄 | `#fff3c4` | 回撤预警底色 |
-| Red / 主红 | `#e53935` | SMA50 / SMA65、MA50 Tag |
+| Red / 主红 | `#e53935` | SMA50 / SMA65、MA50 Tag、近期待发布财报 |
 | Red Strong / 深红 | `#b42318` | 回撤紧急底色、Alert 错误文字 |
 | Positive / 上涨文字 | `#008f83` | Holdings 正向涨跌及盈亏数字 |
 | Negative / 下跌文字 | `#df4543` | Holdings 负向涨跌及盈亏数字 |
 | Candle Up / 上涨柱 | `#26a69a` | 上涨 K 线与成交量柱；现有 CSS 变量 `--up` |
 | Candle Down / 下跌柱 | `#ef5350` | 下跌 K 线与成交量柱；现有 CSS 变量 `--down` |
-| Tag Neutral / 中性线条 | `#64748b` | 无 MA 关联的默认 Tag 线条 |
+| Tag Neutral / 中性线条 | `#64748b` | 无 MA 关联的默认 Tag 线条、近期已发布财报 |
 | Volume Base / 量能普通 | `#f4f5f7` | 普通量能 Badge 底色 |
 | Volume Low / 量能一级 | `#e5e7eb` | 一级量能底色，也用于默认 Tag 毛玻璃底色 |
 | Volume Medium / 量能二级 | `#cbd2db` | 二级量能底色 |
@@ -71,7 +76,7 @@ ADR与两种分钟量比按各自数据就绪显示；单项缺失显示`—`，
 
 - 区分度优先，图案应让人迅速联想到形态或操作；使用有代表性的轮廓，避免装饰细节。Tag 是辅助信息，不能用大面积亮色背景干扰 Symbol、价格和 Growth。
 - Tag、操作图标、品牌 Logo 属于不同用途，不强制共用尺寸或背景。小图形的可视尺寸与按钮的可操作区域分开管理。
-- 每种图案保留明确含义；完整名称、操作说明和状态不能只靠图形或颜色表达。Web 使用提示与可访问名称，原生端需提供可触摸的查看方式，不能照搬 hover。
+- 每种图案保留明确含义；完整名称、操作说明和状态不能只靠图形或颜色表达。Web 为图标提供可访问名称，原生端按平台提供可触摸的查看方式。
 
 ### Tag 图案与配色
 
@@ -88,7 +93,7 @@ Tag 使用自定义纯线条轮廓，不含字母，不使用具象插画或外�
 | `under50` | 上方波浪水面、下方泳镜，表示价格仍在 SMA50 下方；默认使用 SMA50 红色 |
 | `label` | 中性标签轮廓，作为未绑定专用图案的默认值 |
 
-- 主景线条颜色和背景颜色可调。MA10 默认蓝 **#2962ff**，MA20 默认黄 **#e4b400**，MA50 默认红 **#e53935**，无 MA 关联默认中性 **#64748b**。例如 Surf-10 / Bounce-10 同为蓝线，Surf-20 为黄线；用户保存的颜色优先。颜色不表示人工/自动来源，也不决定分类。
+- 主景线条颜色和背景颜色可调。MA10 默认蓝 **#2962ff**，MA20 默认黄 **#e4b400**，MA50 默认红 **#e53935**，无 MA 关联默认中性 **#64748b**。例如 Surf-10 / Bounce-10 同为蓝线，Surf-20 为黄线；用户保存的颜色优先。颜色只用于展示。
 - 背景可选全透明或极浅毛玻璃；默认极浅灰 **#e5e7eb** 毛玻璃胶囊，无 border。保持低 opacity，主景线条承担识别作用；平台不支持模糊时可呈现极浅灰。
 - List 中图形容器高度为行字体的 **0.9 倍**，宽高比 **1.5**。当前 Web 字体 12px，对应高 **10.8px**、宽 **16.2px**。行内数量与列宽见 [List UI / 行与格式](#行与格式)。
 - 每个新 Tag 都绑定图案与外观；可先用 `label`，以后更换。外观独立于名称、用途和条件，改名不重新推断已保存图案。新增专用图案时更新本表与实现，保持已有 Icon ID 的含义。
@@ -176,11 +181,10 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 - 同 ticker 只有一行，固定行高 **28px**，主体数据列保持同一水平行；Scan Growth、Tags 与行操作不换行、不增加副标题。
 - **仅 Scan** 的 Growth 数据列以排序下拉作为列头，显示当前 **RFL 1M / RFL 3M / RFL 6M / Default order**。控件沿用列名的字体与颜色，无背景或边框，右侧使用黑色向下折号。没有独立排序工具行。
 - 该列始终依次显示 **1m / 3m / 6m** 三个值，不随所选排序改变顺序，不显示周期 key。三个等宽子列右对齐，以浅色竖线分隔，所有数据行的竖线位置一致。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
-- Tags 列显示轮廓 glyph，图案、尺寸与配色统一见 [Logo / Icon](#logo--icon)。保持 **110px** 列宽下限并为编辑按钮留空隙；最多显示三个 glyph，其余用小号 `+N`，悬停列出完整剩余标签。glyph 悬停显示完整名称与人工 `today` 状态，人工补充仅当日有效，不额外使用蓝色 badge。Tags 与 `+N` 均不换行、不增加行高，不增加测宽或 ResizeObserver。
-- Tags 编辑按钮不额外占数据行，hover/键盘 focus 时可见；行内编辑只提供 Setup/Label，修改当日人工补充；Hidden 不提供人工 Tag 编辑。图形外观在保存的 Tag 定义中统一编辑。
+- Scan 与 Monitor 共用 Tags 弹性列宽，最小 **80px**，伸展权重 **0.45fr**。列头留空。按规则结果顺序靠左平铺前四个只读图标，图标间隔 **3px**，距列左缘 **4px**。每行首个图标对齐，Ext 与首个图标之间留 **16px**。无 Tag 时留空。图标提供可访问名称，行内仅显示图标。图案、尺寸与配色见 [Logo / Icon](#logo--icon)。
 - NEW 使用 Symbol 旁的小标记，颜色与 EMA10 一致为蓝色 **#2962ff**。ticker 不显示 `.US`。不显示成员勾选框。
 - Scan Price 是完成日收盘价，ADR20/MDV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。
-- 选中、hover 与价格区域外观共用 [Symbol row template](#symbol-row-template)。行操作在选中、悬停或获得焦点时可见，已置顶和已暂停自动报警的按钮持续显示。Tag 编辑按钮在悬停或键盘聚焦时可见。报价更新保留行结构，仅刷新值。
+- 选中、hover 与价格区域外观共用 [Symbol row template](#symbol-row-template)。行操作在选中、悬停或获得焦点时可见，已置顶和已暂停自动报警的按钮持续显示。报价更新保留行结构，仅刷新值。
 
 ### Section、顺序与选择
 
@@ -200,8 +204,8 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 - 数值条件支持 Any / ≥ / ≤ / range；不同条件 AND，分类多选 OR。缺失值匹配 Any 或显式 Missing。Filter 不移动名单、不改变订阅，被筛掉的成员保留底层归属。
 - Tag 用途固定为 Setup / Earnings（显示In 14 Days）/ Extended / Broken / Under-50 / Label，与名称独立；Setup 提供潜力 section，其余按 List 设计处理。Tag 名称唯一，可保存零到十个；选择按钮点击一次选中，再点击取消。没有选择时不应用保存 Tag 筛选。
 - 新建克隆当前草稿条件，用途默认 Setup；未选 Tag 时从空条件编辑，可保存为新命名 Tag。条件编辑即时预览；Save 保存并折叠，Cancel 恢复。未保存时切 Tag 需明确丢弃，保存失败保留草稿；名单/排序偏好写入不得覆盖未保存的 Filter 草稿。
-- Tag 外观编辑遵循 [Logo / Icon](#logo--icon)，与本章同一份 Tag 草稿一起保存或恢复；外观编辑保留已保存条件下的人工匹配成员，不切换到纯条件预览。
-- 已保存 Tag 的筛选包含人工补 Tag 成员；未保存条件预览只按草稿条件判断。保存规则由后端重评已有本地数据，UI 筛选不触发下载。
+- Tag 外观编辑遵循 [Logo / Icon](#logo--icon)，与本章同一份 Tag 草稿一起保存或恢复；外观编辑继续使用已保存条件下的匹配结果。
+- 已保存 Tag 的筛选使用规则结果和保存的条件。条件有改动时，预览按草稿条件判断。保存规则由后端重评已有本地数据，UI 筛选不触发下载。
 
 ### 名单行操作
 

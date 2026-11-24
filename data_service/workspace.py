@@ -72,9 +72,6 @@ def persistent_workspace(data: dict) -> dict:
     result = deepcopy(data)
     result['statuses'] = {ticker: state for ticker, state in result['statuses'].items()
                           if state.get('status') != 'excluded' or state.get('section') == 'hidden'}
-    for ticker, state in data['statuses'].items():
-        if ticker not in result['statuses'] and state.get('manual_tags'):
-            result['statuses'][ticker] = {key: state[key] for key in ('manual_tags', 'manual_tags_date')}
     result['orders'] = _workspace_orders(result)
     return result
 
@@ -89,7 +86,15 @@ def migrate_workspace(data: dict, selected_date: str | None = None) -> dict:
     result['orders'] = {'discover': list(old_orders.get('discover', result.get('discover_order', []))),
                         'focus': list(old_orders.get('focus', [])) + list(old_orders.get('wait', [])),
                         'excluded': list(old_orders.get('excluded', [])) + list(old_orders.get('hidden', []))}
-    for state in states.values():
+    for ticker, state in list(states.items()):
+        if 'manual_tags' in state or 'manual_tags_date' in state:
+            state.pop('manual_tags', None)
+            state.pop('manual_tags_date', None)
+            if not state:
+                del states[ticker]
+                continue
+            # The saved Tag list could include a manual match. Rebuild it from rules.
+            state['tags'] = []
         status = state.get('status')
         if status == 'wait':
             state['status'] = 'focus'
@@ -121,7 +126,7 @@ def reset_daily_workspace(previous: dict | None, selected_date: str) -> dict:
         state['tags'] = []
         if state.get('status') == 'focus':
             state['section'] = 'unclassified'
-        for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date', 'manual_tags_date', 'manual_tags'):
+        for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date'):
             state.pop(key, None)
     result['orders'] = {}
     result['orders'] = _workspace_orders(result)
@@ -158,9 +163,6 @@ class DayView:
 def derive_day_view(selected_date: str, candidates: set[str], previous_candidates: set[str], workspace: dict) -> DayView:
     data = migrate_workspace(workspace, selected_date)
     statuses = data['statuses']
-    for ticker, state in statuses.items():
-        if state.get('manual_tags_date') != selected_date:
-            state['manual_tags'] = []
     return DayView(selected_date, frozenset(candidates), frozenset(data['carried']),
                    tuple(data['orders']['discover']), tuple(data['orders']['focus']), tuple(data['orders']['excluded']),
                    frozenset(candidates - previous_candidates), statuses)
@@ -214,7 +216,7 @@ class Workspace:
     def _focus(self, ticker, classification=None):
         self._unpin(ticker)
         state = self.data['statuses'].setdefault(ticker, {})
-        for key in ('tags', 'manual_tags', 'manual_tags_date', 'manual_section_date', 'manual_discover_date', 'excluded_at'):
+        for key in ('tags', 'manual_section_date', 'manual_discover_date', 'excluded_at'):
             state.pop(key, None)
         state.update(status='focus', section='unclassified', tags=[], status_at=self.date, manual_focus_date=self.date)
         state.update(classification or {})
@@ -265,7 +267,7 @@ class Workspace:
         self._remove_order(ticker)
         state = self.data['statuses'][ticker]
         state.update(status='excluded', section='hidden', tags=[], status_at=self.date, excluded_at=self.date)
-        for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date', 'manual_tags', 'manual_tags_date'):
+        for key in ('manual_focus_date', 'manual_discover_date', 'manual_section_date'):
             state.pop(key, None)
         self.data['orders']['excluded'].insert(0, ticker)
         self.save(previous)
@@ -332,15 +334,6 @@ class Workspace:
         positions = [i for i, item in enumerate(order) if self.section(item) == list_name]
         at = positions[index] if index < len(positions) else (positions[-1] + 1 if positions else 0)
         order.insert(at, ticker)
-        self.save(previous)
-
-    def set_manual_tags(self, ticker, tag_ids):
-        if ticker not in self.data['statuses'] or self.data['statuses'][ticker].get('section') == 'hidden':
-            raise ValueError('Ticker is not available for tagging')
-        if not isinstance(tag_ids, list) or any(not isinstance(tag, str) for tag in tag_ids) or len(set(tag_ids)) != len(tag_ids):
-            raise ValueError('Use unique Tag IDs')
-        previous = deepcopy(self.data)
-        self.data['statuses'][ticker].update(manual_tags=tag_ids, manual_tags_date=self.date)
         self.save(previous)
 
     def reload(self):

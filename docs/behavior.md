@@ -1,6 +1,6 @@
 # 看盘服务运行逻辑
 
-更新：2026-11-17。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [schwab.md](schwab.md)。
+更新：2026-11-24。面向使用者；实现入口见 [development.md](development.md)，UI 总入口为 [ui.md](ui.md)，图表交互见 [chart-ui.md](chart-ui.md)，持仓显示见 [schwab.md](schwab.md)。
 
 ## Alert 与入选规则
 
@@ -50,11 +50,11 @@ Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两�
 
 候选按 [Massive 数据要求](massive-data.md#独立配置与处理顺序) 完成初筛和RFL排名。候选、当日人工Discover、Focus和有效Hidden计算完整特征与Growth所用RFL数值，继承成员不另行排名；详细范围见 [名单完整特征范围](massive-data.md#名单完整特征范围)。历史机器Excluded不扩大计算范围；Focus不因候选门槛、短历史或缺数据直接淘汰。启动在后台从本地Daily补齐旧截面缺少的有效成员特征，随后按名单规则分类，不触发下载。新日和重算发布后更新规则结果。
 
-Tag 保存条件与用途：Setup用于Discover/Focus分组，Earnings、Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。每只股票可匹配多个Tag，按Setup定义顺序选主section；未匹配为Unclassified。人工补充仅允许Setup/Label。
+Tag 保存条件与用途：Setup用于Discover/Focus分组，Earnings、Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。逐股 Tag 由保存的条件计算，一只股票可匹配多个。按 Setup 定义顺序选主 section，未匹配归入 Unclassified。
 
 Tag 选择可为空，点击已选 Tag 再次取消；空选择不应用保存 Tag 筛选，全部定义仍参与自动分类。
 
-Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑定。编辑外观草稿继续使用已指派及人工补充的匹配结果，只有修改条件才进入条件预览，不因调颜色改变名单归属或订阅。
+Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑定。编辑外观草稿继续使用已计算的匹配结果，只有修改条件才进入条件预览，不因调颜色改变名单归属或订阅。
 
 完成日Daily和feature准备后，按 [每日规则](list-design.md#每日规则) 统一计算候选归属和Focus淘汰；机器分类不落盘。有效Hidden继续屏蔽，到期仅当天候选重新分类。分类复用已有算子和Tag匹配，不增加定时扫描。
 
@@ -64,7 +64,7 @@ Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑�
 
 Scan、Monitor 和 Holdings 共用名单导航的鼠标悬停规则。方向键选中一行后，悬停高亮等到鼠标输入恢复。详见 [名单导航](list-interactions.md#导航与快捷键)。
 
-搜索仍使用列表上方Search与/入口。Monitor通过主账号Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整 section，本次不新增 Quote 形态规则。保存失败回退内存并显示错误。
+搜索仍使用列表上方Search与/入口。Monitor通过主账号Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整主 section，逐股 Tag 仍由保存的条件计算。保存失败回退内存并显示错误。
 
 一个watchdog原生事件监听days，新日期workspace出现自动跟随；Monitor始终使用最新名单，历史Scan只读。外部修改自动重读，Focus变更立即同步行情范围；已有行情状态复用，排序/主section移动不重下载。只有同时不在Focus和Holdings才退订；已有行情缓存保留；重新加入按 Longbridge 数据要求初始化。两类实时列表都为空时清空图表并保留搜索入口。`--symbols`会话始终限制指定Focus子集并禁用编辑；模拟器只写临时名单。
 
