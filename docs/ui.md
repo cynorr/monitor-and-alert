@@ -64,7 +64,7 @@ Focus、活动 Entry 和真实余仓共用 ADR、CumVol 与 LocalVol 显示规�
 - 价格区域为连续胶囊。Monitor Focus 覆盖 Symbol、Last、Chg%、ADR；非 Regular 的 Ext 也属于价格区域。Tags、量能与操作独立。Scan 保持自身数据列，使用相同模板，不为两种量能重排列。Holdings 的区域边界只在 [Schwab 持仓 UI](schwab.md#列与格式) 维护。
 - 底色及文字始终表达当前实时状态。Blue Soft / Blue 对应上行关注／增强，Yellow Soft / Red Strong 对应回撤预警／紧急。强蓝、深红价格区域使用白字。Candidate Chg% 使用 Positive / Negative，强底色时继承白字。其他字段保持本色。
 - 最新未读用价格胶囊两侧横向流动的渐变波浪表达。浅底上的上行关注用 Blue 与 White 的 68% 混色，上行增强用 Blue，回撤预警用 Yellow，回撤紧急用 Red Strong。深底使用对应方向的浅色波浪以保留对比。同方向的紧急未读与强底色同时存在时，波浪用 White。
-- 整条只用一份长边渐变遮罩，取消端部单独拼接、实色色带和虚线。当前 Web 波浪每 2.8s 平移一个周期；遮罩可见峰值 0.48，向内 6px 淡至透明，中央保留实时底色。波浪没有实色停留段；外层胶囊自然裁切，不另做内圈 border。音频每声通过同一入口触发一次短亮度脉冲，不缩放数字或整行；播放结束后只保留流动波浪。
+- 整条使用一份长边渐变遮罩。当前 Web 波浪每 2.8s 平移一个周期。持续流动时，白色波浪的遮罩峰值与波浪层自身的不透明度均为 100%。其余波浪的遮罩峰值为 48%，波浪层自身的不透明度为 85%。遮罩均向内 6px 淡至透明，中央保留实时底色。外层胶囊自然裁切。音频每声通过同一入口触发一次短亮度脉冲，播放结束后保留流动波浪。
 - 仅 symbol 主行承载提醒，section、Holdings 标题、Buy/Sold 明细及 Total 不聚合提醒。已读、期限与声音行为只在 [Alert](alert.md#统一未读提醒) 维护。
 - Web 复用 `symbol-row.ts` 创建 `.price-surface` / `.price-wave`，`attention.ts` 应用最后一条提醒及本次节拍；Grid 与 Holdings Table 使用同一套 CSS。Chart 与行阴影分别由 `--panel-shadow` / `--row-shadow` 集中定义。不为未来功能复制绘制或增加动画框架；平台实现可以调整绘制方式，保留上述语义。
 

@@ -288,12 +288,17 @@ button:disabled { cursor: default; opacity: .45; }
 [data-intraday$="urgent"][data-alert^="up-"] { --alert-color:var(--color-blue-soft); }
 [data-intraday$="urgent"][data-alert^="down-"] { --alert-color:var(--color-yellow-soft); }
 [data-intraday="up-urgent"][data-alert="up-urgent"],
-[data-intraday="down-urgent"][data-alert="down-urgent"] { --alert-color:var(--color-white); }
+[data-intraday="down-urgent"][data-alert="down-urgent"] {
+    --alert-color:var(--color-white);
+    --alert-edge-opacity:1;
+    --alert-wave-opacity:1;
+}
 .price-wave { display:none; position:absolute; inset:0; border-radius:inherit; }
 .instrument-row[data-alert] .price-wave {
+    --edge-mask-color:rgba(0,0,0,var(--alert-edge-opacity,.48));
     display:block; background-image:repeating-linear-gradient(100deg,var(--alert-color) 0px,transparent 68px,var(--alert-color) 136px);
-    background-size:138px 100%; animation:alert-wave 2.8s linear infinite; opacity:.85;
-    mask-image:linear-gradient(to bottom,rgba(0,0,0,.48),transparent 6px,transparent calc(100% - 6px),rgba(0,0,0,.48));
+    background-size:138px 100%; animation:alert-wave 2.8s linear infinite; opacity:var(--alert-wave-opacity,.85);
+    mask-image:linear-gradient(to bottom,var(--edge-mask-color),transparent 6px,transparent calc(100% - 6px),var(--edge-mask-color));
 }
 @keyframes alert-wave { from { background-position:0 0; } to { background-position:138px 0; } }
 .volume-badge { display:inline-block; min-width:40px; padding:2px 6px; border-radius:999px; font-size:11px; line-height:16px; text-align:center; color:var(--color-volume-high); background:var(--color-volume-base); font-variant-numeric:tabular-nums; }
