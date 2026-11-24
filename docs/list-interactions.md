@@ -42,9 +42,9 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 ## 未读 Alert 导航
 
 - 每次按键从当前排列找第一只未读symbol；选图即按 [Alert统一已读](alert.md#统一未读提醒) 清除未读，再按就找到下一只。没有未读时保持原选择，不弹提示；不保存遍历游标、队列或另一套排序。
-- 已撤回的 Focus ADR 报警立即退出未读导航。
+- 已撤回的候选 ADR 报警立即退出未读导航。
 - End与Command+G共用完整Focus导航，不含被Holdings接管显示的symbols；顺序与列表共用Pinned、In Play、原分组及组内顺序。包含折叠组，命中时展开；Scan当前在Discover/Excluded时切到Focus，保持原Tag与Filter。即使目标被Tag筛选隐藏，仍展示其chart，普通后台名单更新保留该选择；目标行可见时滚动定位，不修改筛选、Tag、名单归属或排序。
-- Home与Command+U共用当前Holdings主行顺序，同symbol多批次选第一条主行，共享symbol已读；整体折叠时展开。Scan不跳Holdings、不切模式。这两组快捷键均不受当前选择来源限制；输入框、搜索与可编辑内容保留原键盘行为。
+- Home与Command+U按当前Holdings主行顺序查找活动 Entry 和真实余仓，同symbol多批次选第一条主行，共享symbol已读；整体折叠时展开。Scan不跳Holdings、不切模式。这两组快捷键均不受当前选择来源限制；输入框、搜索与可编辑内容保留原键盘行为。
 - Home/End仅单键生效，在Scan/Monitor均取消原生页面翻页／滚动，即使没有未读目标也不滚动。带修饰键的Home/End不映射；文本编辑中的行首／行尾行为保留。
 
 ## 单只名单操作
@@ -87,4 +87,4 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 - 上述指定 section 新增针对全新 symbol。已有 Discover/Excluded symbol 明确加入 Focus 时，分类以 [统一入选](list-design.md#统一移入-focus) 为准，不由 Search/section `+` 保留来源结果或强制目标组。
 
 
-Trade 复用 Monitor 的 Focus 操作与快捷键；Holdings 未读导航切入独立 Schwab 表，只在真实持仓行查找未读，Entries/Sold Today 不增加提醒游标。同 symbol 的图表和手动 Alert 身份不随账户显示来源复制。
+Trade 复用 Monitor 的 Focus 操作与快捷键；Holdings 未读导航切入独立 Schwab 表，查找活动 Entry 和真实余仓的未读。同 symbol 的图表和手动 Alert 身份不随账户显示来源复制。

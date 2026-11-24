@@ -2,7 +2,7 @@
 
 先读 UI 总入口 [docs/ui.md](../../docs/ui.md)，名单改动读 [List UI](../../docs/ui.md#list-ui) 与 [List 交互](../../docs/list-interactions.md)，图表改动读 [Chart UI](../../docs/chart-ui.md)，持仓表改动读 [Schwab 持仓 UI](../../docs/schwab.md)，Alert 交互读 [docs/alert.md](../../docs/alert.md)，Tag 图案、操作/状态图标及品牌 Logo 读 [Logo / Icon](../../docs/ui.md#logo--icon)；产品分类与生命周期读 [docs/list-design.md](../../docs/list-design.md)。不要在这里复制产品数值或建立第二份 UI 规范。当前用户要求优先。
 
-- 盘中状态另读 [Intraday State](../../docs/intraday-state.md)，`intraday-state.ts`仅负责格式化、Badge及服务端离散rank比较；In Play复用section，不改真实归属，重排保留节点/选择/焦点/滚动。Holdings当前余仓同步状态，清仓尾部保持灰色。
+- 盘中状态另读 [Intraday State](../../docs/intraday-state.md)，`intraday-state.ts`仅负责格式化、Badge及服务端离散rank比较；In Play复用section，不改真实归属，重排保留节点/选择/焦点/滚动。Focus、Entry 与真实余仓复用同一套盘中字段格式，清仓尾部保持灰色。
 - `list.ts`：名单行、section、选择、拖拽及只读 Tag 图标；`scan.ts`：两模式共用 Tag/Filter、日期和草稿编辑；`board.ts`：分组、共用列定义、角标和显示格式；`tags.ts`：Tag 保存与草稿比较；`tag-appearance.ts`：外观默认值、图案与共用 SVG 渲染入口。
 - `layout.ts`：可见图表等宽分配与唯一图表组/List分隔条；`holdings-layout.ts`：持仓自然内容测宽与价格背景几何；`main.ts`：模式和图表选择来源、R重置可见图、共用名单悬停开关。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
 - `additional-info.ts`：独立信息身份校验、分类显示精简、可空格式化及纽约自然日财报文案；原始分类保留在数据契约中，数据和文案见 [Additional Info](../../docs/additional-info.md)，财报配色见 [Chart UI](../../docs/chart-ui.md#headers-and-information)，不改变bar revision或Ready。
@@ -21,6 +21,6 @@
 
 - 新增 symbol 行复用 `symbol-row.ts` 的表面及 `attention.ts` 的最新提醒入口，规则见 [Symbol模板](../../docs/ui.md#symbol-row-template)。Grid/Table共用CSS，不复制波浪或按不同列表另造提醒；Holdings区域宽度跟随现有列几何。共享颜色只引用 `palette.ts`，由main安装CSS变量，禁止在Chart/Tag/名单重复默认色值；说明见 [Color palette](../../docs/ui.md#color-palette)。实时状态决定价格底色与文字，未读只决定边缘波浪。Focus 与 Holdings 复用暂停自动报警图标，M 共用 Alert 操作。
 
-- Schwab账户与交易规范见 [docs/schwab.md](../../docs/schwab.md)。schwab-data.ts 维护原生响应、后端FIFO/Days/Sold字段及逐笔显示，不在前端重算历史归属；schwab-holdings.ts 维护Days/Sold列、逐笔明细及Entry/NEW标记；保留原生展示逻辑，复用 holdings-layout/symbol-row/attention/intraday-state；trade.ts 管独立策略胶囊、买卖共用的整股档位与比例预设、EMA 周期、原生 Stop 编辑和共用 Send，行情公式只消费服务端图表参考，trade-lines.ts 用公开图表 API 绘制双图交易线，price-lines.ts 与 Alert 共用坐标/命中/绘制。产品模式只有scan/monitor，保持 request_id/source/socket 检查；金融写请求不能复用普通 post 的错误语义或自动重发。
+- Schwab账户与交易规范见 [docs/schwab.md](../../docs/schwab.md)。schwab-data.ts 维护原生响应、后端FIFO/Days/Sold字段、单一主行标记和 Entry/Stop 明细投影，不在前端重算历史归属。schwab-holdings.ts 渲染表格、展开树及右侧铃铛，复用 holdings-layout/symbol-row/attention/intraday-state。trade.ts 管独立策略胶囊、买卖共用的整股档位与比例预设、EMA 周期、原生 Stop 编辑和共用 Send，行情公式只消费服务端图表参考，trade-lines.ts 用公开图表 API 绘制双图交易线，price-lines.ts 与 Alert 共用坐标/命中/绘制。产品模式只有scan/monitor，保持 request_id/source/socket 检查；金融写请求不能复用普通 post 的错误语义或自动重发。
 
 - 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

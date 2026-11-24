@@ -6,7 +6,7 @@
 
 Alert 与统一移入 Focus 已实现；完整需求分别见 [Alert](docs/alert.md) 与 [List 入选规则](docs/list-design.md#统一移入-focus)，模块维护入口为 [data_service/alerts/AGENTS.md](data_service/alerts/AGENTS.md)。
 
-Intraday State（盘中状态）提供 Focus/余仓的 Regular 状态、量比、自动声音和 In Play自动聚集；独立需求见 [intraday-state.md](docs/intraday-state.md)，模块入口见 [AGENTS.md](data_service/intraday_state/AGENTS.md)。参数在 [config/intraday-state.json](config/intraday-state.json)，修改后重启后台。
+Intraday State（盘中状态）提供 Focus、活动 Entry 与真实余仓的 Regular 状态、量比、自动声音和 In Play自动聚集；独立需求见 [intraday-state.md](docs/intraday-state.md)，模块入口见 [AGENTS.md](data_service/intraday_state/AGENTS.md)。参数在 [config/intraday-state.json](config/intraday-state.json)，修改后重启后台。
 
 后端按职责直接组织：market.py / MarketService维护共用行情与调度；schwab.py / SchwabService维护原生账户、历史与交易流程；workbench.py组合Scan/Monitor业务。其余来源、缓存和指标保持现有独立模块，详见 [开发维护](docs/development.md#文件与依赖)。
 

@@ -36,42 +36,52 @@ export const entryOrders = (row: AccountRow) => activeOrders(row).filter(order =
 export function editableStop(order: Order) {
     return !!order.order_id && (order.editable === true || ['PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '')) && order.instruction === 'SELL' && order.order_type === 'STOP' && order.strategy_type === 'SINGLE' && !order.child_orders.length && ['WORKING', 'AWAITING_STOP_CONDITION', 'QUEUED', 'ACCEPTED', 'PENDING_ACTIVATION', 'AWAITING_RELEASE_TIME'].includes(order.status ?? '');
 }
-export function entryPreview(order: Order) {
+function entryTerms(order: Order) {
     const qty = numeric(order.quantity), price = numeric(order.stop_price);
-    const stop = numeric(flattenOrders(order.child_orders).find(child => child.instruction === 'SELL' && child.order_type === 'STOP')?.stop_price);
     const amount = qty != null && price != null ? qty * price : null;
-    const distance = price != null && stop != null ? price - stop : null;
-    return { qty, price, stop, amount, riskPercent: distance != null && price && price > 0 ? distance / price * 100 : null, risk: distance != null && qty != null ? distance * qty : null };
+    return { qty, price, amount };
 }
 export function entryAmount(row: AccountRow) {
-    const values = entryOrders(row).map(order => entryPreview(order).amount);
+    const values = entryOrders(row).map(order => entryTerms(order).amount);
     return values.length && values.every(value => value != null) ? values.reduce<number>((sum, value) => sum + value!, 0) : null;
 }
-export function holdingTags(row: AccountRow) {
-    return [...(entryOrders(row).length ? ['Entry'] : []), ...(row.is_new ? ['NEW'] : [])];
+export function holdingTag(row: AccountRow) {
+    if (entryOrders(row).length) return row.position ? 'Add' : 'Entry';
+    return row.position && row.is_new ? 'NEW' : '';
 }
-export type HoldingDetail = { key: string; kind: 'Buy' | 'Sold' | 'Stop' | 'Entry'; date: string | null; days: number | null; qty: number; price: number | null; stop: number | null; amount: number | null; pnlPercent: number | null; pnl: number | null; riskPercent: number | null; risk: number | null; cancelId: string | null };
+export type HoldingDetail = { key: string; kind: 'Buy' | 'Sold' | 'Stop' | 'Entry'; date: string | null; days: number | null; qty: number; price: number | null; amount: number | null; pnlPercent: number | null; pnl: number | null; cancelId: string | null };
 export function holdingDetails(row: AccountRow): HoldingDetail[] {
-    const result: HoldingDetail[] = [], position = row.position, average = numeric(position?.average_price);
-    const add = (key: string, kind: HoldingDetail['kind'], qty: number, price: number | null, order?: Order) => {
-        const difference = kind !== 'Buy' && average != null && average > 0 && price != null ? price - average : null;
-        const pnl = difference != null ? qty * difference : null;
-        const pnlPercent = difference != null ? difference / average! * 100 : null;
-        result.push({ key, kind, date: null, days: null, qty, price, stop: null, amount: price != null ? qty * price : null, pnlPercent, pnl, riskPercent: null, risk: null, cancelId: order?.cancelable && order.order_id ? order.order_id : null });
+    const result: HoldingDetail[] = [];
+    const addStop = (order: Order, cost: number | null, cancelId: string | null) => {
+        const qty = numeric(order.quantity), price = numeric(order.stop_price);
+        if (qty == null) return;
+        const difference = price != null && cost != null && cost > 0 ? price - cost : null;
+        result.push({ key: 'stop-' + order.order_id, kind: 'Stop', date: null, days: null, qty, price,
+            amount: price != null ? qty * price : null, pnlPercent: difference != null ? difference / cost! * 100 : null,
+            pnl: difference != null ? qty * difference : null, cancelId });
     };
     for (const trade of row.trades ?? []) {
         const sold = trade.side === 'SELL';
         result.push({ key: 'trade-' + trade.order_id, kind: sold ? 'Sold' : 'Buy', date: trade.date,
             days: sold ? trade.holding_days : null, qty: Number(trade.quantity), price: numeric(trade.price),
-            stop: null, amount: numeric(trade.amount), pnlPercent: sold ? numeric(trade.pnl_percent) : null,
-            pnl: sold ? numeric(trade.pnl) : null, riskPercent: null, risk: null, cancelId: null });
+            amount: numeric(trade.amount), pnlPercent: sold ? numeric(trade.pnl_percent) : null,
+            pnl: sold ? numeric(trade.pnl) : null, cancelId: null });
     }
-    const entries = entryOrders(row), attached = new Set(entries.flatMap(order => flattenOrders(order.child_orders).map(child => child.order_id)));
-    for (const order of entries) {
-        const value = entryPreview(order);
-        if (value.qty == null) continue;
-        result.push({ key: 'entry-' + order.order_id, kind: 'Entry', date: null, days: null, ...value, qty: value.qty, pnlPercent: null, pnl: null, cancelId: order.cancelable ? order.order_id : null });
+    const orders = activeOrders(row);
+    const stops = new Map(orders.filter(order => order.instruction === 'SELL' && order.order_type === 'STOP')
+        .map(order => [order.order_id ?? order, order]));
+    for (const order of orders.filter(order => order.instruction === 'BUY')) {
+        const entry = entryTerms(order);
+        if (entry.qty != null) result.push({ key: 'entry-' + order.order_id, kind: 'Entry', date: null, days: null,
+            ...entry, qty: entry.qty, pnlPercent: null, pnl: null, cancelId: order.cancelable ? order.order_id : null });
+        for (const child of flattenOrders(order.child_orders)) {
+            const key = child.order_id ?? child, stop = stops.get(key);
+            if (!stop) continue;
+            addStop(stop, entry.price, null);
+            stops.delete(key);
+        }
     }
-    for (const order of activeOrders(row)) if (order.instruction === 'SELL' && order.order_type === 'STOP' && !attached.has(order.order_id) && numeric(order.quantity) != null) add('stop-' + order.order_id, 'Stop', Number(order.quantity), numeric(order.stop_price), order);
+    const average = numeric(row.position?.average_price);
+    for (const stop of stops.values()) addStop(stop, average, stop.cancelable ? stop.order_id : null);
     return result;
 }

@@ -9,7 +9,7 @@
 - Alert 按 symbol 归属，每条有独立 ID；不按模式、日期、周期、来源或持仓批次拆分。创建价来自鼠标水平线，不转换 Scan/Monitor 价格口径。
 - 允许范围由当前 Focus 与有效 Holdings 决定。Scan Discover/Excluded 创建先入 Focus；与手动移入共用 [List 入选规则](../../docs/list-design.md#统一移入-focus)，不复制 Tag 匹配算法，不继承来源 Tag/人工 section。
 - Workspace 归属与同步保存仍由 `workspace.py` 管理，Tag 匹配仍由 `list_rules.py` 管理；Alert 模块不直接改 workspace JSON，也不改变 Holdings 的归属/清仓语义。
-- 独立SQLite保存Alert与每个symbol最新未读；写成功后才返回或播放。手动触发状态与未读同事务；read(symbol)只清未读，灰线保持到重新设置/删除/到期/出范围。新报警直接覆盖方向、等级、来源和时间。自动暂停按美东日期持久化，自动来源在 notify 统一判定。Focus ADR 降级只能撤回同来源且档位失效的未读。手动线不受暂停控制。
+- 独立SQLite保存Alert与每个symbol最新未读；写成功后才返回或播放。手动触发状态与未读同事务；read(symbol)只清未读，灰线保持到重新设置/删除/到期/出范围。新报警直接覆盖方向、等级、来源和时间。自动暂停按美东日期持久化，自动来源在 notify 统一判定。候选 ADR 降级只能撤回同来源且档位失效的未读。手动线不受暂停控制。
 - 未读只在所属Regular内有效，复用时钟、交易日历与fired_at，在构造、既有维护和状态输出前统一清理；跨收盘清理不等scope_known，不依赖Massive、Refresh或workspace日期，不新增期限字段/调度。前端所有选图与当前chart更新均可read，不做主动/自动、停留或渲染完成区分；详细规则只维护在Alert和List交互需求。
 - 声音直接由后台调用系统音频命令播放，不构建原生应用或请求通知权限。报告实际播放错误；新事件才播放，刷新/重连/恢复未读不重播，退出时停止全部在播声音。Mock默认静音，实际听辨须明确启用。
 - 图表使用公开 API，遵循 [Chart 首要准则](../../docs/chart-ui.md#implementation-principle)；图案只维护在 [Logo / Icon](../../docs/ui.md#logo--icon)。UI 全英文；TypeScript 在 `ui/src` 维护并按要求构建。

@@ -7,6 +7,7 @@ Additional Info 的唯一需求见 [docs/additional-info.md](../docs/additional-
 - `longbridge/`仅含官方SDK入口、多账号访问台账、实时订阅与历史获取/检查；`market.py`组合行情、名单及盘中状态；`massive/pipeline.py`管理Massive准备任务。共享Bar、持久化和OHLC诊断集中在`storage.py`，图表序列与指标缓存集中在`chart_cache.py`，来源包不作为共用工具入口。
 
 - 显式 Refresh 与跨日首次分类共用人工状态清理，不重复准备 Ready 数据；清理后 Focus 接受自动淘汰。普通重分类与用户 Refresh 分开，详细边界见 List 设计。
+- Workbench 基于 Schwab 账户投影分配盘中监控角色，规则见 [Intraday State](../docs/intraday-state.md)。
 - `workspace.py` 管三名单归属、顺序、迁移与同步保存；`list_rules.py` 依据保存的条件计算逐股 Tag 和分类，不请求行情；财报日期由Workbench在当前名单的list_snapshot统一补入，纯日期算子位于features/events.py，不写回行情截面。
 - Scan/Monitor 的 Focus Release 共用现有名单移动及重新分类。自动报警暂停与撤回由 AlertEngine 负责，交易网关保持独立。
 - 手动与 Alert 移入 Focus 共用 [统一入选规则](../docs/list-design.md#统一移入-focus)；不继承来源 Tag/人工 section，不由 Alert 另写分类逻辑。

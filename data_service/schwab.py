@@ -107,10 +107,14 @@ class SchwabService:
         self.history_attempt_day = None
         self.history_task = None
 
+    def portfolio_rows(self, now):
+        day = datetime.fromtimestamp(now, ET).date().isoformat()
+        return portfolio(self.runtime.state.positions, self.runtime.state.orders, day)
+
     def rows(self, now):
         day = datetime.fromtimestamp(now, ET).date()
         fills = display_fills(self.history, self.runtime.state.orders, day)
-        rows = portfolio(self.runtime.state.positions, self.runtime.state.orders, day.isoformat())
+        rows = self.portfolio_rows(now)
         for row in rows:
             selected = [f for f in fills if f.symbol == row['ticker']]
             qty = Decimal(row['position']['quantity']) if row['position'] else Decimal(0)
@@ -118,8 +122,7 @@ class SchwabService:
         return rows
 
     def symbols(self, now):
-        return [row['symbol'] for row in portfolio(self.runtime.state.positions, self.runtime.state.orders,
-                                                  datetime.fromtimestamp(now, ET).date().isoformat())]
+        return [row['symbol'] for row in self.portfolio_rows(now)]
 
     def held_symbols(self):
         return {symbol_key(p['symbol']) for p in self.runtime.state.positions

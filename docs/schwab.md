@@ -36,11 +36,11 @@
 | Chg% / Ext | 共用 Longbridge Quote 与完成 Daily 修正基准 |
 | ADR / CumVol / LocalVol | 共用 Intraday State，沿用 Regular 显隐 |
 
-主行顺序为 Symbol、Sold、Net Liq、Days、P/L %、P/L、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。Sold 不显示列名，使用与历史日期一致的11px Muted灰色，保留列头区域的排序操作。金额取整数，P/L%与Chg%一位小数，Ext与成交价两位小数。Sold 为整数百分比，零留空，非零但四舍五入为零显示 <1%。缺值显示 —，明细缺值留空。Regular 隐藏 Ext；ADR/量比按现有规则。排序只影响余仓，Entries 固定前部，纯 Sold Today 固定灰色尾部。
+主行顺序为 Symbol、Sold、Net Liq、Days、P/L %、P/L、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。Sold 不显示列名，使用与历史日期一致的11px Muted灰色，保留列头区域的排序操作。金额取整数，P/L%与Chg%一位小数，Ext与成交价两位小数。Sold 为整数百分比，零留空，非零但四舍五入为零显示 <1%。主行、展开明细、账户值和 Total 的缺失数值留空。Regular 隐藏 Ext。ADR 与量比共用 [盘中字段显示规则](ui.md#intraday-state-ui)。排序只影响余仓，Entries 固定前部，纯 Sold Today 固定灰色尾部。
 
 Total Net Liq / P/L / P/L Day 仅汇总当前券商余仓；P/L Day Total 不合并已清仓交易，保持券商当前持仓口径。主行盈亏、账户净值和行情不等待历史整理成功；FIFO、Days、Sold 或明细成本不可用时只影响相应派生字段。账户、订单和历史分别保留自己的成功时间，不把视图生成时间当刷新时间。
 
-实时价格颜色、未读波浪及持仓主行的暂停自动报警圆形按钮复用 [Symbol 行模板](ui.md#symbol-row-template)。表面复用 palette、attention 和 holdings-layout.ts 的纯 DOM 自然测宽。内容宽度由隐藏自然宽度副本决定，不使用已分配 scrollWidth 反推最小宽度。普通报价更新复用节点，顺序或明细结构变化才重排。
+实时价格颜色、未读波浪及持仓主行的暂停自动报警圆形按钮复用 [Symbol 行模板](ui.md#symbol-row-template)。展开箭头位于 ticker 左侧，状态标记紧跟 ticker。铃铛位于末列，与 Focus 的铃铛中心对齐。表面复用 palette、attention 和 holdings-layout.ts 的纯 DOM 自然测宽。内容宽度由隐藏自然宽度副本决定，不使用已分配 scrollWidth 反推最小宽度。普通报价更新复用节点，顺序或明细结构变化才重排。
 
 ## 持仓布局、选择与自然宽度
 
@@ -64,7 +64,7 @@ Transactions 主动读取最近365天，启动和纽约跨日各读一次，复�
 
 历史涉及的其他 ticker 不扩大正式行情订阅。普通行情范围只按 Longbridge 数据要求维护。
 
-## FIFO、Days、Sold 与 NEW
+## FIFO、Days、Sold 与主行标记
 
 从当前真实 Positions 股数倒序处理成交：遇到买入减去股数，遇到卖出加回股数；第一次回到零即找到本轮起点。更早轮次不参与当前轮次。负数不是清仓边界，无法建立可靠顺序或数量不符时派生缺值，不把负数清零猜测。
 
@@ -72,10 +72,9 @@ Transactions 主动读取最近365天，启动和纽约跨日各读一次，复�
 
 - Days 取 FIFO 队首剩余批次日期。买入当天为0；自然日差不超过7时只计周一至周五，不处理休市日；超过7直接取自然日差。纯清仓行冻结最后清仓前余仓的 Days。
 - Sold 统计从零建仓到再次归零的整轮累计卖出/买入。加仓扩大分母；完全清仓为100%，当天重新买入开启新轮并清零进度。
-- NEW 使用最新实际买入成交日期，纽约当天买入或加仓均显示；与 Days 起点独立。未成交买单不算买入，周末 Days=0 不等于 NEW。
 - 未在窗口内找到本轮起点时，窗口前余额作为未知旧批次参与 FIFO，不编造其成本或买入日期。旧批次仍剩余且已成功读取完整窗口时 Days 显示 >1y；旧批次已卖完，只剩窗口内批次时 Days 正常计算。整轮分母缺失则 Sold 留空；无法确定的成本及盈亏留空。
 
-主行标记仅保留 Entry 和 NEW，复用 symbol-flag。完全清仓仍为灰色行，不增加额外状态标签。
+主行最多显示一个自然宽度的标记。有活动买单时，有余仓显示 `Add`，无余仓显示 `Entry`。有余仓且无活动买单时，纽约当天有已确认买入成交则显示 `NEW`。其余留空。日期独立于 Days 起点。纯 Entry 的 ticker 常态使用中性灰，强色价格底使用共用文字规则。完全清仓的尾行使用清仓灰色。
 
 ## 展开明细与 Sold Today
 
@@ -83,12 +82,12 @@ Transactions 主动读取最近365天，启动和纽约跨日各读一次，复�
 
 - Buy：按真实买入订单分别显示日期、原买入金额、数量、成交均价；Days/P/L两项留空。
 - Sold：按真实卖出订单显示日期、金额、FIFO买入成本对应的税费前价差与比例、卖出时 Days、数量及成交均价。一笔卖出跨多个批次时内部累加成本，界面仍只显示一条 Sold；缺对应成本时盈亏留空。
-- Entry：每组母子买单保留原名义金额、数量、买入价、保护 Stop、风险比例及金额；只有母单保留一个圆形 ×，取消联动交给券商。
-- Stop：每张真实活动 SELL STOP 独立显示数量×Stop、数量和价格；预估盈亏继续使用当前券商 averagePrice，不混入 FIFO 历史已实现盈亏。只按 cancelable 显示圆形 ×。
+- Entry：买单行显示股数、计划买入价和名义金额。保护 Stop 紧跟母单单独成行。母子单组由可撤母单提供一个圆形 ×，取消联动由券商处理。
+- Stop：每张真实活动 SELL STOP 显示股数、止损价和名义金额。P/L % 与 P/L 按止损价减成本基准估算，分别除以成本基准和乘以该 Stop 的股数。保护 Stop 用母单计划买入价，独立 Stop 用券商当前持仓均价。缺成本或价格时盈亏留空。独立 Stop 按 `cancelable` 显示圆形 ×。
 
-历史 Buy/Sold 保持同级、按成交时间排列，以浅灰树线表达同一 symbol 归属，不绘制买卖配对或嵌套批次。历史行移除常驻及悬停背景；树干对齐主行symbol首字母中心，当前Web距单元格左边21px，由CSS的 --history-tree-x 统一控制。文字在树干右侧20px，分支连向5px圆点，末条历史行在圆点中心收尾。圆点含义只维护在 [Logo / Icon](ui.md#操作与状态图标)。Entry/Stop 保留原订单行和取消交互，不加入历史树线。
+Buy、Sold、Entry、Stop 共用浅灰平级树线表达同一 symbol 的归属。已成交 Buy/Sold 按时间排列，使用实线。通往活动 Entry/Stop 的竖线从上一条分叉点开始用虚线，首条明细从主行下沿开始；当前横线也用虚线。横竖虚线均为 2px 线段、1px 间隔。树干对齐主行 ticker 首字母中心，Web 由 `--holding-tree-x` 定位在单元格左侧 21px。文字位于树干右侧 20px，分支连向圆点，树干在最后一条明细的分叉点结束。Buy/Sold 行背景透明。圆点含义和尺寸见 [Logo / Icon](ui.md#操作与状态图标)。
 
-Buy/Sold 类型12px，位于 Symbol 单元格；明细数量移至 Symbol 和 Net Liq 之间，与主行 Sold 百分比右对齐，保留原11px字号与正常明细颜色。金额、Days、P/L%、P/L 对齐主行同名列，价格位于Chg%列。历史日期与主行P/L Day列右对齐，使用11px Muted灰色；取消操作保留原位置。文本使用正常表格布局参与自然测宽，不绝对定位覆盖其他字段；Entry额外字段合并在末尾可见区域。不显示内部 ID 或常态订单状态，不增加缺失历史提示。
+明细类型使用 12px，位于 Symbol 单元格。数量与主行 Sold 百分比右对齐，使用 11px。金额、Days、P/L%、P/L 对齐主行同名列，价格位于 Chg% 列。历史日期在 P/L Day 列右对齐，使用 11px Muted 灰色。取消按钮在价格右侧，Regular 使用 P/L Day 列，扩展时段使用 Ext 列。明细文本参与表格自然测宽。
 
 Sold Today 的显示范围沿用当前订单中完全成交股票 SELL 的最后 execution 纽约日期；有余仓时卖出位于同一 Holding 下拉，无余仓且无活动买单时灰色尾行。当天清仓再买回仍只显示一条当前 symbol 主行，其旧轮次明细保留在下拉，Sold 统计新轮次。纽约跨日移除昨日纯清仓行。
 
@@ -98,7 +97,7 @@ Schwab 一条 Streaming 连接，继续订阅 ACCT_ACTIVITY 与 LEVELONE_EQUITIE
 
 Longbridge完整范围只在 [longbridge-data.md](longbridge-data.md) 维护。Monitor复用同一份图表、Quote、指标和订阅连接。
 
-自动Intraday State始终仅把Schwab真实余仓视为holding；Entries与Sold Today保留图表，不充当持仓风险身份，也不因仍在Focus而重复作为候选。相同symbol只计算一次；切换Scan/Monitor不切换账户身份、不重置已有状态。
+Entry 与真实余仓共享 Longbridge 盘中数据。候选提醒、余仓风险和清仓行的边界统一见 [Intraday State](intraday-state.md#范围与原则)。
 
 手动 Alert 仍按 symbol 共享，既有保存线可按原规则触发。Sold Today 不触发自动持仓风险声音，不代表禁用已有手动价格线。未读与声音继续通过同一 AlertEngine，不按列表复制提醒。
 

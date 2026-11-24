@@ -12,7 +12,7 @@ Alert 悬停价格胶囊、双图改价及其删除操作见 [Alert 图表交互
 
 ## Intraday State
 
-盘中状态是现有后台中的独立监控，Focus候选与当前余仓共享symbol计算，手动Alert生命周期保持独立。Regular底色始终表达当前状态，边缘波浪表达最新未读；新报警覆盖旧记录，不保存通知历史。声音随规则进入或升级发出。Focus 上行 ADR 未读在触发档位失效时撤回。当天暂停自动报警按 symbol 生效，手动线独立。持仓未进入预警时，ADR数值仍按较强的上下行方向显示，不固定为上行；数值方向不等于报警等级。In Play自动聚集只改变展示顺序，不改workspace、section或Tag；全部报警共享仅显示于symbol row的未读提醒，section与Holdings标题不参与闪烁或驻留，任何方式选图或更新当前chart都标记该symbol已读，不区分主动/自动或等待加载，灰线不变。未读仅在所属Regular内有效，实际收盘即失效，睡眠跨收盘在唤醒后清理；不依赖Massive或Refresh。Focus/Holdings未读导航见[List交互](list-interactions.md#未读-alert-导航)。当前Scan Focus共用同一份Longbridge状态，历史Scan不显示当前状态。完整公式、参数、范围、量比与排序规则只在 [intraday-state.md](intraday-state.md) 维护。
+盘中状态是现有后台中的独立监控，Focus、活动 Entry 与真实余仓共享 symbol 计算，手动Alert生命周期保持独立。Regular底色始终表达当前状态，边缘波浪表达最新未读；新报警覆盖旧记录，不保存通知历史。声音随规则进入或升级发出。候选上行 ADR 未读在触发档位失效时撤回。当天暂停自动报警按 symbol 生效，手动线独立。中性状态的 ADR 显示上下行较大值，状态配色和提醒沿各自触发规则。In Play自动聚集只改变展示顺序，不改workspace、section或Tag；全部报警共享仅显示于symbol row的未读提醒，section与Holdings标题不参与闪烁或驻留，任何方式选图或更新当前chart都标记该symbol已读，不区分主动/自动或等待加载，灰线不变。未读仅在所属Regular内有效，实际收盘即失效，睡眠跨收盘在唤醒后清理；不依赖Massive或Refresh。Focus/Holdings未读导航见[List交互](list-interactions.md#未读-alert-导航)。当前Scan Focus共用同一份Longbridge状态，历史Scan不显示当前状态。完整公式、参数、范围、量比与排序规则只在 [intraday-state.md](intraday-state.md) 维护。
 
 ## 启动与接收
 
@@ -26,7 +26,7 @@ Quote 统一接收和校验，regular 与 extended 按时段保存最新值，qu
 
 ## Holdings
 
-Monitor只显示Schwab原生账户，一个symbol一行。持仓、活动Entry/Stop和Sold Today与Focus共享底层行情，归属和选择独立；名单前端屏蔽当前账户展示的symbol，不修改workspace。券商当前持仓盈亏与FIFO历史派生独立，字段、排序、历史链、布局及账户刷新只在 [Schwab账户与交易](schwab.md) 维护。
+Monitor 只显示 Schwab 原生账户，一个 symbol 一行。持仓、活动 Entry/Stop 和 Sold Today 与 Focus 共享底层行情，归属和选择独立。名单前端屏蔽当前账户展示的 symbol，workspace 保留原归属。主行以单一标记表示活动买单或当日买入。展开明细按券商订单区分 Entry 和保护 Stop。账户字段、标记、历史链、布局及账户刷新只在 [Schwab 账户与交易](schwab.md) 维护。
 
 ## Scan 与后台数据任务
 

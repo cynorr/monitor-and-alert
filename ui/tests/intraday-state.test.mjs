@@ -10,7 +10,7 @@ const state = (rank, extra = {}) => ({ rank, state: 'up-notice', up_adr: .7, dow
 
 test('volume-only state leaves ADR empty until its own inputs arrive', () => {
     const partial = state([0, 2, 1], { state: null, up_adr: null, down_adr: null, adr20: null });
-    assert.equal(adrText(partial), '—');
+    assert.equal(adrText(partial), '');
     assert.match(adrTitle(partial), /Waiting/);
     assert.ok(compareRank(partial, state([0, 0, 0])) < 0);
 });
@@ -26,17 +26,17 @@ test('pins keep owner order; price, cumulative and local discrete tiers precede 
 
 test('holdings risk sorts ahead of potential while sold symbols remain at the tail', () => {
     const holding = (ticker, kind = 'holding') => ({ ticker, symbol: ticker + '.US', kind });
-    const data = [holding('UP'), holding('RISK'), holding('SOLD', 'sold'), holding('NOTICE')];
-    const states = { 'UP.US': state([2, 3, 3]), 'RISK.US': state([4, 0, 0]), 'NOTICE.US': state([3, 0, 0]) };
-    assert.deepEqual(orderedAccountRows(data, '', { enabled: true, symbols: states }).map(r => r.ticker), ['RISK', 'NOTICE', 'UP', 'SOLD']);
-    assert.deepEqual(orderedAccountRows(data, '', { enabled: false, symbols: {} }).map(r => r.ticker), ['UP', 'RISK', 'NOTICE', 'SOLD']);
+    const data = [holding('UP'), holding('RISK'), holding('SOLD', 'sold'), holding('NOTICE'), holding('E1', 'entry'), holding('E2', 'entry')];
+    const states = { 'UP.US': state([2, 3, 3]), 'RISK.US': state([4, 0, 0]), 'NOTICE.US': state([3, 0, 0]), 'E2.US': state([3, 0, 0]) };
+    assert.deepEqual(orderedAccountRows(data, '', { enabled: true, symbols: states }).map(r => r.ticker), ['E1', 'E2', 'RISK', 'NOTICE', 'UP', 'SOLD']);
+    assert.deepEqual(orderedAccountRows(data, '', { enabled: false, symbols: {} }).map(r => r.ticker), ['E1', 'E2', 'UP', 'RISK', 'NOTICE', 'SOLD']);
 });
 
 test('ADR label describes the displayed direction while tooltip keeps both values and percentage units', () => {
     assert.equal(adrText(state([2, 0, 0])), '↑0.70×');
     assert.equal(adrText(state([4, 0, 0], { state: 'down-urgent', down_adr: 1.05 })), '↓1.05×');
     assert.match(adrTitle(state([2, 0, 0])), /ADR20 5.00%/);
-    assert.equal(adrText(), '—');
+    assert.equal(adrText(), '');
 });
 
 test('state columns are confined to an enabled current Focus presentation', () => {
@@ -62,12 +62,20 @@ test('latest unread direction and grade replace the wave; old playback cannot re
     assert.equal(node.dataset.alert, undefined); assert.equal(pulses.length, 1);
 });
 
-test('Focus hides small raw multiples without treating them as missing or changing Holdings formatting', () => {
-    const value = state([0,0,0], {state:'neutral',up_adr:.5});
-    assert.equal(adrText(value, true), ''); assert.equal(adrText(value), '↑0.50×');
-    assert.equal(adrText({...value,up_adr:.501}, true), '↑0.50×');
-    assert.equal(adrText(undefined, true), '—');
-    let cleared = false;
-    volumeBadge({replaceChildren:()=>{cleared=true;}}, {ratio:.5}, true);
-    assert.ok(cleared);
+test('candidate and holding metrics share direction, raw visibility thresholds and blank missing values', () => {
+    for (const role of ['candidate', 'holding']) {
+        const value = state([0,0,0], {role, state:'neutral', up_adr:.5});
+        assert.equal(adrText(value), '');
+        assert.equal(adrText({...value,up_adr:.501}), '↑0.50×');
+        assert.equal(adrText({...value,down_adr:.75}), '↓0.75×');
+        assert.equal(adrText({...value,state:'up-notice',up_adr:.72,down_adr:.75}), '↑0.72×');
+    }
+    const badge = {dataset:{}}, cell = {querySelector:()=>badge, replaceChildren(){this.cleared = true;}};
+    for (const value of [undefined, {ratio:null}, {ratio:.5}]) {
+        cell.cleared = false;
+        volumeBadge(cell, value);
+        assert.ok(cell.cleared);
+    }
+    volumeBadge(cell, {ratio:.501, actual:501, average:1000, level:0, samples:5});
+    assert.equal(badge.textContent, '0.5×');
 });

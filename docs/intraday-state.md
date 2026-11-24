@@ -1,12 +1,12 @@
 # Intraday State：盘中状态
 
-更新：2026-11-24。本文件是盘中状态、自动提醒、量比与In Play展示的唯一需求入口。手动价格线与统一未读交互只在 [alert.md](alert.md) 维护。开发遵循 [development-principles.md](development-principles.md)，模块入口为 [intraday_state/AGENTS.md](../data_service/intraday_state/AGENTS.md)，职责见 [development.md](development.md#intraday-state-实现)。
+更新：2026-11-25。本文件是盘中状态、自动提醒、量比与In Play展示的唯一需求入口。手动价格线与统一未读交互只在 [alert.md](alert.md) 维护。开发遵循 [development-principles.md](development-principles.md)，模块入口为 [intraday_state/AGENTS.md](../data_service/intraday_state/AGENTS.md)，职责见 [development.md](development.md#intraday-state-实现)。
 
 ## 范围与原则
 
 - 这是 symbol 当前状态的监控和描述。颜色持续同步状态，条件变化立即更新；不闪几秒、不锁定当天最高等级，不要求手动关闭或重新设置。
-- 仅使用当前 Regular 行情，后台持续工作，不依赖浏览器或 Scan/Monitor 展示。完整监控范围为 Focus 候选与当前余仓 Holdings；具体上游订阅只在 [Longbridge 数据要求](longbridge-data.md) 维护。Discover/Excluded 的 Quote-only 不进入本模块。
-- 持仓风险身份始终使用Schwab真实余仓，与Scan/Monitor展示模式无关。Entries和Sold Today不作为holding，已进入账户展示区的symbol不重复作为Focus候选报警。
+- 仅使用当前 Regular 行情，后台持续工作，不依赖浏览器或 Scan/Monitor 展示。监控覆盖 Focus、活动 Entry 和当前余仓。具体上游订阅见 [Longbridge 数据要求](longbridge-data.md)。Discover/Excluded 的 Quote-only 不进入本模块。
+- Focus 与无余仓的活动 Entry 共用 Candidate 状态及 ADR/EMA 自动提醒。Schwab 真实余仓使用 Holding 风险规则。账户行决定该 symbol 的显示位置与行情角色，两种模式共用。
 - 同 symbol 只计算一次，Holdings 优先于 Candidate。同symbol声音去重；当天已清仓记录只保留复盘，不发持仓风险声音，也不因仍在 Focus 而作为候选重复提醒。
 - 当前 Scan Focus 可以显示同一份 Longbridge 状态；Scan 日图仍使用 Massive，不用 Massive 指标或日 K 补充盘中计算。历史 Scan 不展示当前盘中状态。
 - 只描述关注等级，不自动识别 Pivot、确认主升或作清仓指令；不下单、不接 Atomic feature 自动设置，不建设通用策略框架。
@@ -33,13 +33,13 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 | down_urgent | 1.0 | 深红白字，持仓回撤紧急 |
 | volume_levels | 1.1 / 2.0 / 3.0 | 三个量能等级 |
 
-统一达到即进入（≥），高等级覆盖低等级。颜色只描述当前状态；数值不先按显示精度取整。ADR列显示主状态方向和两位倍数；Holdings尚未进入任一等级时，显示Up_ADR与Down_ADR中较大的一项（相等时显示Up），不因尚未达到回撤阈值而固定显示Up。Candidate继续显示Up。这个数值方向不改变颜色、排序等级或声音；tooltip始终显示上下行两项及截至昨日ADR20。精确配色只在 [Logo / Icon](ui.md#intraday-state-图形与颜色) 维护。
+统一达到即进入（≥），高等级覆盖低等级。颜色只描述当前状态；数值不先按显示精度取整。ADR 列统一显示当前预警方向和两位倍数。中性状态取 Up_ADR 与 Down_ADR 较大者，相等时显示 Up。数值方向独立于颜色、排序等级和声音。Tooltip 提供上下行两项及截至昨日的 ADR20。精确配色只在 [Logo / Icon](ui.md#intraday-state-图形与颜色) 维护。
 
 ## 声音与恢复
 
 - 进入关注等级或升级紧急等级时发声；持续停留不重复，退回再进入自动再次发声，不额外加冷却。
 - EMA10/20 每次由下方到达/上穿都提醒，不要求手动重设。一次更新触发多个条件时只播放最紧急的一种，紧急优先，其次回撤，再其次上行。
-- 任何降级都不发声。最新未读来自 Focus 上行 ADR 时，当前等级降到触发等级以下便撤下波浪及未读跳转项。首次取得有效状态也核对同一 Regular 中恢复的 Focus ADR 未读。退档直接清除该条记录，较低档位继续显示实时底色。手动、EMA 和持仓报警不套用此规则。
+- 任何降级都不发声。最新未读来自 Candidate 上行 ADR 时，当前等级降到触发等级以下便撤下波浪及未读跳转项。首次取得有效状态也核对同一 Regular 中恢复的 Candidate ADR 未读。退档直接清除该条记录，较低档位继续显示实时底色。手动、EMA 和持仓报警不套用此规则。
 - 回撤颜色退去后露出原本已满足的上行颜色，根据各项规则自身前后状态判断是否触发。
 - 首次有效状态、新交易日、范围/角色改变及已知重连/休眠恢复后只建立起点，不补报历史穿越。刷新、重连网页只读状态，不发声。
 - 自动与手动共用 [symbol 未读](alert.md#统一未读提醒)。[暂停自动报警](alert.md#暂停自动报警) 只关掉该股的自动通知，盘中计算继续运行。
@@ -56,7 +56,7 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 
 已完成区间按 `2h→1h→30m→15m→5m` 选择可完整落入区间的bar，按连续起点覆盖，每段只计一次；统一序列含当天SDK已结束根与官方历史覆盖值。不拼接或写回OHLC。大bar有效时可覆盖内部缺失的小bar；覆盖不了不能把缺口计为零。今日累计为已完成区间加当前SDK 5m实际量，不做今日时间外推。
 
-每个历史日先独立完成同进度累计，再在固定前五个交易日中取可用样本均值；不拼接不同日期的片段均值，不向更早日期补样本。有效零量是样本，缺失不是零；半天缺少的下午范围跳过。无样本、均值为零或今日量不可用时显示`—`。时间按XNYS与纽约当地Regular对齐，涵盖DST和提前收盘。
+每个历史日先独立完成同进度累计，再在固定前五个交易日中取可用样本均值；不拼接不同日期的片段均值，不向更早日期补样本。有效零量是样本，缺失不是零；半天缺少的下午范围跳过。无样本、均值为零或今日量不可用时留空。时间按XNYS与纽约当地Regular对齐，涵盖DST和提前收盘。
 
 ## LocalVol：局部同进度量比
 
@@ -75,7 +75,7 @@ ADR20 复用系统最近最多20根完成日 `(H-L)/L×100` 均值，样本截�
 - In Play复用现有section的标题、计数、折叠与空组隐藏。空section整个隐藏，无标题或No symbols；全表空时保留一份全局空状态。
 - 排序键为价格离散等级 → CumVol离散等级 → LocalVol离散等级 → 原相对顺序，不按连续小数排序。价格升级立即前移；普通强弱、降级和量能重排在5m边界调整。
 - 量能数值和Badge在行情或官方历史变化时立即重算，另由秒级tick推进历史插值；5m只约束位置更新，不延迟监控、数值或颜色，也不额外订阅1m周期。
-- Focus价格与量能分区、低倍数隐藏、强色文字及未读波浪只在[UI Symbol模板](ui.md#symbol-row-template)维护；隐藏低值只影响显示，不改等级、rank和触发。
+- Focus、Entry 和真实余仓使用相同的 ADR/量比格式与低倍数显示规则。显示见 [Intraday State UI](ui.md#intraday-state-ui)，价格区域与未读波浪见 [Symbol 模板](ui.md#symbol-row-template)。
 - 自动提取的In Play成员不参与人工拖动/Shift改序，不能拖入In Play修改真实section；其他原section保留原有编辑规则，Pin顺序仍可人工调整。重排复用节点，保持选中symbol、图表、焦点和滚动位置。
 - Tag/Filter与搜索仍只影响可见结果，不停止后台监控。搜索沿用原名单查找，不建立另一种可选展示模式。
 - Holdings独立显示，按既定风险等级优先排序，再按量能离散等级和已选列；明细/清仓尾部保持原语义。价格／财务胶囊边界见Schwab 持仓 UI，未读与声音按symbol共享。

@@ -167,17 +167,22 @@ test('ordinary list updates keep a chart selection hidden by a Tag filter withou
     } finally { delete globalThis.document; }
 });
 
-test('Holdings unread navigation follows account-row order and opens the table', () => {
+test('Holdings unread navigation opens the table and includes Entries in account-row order', () => {
     const list = Object.create(SchwabHoldings.prototype), choices = [];
     Object.assign(list, { collapsed: true, sort: 'market_value', regular: false, states: { enabled: false, symbols: {} },
-        attention: { unread: new Map(['A.US', 'B.US'].map(symbol => [symbol, {symbol,direction:'up',level:1,fired_at:1}])), playing: new Map() },
+        attention: { unread: new Map(['A.US', 'B.US', 'ENTRY.US', 'SOLD.US'].map(symbol => [symbol, {symbol,direction:'up',level:1,fired_at:1}])),
+            playing: new Map(), eligible: new Set(['ENTRY.US', 'SOLD.US']) },
         data: { rows: [
             { ticker: 'A', symbol: 'A.US', kind: 'holding', position: { market_value: '3' } },
             { ticker: 'B', symbol: 'B.US', kind: 'holding', position: { market_value: '2' } },
+            { ticker: 'ENTRY', symbol: 'ENTRY.US', kind: 'entry', position: null },
+            { ticker: 'SOLD', symbol: 'SOLD.US', kind: 'sold', position: null },
         ] } });
     list.select = (symbol, key) => { choices.push([symbol, key]); list.attention.unread.delete(symbol); };
     list.render = () => {};
-    list.jumpUnread(); list.jumpUnread(); list.jumpUnread();
-    assert.deepEqual(choices, [['A.US', 'A.US'], ['B.US', 'B.US']]);
+    list.jumpUnread(); list.jumpUnread(); list.jumpUnread(); list.jumpUnread();
+    assert.deepEqual(choices, [['ENTRY.US', 'ENTRY.US'], ['A.US', 'A.US'], ['B.US', 'B.US']]);
+    assert.equal(list.canPause('ENTRY.US'), true);
+    assert.equal(list.canPause('SOLD.US'), false);
     assert.equal(list.collapsed, false);
 });

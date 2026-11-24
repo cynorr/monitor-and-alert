@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-11-25 · Holdings 单一标记与保护 Stop
+
+本机 macOS 正式 Monitor 在美东 11 月 24 日约 12:21 读取到已认证的 Schwab 账户和真实 Regular 行情。默认宽度下，Holdings 与 Focus 两个铃铛中心的横坐标差为 0px。真实 Entry 与保护 Stop 各占一行，Stop 预估盈亏与母单计划价和子单股数一致。真实 Buy 到独立 Stop 的树线从 Buy 分叉点转为虚线，两个活动 Stop 都使用实心圆。浏览器确认可撤母单和独立 Stop 的 `×` 位于 Regular 的 P/L Day 列，子 Stop 隐藏自己的 `×`。
+
+TypeScript 构建、38 项前端定向用例和 `git diff --check` 通过。正式账户观察到单个 `Entry` 或 `NEW` 标记，`Add`、子单去重以及缺买入价时留空由离线用例覆盖。扩展时段位置和自动提醒声音未做实盘验收。全程仅展开和收起本地明细，未向券商提交、修改或撤销订单。
+
+## 2026-11-25 · Holdings Entry 行情和展开明细
+
+本机 macOS 正式 Monitor 在美东 11 月 24 日 Regular 约 11:14 读取到 3 条真实 Entry，改动前均无盘中状态。按原参数重启后，Longbridge 恢复连接并提供 27 条盘中状态。Schwab 返回 `auth_required`，真实 Entry、订单树及自动提醒待账户重新授权后核对。
+
+TypeScript 构建、23 项前端定向用例、17 项后端定向用例和 `git diff --check` 通过。用例覆盖三类行共用指标规则、Entry 未读导航、买入挂单转为持仓、ADR 触发与降级清除未读。后端用临时库验证通知，不播放声音。整个验证未向券商提交、修改或撤销订单。
+
 ## 2026-11-24 · 交易标尺整股档位
 
 本机 macOS 使用美东 10:33 的正式 Monitor ADMA 行情和 Schwab 报价。Buy Market 与 Buy Stop 用原生滑块键盘操作核对左端 1 股、金额预览、精确右端及相同滑轨宽度。验证后退出策略。实际账户当时无持仓，卖出比例和真实 Stop 数量使用离线用例验证。

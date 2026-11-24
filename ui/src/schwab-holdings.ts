@@ -3,7 +3,7 @@ import { symbolRow } from './symbol-row.js';
 import { attentionState, attentionAppearance, autoAlertButton } from './attention.js';
 import { adrText, adrTitle, compareRank, stateAppearance, volumeBadge, type IntradayState } from './intraday-state.js';
 import { HoldingsLayout } from './holdings-layout.js';
-import { numeric, openPercent, entryAmount, holdingTags, holdingDetails, type SchwabState, type AccountRow, type Position, type HoldingDetail } from './schwab-data.js';
+import { numeric, openPercent, entryAmount, holdingTag, holdingDetails, type SchwabState, type AccountRow, type Position, type HoldingDetail } from './schwab-data.js';
 
 export function orderedAccountRows(rows: AccountRow[], sort: string, intraday: IntradayState) {
     const kind = { entry: 0, holding: 1, order: 2, sold: 3 };
@@ -11,16 +11,17 @@ export function orderedAccountRows(rows: AccountRow[], sort: string, intraday: I
     return [...rows].sort((a, b) => {
         if (kind[a.kind] !== kind[b.kind]) return kind[a.kind] - kind[b.kind];
         if (a.kind === 'sold') return 0;
-        const rank = compareRank(intraday.symbols[a.symbol], intraday.symbols[b.symbol]);
+        const rank = a.kind === 'holding' ? compareRank(intraday.symbols[a.symbol], intraday.symbols[b.symbol]) : 0;
         if (rank || !sort) return rank;
         const x = value(a), y = value(b);
         return sort === 'symbol' ? String(y).localeCompare(String(x)) : x == null ? y == null ? 0 : 1 : y == null ? -1 : Number(y) - Number(x);
     });
 }
-const fields = ['symbol', 'sold_percent', 'market_value', 'holding_days', 'percent', 'open_profit_loss', 'change_percent', 'extended_percent', 'day_profit_loss', 'adr', 'cum', 'local'];
-const labels = ['Symbol', '', 'Net Liq', 'Days', 'P/L %', 'P/L', 'Chg%', 'Ext', 'P/L Day', 'ADR', 'CumVol', 'LocalVol'];
+const fields = ['symbol', 'sold_percent', 'market_value', 'holding_days', 'percent', 'open_profit_loss', 'change_percent', 'extended_percent', 'day_profit_loss', 'adr', 'cum', 'local', 'actions'];
+const labels = ['Symbol', '', 'Net Liq', 'Days', 'P/L %', 'P/L', 'Chg%', 'Ext', 'P/L Day', 'ADR', 'CumVol', 'LocalVol', ''];
 const integer = (value: number | null) => value?.toLocaleString('en-US', { maximumFractionDigits: 0 }) ?? '';
-const formatted = (v: number | null, percent = false) => v == null ? '—' : `${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: percent ? 1 : 0, minimumFractionDigits: percent ? 1 : 0 })}${percent ? '%' : ''}`;
+const formatted = (v: number | null, percent = false) => v == null ? '' : `${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: percent ? 1 : 0, minimumFractionDigits: percent ? 1 : 0 })}${percent ? '%' : ''}`;
+const monitorsIntraday = (row: AccountRow) => row.kind === 'holding' || row.kind === 'entry';
 
 export class SchwabHoldings {
     selected = '';
@@ -54,10 +55,10 @@ export class SchwabHoldings {
     }
     has(key: string) { return this.data?.rows.some(r => r.symbol === key) ?? false; }
     canPause(symbol: string) {
-        return this.attention.eligible.has(symbol) && this.data?.rows.some(row => row.symbol === symbol && row.kind === 'holding');
+        return this.attention.eligible.has(symbol) && this.data?.rows.some(row => row.symbol === symbol && monitorsIntraday(row));
     }
     first() { const row = this.ordered()[0]; return row ? { symbol: row.symbol, key: row.symbol } : null; }
-    jumpUnread() { const row = this.ordered().find(r => r.kind === 'holding' && this.attention.unread.has(r.symbol)); if (row) { this.collapsed = false; this.select(row.symbol, row.symbol); this.render(); } }
+    jumpUnread() { const row = this.ordered().find(r => monitorsIntraday(r) && this.attention.unread.has(r.symbol)); if (row) { this.collapsed = false; this.select(row.symbol, row.symbol); this.render(); } }
     update(data: SchwabState | null, regular: boolean, states?: IntradayState) {
         if (this.regular !== regular || this.states.enabled !== !!states?.enabled) this.layout.reset();
         this.data = data; this.regular = regular; this.states = states ?? { enabled: false, symbols: {} }; this.render();
@@ -76,45 +77,38 @@ export class SchwabHoldings {
         const toggle = document.createElement('button'); toggle.className = 'holdings-trades';
         toggle.onclick = event => { event.stopPropagation(); this.expanded.has(item.symbol) ? this.expanded.delete(item.symbol) : this.expanded.add(item.symbol); this.render(); };
         const ticker = document.createElement('span'); ticker.className = 'ticker'; ticker.textContent = item.ticker;
-        const tags = document.createElement('span'); tags.className = 'holding-tags';
-        row.cells[0].append(toggle, ticker, tags, autoAlertButton(item.symbol, this.toggleAutoPause));
+        const tag = document.createElement('small'); tag.className = 'symbol-flag holding-tag'; tag.hidden = true;
+        row.cells[0].append(toggle, ticker, tag);
+        const alertSlot = document.createElement('span'); alertSlot.className = 'holding-alert-slot';
+        alertSlot.append(autoAlertButton(item.symbol, this.toggleAutoPause));
+        row.cells[fields.length - 1].append(alertSlot);
         row.onclick = () => this.select(item.symbol, item.symbol);
         this.nodes.set(item.symbol, row); return row;
     }
-    private detailRow(symbol: string, value: HoldingDetail, closed: boolean, columns: number) {
+    private detailRow(symbol: string, value: HoldingDetail, closed: boolean) {
         const key = symbol + '/' + value.key;
         let row = this.details.get(key);
         if (!row) {
             row = document.createElement('tr'); row.className = 'holding-trade'; row.dataset.detail = key;
             this.details.set(key, row);
-        }
-        if (row.dataset.columns !== String(columns)) {
-            row.replaceChildren(); row.dataset.columns = String(columns);
-            const label = row.insertCell(); label.className = 'holding-detail-label';
-            const node = document.createElement('span'); node.className = 'holding-history-node'; node.setAttribute('aria-hidden', 'true');
+            for (const field of fields) row.insertCell().dataset.field = field;
+            const label = row.cells[0]; label.className = 'holding-detail-label';
+            const stem = document.createElement('span'); stem.className = 'holding-detail-outgoing'; stem.setAttribute('aria-hidden', 'true');
+            const node = document.createElement('span'); node.className = 'holding-detail-node'; node.setAttribute('aria-hidden', 'true');
             const kind = document.createElement('span'); kind.dataset.part = 'kind';
-            label.append(node, kind);
-            for (const part of ['qty', 'amount', 'days', 'pnlPercent', 'pnl']) row.insertCell().dataset.part = part;
-            const priceCell = row.insertCell(), price = document.createElement('span'); price.dataset.part = 'price'; priceCell.append(price);
+            label.append(stem, node, kind);
+            ['qty', 'amount', 'days', 'pnlPercent', 'pnl', 'price'].forEach((part, i) => { row!.cells[i + 1].dataset.part = part; });
             const cancel = document.createElement('button'); cancel.className = 'icon-button holding-cancel'; cancel.type = 'button';
             cancel.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-            const cancelCell = columns > 7 ? row.insertCell() : priceCell;
-            if (cancelCell === priceCell) cancel.classList.add('inline-cancel');
-            cancelCell.append(cancel);
-            const cell = columns > 8 ? row.insertCell() : cancelCell;
-            if (columns > 8) cell.colSpan = columns - 8;
-            const line = document.createElement('div'); line.className = 'schwab-detail-values' + (columns <= 8 ? ' inline' : '');
-            for (const part of ['stop', 'riskPercent', 'risk']) { const span = document.createElement('span'); span.dataset.part = part; line.append(span); }
-            cell.append(line);
             const date = document.createElement('time'); date.dataset.part = 'date';
-            (this.regular ? cancelCell : cell).append(date);
+            row.cells[8].append(cancel, date);
         }
         row.classList.toggle('holding-closed', closed);
         const history = value.kind === 'Buy' || value.kind === 'Sold';
         row.classList.toggle('holding-history', history); row.dataset.detailKind = value.kind;
-        row.querySelector<HTMLElement>('.holding-history-node')!.hidden = !history;
-        const values = { kind: value.kind, date: value.date ?? '', days: value.days == null ? '' : String(value.days), qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), stop: value.stop == null ? '' : money(value.stop), amount: integer(value.amount), pnlPercent: value.pnlPercent == null ? '' : formatted(value.pnlPercent, true), pnl: value.pnl == null ? '' : formatted(value.pnl), riskPercent: value.riskPercent == null ? '' : value.riskPercent.toFixed(2) + '%', risk: integer(value.risk) };
-        const titles = { kind: '', date: '', days: '', qty: 'Quantity', price: 'Price', stop: 'Stop price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', pnlPercent: '', pnl: '', riskPercent: 'Risk percent', risk: 'Risk amount' };
+        const values = { kind: value.kind, date: value.date ?? '', days: value.days == null ? '' : String(value.days), qty: value.qty.toLocaleString('en-US', { maximumFractionDigits: 6 }), price: value.price == null ? '' : money(value.price), amount: integer(value.amount), pnlPercent: formatted(value.pnlPercent, true), pnl: formatted(value.pnl) };
+        const estimate = value.kind === 'Stop' ? 'Estimated P/L at stop' : '';
+        const titles = { kind: '', date: '', days: '', qty: 'Quantity', price: value.kind === 'Stop' ? 'Stop price' : 'Price', amount: value.kind === 'Buy' ? 'Cost' : 'Value', pnlPercent: estimate, pnl: estimate };
         row.querySelectorAll<HTMLElement>('[data-part]').forEach(span => {
             const part = span.dataset.part as keyof typeof values; span.textContent = values[part]; span.title = titles[part];
             if (part === 'pnl' || part === 'pnlPercent') { const pnl = value[part]; span.classList.toggle('positive', pnl != null && pnl > 0); span.classList.toggle('negative', pnl != null && pnl < 0); }
@@ -122,6 +116,8 @@ export class SchwabHoldings {
         const date = row.querySelector<HTMLTimeElement>('[data-part="date"]')!;
         date.hidden = !value.date; date.dateTime = value.date ?? '';
         const cancel = row.querySelector<HTMLButtonElement>('button')!;
+        const cancelCell = row.cells[this.regular ? 8 : 7];
+        if (cancel.parentElement !== cancelCell) cancelCell.prepend(cancel);
         cancel.hidden = !value.cancelId; cancel.setAttribute('aria-label', `Cancel ${value.kind.toLowerCase()} order for ${symbol.replace('.US', '')}`); cancel.title = 'Cancel order';
         cancel.onclick = event => { event.stopPropagation(); if (value.cancelId) this.cancel(value.cancelId); };
         return row;
@@ -131,12 +127,13 @@ export class SchwabHoldings {
         if (!this.data) { this.layout.reset(); return; }
         const table = $('schwab-table') as HTMLTableElement;
         table.dataset.regular = String(this.regular); table.classList.toggle('holdings-state', this.regular && this.states.enabled);
-        const columns = Array.from(table.tHead!.rows[0].cells).filter(cell => getComputedStyle(cell).display !== 'none').length;
         $('schwab-content').hidden = this.collapsed;
         $('schwab-toggle').setAttribute('aria-expanded', String(!this.collapsed)); $('schwab-arrow').textContent = this.collapsed ? '▸' : '▾';
         $('schwab-count').textContent = String(this.data.rows.length);
-        $('schwab-account').textContent = integer(numeric(this.data.account?.liquidation_value)) || '—';
-        $('schwab-account').title = `Schwab liquidationValue · Stock BP ${money(numeric(this.data.account?.stock_buying_power))} · Available ${money(numeric(this.data.account?.available_funds))}`;
+        const account = this.data.account, buyingPower = numeric(account?.stock_buying_power), funds = numeric(account?.available_funds);
+        $('schwab-account').textContent = integer(numeric(account?.liquidation_value));
+        $('schwab-account').title = ['Schwab liquidationValue', buyingPower != null && 'Stock BP ' + money(buyingPower),
+            funds != null && 'Available ' + money(funds)].filter(Boolean).join(' · ');
         this.tick();
         if (this.regular && this.sort === 'extended_percent') this.sort = '';
         table.querySelectorAll<HTMLElement>('th[data-field]').forEach(th => th.setAttribute('aria-sort', th.dataset.field === this.sort ? 'descending' : 'none'));
@@ -144,27 +141,28 @@ export class SchwabHoldings {
         for (const item of this.ordered()) {
             keep.add(item.symbol);
             const row = this.mainRow(item), detail = holdingDetails(item);
+            row.dataset.holdingKind = item.kind;
             row.classList.toggle('active', item.symbol === this.selected); row.classList.toggle('holding-closed', item.kind === 'sold'); row.setAttribute('aria-selected', String(item.symbol === this.selected));
             const toggle = row.cells[0].querySelector('button')!;
             toggle.hidden = !detail.length; toggle.textContent = this.expanded.has(item.symbol) ? '▾' : '▸'; toggle.setAttribute('aria-label', `Toggle ${item.ticker} details`); toggle.setAttribute('aria-expanded', String(this.expanded.has(item.symbol)));
-            const tags = row.querySelector<HTMLElement>('.holding-tags')!, nextTags = holdingTags(item);
-            if (tags.textContent !== nextTags.join('')) { tags.replaceChildren(...nextTags.map(tag => { const span = document.createElement('small'); span.className = 'symbol-flag ' + (tag === 'Entry' ? 'entry' : 'new'); span.textContent = tag; return span; })); }
+            const tag = row.querySelector<HTMLElement>('.holding-tag')!, nextTag = holdingTag(item);
+            if (tag.textContent !== nextTag) tag.textContent = nextTag;
+            tag.hidden = !nextTag;
             const p = item.position, value = p ? numeric(p.market_value) : item.kind === 'entry' ? entryAmount(item) : item.kind === 'sold' ? 0 : null;
             const values = [value, openPercent(p), numeric(p?.open_profit_loss), numeric(item.change_percent), numeric(item.extended_percent), numeric(p?.day_profit_loss)];
             const cells = [2, 4, 5, 6, 7, 8];
-            values.forEach((value, i) => { const cell = row.cells[cells[i]]; cell.textContent = i === 0 ? integer(value) || '—' : formatted(value, [1, 3, 4].includes(i)); cell.className = i > 0 && value != null ? value > 0 ? 'positive' : value < 0 ? 'negative' : '' : ''; cell.title = i === 0 && item.kind === 'entry' ? 'Entry value' : i === 3 || i === 4 ? 'Longbridge quote' : 'Schwab account snapshot'; });
-            row.cells[3].textContent = item.days_over_year ? '>1y' : item.holding_days == null ? '—' : String(item.holding_days);
+            values.forEach((value, i) => { const cell = row.cells[cells[i]]; cell.textContent = i === 0 ? integer(value) : formatted(value, [1, 3, 4].includes(i)); cell.className = i > 0 && value != null ? value > 0 ? 'positive' : value < 0 ? 'negative' : '' : ''; cell.title = i === 0 && item.kind === 'entry' ? 'Entry value' : i === 3 || i === 4 ? 'Longbridge quote' : 'Schwab account snapshot'; });
+            row.cells[3].textContent = item.days_over_year ? '>1y' : item.holding_days == null ? '' : String(item.holding_days);
             const sold = numeric(item.sold_percent);
             row.cells[1].textContent = sold == null || sold === 0 ? '' : sold < .5 ? '<1%' : Math.round(sold) + '%';
-            const state = this.regular && item.kind === 'holding' ? this.states.symbols[item.symbol] : undefined;
-            stateAppearance(row, state); attentionAppearance(row, item.kind === 'holding' ? item.symbol : '', this.attention);
+            const monitored = monitorsIntraday(item);
+            const state = this.regular && monitored ? this.states.symbols[item.symbol] : undefined;
+            stateAppearance(row, state); attentionAppearance(row, monitored ? item.symbol : '', this.attention);
             row.cells[9].textContent = adrText(state); row.cells[9].title = adrTitle(state); volumeBadge(row.cells[10], state?.cum_vol); volumeBadge(row.cells[11], state?.local_vol);
             desired.push(row);
             if (this.expanded.has(item.symbol)) {
-                const lastHistory = detail.filter(value => value.kind === 'Buy' || value.kind === 'Sold').pop()?.key;
                 for (const value of detail) {
-                    const child = this.detailRow(item.symbol, value, item.kind === 'sold', columns);
-                    child.classList.toggle('history-last', value.key === lastHistory);
+                    const child = this.detailRow(item.symbol, value, item.kind === 'sold');
                     desired.push(child); detailKeys.add(child.dataset.detail!);
                 }
             }
@@ -178,7 +176,7 @@ export class SchwabHoldings {
         const sum = (field: keyof Position) => { if (!this.data?.account) return null; const values = positions.map(position => numeric(position[field])); return values.every(value => value != null) ? values.reduce<number>((sum, value) => sum + value!, 0) : null; };
         const costs = positions.map(position => numeric(position.quantity) != null && numeric(position.average_price) != null ? Number(position.quantity) * Number(position.average_price) : null);
         const cost = costs.every(value => value != null) ? costs.reduce<number>((sum, value) => sum + value!, 0) : null, pnl = sum('open_profit_loss');
-        $('schwab-total-value').textContent = integer(sum('market_value')) || '—'; $('schwab-total-pnl').textContent = formatted(pnl);
+        $('schwab-total-value').textContent = integer(sum('market_value')); $('schwab-total-pnl').textContent = formatted(pnl);
         $('schwab-total-percent').textContent = formatted(pnl != null && cost && cost > 0 ? pnl / cost * 100 : null, true); $('schwab-total-day').textContent = formatted(sum('day_profit_loss'));
         this.layout.measure();
     }

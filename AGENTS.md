@@ -21,6 +21,8 @@
 
 - Symbol 行的选中、价格／量能分区与未读波浪只按 [Symbol row template](docs/ui.md#symbol-row-template)；配色名称见 [Color palette](docs/ui.md#color-palette)，代码复用 `ui/src/palette.ts`。新增行或提醒复用 `symbol-row.ts`、`attention.ts` 与 `AlertEngine.notify`，未读只保留最新一条，按来源处理暂停与 Focus ADR 失效，禁止叠加或保存通知历史。实时价格底色独立于边缘波浪。
 
+- Focus 与 Holdings 共用盘中字段显示。纯 Entry 的候选监控语义只在 [Intraday State](docs/intraday-state.md) 维护。持仓主行标记、铃铛位置和订单明细树只在 [Schwab 持仓 UI](docs/schwab.md) 维护。
+
 - List 的逐股 Tag 由规则计算。Scan 与 Monitor 共用列宽和行内图标规则，前端美元金额格式见 [UI](docs/ui.md#金额格式)。
 
 - 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

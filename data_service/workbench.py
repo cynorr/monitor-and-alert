@@ -68,7 +68,8 @@ class Workbench:
 
     def refresh_alert_scope(self):
         now = int(self.market.now()) if self.market else int(time.time())
-        account_symbols = set(self.schwab.symbols(now)) if self.schwab else set()
+        account_rows = self.schwab.portfolio_rows(now) if self.schwab else []
+        account_symbols = {row['symbol'] for row in account_rows}
         focus = {t.symbol for t in self.workspace.tickers()}
         if self.schwab:
             self.schwab.subscribe(focus | account_symbols)
@@ -76,8 +77,8 @@ class Workbench:
             self.market.update_holdings(sorted(account_symbols))
             if self.market.intraday:
                 open_symbols = self.schwab.held_symbols() if self.schwab else set()
-                # Sold Today / Entries provide charts, never a holding-risk role.
-                self.market.intraday.scope(focus - account_symbols, open_symbols)
+                entries = {row['symbol'] for row in account_rows if row['kind'] == 'entry'}
+                self.market.intraday.scope((focus - account_symbols) | entries, open_symbols)
         if self.alerts:
             known = self.schwab is None or self.schwab.runtime.state.account_updated_at is not None
             self.alerts.maintain(focus | account_symbols, known)

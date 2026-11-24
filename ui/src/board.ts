@@ -4,7 +4,7 @@ import { tagRole, type Tag } from './tags.js';
 export type ListSection = { list: string; id: string; name: string; key: string; pinned?: boolean; inPlay?: boolean };
 export type ListColumn = { field: string; label: string; width: string };
 export function listColumns(scan: boolean, regular: boolean, intraday = false): ListColumn[] {
-    const symbol = { field: 'symbol', label: 'Symbol', width: `minmax(${scan ? 84 : 100}px,1.1fr)` };
+    const symbol = { field: 'symbol', label: 'Symbol', width: 'minmax(84px,1.1fr)' };
     const price = { field: 'price', label: scan ? 'Price' : 'Last', width: 'minmax(62px,.7fr)' };
     const tags = { field: 'tags', label: '', width: 'minmax(80px,.45fr)' };
     const actions = { field: 'actions', label: '', width: '98px' };

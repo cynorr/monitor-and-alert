@@ -71,7 +71,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 - runtime/alerts/alerts.sqlite3 保存 alerts、unread 和 paused_auto。unread 以 symbol 为主键，保存最新 direction、level、fired_at 与内部 source。无法确认来源的记录遵循正常已读、出范围及收盘清理。paused_auto 存当前 symbol 和美东日期，复用服务时钟在日期轮转时清理。
 - AlertEngine共用_clean_unread，用已有_regular_day同时校验当前时刻和fired_at是否属于同一Regular，并合并原scope清理。构造、maintain和state输出都经过此入口；跨收盘清理不等待scope_known，不改价格线，不增加期限字段、任务或Massive/Refresh依赖。
 - create/rearm/delete仍管理手动线；read(symbol)只删除当前symbol的unread，不改变任何线条或generation。触发后灰线保留，无点击后倒计时；只有拖动重新激活、主动删除、到期或出范围改变线生命周期。
-- AlertEngine.notify 是唯一报警入口。自动来源分为 Focus ADR、持仓 ADR 和 EMA，暂停 gate 在同一入口。手动触发将 Triggered 和未读在同一事务提交。提交成功后交给 sound.play。Intraday State 在 Focus 首次有效状态及上行降级时调用 withdraw_focus_adr，按来源和触发档位删除失效记录。
+- AlertEngine.notify 是唯一报警入口。自动来源分为 Candidate ADR（Focus、Entry）、持仓 ADR 和 EMA，暂停 gate 在同一入口。手动触发将 Triggered 和未读在同一事务提交。提交成功后交给 sound.play。Intraday State 在 Candidate 首次有效状态及上行降级时调用 withdraw_focus_adr，按来源和触发档位删除失效记录。
 - sound.py每次play建立独立任务，一次afplay播放完整两段WAV。beat_offsets是资源生成与播放节拍的共同来源；播放器启动后按实际本机时钟发布pulse_at，沿用现有Alert WS。playing每symbol仅输出最新任务的symbol/fired_at/pulse_at；旧任务仍可自然播放完，前端只响应当前未读fired_at的节拍。没有队列、抢占、历史或逐帧消息。退出取消任务并终止播放器；scripts/build_alert_sounds.py只用于离线准备资源。
 - GET /v1/alerts 和 WS alerts 提供 revision、alerts、unread、eligible_symbols、paused_auto_symbols、scope_known、sound、error。unread 项包含 symbol、direction、level、fired_at。POST 接受 create、rearm、delete、read 和 pause_auto，pause_auto 携带 symbol 与布尔 paused。M 与共用圆形按钮调用同一操作。
 - 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
@@ -195,13 +195,13 @@ Watchlist 与 Holdings 处理上下键选股后，main.ts 根据已消费的按�
 
 唯一需求见 [intraday-state.md](intraday-state.md)，模块维护见 [AGENTS.md](../data_service/intraday_state/AGENTS.md)。MarketService在正式Workbench完整会话创建IntradayState；Quote、SDK candle及官方历史提交统一调用update，立即计算当前价格状态、量比与等级；现有scheduler秒级tick处理经过时间与边界rank。不创建新任务服务，不依赖HTTP或图表选择。Mock默认没有声音，--symbols子集不创建状态模块。
 
-Workbench.refresh_alert_scope同时传入Focus候选与当前余仓角色，排除仅当天清仓的ticker；不改变原手动Alert与行情白名单。状态/穿越/截至昨日ADR与排序等级由engine.py维护，ADR缓存键包含日线revision。盘中ADR直接使用Quote的Regular开高低和最新价，不等待SDK Daily；EMA仍复用Daily preview。价格状态和分钟量比独立就绪，统一接口中缺价格字段为null，volume仍可用；前端按字段显示缺失。恢复只清比较起点，保留有效显示，首份新价格状态静默；派生状态不另存业务库，不逐份Quote落盘。
+Workbench.refresh_alert_scope 使用 Schwab 账户投影合并 Focus 与活动 Entry 候选，将真实余仓传为 Holding。账户 ticker 去重后复用同一行情和手动 Alert 范围。状态/穿越/截至昨日ADR与排序等级由engine.py维护，ADR缓存键包含日线revision。盘中ADR直接使用Quote的Regular开高低和最新价，不等待SDK Daily；EMA仍复用Daily preview。价格状态和分钟量比独立就绪，统一接口中缺价格字段为null，volume仍可用；前端按字段显示缺失。恢复只清比较起点，保留有效显示，首份新价格状态静默；派生状态不另存业务库，不逐份Quote落盘。
 
 volume.py只读ChartCache统一closed及SDK open，按合并revision缓存多周期分钟volume索引；区间覆盖只返回标量，每个历史日期独立覆盖后再平均。配置直接读取config/intraday-state.json，启动校验阈值顺序，不增加配置监听或规则编辑器。
 
 GET /v1/intraday-state只读返回enabled和symbols；现有list快照增加同名intraday字段，Scan历史关闭该字段。symbol状态含role/state、ADR20、上下行倍数/等级、above_open、price/timestamp、cum_vol/local_vol和rank。量比含ratio/actual/average/samples/level，LocalVol另含window；缺值为null。rank是价格/CumVol/LocalVol三个离散整数，前端不重新计算业务阈值。
 
-ui/src/intraday-state.ts集中格式化、Badge和rank比较；quiet参数仅供Focus隐藏低倍数，Holdings保留完整数值，缺失仍为—；ADR数值方向独立于预警阈值，持仓neutral时选择较大的一项。list.ts直接使用In Play section，复用标题/折叠/空组隐藏，删除Grouped/Dynamic状态与偏好。schwab-holdings.ts保持独立风险排序和清仓尾部；重排复用节点、恢复焦点和滚动位置。全部报警及未读通过AlertEngine.notify/read共用上述Alert契约，Intraday State不自行播放声音或存另一份通知。
+ui/src/intraday-state.ts 集中处理 ADR 方向、格式、Badge、缺失与低倍数显示，以及 rank 比较。Focus 和 Holdings 调用同一组显示函数。list.ts直接使用In Play section，复用标题/折叠/空组隐藏，删除Grouped/Dynamic状态与偏好。schwab-holdings.ts保持独立风险排序和清仓尾部；重排复用节点、恢复焦点和滚动位置。全部报警及未读通过AlertEngine.notify/read共用上述Alert契约，Intraday State不自行播放声音或存另一份通知。
 
 ## Schwab 账户与交易接入
 
@@ -209,4 +209,4 @@ ui/src/intraday-state.ts集中格式化、Badge和rank比较；quiet参数仅供
 
 trade-ticket 的 CSS grid 仅排列数量、预估与按钮，align-content:end 固定按钮底边，row-gap 只向上展开前两行；顶部报价与反馈使用独立绝对定位，不参与这三行的间距。trade.ts 的 `quantityScale` 由股数上限和步长建立档位映射。原生 range 使用零基档位，刻度和 input 共用映射，数量预览和 Send 使用实际股数。ResizeObserver 在轨道尺寸变化时重算标签，报价更新复用未变化的节点。原生 :active 在拖动中冻结档位映射。Accepted 的短暂反馈由独立前端计时器管理，不订阅账户或订单状态作为关闭条件；写入已知离线与未知结果的区别沿原专用请求契约处理。具体显示和反馈语义只维护在 Schwab 账户与交易 与 Chart UI。
 
-Schwab 明细按类型、数量、金额、Days、P/L%、P/L、价格与撤单的顺序使用可见列；数量与主行Sold百分比共列，time日期独立放在P/L Day列，随Regular隐藏Ext保持对齐。schwab-holdings.ts给各symbol最后一条历史明细标记history-last；连线/圆点用CSS绘制，不增加测宽监听或图形坐标计算。Entry额外字段占据后续区域，跨列数读取当前可见表头，列数不足时在末列内并排，不增加虚列。可见列数变化时重建该行内部单元格，普通报价仍复用节点。schwab-data.ts仅格式化后端逐笔FIFO与Days数据，Stop预估仍按当前持仓均价，Buy盈亏留空；主行继续读取券商余仓盈亏。口径只在Schwab 账户与交易维护，历史归属只在schwab_history.py，不由前端重算。前后端支持PENDING_ACTIVATION及AWAITING_RELEASE_TIME止损的改价/改数量，新ID以该状态返回也能结束旧改单预览，不等待Regular激活。List 时钟继续由 main.ts 的既有 view.server_time 更新，移动 DOM 不新增时间来源或任务。
+schwab-data.ts 从同一账户行生成单一标记与明细。保护 Stop 按原生子单归属与订单身份去重，和独立 Stop 共用预估函数。schwab-holdings.ts 让表头、主行、明细、Total 共用字段对齐，CSS 按时段隐藏字段。撤单控件随时段放入对应单元格，日期固定用 P/L Day。CSS 按明细类型和相邻行绘制树线，普通报价复用节点。铃铛沿用共用 attention 操作。字段口径只在 [Schwab 账户与交易](schwab.md) 维护，成交归属由 schwab_history.py 计算。前后端支持 PENDING_ACTIVATION 及 AWAITING_RELEASE_TIME 止损的改价和改数量，新 ID 以该状态返回可结束旧改单预览。List 时钟由 main.ts 的既有 view.server_time 更新。

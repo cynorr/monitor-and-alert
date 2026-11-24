@@ -13,6 +13,7 @@ from aiohttp import ClientSession, web
 from data_service import schwab_backend as broker
 from data_service.http_api import create_app
 from data_service.schwab import SchwabService, portfolio
+from data_service.storage import Bar
 from data_service.workbench import Workbench
 from data_service.workspace import Workspace
 from test_scan_integration import app_data, mock_data, FakeBroker
@@ -125,7 +126,7 @@ async def test_integrated_routes_validate_before_write_and_preserve_unknown_with
         await value.close()
 
 
-def test_monitor_uses_schwab_scope_and_sold_today_do_not_duplicate_holding_role(app_data):
+def test_monitor_schwab_scope_adds_entries_as_candidates_and_preserves_holding_priority(app_data):
     async def scenario():
         ws = Workspace(root=app_data / 'days')
         value = runtime()
@@ -135,13 +136,35 @@ def test_monitor_uses_schwab_scope_and_sold_today_do_not_duplicate_holding_role(
             app.start_market()
             app.market.now = lambda: int(datetime(2026, 10, 26, 15, tzinfo=timezone.utc).timestamp())
             value.state.positions = [position()]
-            value.state.orders = [order(), order('3', symbol='SOLD')]
+            value.state.orders = [order(), order('3', symbol='SOLD'),
+                                  order('4', symbol='ENTRY', side='BUY', status='WORKING', executions=[]),
+                                  order('5', side='BUY', status='WORKING', executions=[])]
             await app.switch_mode('monitor')
             rows = app.list_state()['schwab']['rows']
             assert len([r for r in rows if r['symbol'] == 'XYZ.US']) == 1
+            assert next(r for r in rows if r['symbol'] == 'ENTRY.US')['kind'] == 'entry'
+            assert 'ENTRY.US' not in {ticker.symbol for ticker in ws.tickers()}
+            assert 'ENTRY.US' in app.market.intraday.focus
+            assert 'XYZ.US' not in app.market.intraday.focus
             assert app.market.intraday.holdings == {'XYZ.US'}
             assert 'SOLD.US' not in app.market.intraday.focus | app.market.intraday.holdings
-            assert {'XYZ.US', 'SOLD.US'} <= set(app.market.symbols)
+            assert {'XYZ.US', 'SOLD.US', 'ENTRY.US'} <= set(app.market.symbols)
+            now = app.market.now()
+            day = datetime.fromtimestamp(now, timezone.utc).date()
+            app.market.store.upsert([
+                Bar('ENTRY.US', '1d', app.calendar.grid(previous, '1d')[0][0], 102, 105, 100, 102, 1000)
+                for previous in app.calendar.previous_days(day, 20)
+            ], now)
+            app.market.intraday.now = app.alerts.now = app.market.now
+            app.alerts.sound = None
+            quote = {'trade_session': 'Intraday', 'timestamp': now, 'open': 100, 'high': 105, 'low': 100}
+            app.market.apply_quote('ENTRY.US', {**quote, 'last_price': 101})
+            assert app.alert_state()['unread'] == []
+            app.market.apply_quote('ENTRY.US', {**quote, 'last_price': 104})
+            assert app.list_state()['intraday']['symbols']['ENTRY.US']['state'] == 'up-notice'
+            assert [(alert['symbol'], alert['direction']) for alert in app.alert_state()['unread']] == [('ENTRY.US', 'up')]
+            app.market.apply_quote('ENTRY.US', {**quote, 'last_price': 101})
+            assert app.alert_state()['unread'] == []
             assert 'holdings' not in app.list_state()
             assert app.view('XYZ.US', '5m')['app_mode'] == 'monitor'
             with pytest.raises(ValueError, match='Choose Scan or Monitor'):
@@ -153,9 +176,14 @@ def test_monitor_uses_schwab_scope_and_sold_today_do_not_duplicate_holding_role(
                     await app.api(removed, {})
             await app.switch_mode('scan')
             assert app.market.intraday.holdings == {'XYZ.US'}
+            assert 'ENTRY.US' in app.market.intraday.focus
             assert app.list_state()['schwab'] is None
             await app.switch_mode('monitor')
             assert app.list_state()['schwab'] is not None
+            value.state.positions.append(position('ENTRY'))
+            app.account_changed()
+            assert 'ENTRY.US' not in app.market.intraday.focus
+            assert app.market.intraday.holdings == {'XYZ.US', 'ENTRY.US'}
         finally:
             await app.close()
             await value.close()

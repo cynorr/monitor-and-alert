@@ -1,6 +1,6 @@
 import { tagRole } from './tags.js';
 export function listColumns(scan, regular, intraday = false) {
-    const symbol = { field: 'symbol', label: 'Symbol', width: `minmax(${scan ? 84 : 100}px,1.1fr)` };
+    const symbol = { field: 'symbol', label: 'Symbol', width: 'minmax(84px,1.1fr)' };
     const price = { field: 'price', label: scan ? 'Price' : 'Last', width: 'minmax(62px,.7fr)' };
     const tags = { field: 'tags', label: '', width: 'minmax(80px,.45fr)' };
     const actions = { field: 'actions', label: '', width: '98px' };

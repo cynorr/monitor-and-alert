@@ -474,10 +474,10 @@ export class Watchlist {
         stateAppearance(row, state);
         attentionAppearance(row, ticker.symbol, this.attention);
         const adr = row.querySelector<HTMLElement>('[data-field="state-adr"]');
-        if (adr) { adr.textContent = adrText(state, true); adr.title = adrTitle(state); }
+        if (adr) { adr.textContent = adrText(state); adr.title = adrTitle(state); }
         for (const [field, value] of [['cum-vol', state?.cum_vol], ['local-vol', state?.local_vol]] as const) {
             const cell = row.querySelector<HTMLElement>(`[data-field="${field}"]`);
-            if (cell) volumeBadge(cell, value, true);
+            if (cell) volumeBadge(cell, value);
         }
         row.classList.toggle('active', ticker.symbol === this.selected);
         row.querySelector('.ticker')!.setAttribute('aria-pressed', String(ticker.symbol === this.selected));

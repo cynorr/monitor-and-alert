@@ -7,8 +7,8 @@
 - ADR复用现有百分数公式，样本截至昨日，相关历史修正后重算；当日开高低/最新价用Regular Quote，不等待SDK Daily，EMA仍复用图表preview。价格与量比独立就绪，缺失字段为null；首个有效价格/EMA只建立比较起点。上下行各自判断触发，显示回撤优先不能制造新的上穿。
 - 新增、恢复或角色改变首状态静默；降级无声音。状态缺失不能当作正常或零；原始OHLC仍遵守项目数据校验，不自行修正。
 - volume区间覆盖只生成标量，不生成或落盘K线；按统一closed revision缓存分钟量索引，历史每个日期完整覆盖后再均值，不混Quote/Daily量与分钟量。短暂等待新根时保留有效显示，恢复只清报警比较起点。
-- 同symbol共用状态；当前余仓角色由Workbench提供，当日清仓只复盘。Workspace/List持久归属仍由原模块管理，排序只是展示投影。
-- 不逐份Quote写库，不做补报、故障注入、回放或下单。手动线生命周期独立；自动转换提供明确来源并调用 AlertEngine.notify。Focus ADR 在首个有效状态及降级时核对未读。暂停由 AlertEngine 管理，盘中状态继续计算。
+- 同 symbol 共用状态。Workbench 从账户投影提供 Entry 候选与真实余仓的角色，当日清仓只用于复盘。Workspace/List持久归属仍由原模块管理，排序只是展示投影。
+- 不逐份Quote写库，不做补报、故障注入、回放或下单。手动线生命周期独立；自动转换提供明确来源并调用 AlertEngine.notify。候选上行 ADR 在首个有效状态及降级时核对未读。暂停由 AlertEngine 管理，盘中状态继续计算。
 - 配置在config/intraday-state.json，启动直接读取；前端intraday-state.ts负责格式化与离散rank比较，list.ts用In Play复用section，schwab-holdings.ts维持独立排序；两者保留节点、选择与焦点，不重新计算业务规则。
 - 只跑本次必要定向验证，真实范围/时限明确。同步独立需求、development、对应UI入口与validation，不把离线结果当作实盘或macOS27证据。
 
