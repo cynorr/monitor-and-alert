@@ -2,9 +2,9 @@ import { $, money, mdvText, extendedQuote } from './types.js';
 import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey } from './board.js';
-import { attentionState, attentionAppearance, autoAlertButton } from './attention.js';
-import { symbolRow } from './symbol-row.js';
-import { rankedRows, stateAppearance, adrText, adrTitle, volumeBadge } from './intraday-state.js';
+import { attentionState, autoAlertButton } from './attention.js';
+import { adjacentSymbol, listHeader, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow } from './symbol-row.js';
+import { rankedRows } from './intraday-state.js';
 export class Watchlist {
     onSelect;
     onUpdate;
@@ -33,6 +33,7 @@ export class Watchlist {
     attention = attentionState();
     get stateVisible() { return this.intraday.enabled && this.regularSession && (!this.scan?.enabled || this.scan.activeList === 'focus'); }
     get inPlayActive() { return this.stateVisible && !this.search; }
+    get priceEnd() { return this.stateVisible ? 'cum-vol' : 'tags'; }
     canPause(symbol) {
         return this.editable && this.attention.eligible.has(symbol) && this.tickers.some(t => t.symbol === symbol && t.status === 'focus');
     }
@@ -110,7 +111,7 @@ export class Watchlist {
             event.preventDefault();
             const scroller = $('symbols').parentElement;
             const bounds = scroller.getBoundingClientRect();
-            if (event.clientY < bounds.top + 24)
+            if (event.clientY < bounds.top + $('list-columns').offsetHeight + 24)
                 scroller.scrollTop -= 18;
             if (event.clientY > bounds.bottom - 24)
                 scroller.scrollTop += 18;
@@ -213,17 +214,13 @@ export class Watchlist {
                 void this.swapSelected(direction);
             return;
         }
-        const rows = [...this.rows.values()];
-        if (!rows.length)
-            return;
-        const index = rows.findIndex(row => row.dataset.symbol === this.selected);
-        const next = Math.max(0, Math.min(rows.length - 1, index + direction));
-        this.selectRow(rows[next].dataset.symbol);
-        rows[next].scrollIntoView({ block: 'nearest' });
+        const next = adjacentSymbol(this.rows.keys(), this.selected, direction);
+        if (next)
+            this.selectRow(next, true);
     }
-    selectRow(symbol) {
+    selectRow(symbol, scroll = false) {
         this.onSelect(symbol);
-        this.rows.get(symbol)?.focus({ preventScroll: true });
+        revealSymbolRow(this.rows.get(symbol), scroll);
     }
     jumpSection(direction) {
         const sections = Array.from($('symbols').querySelectorAll('[data-section]'));
@@ -235,8 +232,7 @@ export class Watchlist {
         this.collapsed.delete(target.querySelector('[data-toggle]').dataset.toggle);
         const symbol = target.dataset.firstSymbol;
         this.render();
-        this.selectRow(symbol);
-        this.rows.get(symbol)?.scrollIntoView({ block: 'nearest' });
+        this.selectRow(symbol, true);
     }
     async jumpUnread() {
         const rows = this.scan?.visible(this.tickers, 'focus', false) ?? this.tickers.filter(t => t.status === 'focus');
@@ -468,9 +464,7 @@ export class Watchlist {
         }
     }
     createRow(ticker, columns, scan) {
-        const row = document.createElement('div');
-        row.className = 'symbol-row';
-        row.tabIndex = -1;
+        const { row, cells, name } = symbolRow(ticker.ticker, columns, this.priceEnd);
         row.dataset.renderKey = this.rowKey(ticker);
         row.dataset.symbol = ticker.symbol;
         row.dataset.ticker = ticker.ticker;
@@ -479,20 +473,14 @@ export class Watchlist {
         const tags = this.preferences?.tags ?? [];
         const definitions = new Map(tags.map(tag => [tag.id, tag]));
         for (const column of columns) {
-            const cell = document.createElement(column.field === 'symbol' || column.field === 'tags' || column.field === 'actions' ? 'div' : 'span');
-            cell.dataset.field = column.field;
+            const cell = cells[column.field];
             if (column.field === 'symbol') {
-                cell.className = 'scan-symbol';
-                const name = document.createElement('button');
-                name.className = 'ticker';
-                name.textContent = ticker.ticker;
-                name.setAttribute('aria-label', `Select ${ticker.ticker}`);
+                cell.classList.add('scan-symbol');
                 const mark = document.createElement('span');
                 mark.className = 'warn';
                 mark.textContent = '!';
                 mark.hidden = true;
                 name.append(mark);
-                cell.append(name);
                 if (ticker.is_new) {
                     const flag = document.createElement('span');
                     flag.className = 'symbol-flag new';
@@ -501,7 +489,7 @@ export class Watchlist {
                 }
             }
             else if (column.field === 'growth') {
-                cell.className = 'growth-cell';
+                cell.classList.add('growth-cell');
                 cell.title = '1M / 3M / 6M return from low';
                 for (const field of ['rfl1m', 'rfl3m', 'rfl6m']) {
                     const value = document.createElement('span');
@@ -510,12 +498,12 @@ export class Watchlist {
                 }
             }
             else if (column.field === 'tags') {
-                cell.className = 'row-tags';
+                cell.classList.add('row-tags');
                 for (const id of rowTags(ticker).slice(0, 4))
                     cell.append(tagLogo(definitions.get(id) ?? { name: id }));
             }
             else if (column.field === 'actions') {
-                cell.className = 'row-actions';
+                cell.classList.add('row-actions');
                 cell.hidden = !this.editable;
                 const pin = document.createElement('button');
                 pin.className = 'pin-ticker icon-button';
@@ -553,36 +541,13 @@ export class Watchlist {
                 if (ticker.status === 'focus')
                     cell.append(autoAlertButton(ticker.symbol, this.toggleAutoPause));
             }
-            row.append(cell);
         }
-        const priceEnd = columns.findIndex(column => ['cum-vol', 'tags'].includes(column.field));
-        row.style.setProperty('--price-end', String(priceEnd + 1));
-        row.querySelectorAll('[data-field]').forEach((cell, index) => {
-            cell.style.gridColumn = String(index + 1);
-            cell.style.gridRow = '1';
-            if (index < priceEnd)
-                cell.classList.add('price-cell');
-        });
-        symbolRow(row);
         this.rows.set(ticker.symbol, row);
         return row;
     }
     updateRow(ticker, row, scan) {
         const state = this.stateVisible ? this.intraday.symbols[ticker.symbol] : undefined;
-        stateAppearance(row, state);
-        attentionAppearance(row, ticker.symbol, this.attention);
-        const adr = row.querySelector('[data-field="state-adr"]');
-        if (adr) {
-            adr.textContent = adrText(state);
-            adr.title = adrTitle(state);
-        }
-        for (const [field, value] of [['cum-vol', state?.cum_vol], ['local-vol', state?.local_vol]]) {
-            const cell = row.querySelector(`[data-field="${field}"]`);
-            if (cell)
-                volumeBadge(cell, value);
-        }
-        row.classList.toggle('active', ticker.symbol === this.selected);
-        row.querySelector('.ticker').setAttribute('aria-pressed', String(ticker.symbol === this.selected));
+        updateSymbolRow(row, ticker.symbol, ticker.symbol === this.selected, state, this.attention);
         const errors = [...(ticker.errors ?? []), ...(ticker.quote?.error ? ['Quote: ' + ticker.quote.error] : [])];
         const mark = row.querySelector('.warn');
         mark.hidden = !errors.length;
@@ -643,17 +608,13 @@ export class Watchlist {
         const previousColumnsKey = this.columnsKey;
         if (columnsKey !== this.columnsKey) {
             this.columnsKey = columnsKey;
-            document.querySelector('.watchlist').style.setProperty('--list-columns', columns.map(column => column.width).join(' '));
-            $('list-columns').replaceChildren(...columns.map(column => {
-                const cell = document.createElement('span');
-                cell.dataset.field = column.field;
-                cell.textContent = column.label;
+            setListColumns(document.querySelector('.watchlist'), columns, this.priceEnd);
+            listHeader($('list-columns'), columns, (cell, column) => {
                 if (column.field === 'growth') {
                     cell.className = 'sort-column';
                     cell.append(this.scan.sortControl);
                 }
-                return cell;
-            }));
+            });
         }
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.scan?.isHolding(candidate.ticker + '.US') && !this.tickers.some(t => t.ticker === candidate.ticker);

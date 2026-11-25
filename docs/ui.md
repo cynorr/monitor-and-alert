@@ -60,13 +60,13 @@ Focus、活动 Entry 和真实余仓共用 ADR、CumVol 与 LocalVol 显示规�
 
 背景与设计哲学：在有限行高中突出 Symbol、价格和有效提醒，减少无效数字与装饰。Chart 采用大圆角容器，名单采用胶囊；共用颜色与轻阴影语言，按信息密度调整阴影强度。行的选择、实时价格状态、最新未读报警分别表达，不增加新的选中模式或点击区域。
 
-- Focus、Holdings、Discover、Excluded 共用 Symbol 起始缩进，给半圆端部和 Holdings 展开三角留白。选中始终作用于整行，使用黑色细胶囊轮廓和轻微外阴影。方向键选股时由整行接收键盘焦点，选中轮廓同时表示行焦点。Tab 单独聚焦操作按钮时仍使用按钮焦点提示。鼠标悬停在未选中行时显示浅灰，价格状态仍可见。键盘选股时暂停鼠标悬停外观，鼠标移动或按下后恢复。普通行与量能胶囊不额外加阴影。
+- Focus、Holdings、Discover、Excluded 共用 Symbol 起始缩进，给半圆端部和 Holdings 展开三角留白。选中始终作用于整行，使用黑色细胶囊轮廓和轻微外阴影。方向键选股时由整行接收键盘焦点，选中轮廓同时表示行焦点。Tab 单独聚焦操作按钮时仍使用按钮焦点提示。Scan 与 Monitor 的未选中 Symbol 行共用整行浅灰悬停胶囊，价格状态显示在其上方。键盘选股时暂停鼠标悬停外观，鼠标移动或按下后恢复。普通行与量能胶囊不额外加阴影。
 - 价格区域为连续胶囊。Monitor Focus 覆盖 Symbol、Last、Chg%、ADR；非 Regular 的 Ext 也属于价格区域。Tags、量能与操作独立。Scan 保持自身数据列，使用相同模板，不为两种量能重排列。Holdings 的区域边界只在 [Schwab 持仓 UI](schwab.md#列与格式) 维护。
 - 底色及文字始终表达当前实时状态。Blue Soft / Blue 对应上行关注／增强，Yellow Soft / Red Strong 对应回撤预警／紧急。强蓝、深红价格区域使用白字。Candidate Chg% 使用 Positive / Negative，强底色时继承白字。其他字段保持本色。
 - 最新未读用价格胶囊两侧横向流动的渐变波浪表达。浅底上的上行关注用 Blue 与 White 的 68% 混色，上行增强用 Blue，回撤预警用 Yellow，回撤紧急用 Red Strong。深底使用对应方向的浅色波浪以保留对比。同方向的紧急未读与强底色同时存在时，波浪用 White。
 - 整条使用一份长边渐变遮罩。当前 Web 波浪每 2.8s 平移一个周期。持续流动时，白色波浪的遮罩峰值与波浪层自身的不透明度均为 100%。其余波浪的遮罩峰值为 48%，波浪层自身的不透明度为 85%。遮罩均向内 6px 淡至透明，中央保留实时底色。外层胶囊自然裁切。音频每声通过同一入口触发一次短亮度脉冲，播放结束后保留流动波浪。
 - 仅 symbol 主行承载提醒，section、Holdings 标题、Buy/Sold 明细及 Total 不聚合提醒。已读、期限与声音行为只在 [Alert](alert.md#统一未读提醒) 维护。
-- Web 复用 `symbol-row.ts` 创建 `.price-surface` / `.price-wave`，`attention.ts` 应用最后一条提醒及本次节拍；Grid 与 Holdings Table 使用同一套 CSS。Chart 与行阴影分别由 `--panel-shadow` / `--row-shadow` 集中定义。不为未来功能复制绘制或增加动画框架；平台实现可以调整绘制方式，保留上述语义。
+- Web 共用 `symbol-row.ts` 的 Grid 表头与主行，列配置指定字段、宽度和价格区边界。悬停、选中与提醒是独立绘制层，行及各字段坐标保持稳定。`attention.ts` 应用最新提醒及节拍。Chart 与行阴影分别由 `--panel-shadow` 和 `--row-shadow` 定义。原生端按平台适配绘制，保留上述语义。
 
 ## Logo / Icon
 
@@ -154,6 +154,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 - 图表之间保留 **12px** 静态间距，删除中间拖动把手、键盘焦点及调整行为。只保留图表组与 List 的 **12px** 分隔条，拖动均匀增减各图宽度；List 数据列间距不变。打开页面、切换模式或双击该分隔条恢复默认比例。持仓自然测宽仍约束 List 最小宽度；小窗口允许整体溢出，Monitor 在 List 最小值下工作区至少1804px。圆角、阴影、头部、内边距、票据和内部成交量分界不变。
 - Monitor 的最小宽度也接受独立持仓内容需求，具体测量和固定顶部布局见 [Schwab 持仓 UI](schwab.md#位置折叠与宽度)。
 - List 与图表头部保持等高对齐，高度只在 [Chart UI](chart-ui.md#headers-and-information) 维护。模式、总数、数据标记、Search 和一行 Filter/Tags 位于固定头部的水平分割线上方；与两图保持同一固定高度。Scan 准备状态在分割线下，仅需要时显示。名单列头在 Holdings 下方，文字位于其底部分割线上方；没有额外的 Filters/Holdings 或 section 分割线。
+- 观察名单列头固定在名单滚动区顶部，随数据行同步横向滚动。
 - 原 Intraday 时间模块统一移到 List 右上角，与 Monitor / Scan 模式按钮垂直居中、同排显示；使用12px、#293341、26px行高和右侧12px内距。继续读取现有 view.server_time 并显示纽约时间及 ET，不新增时钟请求或定时器。
 - 计数使用独立 `span.count-badge`：**10px、黑色、不加粗**，与标题留小间距。适用于列表按钮、section、symbol 总数、Holdings 与 Filter。数字本身不统一加背景；选中 pill 中的数字仍为黑色，所在 pill 使用浅背景保证可读。
 
@@ -218,7 +219,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 
 ### 独立 Holdings 入口
 
-Monitor 顶部固定的持仓表、整体折叠、水平 overflow、列与格式、买卖明细、排序、选择和状态的唯一要求见 [Schwab 持仓 UI](schwab.md)。当日新仓复用List的NEW标记；账户总值与延迟时间显示也只在该入口维护。
+Monitor 顶部固定的 Holdings 复用 Symbol 行模板。整体折叠、横向滚动、列与格式、订单明细、排序、选择和账户时间见 [Schwab 持仓 UI](schwab.md)。当日新仓复用 List 的 NEW 标记。
 
 ### Scan 日期与准备状态
 

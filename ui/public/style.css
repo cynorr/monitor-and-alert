@@ -12,10 +12,12 @@
     --label-rule-gap: 4px;
     --row-action-size: 24px;
     --row-action-end-gap: 6px;
+    --list-column-gap: 12px;
     --border: #171b20;
     --surface-muted: #f0f2f5;
     --panel-shadow: 0 3px 14px #1a253012;
     --row-shadow: 0 2px 5px #1a25301b;
+    --row-hover: #f3f5f8;
     --up: var(--color-candle-up);
     --down: var(--color-candle-down);
 }
@@ -114,24 +116,26 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .count-badge, #symbol-count, #filter-count { color: #111; font-size: 10px; font-weight: 400; }
 #simulation { margin-left: auto; background: #fff1cc; color: #876211; }
 #search { background: var(--surface-muted); border: 0; border-radius: 999px; margin: 0 10px 4px; padding: 6px 13px; min-width: 0; outline-offset: 1px; }
-.list-columns, .symbol-row { display: grid; grid-template-columns: var(--list-columns); align-items: center; column-gap: 12px; padding: 0 8px; }
-.list-columns { flex: 0 0 24px; align-items: end; padding-bottom: var(--label-rule-gap); border-bottom: 1px solid var(--border); color: #68727f; font-size: var(--font-small); line-height: 16px; }
-.list-columns span:not(:first-child), .symbol-row > span { text-align: right; }
-.list-columns [data-field="symbol"], .symbol-row .scan-symbol { padding-left:16px; }
+.list-grid-row { display: grid; grid-template-columns: var(--list-columns); align-items: center; column-gap: var(--list-column-gap); padding-inline: var(--list-row-padding, 8px); white-space: nowrap; }
+.list-grid-row > [data-field] { grid-row: 1; text-align: right; }
+.list-grid-row > [data-field="symbol"] { position: relative; padding-left: 16px; text-align: left; }
+.list-columns { align-items: end; padding-bottom: var(--label-rule-gap); border-bottom: 1px solid var(--border); color: #68727f; font-size: var(--font-small); line-height: 16px; }
 .sort-column { position: relative; }
 #scan-sort { appearance: none; width: 100%; border: 0; background: none; color: inherit; font: inherit; line-height: 16px; text-align: right; padding: 0 13px 0 0; cursor: pointer; }
 #scan-sort:focus-visible { outline: 2px solid var(--color-blue); outline-offset: 2px; }
 .sort-column::after { content: ""; position: absolute; right: 2px; top: 4px; width: 5px; height: 5px; border-right: 1px solid #000; border-bottom: 1px solid #000; transform: rotate(45deg); pointer-events: none; }
-.list-body { overflow: auto; flex: 1; min-height: 0; scrollbar-width: thin; }
-#symbols { min-width: 0; }
+.list-body { overflow: auto; flex: 1; min-height: 0; scrollbar-width: thin; scroll-padding-top: 24px; }
+.list-body > .list-columns { position: sticky; top: 0; z-index: 2; height: 24px; background: var(--color-white); }
+.list-body > .list-columns, #symbols { min-width: min-content; }
 .group { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; font-weight: 600; color: #747c87; }
 .group button[data-toggle] { display: inline-flex; align-items: center; gap: 5px; font-size: var(--font-row); padding: 5px 2px; }
 .section-arrow { font-size: 18px; line-height: 16px; width: 16px; text-align: center; }
 .add-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 26px; height: 26px; padding: 5px 2px; border-radius: 50%; font-size: 21px; font-weight: 600; line-height: 16px; }
 .add-button:hover, .group button[data-toggle]:hover { background: #edf0f5; }
 .add-button:disabled, .group button[data-toggle]:disabled { opacity: .35; cursor: default; }
-.symbol-row { width: 100%; height: 28px; padding-top: 2px; padding-bottom: 2px; font-size: var(--font-row); text-align: left; white-space: nowrap; cursor: pointer; user-select: none; touch-action: none; }
-:where(.workspace:not(.keyboard-row-nav)) :is(.instrument-row, .search-result, .holding-trade):hover:not(.active) { background: #f3f5f8; }
+.symbol-row { width: 100%; height: 28px; padding-block: 2px; font-size: var(--font-row); cursor: pointer; user-select: none; }
+#symbols .symbol-row { touch-action: none; }
+:where(.workspace:not(.keyboard-row-nav)) .search-result:hover { background: var(--row-hover); }
 .ticker { text-align: left; padding: 0; font-size: inherit; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .warn { color: #b58722; font-size: 10px; margin-left: 3px; }
 .positive { color: var(--color-positive); }
@@ -140,8 +144,8 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .row-actions:has(> .auto-alert:not([hidden])) { justify-content: flex-end; padding-right: var(--row-action-end-gap); }
 .hide-ticker, .release-ticker, .pin-ticker { width: var(--row-action-size); height: var(--row-action-size); color: #7a838e; }
 .row-actions button, .auto-alert { opacity: 0; }
-.instrument-row:is(.active, :focus-within) :is(.row-actions button, .auto-alert),
-:where(.workspace:not(.keyboard-row-nav)) .instrument-row:hover :is(.row-actions button, .auto-alert),
+.symbol-row:is(.active, :focus-within) .row-actions button,
+:where(.workspace:not(.keyboard-row-nav)) .symbol-row:hover .row-actions button,
 :is(.pin-ticker, .auto-alert)[aria-pressed="true"] { opacity: 1; }
 :where(.workspace:not(.keyboard-row-nav)) .pin-ticker:hover, .pin-ticker[aria-pressed="true"] { color: var(--color-blue); background: #eaf1ff; }
 :where(.workspace:not(.keyboard-row-nav)) .hide-ticker:hover { color: #d33838; background: #ffe9e9; }
@@ -172,20 +176,12 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .holdings-meta { display: flex; align-items: end; gap: 8px; text-align: right; font-size: var(--font-small); white-space: nowrap; }
 .holdings-meta b { color: #161b22; font-size: 14px; font-weight: 600; }
 .holdings-scroll { overflow-x: auto; scrollbar-width: thin; padding: 0 8px; }
-.holdings-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: var(--font-row); }
-.holdings-table th, .holdings-table td { text-align: right; white-space: nowrap; padding: 3px 4px; }
-.holdings-table th { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: #68727f; font-size: var(--font-small); font-weight: 400; }
-.holdings-table th:first-child, .holdings-table td:first-child { text-align: left; padding-left: 16px; position: relative; }
-.holdings-table tbody tr[data-holding] { cursor: pointer; }
-.holdings-table tbody td { border-top: 1px solid transparent; border-bottom: 1px solid transparent; }
-.holdings-table tbody td:first-child { border-left: 1px solid transparent; }
-.holdings-table tbody td:last-child { border-right: 1px solid transparent; }
-.holdings-table th:first-child, .holdings-table tfoot td:first-child { padding-left: 17px; }
-.holdings-table tr:focus-visible { outline: 2px solid var(--color-blue); outline-offset: -2px; }
+.holdings-grid { display: grid; grid-template-columns: var(--list-columns); column-gap: var(--list-column-gap); width: 100%; min-width: min-content; font-size: var(--font-row); --list-column-gap: 14px; --list-row-padding: 0px; }
+.holdings-grid :is(.holdings-rows, .list-grid-row) { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; column-gap: inherit; }
+.holdings-grid .list-columns { border-top: 1px solid var(--border); padding-top: 3px; }
 .holdings-trades { position: absolute; left: 3px; top: 50%; transform: translateY(-50%); width: 10px; padding: 0; font-size: 10px; line-height: 16px; color: #747c87; }
-.holdings-table .holding-trade td { background: #f5f7f9; font-size: var(--font-small); }
-.holdings-table .holding-closed td, .holdings-table .holding-closed .ticker { color: #939ca8; }
-.holdings-table tfoot td { border-top: 3px double var(--border); font-weight: 600; padding-top: 8px; }
+.holdings-grid .holding-closed > [data-field] { color: #939ca8; }
+.holding-total { border-top: 3px double var(--border); font-weight: 600; padding-top: 8px; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
 
 /* Scan reuses the Daily panel and watchlist with completed-day data. */
 .mode-switch, .scan-pills { display: flex; gap: 3px; align-items: center; }
@@ -233,14 +229,12 @@ button:disabled { cursor: default; opacity: .45; }
 .scan-symbol .ticker { flex-shrink: 0; }
 .symbol-flag { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #8a929d; font-size: 8px; }
 .symbol-flag.new { color: var(--color-blue); }
-.holdings-table .symbol-flag { margin-left: 5px; vertical-align: middle; }
+.holdings-grid .symbol-flag { margin-left: 5px; vertical-align: middle; }
 
 /* Holdings content sets a width minimum; sort markers add no width. */
-.holdings-table th button { position: relative; padding: 0; color: inherit; font: inherit; white-space: nowrap; }
-.holdings-table th button:hover { color: #161b22; }
-.holdings-table th[aria-sort="descending"] button { color: #161b22; }
-.holdings-table th[aria-sort="descending"] button::after { content: ""; position: absolute; left: 50%; top: calc(100% + 1px); transform: translateX(-50%); border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 3px solid currentColor; }
-.holdings-table.holdings-measure { position: absolute; visibility: hidden; pointer-events: none; width: max-content; min-width: 0; left: 0; top: 0; }
+.holdings-grid [role="columnheader"] button { position: relative; padding: 0; color: inherit; font: inherit; white-space: nowrap; }
+.holdings-grid [role="columnheader"] button:hover, .holdings-grid [aria-sort="descending"] button { color: #161b22; }
+.holdings-grid [aria-sort="descending"] button::after { content: ""; position: absolute; left: 50%; top: calc(100% + 1px); transform: translateX(-50%); border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 3px solid currentColor; }
 
 /* Tag logos remain secondary and never change the data row height. */
 .growth-cell { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); align-items: center; gap: 4px; white-space: nowrap; }
@@ -264,23 +258,19 @@ button:disabled { cursor: default; opacity: .45; }
 .alert-error[hidden] { display:none; }
 
 /* Shared symbol row: one price surface, one selection outline, one latest-alert wave. */
-.instrument-row { position:relative; isolation:isolate; border-radius:999px; }
-.instrument-row.active:focus-visible { outline: none; }
-.instrument-row.active::after { content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 0 0 1px var(--color-ink),var(--row-shadow); pointer-events:none; z-index:1; }
-.price-surface { position:absolute; top:2px; bottom:2px; border-radius:999px; background:var(--price-background,transparent); pointer-events:none; z-index:-1; overflow:hidden; }
-.symbol-row > .price-surface { grid-column:1 / var(--price-end); grid-row:1; left:0; right:-10px; }
-.holdings-table .price-surface { left:0; width:var(--holding-price-width); }
+.symbol-row { position:relative; isolation:isolate; border-radius:999px; }
+.symbol-row::before, .symbol-row::after { position:absolute; inset:0; border-radius:inherit; pointer-events:none; }
+.symbol-row::before { content:""; z-index:-1; }
+:where(.workspace:not(.keyboard-row-nav)) .symbol-row:hover:not(.active)::before { background:var(--row-hover); }
+.symbol-row.active:focus-visible { outline: none; }
+.symbol-row.active::after { content:""; box-shadow:inset 0 0 0 1px var(--color-ink),var(--row-shadow); z-index:1; }
+.price-surface { position:absolute; top:2px; bottom:2px; left:0; right:calc(2px - var(--list-column-gap)); grid-column:1 / var(--price-end); grid-row:1; border-radius:999px; background:var(--price-background,transparent); pointer-events:none; z-index:-1; overflow:hidden; }
 [data-intraday="up-notice"] { --price-background:var(--color-blue-soft); }
 [data-intraday="up-urgent"] { --price-background:var(--color-blue); }
 [data-intraday="down-notice"] { --price-background:var(--color-yellow-soft); }
 [data-intraday="down-urgent"] { --price-background:var(--color-red-strong); }
-.instrument-row[data-intraday$="urgent"] > .price-cell,
-.holdings-table tr[data-intraday$="urgent"] > td:nth-child(-n+10) { color:var(--color-white); }
-.instrument-row[data-intraday$="urgent"] .price-cell .ticker,
-.instrument-row[data-intraday$="urgent"] .price-cell .symbol-flag,
-.holdings-table tr[data-intraday$="urgent"] .ticker,
-.holdings-table tr[data-intraday$="urgent"] .holding-tag,
-.holdings-table tr[data-intraday$="urgent"] .holdings-trades { color:inherit; }
+.symbol-row[data-intraday$="urgent"] > .price-cell { color:var(--color-white); }
+.symbol-row[data-intraday$="urgent"] .price-cell :is(.ticker, .symbol-flag, .holdings-trades) { color:inherit; }
 [data-alert="up-notice"] { --alert-color:color-mix(in srgb,var(--color-blue) 68%,var(--color-white)); }
 [data-alert="up-urgent"] { --alert-color:var(--color-blue); }
 [data-alert="down-notice"] { --alert-color:var(--color-yellow); }
@@ -294,7 +284,7 @@ button:disabled { cursor: default; opacity: .45; }
     --alert-wave-opacity:1;
 }
 .price-wave { display:none; position:absolute; inset:0; border-radius:inherit; }
-.instrument-row[data-alert] .price-wave {
+.symbol-row[data-alert] .price-wave {
     --edge-mask-color:rgba(0,0,0,var(--alert-edge-opacity,.48));
     display:block; background-image:repeating-linear-gradient(100deg,var(--alert-color) 0px,transparent 68px,var(--alert-color) 136px);
     background-size:138px 100%; animation:alert-wave 2.8s linear infinite; opacity:var(--alert-wave-opacity,.85);
@@ -305,7 +295,6 @@ button:disabled { cursor: default; opacity: .45; }
 .volume-badge[data-level="1"] { background:var(--color-volume-low); }
 .volume-badge[data-level="2"] { background:var(--color-volume-medium); }
 .volume-badge[data-level="3"] { background:var(--color-volume-high); color:var(--color-white); }
-.holdings-table:not(.holdings-state) tr > :nth-child(n+10) { display:none; }
 
 /* Trade shares the quantity rail and keeps quotes beside Go to latest. */
 [data-mode="monitor"] { --header-height: 192px; }
@@ -384,28 +373,18 @@ button:disabled { cursor: default; opacity: .45; }
 #schwab-arrow { width: 16px; font-size: 18px; }
 #schwab-holdings:not([hidden]) { padding-bottom: 8px; }
 #schwab-holdings:has(#schwab-content[hidden]) { padding-bottom: 0; }
-.schwab-table[data-regular="true"] [data-field="extended_percent"],
-.schwab-table:not(.holdings-state) [data-field="adr"],
-.schwab-table:not(.holdings-state) [data-field="cum"],
-.schwab-table:not(.holdings-state) [data-field="local"] { display: none; }
-.schwab-table {
+.holdings-grid {
     --holding-tree-x: 21px;
     --holding-tree-color: color-mix(in srgb, var(--color-muted) 45%, var(--color-white));
     --holding-dash-stops: var(--holding-tree-color) 0 2px, transparent 2px 3px;
 }
-.schwab-table [data-field="actions"] { width: calc(var(--row-action-size) + var(--row-action-end-gap) + 4px); }
-.schwab-table tbody td[data-field="actions"] { padding: 0 var(--row-action-end-gap) 0 4px; border-right-width: 0; }
-.holding-alert-slot { display: inline-flex; justify-content: center; width: var(--row-action-size); vertical-align: middle; }
-.holding-alert-slot .auto-alert { width: 18px; height: 18px; }
-.holding-alert-slot .auto-alert svg { width: 13px; height: 13px; }
-.schwab-table th[data-field="sold_percent"] button { width: 100%; min-height: 1em; }
-.schwab-table tbody [data-field="sold_percent"] { color: var(--color-muted); font-size: var(--font-small); }
-.schwab-table .holding-tag { color: var(--color-blue); }
-.schwab-table tr[data-holding-kind="entry"]:not([data-intraday$="urgent"]) .ticker { color: var(--color-tag-neutral); }
-.schwab-table .holding-trade .holding-detail-label { padding-left: calc(var(--holding-tree-x) + 20px); }
-.schwab-table .holding-trade td { height: 26px; vertical-align: middle; }
+.holdings-grid [role="columnheader"][data-field="sold_percent"] button { width: 100%; min-width: 18px; min-height: 1em; }
+.holdings-rows [data-field="sold_percent"] { color: var(--color-muted); font-size: var(--font-small); }
+.holdings-grid .holding-tag { color: var(--color-blue); }
+.holdings-grid [data-holding-kind="entry"]:not([data-intraday$="urgent"]) .ticker { color: var(--color-tag-neutral); }
+.holding-trade { height: 26px; font-size: var(--font-small); }
+.holding-trade .holding-detail-label { align-self: stretch; display: flex; align-items: center; padding-left: calc(var(--holding-tree-x) + 20px); }
 .holding-history [data-part="date"] { color: var(--color-muted); font-size: var(--font-small); }
-.schwab-table .holding-history td, .schwab-table tbody tr.holding-history:hover { background: transparent; }
 .holding-trade [data-part="kind"] { font-size: var(--font-row); }
 .holding-detail-label::before, .holding-detail-label::after, .holding-detail-outgoing { content: ""; position: absolute; pointer-events: none; left: var(--holding-tree-x); background: var(--holding-tree-color); }
 .holding-detail-label::before { top: -1px; bottom: 50%; width: 1px; }
@@ -423,4 +402,3 @@ button:disabled { cursor: default; opacity: .45; }
 .holding-cancel { width: 14px; height: 14px; vertical-align: middle; background: var(--color-red); color: var(--color-white); }
 .holding-cancel svg { width: 14px; height: 14px; stroke-width: 3; }
 .holding-cancel:hover { background: var(--color-red-strong); }
-.schwab-table tfoot { font-variant-numeric: tabular-nums; }

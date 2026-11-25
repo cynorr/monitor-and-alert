@@ -4,7 +4,7 @@
 
 - 盘中状态另读 [Intraday State](../../docs/intraday-state.md)，`intraday-state.ts`仅负责格式化、Badge及服务端离散rank比较；In Play复用section，不改真实归属，重排保留节点/选择/焦点/滚动。Focus、Entry 与真实余仓复用同一套盘中字段格式，清仓尾部保持灰色。
 - `list.ts`：名单行、section、选择、拖拽及只读 Tag 图标；`scan.ts`：两模式共用 Tag/Filter、日期和草稿编辑；`board.ts`：分组、共用列定义、角标和显示格式；`tags.ts`：Tag 保存与草稿比较；`tag-appearance.ts`：外观默认值、图案与共用 SVG 渲染入口。
-- `layout.ts`：可见图表等宽分配与唯一图表组/List分隔条；`holdings-layout.ts`：持仓自然内容测宽与价格背景几何；`main.ts`：模式和图表选择来源、R重置可见图、共用名单悬停开关。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
+- `layout.ts` 负责图表等宽分配与唯一图表组/List 分隔条。`main.ts` 负责模式和图表选择来源、R 重置可见图和共用名单悬停开关。样式在 `../public/style.css`，静态结构在 `../public/index.html`。
 - `additional-info.ts`：独立信息身份校验、分类显示精简、可空格式化及纽约自然日财报文案；原始分类保留在数据契约中，数据和文案见 [Additional Info](../../docs/additional-info.md)，财报配色见 [Chart UI](../../docs/chart-ui.md#headers-and-information)，不改变bar revision或Ready。
 - 前端美元金额、MDV20 和 Dollar Vol 复用 `types.ts` 的格式化函数，精度和范围见 [UI](../../docs/ui.md#金额格式)。
 - `chart.ts`：共用图表、十字线与成交额显示、交易日联动；`daily-chart-view.ts`：Daily 坐标策略、等比缩放、临时全貌和裁切 primitive，唯一需求见 [Daily setup scale](../../docs/chart-ui.md#daily-setup-scale)；`chart-settings.ts`：统一图形参数。修改参数后构建并刷新页面，不增加设置界面。
@@ -19,8 +19,8 @@
 - `alerts.ts`：公开图表primitive、手势、mutation和错误；`attention.ts`：仅symbol row的统一最新未读/节拍外观，不聚合标题；`main.ts`：所有选图和当前chart更新统一read，不区分主动/自动、不等待渲染。未读快捷键统一调用各名单jumpUnread，具体映射只维护在List交互，复用当前分组/排序，不改Tag筛选或另存游标。API持久化结果才更新横线，已读不改变灰线或generation，不建倒计时删除；未读有效期只按Alert需求由后台维护。
 - 只验证本次改动相关的离线场景；live 必须有明确范围与时限。同步唯一 UI 文档和必要产品文档，不新增交易入口、Atomic feature 自动 Alert 或通用框架。
 
-- 新增 symbol 行复用 `symbol-row.ts` 的表面及 `attention.ts` 的最新提醒入口，规则见 [Symbol模板](../../docs/ui.md#symbol-row-template)。Grid/Table共用CSS，不复制波浪或按不同列表另造提醒；Holdings区域宽度跟随现有列几何。共享颜色只引用 `palette.ts`，由main安装CSS变量，禁止在Chart/Tag/名单重复默认色值；说明见 [Color palette](../../docs/ui.md#color-palette)。实时状态决定价格底色与文字，未读只决定边缘波浪。Focus 与 Holdings 复用暂停自动报警图标，M 共用 Alert 操作。
+- `symbol-row.ts` 维护共用 Grid 表头、单元格、Symbol 主行、盘中字段及基础选股导航。按字段名定位列与价格胶囊，悬停和选中只绘制表面。最新提醒复用 `attention.ts`，规则见 [Symbol模板](../../docs/ui.md#symbol-row-template)。共享色值由 `palette.ts` 提供、main 安装，见 [Color palette](../../docs/ui.md#color-palette)。实时状态决定价格底色与文字，未读决定边缘波浪。Focus 与 Holdings 复用暂停自动报警图标和 M 操作。
 
-- Schwab账户与交易规范见 [docs/schwab.md](../../docs/schwab.md)。schwab-data.ts 维护原生响应、后端FIFO/Days/Sold字段、单一主行标记和 Entry/Stop 明细投影，不在前端重算历史归属。schwab-holdings.ts 渲染表格、展开树及右侧铃铛，复用 holdings-layout/symbol-row/attention/intraday-state。trade.ts 管独立策略胶囊、买卖共用的整股档位与比例预设、EMA 周期、原生 Stop 编辑和共用 Send，行情公式只消费服务端图表参考，trade-lines.ts 用公开图表 API 绘制双图交易线，price-lines.ts 与 Alert 共用坐标/命中/绘制。产品模式只有scan/monitor，保持 request_id/source/socket 检查；金融写请求不能复用普通 post 的错误语义或自动重发。
+- Schwab账户与交易规范见 [docs/schwab.md](../../docs/schwab.md)。`schwab-data.ts` 维护原生响应、后端 FIFO/Days/Sold 字段、单一主行标记和 Entry/Stop 明细投影，不在前端重算历史归属。`schwab-holdings.ts` 提供动态列、排序、展开树和 Total，使用同一个 Grid 的列轨道和自然宽度。`trade.ts` 管独立策略胶囊、买卖共用的整股档位与比例预设、EMA 周期、原生 Stop 编辑和共用 Send，行情公式只消费服务端图表参考。`trade-lines.ts` 用公开图表 API 绘制双图交易线，`price-lines.ts` 与 Alert 共用坐标、命中和绘制。产品模式只有 Scan 和 Monitor，维持 request_id/source/socket 检查。金融写请求保留专用错误语义与单次发送。
 
 - 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

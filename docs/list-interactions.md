@@ -14,7 +14,7 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 
 | 范围 | 按键 | 动作 |
 | --- | --- | --- |
-| Scan / Monitor | ↑ / ↓ | 按当前可见顺序选上一只／下一只，跳过折叠组，不循环 |
+| Scan / Monitor（含 Holdings） | ↑ / ↓ | 按当前名单可见的 Symbol 主行选上一只／下一只，跳过折叠组和订单明细，不循环 |
 | Daily（Scan / Monitor） | 按住 F / 松开 | 临时查看一年全貌／恢复视图，完整规则见 [Daily setup scale](chart-ui.md#daily-setup-scale) |
 | Scan / Monitor | R | Reset view & go to latest，同时重置全部可见图表；输入/IME及修饰键除外，不按指针位置分流 |
 | Scan / Monitor | Page Up / Page Down | 跳到前／后一个非空 section 的第一只，不循环 |
@@ -32,7 +32,7 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 | Scan · Focus | Shift + ← / → | 无操作 |
 
 - Page 导航只在当前 List 内进行，不切 Discover/Focus/Excluded。Pinned、In Play 参与 section 导航，空组跳过，目标折叠时展开。
-- ↑ / ↓ 和 Page 导航让目标 Symbol 行获得键盘焦点，选中外观走整行轮廓。↑ / ↓ 选股后，各名单暂时清除鼠标悬停高亮，鼠标移动或按下时恢复。行内按钮可以单独用 Tab 聚焦。
+- 点击主行、↑ / ↓ 和 Page 导航让目标 Symbol 行获得键盘焦点，选中外观走整行轮廓。↑ / ↓ 选股后，各名单暂时清除鼠标悬停高亮，鼠标移动或按下时恢复。行内按钮可以单独用 Tab 聚焦。
 - Shift 移动复用原人工排序范围：Default order 的普通 setup section、Pinned；Scan RFL 排序时普通组不重排，机器 Excluded 普通组与 In Play 保持自动顺序。拖动及其原选择行为不变。
 - 已置顶再按置顶、未置顶再按取消，均无操作、不跳下一只。取消置顶回到真实 section；若当前满足 In Play，仍按现有聚集规则显示。
 - 输入框、搜索及可编辑内容保留文本编辑行为；历史 Scan 与受限会话不可修改名单，导航仍可用。

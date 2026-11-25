@@ -167,11 +167,12 @@ test('ordinary list updates keep a chart selection hidden by a Tag filter withou
     } finally { delete globalThis.document; }
 });
 
-test('Holdings unread navigation opens the table and includes Entries in account-row order', () => {
-    const list = Object.create(SchwabHoldings.prototype), choices = [];
+test('Holdings unread navigation opens the list and includes Entries in account-row order', () => {
+    const list = Object.create(SchwabHoldings.prototype), choices = [], revealed = [];
     Object.assign(list, { collapsed: true, sort: 'market_value', regular: false, states: { enabled: false, symbols: {} },
         attention: { unread: new Map(['A.US', 'B.US', 'ENTRY.US', 'SOLD.US'].map(symbol => [symbol, {symbol,direction:'up',level:1,fired_at:1}])),
             playing: new Map(), eligible: new Set(['ENTRY.US', 'SOLD.US']) },
+        nodes: new Map([['ENTRY.US', { row: { focus: () => revealed.push('focus'), scrollIntoView: () => revealed.push('scroll') } }]]),
         data: { rows: [
             { ticker: 'A', symbol: 'A.US', kind: 'holding', position: { market_value: '3' } },
             { ticker: 'B', symbol: 'B.US', kind: 'holding', position: { market_value: '2' } },
@@ -182,6 +183,7 @@ test('Holdings unread navigation opens the table and includes Entries in account
     list.render = () => {};
     list.jumpUnread(); list.jumpUnread(); list.jumpUnread(); list.jumpUnread();
     assert.deepEqual(choices, [['ENTRY.US', 'ENTRY.US'], ['A.US', 'A.US'], ['B.US', 'B.US']]);
+    assert.deepEqual(revealed, ['focus', 'scroll']);
     assert.equal(list.canPause('ENTRY.US'), true);
     assert.equal(list.canPause('SOLD.US'), false);
     assert.equal(list.collapsed, false);

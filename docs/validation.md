@@ -1,5 +1,21 @@
 # 验证记录
 
+## 2026-11-25 · Holdings 紧凑列宽
+
+本机 Safari 使用正式服务的真实 Regular 持仓及 Buy、Entry、Stop 明细。在 680 px 和 900 px 面板下，表头、主行、展开明细、Total 逐列对齐，数据列坐标一致。列间距为 14 px，价格区到量能列仍为 2 px，增宽的 220 px 全部由操作列吸收。铃铛与 Focus 中心偏差至多 0.02 px。用隔离预览中的 `99,999` 和 `399,996` 核对，最小宽度约 666 px。TypeScript 构建、Holdings 列配置用例和 `git diff --check` 通过。浏览器实测覆盖 Regular 布局。
+
+## 2026-11-25 · Holdings 明细透明背景
+
+本机 macOS 浏览器用正式服务的真实账户快照展开 Buy、Entry、Stop，三类明细的计算背景均为透明。Sell 成交明细沿用同一条背景规则，当前快照无 Sold 样本。另在隔离预览中用 `99,999` 和 `399,996` 检查拟议的紧凑列宽，Regular 布局含展开明细约需 666 px，680 px 面板内金额完整且与 Total 对齐。本轮仅修改背景样式，`git diff --check` 通过。
+
+## 2026-11-25 · 共用 Symbol 行与 Holdings Grid
+
+本机 macOS 在美东 11 月 24 日 Regular 使用正式服务的真实名单、持仓和订单。Safari 测得 Monitor Holdings、Focus 及 Scan Focus、Discover、Excluded 的悬停前后字段位移均为 0 px。方向键从一只 Monitor Focus 切到下一只并聚焦目标行。核验后恢复原有 Monitor 模式和 Scan Focus 入口。
+
+浏览器核对 Holdings 的表头、主行、真实 Entry 和保护 Stop 明细及 Total 对齐。母单撤单按钮显示在 P/L Day，保护 Stop 隐藏自己的按钮。拉宽面板后各列仍对齐，Holdings 与 Focus 的铃铛中心横向偏差为 0 px。Scan 的 680 px 滚动区内表头与主行均为 912 px，共用横向滚动。
+
+TypeScript 构建、38 项前端定向用例和 `git diff --check` 通过。扩展时段的列配置由定向用例覆盖，尚未在扩展时段实测订单明细。全程未向券商提交、修改或撤销订单。
+
 ## 2026-11-25 · 紧急未读波浪全白峰值
 
 本机 macOS 浏览器使用正式服务的 CSS，在独立样式预览中核对上行和回撤两档。白色波浪的遮罩峰值与持续流动时的图层不透明度均为 100%，普通档仍为 48% 和 85%，四种波浪均保留 6px 渐隐和 2.8s 周期。`git diff --check` 通过。本轮覆盖浏览器计算样式，未实测行情触发或声音脉冲。

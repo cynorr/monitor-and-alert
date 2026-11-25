@@ -62,7 +62,7 @@ Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑�
 
 名单操作直接作用于单只 symbol；机器 Excluded 禁止人工释放，Hidden/Focus 释放后重新分类。快捷键、行按钮和限定自动下一只见 [List 交互](list-interactions.md)。Scan 和 Monitor 的 Focus 共用 Release，Discover 的 Hide 进入 Hidden 七天。
 
-Scan、Monitor 和 Holdings 共用名单导航的鼠标悬停规则。方向键选中一行后，悬停高亮等到鼠标输入恢复。详见 [名单导航](list-interactions.md#导航与快捷键)。
+Scan 名单、Monitor Focus 和 Holdings 共用 Symbol 主行、方向键导航及鼠标悬停反馈。方向键选中一行后，悬停高亮等到鼠标输入恢复。详见 [名单导航](list-interactions.md#导航与快捷键)。
 
 搜索仍使用列表上方Search与/入口。Monitor通过主账号Longbridge context的static_info验证新股票；Scan只读本地Daily。查询不写名单、不订阅。确认 Add 后默认加入 Focus，Focus section 的 + 使用指定组；具体入口与排序交互统一见 List UI。盘中可以调整主 section，逐股 Tag 仍由保存的条件计算。保存失败回退内存并显示错误。
 

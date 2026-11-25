@@ -44,7 +44,7 @@
 
 依赖方向：UI → Data API → Workbench → Scan或MarketService。MarketService调用longbridge包并组合ChartCache与盘中状态；Scan/Massive只使用共用storage、指标和特征，不从Longbridge包获取共用工具。正式data不import simulator，Scan算子不依赖SDK。pandas/numpy用于共用指标与特征；candle preview仍使用缓存标量，不逐次重建DataFrame。不增加 services 层、指标数据库或事件日志协议。
 
-Schwab账户字段、FIFO历史与持仓UI只在 [schwab.md](schwab.md) 维护。schwab-holdings.ts使用原生账户行；holdings-layout.ts维护自然内容测宽及价格背景几何，symbol-row/attention/palette维护共用表面。账户成功时间独立于行情时间，前端仅格式化后端结果，不重算历史归属。
+Schwab 账户字段、FIFO 历史与持仓 UI 只在 [schwab.md](schwab.md) 维护。`schwab-holdings.ts` 使用原生账户行，提供列配置、展开明细和 Total。表头、主行、明细和 Total 通过 CSS subgrid 共享列轨道。可见列和内容长度变化时，读取真实 Grid 的内在宽度并更新 List 最小宽度。账户成功时间独立于行情时间，前端格式化后端结果。
 
 图表显示与交互的唯一规范见 [chart-ui.md](chart-ui.md)。chart-settings.ts集中维护默认bar spacing、volume区比例与Daily锚点/百分比比例常量；修改后npm构建并刷新，不增加设置界面。daily-chart-view.ts只负责前端Daily坐标策略：公开autoscaleInfoProvider读取当前pane高度与bar spacing，返回统一线性价格范围，均线不参与扩大范围；保留原生autoScale以关闭纵向平移。通过公开逻辑范围事件和ResizeObserver联动缩放/分区，使用公开series primitive画裁切提示。F暂存逻辑视口和间距，用已有数据预览一年，结束时恢复视图而不回滚行情；没有新网络接口、后端指标、持久化或vendor修改。背景及完整交互只维护于[Daily setup scale](chart-ui.md#daily-setup-scale)。
 
@@ -56,7 +56,7 @@ layout.ts以可见chart数量、各组件最小宽度和单个List比例分配�
 
 chart.ts 的 syncSeries 用公开 data/update API 比较已显示数据：相同时间序列的尾部替换/追加只更新变化项，较早官方修订用 update(row, true)。只有新窗口、时间序列变化或删除点时使用 setData；正常 closed 更新不调用滚动重定位，未知 active volume 只更新 histogram 的 whitespace，不重建 candles/MA。保持 vendor 原样。
 
-List 显示要求见 [List UI](ui.md#list-ui)，操作规则只在 [List 交互](list-interactions.md) 维护，局部 AI 约束见 ui/src/AGENTS.md。board.listColumns分别定义Scan/Monitor列和宽度，list.ts共用它创建标题和行，按data-field更新单元，不依赖children位置；Monitor无Growth渲染。ScanControls持有唯一sortControl及其事件，list.ts在Scan列头中挂载，模式切换重建列头时复用同一控件。board.growthValue仅供Scan格式化RFL，原始百分比及排名不变；三个值用等宽CSS grid及子列边框对齐。ScanControls.available统一屏蔽holding_symbols，供筛选/计数/搜索/导航/单只操作使用；原board仍保留完整后端成员。导航与日期控件用单行flex布局，CSS维护独立列与12px间距，filter-rules 用两列 CSS columns、group 用 break-inside:avoid，不引入布局依赖或脚本测高。
+List 显示要求见 [List UI](ui.md#list-ui)，操作规则见 [List 交互](list-interactions.md)，局部 AI 约束见 ui/src/AGENTS.md。`board.listColumns` 定义 Scan 和 Monitor Focus 列，`schwab-holdings.ts` 定义 Holdings 列。`symbol-row.ts` 共用表头、按字段名定位的单元格和 Symbol 主行。ScanControls 持有唯一 sortControl，Scan 的 Growth 列头挂载该控件，三段 RFL 用等宽 Grid 子列。ScanControls.available 屏蔽 holding_symbols，供筛选、计数、搜索、导航和单只操作使用。导航与日期使用单行 flex 布局，筛选器用两列 CSS columns。
 
 共享语义配色的唯一代码来源为 `ui/src/palette.ts`，Chart/Alert/Tag默认值直接引用，main启动安装对应CSS变量；名称和用途只在[Color palette](ui.md#color-palette)维护。Symbol共用模板见[UI](ui.md#symbol-row-template)，不复制行绘制、波浪或默认色值。
 
@@ -75,7 +75,7 @@ Tag 外观 metadata 为独立的 `{icon,color,background:'transparent'|'frosted'
 - sound.py每次play建立独立任务，一次afplay播放完整两段WAV。beat_offsets是资源生成与播放节拍的共同来源；播放器启动后按实际本机时钟发布pulse_at，沿用现有Alert WS。playing每symbol仅输出最新任务的symbol/fired_at/pulse_at；旧任务仍可自然播放完，前端只响应当前未读fired_at的节拍。没有队列、抢占、历史或逐帧消息。退出取消任务并终止播放器；scripts/build_alert_sounds.py只用于离线准备资源。
 - GET /v1/alerts 和 WS alerts 提供 revision、alerts、unread、eligible_symbols、paused_auto_symbols、scope_known、sound、error。unread 项包含 symbol、direction、level、fired_at。POST 接受 create、rearm、delete、read 和 pause_auto，pause_auto 携带 symbol 与布尔 paused。M 与共用圆形按钮调用同一操作。
 - 每个WS连接把自己的asyncio.Event登记到AlertEngine.watchers；持久化或播放状态变化唤醒既有发送循环，退出移除登记。沿用同源校验与唯一stream，不建立消息总线或新服务。
-- ui/src/symbol-row.ts为Grid名单和Table持仓创建同一price-surface/price-wave；attention.ts应用最新未读与本次pulse_at，并按后端 paused_auto_symbols 更新共用图标。main.ts所有select及当前chart更新直接read。列表表面用Grid列范围定位；持仓表面挂在首个td，宽度由现有列几何计算，holdings-layout.ts的table ResizeObserver只同步这一个范围，背景原点计入首个td的实际边框。底色和文字取 data-intraday，data-alert 控制边缘波浪。
+- `symbol-row.ts` 为所有主行创建共用的价格表面和波浪，由命名列界定价格区。底色和文字取 data-intraday，data-alert 控制波浪。`attention.ts` 应用最新未读与本次 pulse_at，并按 paused_auto_symbols 更新共用图标。main.ts 的 select 及当前图表更新直接标记已读。
 - End/Home与Command+G/U在main.ts归一后路由到原名单jumpUnread，单键Home/End取消原生页面滚动，文本编辑不拦截。Watchlist.sections同时供render与完整Focus导航使用；ScanControls.visible可指定Focus并忽略显示筛选，showList可保留Tag草稿。Watchlist.update仅在成员退出当前List或转入Holdings时自动候补，Tag遮住的已选chart不因后台推送跳走；用户主动修改筛选仍沿用原反馈。Holdings复用ordered与choose，不增加已访问集合。
 
 ## 模式与上游数据
@@ -181,7 +181,7 @@ List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受
 
 Watchlist.handleKey 维护观察名单键盘入口，ScanControls 管理 Tag/Filter、日期与显示偏好。选股导航使用 Symbol 行的键盘焦点，选中行共用已有整行轮廓。行按钮和快捷键通过 actOnTicker/togglePin 共用单只动作。Focus Release 按名单归属路由，Scan/Monitor 复用 move。Delete/Backspace 通过名单焦点与已选图表提醒线分流。mutate 的 advance 参数按 [List 交互](list-interactions.md#自动下一只限定白名单) 调用。提交前保存可见顺序，等待期间阻止本次删除引起的首行候补，成功后 advanceSelection 选后项或末行。用户换股、切 List 或切模式后保留其选择。Page 导航使用已渲染非空 section 的首个 symbol，展开目标。
 
-Watchlist 与 Holdings 处理上下键选股后，main.ts 根据已消费的按键设置工作区的悬停开关。共用 CSS 控制名单行和仅悬停时显示的操作。鼠标 pointermove 或 pointerdown 恢复悬停，选中和键盘焦点各自保留。
+Watchlist 与 Holdings 共用相邻 Symbol 查找、行聚焦和滚动定位。各名单提供自己的有序主行与图表选择来源。main.ts 根据已消费的方向键设置悬停开关，鼠标 pointermove 或 pointerdown 恢复。悬停使用独立绘制层，按钮在原列宽内显示。
 
 前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口；Scan全局Search目标为Discover置顶，显式Focus section的+保留目标。Scan查询本地只读SQLite并截断到所选日，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 

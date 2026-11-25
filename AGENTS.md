@@ -19,9 +19,9 @@
 - 买卖数量共用前端整股档位，数量语义见 [Schwab 交易区](docs/schwab.md#交易区与图上操作)，标尺几何见 [Chart UI](docs/chart-ui.md#trade-ticket)。
 - TypeScript 改动后 npm run build --prefix ui；数据/调度改动只做相关的必要真实数据验证与定向用例。历史记录不能当成本轮 live 证据。
 
-- Symbol 行的选中、价格／量能分区与未读波浪只按 [Symbol row template](docs/ui.md#symbol-row-template)；配色名称见 [Color palette](docs/ui.md#color-palette)，代码复用 `ui/src/palette.ts`。新增行或提醒复用 `symbol-row.ts`、`attention.ts` 与 `AlertEngine.notify`，未读只保留最新一条，按来源处理暂停与 Focus ADR 失效，禁止叠加或保存通知历史。实时价格底色独立于边缘波浪。
+- Scan、Monitor Focus 和 Holdings 共用 `symbol-row.ts` 的 Grid 行、列和基础选股导航。Symbol 行的悬停、选中、价格／量能分区与未读波浪只按 [Symbol row template](docs/ui.md#symbol-row-template)。配色见 [Color palette](docs/ui.md#color-palette)，复用 `ui/src/palette.ts`。提醒复用 `attention.ts` 与 `AlertEngine.notify`，未读只保留最新一条，按来源处理暂停与 Focus ADR 失效，禁止叠加或保存通知历史。实时价格底色独立于边缘波浪。
 
-- Focus 与 Holdings 共用盘中字段显示。纯 Entry 的候选监控语义只在 [Intraday State](docs/intraday-state.md) 维护。持仓主行标记、铃铛位置和订单明细树只在 [Schwab 持仓 UI](docs/schwab.md) 维护。
+- Focus 与 Holdings 共用盘中字段显示。纯 Entry 的候选监控语义只在 [Intraday State](docs/intraday-state.md) 维护。Holdings 提供列配置、主行标记、订单明细和 Total，同一区域共享列轨道，详见 [Schwab 持仓 UI](docs/schwab.md)。
 
 - List 的逐股 Tag 由规则计算。Scan 与 Monitor 共用列宽和行内图标规则，前端美元金额格式见 [UI](docs/ui.md#金额格式)。
 
