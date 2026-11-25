@@ -1,8 +1,8 @@
 {
   "status": "OK",
   "start_date": "2024-07-12",
-  "end_date": "2026-11-23",
-  "resultsCount": 3684,
+  "end_date": "2026-11-24",
+  "resultsCount": 3692,
   "results": [
     {
       "id": "E69d6ca86b3758d1626b2a0fd5b12cefe0ac75be322fe36b805b5597178356118",
@@ -4727,7 +4727,7 @@
       "split_to": 43.0,
       "ticker": "VSCFF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.896604
+      "historical_adjustment_factor": 0.873614
     },
     {
       "id": "Ed59443e7582966dcd360b3b9cc2956fe027c2898c4e6665ae4f9acb51e02d0c8",
@@ -10505,7 +10505,7 @@
       "split_to": 38.0,
       "ticker": "VSCFF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.917951
+      "historical_adjustment_factor": 0.894414
     },
     {
       "id": "Edfd70da9b7087f0cb3acac15738b2906e1f3f5faeb578c42084eaef751f6bb3d",
@@ -11558,7 +11558,7 @@
       "split_to": 1.0,
       "ticker": "AMZE",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 184.0
+      "historical_adjustment_factor": 18400.0
     },
     {
       "id": "E329093673949297042438685dffd7e247c534fa7e254294c5464d866015751bf",
@@ -12692,7 +12692,7 @@
       "split_to": 1.0,
       "ticker": "PASG",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 20.0
+      "historical_adjustment_factor": 120.0
     },
     {
       "id": "E04235779ff9dd3bca7d09e86fcec97076057480513d3358fd43331b7e3ea3e14",
@@ -16394,7 +16394,7 @@
       "historical_adjustment_factor": 238.095238
     },
     {
-      "id": "E308f13316ea4bc6a0e142cd9d19dd4a9927c5885576f92242eb719c21feb6b1b",
+      "id": "Eddddd6dec896dca093b95f4526cc5afeb762587883b6863d92914a0c1d8c8008",
       "execution_date": "2025-10-27",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -17327,7 +17327,7 @@
       "split_to": 36.0,
       "ticker": "VSCFF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.942761
+      "historical_adjustment_factor": 0.918588
     },
     {
       "id": "Eccaa32b813dcbdccd4ed58a9fc920ea41cbe5d2bd85d83c5af0cceffdc52f437",
@@ -18815,7 +18815,7 @@
       "historical_adjustment_factor": 160.0
     },
     {
-      "id": "E1961d40baa5fe68e38dbb1b476fc877e6d24466738448f10316c260a4898b1ed",
+      "id": "E4287f60ce435eb25d8c0452cdbc448c5485d65a0b11b13aeb255b46173178eaa",
       "execution_date": "2025-12-23",
       "split_from": 1.0,
       "split_to": 3.0,
@@ -23828,7 +23828,7 @@
       "historical_adjustment_factor": 25.0
     },
     {
-      "id": "Ef42e81b29689efc7e0db8f11354194b26fa825d40d3a87fcd00ee0b24384a7cf",
+      "id": "E4727fb74a1d41d26ca96d167dcf5dd266792fe2b24a38cd60dd8147f1931e312",
       "execution_date": "2026-04-30",
       "split_from": 10.0,
       "split_to": 1.0,
@@ -24251,7 +24251,7 @@
       "historical_adjustment_factor": 15.0
     },
     {
-      "id": "E0070baa8b8586e6dfa7ec3aa4cce3d07f506b65da2113d5e3600b1d12fcefbc1",
+      "id": "E89ff98c46b815933b75a011c2ff1b494412cae95a1141669534da4fb9cf2a909",
       "execution_date": "2026-05-08",
       "split_from": 1.0,
       "split_to": 1.047337278106509,
@@ -25526,7 +25526,7 @@
       "split_to": 33.0,
       "ticker": "VSCFF",
       "adjustment_type": "stock_dividend",
-      "historical_adjustment_factor": 0.969697
+      "historical_adjustment_factor": 0.944833
     },
     {
       "id": "E4df28ce063112dffa8eb99805a4e12af116e8e1deebaad9b32def49f8914b6cb",
@@ -27983,7 +27983,7 @@
       "split_to": 1.0,
       "ticker": "AMZE",
       "adjustment_type": "reverse_split",
-      "historical_adjustment_factor": 8.0
+      "historical_adjustment_factor": 800.0
     },
     {
       "id": "E2725904755a1af58c9688fede10cf7b80dc37cd2ebe019c99835efe33e393fa7",
@@ -33159,6 +33159,78 @@
       "ticker": "ZIZTF",
       "adjustment_type": "reverse_split",
       "historical_adjustment_factor": 5.0
+    },
+    {
+      "id": "Ead59a769a1f70a7d60a850c208d3dbb37ce5e593a313400f965e99e2c1353917",
+      "execution_date": "2026-11-24",
+      "split_from": 10.0,
+      "split_to": 1.0,
+      "ticker": "ANDMF",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 10.0
+    },
+    {
+      "id": "Eff06b46ee10b4eabd0805451bed6d79e54a4d3180b6e1c1cd4403324cdef5af6",
+      "execution_date": "2026-11-24",
+      "split_from": 20.0,
+      "split_to": 1.0,
+      "ticker": "CCTG",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 20.0
+    },
+    {
+      "id": "E76b07782223b64c8581a59dbd5b0c6bf4d861ea7541633e989a6cb0192fc3015",
+      "execution_date": "2026-11-24",
+      "split_from": 25.0,
+      "split_to": 1.0,
+      "ticker": "CODX",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 25.0
+    },
+    {
+      "id": "Ef2c83d37b9a9c012a828e77370deb5cd21cc87a85229995df2e4a865787bdbd9",
+      "execution_date": "2026-11-24",
+      "split_from": 40.0,
+      "split_to": 1.0,
+      "ticker": "GFAI",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 40.0
+    },
+    {
+      "id": "Ea7eacb78c96076fe479251860b2d5001bf6d4d33a18f019a641b1b9d4da40c40",
+      "execution_date": "2026-11-24",
+      "split_from": 1.0,
+      "split_to": 3.0,
+      "ticker": "GRTUF",
+      "adjustment_type": "forward_split",
+      "historical_adjustment_factor": 0.333333
+    },
+    {
+      "id": "E6761edf4cf4932bbcad4582d9626a7be671cef9b5ed0dab0b7069659ad8d920e",
+      "execution_date": "2026-11-24",
+      "split_from": 6.0,
+      "split_to": 1.0,
+      "ticker": "ISPC",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 6.0
+    },
+    {
+      "id": "E9ecbcf072ea89db3f84f873191cb3e4e53d2adac53a4fd44a4711e1591542a29",
+      "execution_date": "2026-11-24",
+      "split_from": 25.0,
+      "split_to": 1.0,
+      "ticker": "JAGX",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 25.0
+    },
+    {
+      "id": "Eff6860d7f17d2ff8303e568956dba4971330a91fdb8b5c37f5193513e204398c",
+      "execution_date": "2026-11-24",
+      "split_from": 75.0,
+      "split_to": 1.0,
+      "ticker": "RBNE",
+      "adjustment_type": "reverse_split",
+      "historical_adjustment_factor": 75.0
     }
   ]
 }

@@ -125,7 +125,7 @@ watchdog 6 使用平台 Observer（macOS 为 FSEvents），只建一个递归 wa
 List完整需求见 [list-design.md](list-design.md)。Workspace V3继续直接维护JSON。内存statuses包含完整当日分类；persistent_workspace供Workspace.save和publish_day共用，落盘时移除机器 Excluded 的成员身份、section 和计算 Tag，Pin 独立保存。Discover/Focus/Hidden的状态和人工顺序沿用现有字段，excluded_at仅属于Hidden。inherit_workspace只继承Focus和有效Hidden；apply_rules统一匹配Tag并生成当天候选归属，保留Focus自动淘汰，非候选淘汰后删除。无需保存历史机器section或未知特征恢复状态。derive_day_view只投影已分类结果及NEW。新section成员置前，同section人工顺序保留。Workspace.reload比较同一持久投影，忽略自身保存引发的文件事件；外部变化由Workbench.workspace_changed同步重建分类并更新行情范围。旧wait/hidden的V2读取迁移仍只在内存。
 
 
-preferences的activeTag为Tag ID或null，tags可为空、最多十个。前端草稿独立，空选择仍可编辑并保存新Tag；点击已选Tag保存null，全部定义仍参与分类。role为setup/earnings/extended/broken/under50/label；负面优先级earnings → broken → extended → under50，Setup顺序决定主section。逐股 Tag 全部由 `apply_rules` 计算。`manual_section_date` 和 `manual_focus_date` 仅当前名单交易日有效。删除或改用途后的人工section回归有效setup/unclassified。写失败恢复原内存，沿用同步保存与单watcher。数据缺失不淘汰Focus。
+preferences 保存名单、排序和最多十个 Tag 定义。活动 Tag 与草稿由 ScanControls 在当前 Scan 会话持有。role 为 setup/earnings/extended/broken/under50/label，负面优先级为 earnings → broken → extended → under50，Setup 顺序决定主 section。逐股 Tag 由 `apply_rules` 计算。`manual_section_date` 和 `manual_focus_date` 仅当前名单交易日有效。删除或改用途后的人工 section 回归有效 setup 或 unclassified。数据缺失不淘汰 Focus。
 
 Workbench.start_background先异步补本地成员feature并分类，再启动正式Focus行情；本地准备失败保留名单、显示错误并继续原行情与Massive准备。新截面成功发布、Tag保存及显式编辑后重评；list_state/GET不写盘、不下载，不增加定时分类。Monitor board只输出Focus，图表统一来自实时MarketService；Scan图表使用本地Massive Daily。HTTP/WS保留watchlist/holdings选择来源隔离；_list_context使用日期与Focus成员变化更新run_id并清WS revision。
 
@@ -182,6 +182,8 @@ List 动作接口：`POST /v1/list`，Content-Type 为 application/json，接受
 Watchlist.handleKey 维护观察名单键盘入口，ScanControls 管理 Tag/Filter、日期与显示偏好。选股导航使用 Symbol 行的键盘焦点，选中行共用已有整行轮廓。行按钮和快捷键通过 actOnTicker/togglePin 共用单只动作。Focus Release 按名单归属路由，Scan/Monitor 复用 move。Delete/Backspace 通过名单焦点与已选图表提醒线分流。mutate 的 advance 参数按 [List 交互](list-interactions.md#自动下一只限定白名单) 调用。提交前保存可见顺序，等待期间阻止本次删除引起的首行候补，成功后 advanceSelection 选后项或末行。用户换股、切 List 或切模式后保留其选择。Page 导航使用已渲染非空 section 的首个 symbol，展开目标。
 
 Watchlist 与 Holdings 共用相邻 Symbol 查找、行聚焦和滚动定位。各名单提供自己的有序主行与图表选择来源。main.ts 根据已消费的方向键设置悬停开关，鼠标 pointermove 或 pointerdown 恢复。悬停使用独立绘制层，按钮在原列宽内显示。
+
+Monitor 上下两卡共用行壳、内容边距和 Symbol 文字起点。Grid 命名列界定价格胶囊，末格对齐铃铛。symbol-row.ts 从可见表头或持仓 Grid 读取最小内容宽度，layout.ts 用各名单宽度约束分隔条。Scan 的分界线按已有 Massive 准备状态切换动画，状态文字与 Scan 导航同排。
 
 前端只有一套 Search 状态（目标 Section、候选、提示与在途 lookup）。/ 和 + 共用入口；Scan全局Search目标为Discover置顶，显式Focus section的+保留目标。Scan查询本地只读SQLite并截断到所选日，Monitor使用static_info。输入后 1 秒延迟只用于 lookup，写文件仍同步立即执行。输入变化/退出会取消等待及 fetch，并以 Search 对象身份忽略迟到结果；Enter 复用正在执行的 lookup。最终 add 仍由后端验证，不能信任前端传来的证券名称。Shift 换序复用 move，目标 index 为移除主动 ticker 后的位置，不新增 swap 接口。
 

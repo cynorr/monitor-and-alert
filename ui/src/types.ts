@@ -39,7 +39,7 @@ export function scanProgress(value: MassiveState) {
     const active = stages.find(([key]) => value[key].status === 'running');
     const progress = active?.[1] ?? (value.running ? 'Preparing scan' : errors.length ? 'Refresh failed' : !value.ready ? 'Scan not ready' : '');
     const text = progress ? progress + ' · ' + value.target_date : '';
-    return { text, error: errors.length > 0, title: errors.join('\n') || text };
+    return { text, running: !!active || value.running, error: errors.length > 0, title: errors.join('\n') || text };
 }
 export type Row = {
     time: number;

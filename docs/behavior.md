@@ -36,7 +36,7 @@ Scan 读取上游 runtime/massive/daily.sqlite3，截至选择日期最近最多
 
 Massive 数据要求、拆股/整数成交量、来源时段与筛选配置统一见 [massive-data.md](massive-data.md)。Longbridge 数据要求统一见 [longbridge-data.md](longbridge-data.md)。读取、指标和图表不再做复权；两源共享格式与计算，数据互不干涉。Daily Symbol右侧可以显示本地Nasdaq目录名称，缺失正常留空，两模式共用。
 
-全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh Scan 补齐并打开最新可用日，完成的步骤跳过，也不重算日期下拉框当前选中的旧日。指定日重算只由 CLI 的 scan --date D 执行；不带 --date 的 scan 命令重算本地库最新完成日。GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读，普通 Refresh 仅生成缺失的最新日截面，但即使准备跳过仍清理人工状态并重新分类。日期下拉框仅显示已生成的日期。
+全市场完成日期由上游提交 metadata.completed_date 发布；不从 MAX(ts) 猜测完成状态。页面 Refresh 补齐并打开最新可用日，完成的步骤跳过，也不重算日期下拉框当前选中的旧日。指定日重算只由 CLI 的 scan --date D 执行；不带 --date 的 scan 命令重算本地库最新完成日。GET和图表选择不生成。内置Massive准备成功后自动生成截面；显式外部SQLite入口仍只读，普通 Refresh 仅生成缺失的最新日截面，但即使准备跳过仍清理人工状态并重新分类。日期下拉框仅显示已生成的日期。
 
 正式服务启动触发一次Massive后台准备，依次完成Daily、split、SQLite和features；已有目标日及匹配行情版本的完整产物则跳过。免费Nasdaq目录由独立脚本维护；缺失/损坏或配置错误先于Massive请求失败，保留旧结果并提示。网络获取按数据要求有界重试；本地构建失败直接报错，派生SQLite删除后在下次运行重建。没有定时轮询。手动脚本与页面Refresh复用同一流程，GET、图表和切页不触发下载；同一时刻仅一份准备任务。
 
@@ -52,7 +52,7 @@ Scan 使用 Discover、Focus、Excluded 三个列表；Focus 跨日保留、两�
 
 Tag 保存条件与用途：Setup用于Discover/Focus分组，Earnings、Extended、Broken和Under-50用于机器排除，Label仅辅助观察；名称不决定用途。数值条件AND、分类选项OR，缺失值不匹配，Any不排除缺失。逐股 Tag 由保存的条件计算，一只股票可匹配多个。按 Setup 定义顺序选主 section，未匹配归入 Unclassified。
 
-Tag 选择可为空，点击已选 Tag 再次取消；空选择不应用保存 Tag 筛选，全部定义仍参与自动分类。
+Tag 选择和条件草稿只改变当前 Scan 的显示，切出 Scan 即清空。已保存的 Tag 定义参与自动分类并提供行内标记。
 
 Tag 图案与颜色独立保存，只影响展示；改名保留已有图案绑定。编辑外观草稿继续使用已计算的匹配结果，只有修改条件才进入条件预览，不因调颜色改变名单归属或订阅。
 

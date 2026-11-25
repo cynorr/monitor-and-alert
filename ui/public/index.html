@@ -54,17 +54,19 @@
   </article>
   <div class="divider" id="divider-1" role="separator" aria-orientation="vertical" aria-label="Resize Intraday and watchlist" tabindex="0"></div>
   <aside class="watchlist" aria-label="Watchlist">
+    <div class="list-top list-card">
     <div class="list-header">
     <div class="list-heading"><div class="mode-switch" role="group" aria-label="Application mode"><button data-app-mode="scan">Scan</button><button data-app-mode="monitor" class="active">Monitor</button></div><span id="symbol-count" class="count-badge"></span><span id="simulation" class="pill" hidden title="Synthetic data. No broker connection.">SIM</span><span id="mock-data" class="pill" hidden title="Synthetic daily bars">MOCK</span><div class="market-clock"><time class="clock"></time></div></div>
     <input id="search" type="search" placeholder="Search" aria-label="Search ticker" aria-keyshortcuts="/" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
-    <div id="list-tools" class="list-tools" hidden><button id="filter-toggle" aria-expanded="false" aria-controls="filter-editor">Filters <span id="filter-count"></span></button><div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div></div><button id="tag-add" class="add-button" aria-label="Create Tag">+</button></div>
-    </div>
-    <div id="scan-progress" class="scan-progress" role="status" hidden></div>
-    <section id="scan-controls" class="scan-controls" hidden aria-label="List filters and Scan controls">
-      <div id="scan-navigation" class="scan-navigation">
+      <div id="scan-navigation" class="scan-navigation" hidden>
         <div id="scan-lists" class="scan-pills" role="group" aria-label="Scan list"><button data-list="discover">Discover</button><button data-list="focus">Focus</button><button data-list="excluded">Excluded</button></div>
-        <div class="scan-date-controls"><select id="scan-date" aria-label="Scan trading date"></select><button id="scan-refresh">Refresh Scan</button></div>
+        <div id="scan-progress" class="scan-progress" role="status" hidden></div>
+        <div class="scan-date-controls"><span class="list-select"><select id="scan-date" aria-label="Scan trading date"></select></span><button id="scan-refresh">Refresh</button></div>
       </div>
+      <div id="scan-divider" class="scan-divider" aria-hidden="true"></div>
+    </div>
+    <section id="scan-controls" class="scan-controls" hidden aria-label="Scan filters">
+      <div class="list-tools"><button id="filter-toggle" aria-expanded="false" aria-controls="filter-editor">Filters <span id="filter-count"></span></button><div class="tag-row"><div id="scan-tags" class="scan-pills" aria-label="Saved Tags"></div></div><button id="tag-add" class="add-button" aria-label="Create Tag">+</button></div>
       <section id="filter-editor" aria-label="Tag and Filter editor" hidden><span id="tag-unsaved" hidden>Unsaved</span>
         <div class="tag-editor"><input id="tag-name" aria-label="Tag name" maxlength="24" placeholder="Tag name"><select id="tag-role" aria-label="Tag role"><option value="setup">Setup</option><option value="earnings">In 14 Days</option><option value="extended">Extended</option><option value="broken">Broken</option><option value="under50">Under-50</option><option value="label">Label</option></select><button id="tag-save">Save</button><button id="tag-cancel">Cancel</button><button id="tag-delete">Delete Tag</button><button id="tag-discard" hidden>Discard changes and continue</button><button id="clear-filters">Clear all</button></div>
         <div class="tag-appearance-editor" aria-label="Tag appearance">
@@ -81,10 +83,10 @@
     <div id="workspace-error" class="list-message" role="alert"></div>
     <div id="list-notice" class="list-message" role="status"></div>
     <section id="schwab-holdings" class="holdings-list" aria-label="Schwab holdings and orders" hidden>
-      <div class="holdings-heading"><button id="schwab-toggle" type="button" aria-expanded="true"><span id="schwab-arrow">▾</span>Holdings <span id="schwab-count" class="count-badge"></span></button><div class="holdings-meta"><time id="schwab-updated"></time><b id="schwab-account" aria-label="Schwab account value"></b></div></div>
+      <div class="holdings-heading"><button id="schwab-toggle" type="button" aria-expanded="true"><span id="schwab-arrow" aria-hidden="true">▾</span>Holdings <span id="schwab-count" class="count-badge"></span></button><div class="holdings-meta"><time id="schwab-updated"></time><b id="schwab-account" aria-label="Schwab account value"></b></div></div>
       <div id="schwab-content">
-        <div class="holdings-scroll">
-          <div id="schwab-grid" class="holdings-grid" role="table" aria-label="Schwab holdings and orders">
+        <div class="holdings-content">
+          <div id="schwab-grid" class="holdings-grid list-content" role="table" aria-label="Schwab holdings and orders">
             <div id="schwab-head" class="list-grid-row list-columns" role="row"></div>
             <div id="schwab-rows" class="holdings-rows" role="rowgroup"></div>
             <div id="schwab-total" class="list-grid-row holding-total"></div>
@@ -93,9 +95,14 @@
         <div id="schwab-empty" class="list-message"></div>
       </div>
     </section>
-    <div class="list-body">
-      <div id="list-columns" class="list-grid-row list-columns"></div>
-      <nav id="symbols" aria-label="Symbols"></nav>
+    </div>
+    <div class="list-card list-main">
+      <div id="list-body" class="list-body">
+        <div id="list-content" class="list-content">
+          <div id="list-columns" class="list-grid-row list-columns"></div>
+          <nav id="symbols" aria-label="Symbols"></nav>
+        </div>
+      </div>
     </div>
   </aside>
 </main>

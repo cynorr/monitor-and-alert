@@ -18,11 +18,11 @@ Scan 与 Monitor 共用一份名单。目标是减少每日肉眼重复筛选，
 
 同一 symbol 在三个列表中只有一个归属。Holdings 独立，不改变名单归属；同 ticker 底层行情去重。常规名单前端屏蔽 Holdings 已有 ticker，后端成员与规则结果保留。
 
-Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为当日人工 Discover，并加入已有 Pinned 区首位、选中日 K。人工 Discover 在普通重新分类和同日重启后保留，点击 Refresh Scan 后清除人工保留资格，Setup/负面 Tag 如实计算，在显式 Refresh 前不因候选门槛或负面规则被移走；不伪造 candidate 或市场排名。新完成日或显式 Refresh 清理时删除人工 Discover 与全部 Pin，无跨日保留要求；需要长期关注时使用现有移入 Focus 操作。已有 Discover 搜索结果可置顶并选中，已有 Focus/Excluded 只选中、不改归属；Focus section 的显式新增保留原用途。
+Scan 全局搜索使用本地 Massive bars，确认新股后复用 add 保存为当日人工 Discover，并加入已有 Pinned 区首位、选中日 K。人工 Discover 在普通重新分类和同日重启后保留，点击 Refresh 后清除人工保留资格，Setup/负面 Tag 如实计算，在显式 Refresh 前不因候选门槛或负面规则被移走；不伪造 candidate 或市场排名。新完成日或显式 Refresh 清理时删除人工 Discover 与全部 Pin，无跨日保留要求；需要长期关注时使用现有移入 Focus 操作。已有 Discover 搜索结果可置顶并选中，已有 Focus/Excluded 只选中、不改归属；Focus section 的显式新增保留原用途。
 
 ## 每日规则
 
-新完成交易日只继承 Focus 与未满七个自然日的 Hidden。 用户点击 Refresh Scan 使用同一清理与分类逻辑：只保留这些成员作为输入，清除人工 Discover、人工 Focus 当日豁免、人工主 section、全部 Pin 与人工排序，随后重新匹配；Focus 仍接受下表自动淘汰。Hidden 保留原 excluded_at，不重新计时。已有数据准备状态继续复用，不重复下载或构建；保存的 Tag 定义与显示 Filter 不清除。同日 Refresh 不更改交易日期或将当天新成员伪装成跨日 carried。Discover 与自动 Excluded 每日按当天 candidate 和保存的 Tag 规则生成，不维护跨日机器排除成员名单。完整 feature 和 Growth 范围只在 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 维护。
+新完成交易日只继承 Focus 与未满七个自然日的 Hidden。 用户点击 Refresh 使用同一清理与分类逻辑：只保留这些成员作为输入，清除人工 Discover、人工 Focus 当日豁免、人工主 section、全部 Pin 与人工排序，随后重新匹配；Focus 仍接受下表自动淘汰。Hidden 保留原 excluded_at，不重新计时。已有数据准备状态继续复用，不重复下载或构建；保存的 Tag 定义与显示 Filter 不清除。同日 Refresh 不更改交易日期或将当天新成员伪装成跨日 carried。Discover 与自动 Excluded 每日按当天 candidate 和保存的 Tag 规则生成，不维护跨日机器排除成员名单。完整 feature 和 Growth 范围只在 [Massive 完整特征范围](massive-data.md#名单完整特征范围) 维护。
 
 | 输入 | 完成日判断 | 最终归属 |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ Tag 的用途固定为 Setup、Earnings、Extended、Broken、Under-50 或 Label
 
 Section 支持折叠、内部排序和跨 section 拖拽。新进入 section 的股票放到队首，同 section 内保留人工顺序。允许盘中操作改变 section；本次不新增基于实时 Quote 的形态规则。
 
-Tag 选择是可空的显示偏好，点击已选 Tag 取消选择；未选时不应用保存 Tag 筛选。可保存零到十个命名 Tag，筛选草稿可独立编辑并保存为新 Tag。取消选择不删除定义，不影响每日自动分类。
+Tag 选择和筛选草稿只在当前 Scan 会话生效，切出 Scan 即清空。点击已选 Tag 可取消选择。可保存零到十个命名 Tag 定义，定义参与每日自动分类。筛选和编辑见 [List UI](ui.md#tag-与-filter-编辑)。
 
 Filter 仅改变显示，不移动名单、不改变实时订阅。自动分类与显示筛选使用同一字段目录和相同条件含义。
 

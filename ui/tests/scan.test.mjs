@@ -59,16 +59,19 @@ test('scan progress hides Ready and shows only target-date preparation or errors
         daily: { ...stage }, splits: { ...stage }, bars: { ...stage, input_revision: 'old' },
         features: { ...stage, date: '2026-10-02', input_revision: 'old', updated_at: '2026-10-02T23:01:02+00:00' } };
     assert.equal(scanProgress(state).text, '');
+    assert.equal(scanProgress(state).running, false);
     state.ready = false;
     state.features.date = '2026-10-01';
     assert.equal(scanProgress(state).text, 'Scan not ready · 2026-10-02');
     state.running = true;
     state.daily.status = 'running';
     assert.equal(scanProgress(state).text, 'Downloading daily · 2026-10-02');
+    assert.equal(scanProgress(state).running, true);
     state.running = false;
     state.daily.status = 'error';
     state.daily.error = 'daily: Massive HTTP 503';
     assert.ok(scanProgress(state).error);
+    assert.equal(scanProgress(state).running, false);
     assert.equal(scanProgress(state).text, 'Refresh failed · 2026-10-02');
     assert.equal(scanProgress(state).title, state.daily.error);
     state.daily.error = null;
@@ -181,14 +184,44 @@ test('appearance edits save independently, survive renaming, and preserve comput
     assert.equal(tagAppearance(result).icon, 'surf');
     assert.equal(saved.appearance.color, '#e4b400');
     const controls = Object.create(ScanControls.prototype);
-    controls.enabled = false;
+    controls.enabled = true;
+    controls.activeTag = saved.id;
     controls.holdingSymbols = new Set();
-    controls.preferences = { activeTag: saved.id, tags: [saved] };
+    controls.preferences = { activeList: 'focus', sort: 'default', tags: [saved] };
     controls.draft = draft;
     const row = { status: 'focus', tags: ['surf'] };
     assert.deepEqual(controls.visible([row]), [row]);
     draft.filters.below_days.max = 2;
     assert.deepEqual(controls.visible([row]), []);
+});
+
+test('Scan selection and an open draft end when switching modes', () => {
+    const controls = Object.create(ScanControls.prototype);
+    controls.render = () => {};
+    controls.session = 0;
+    const date = { options: [], value: '' };
+    const filter = {}, navigation = {};
+    const nodes = { 'scan-controls': filter, 'scan-navigation': navigation, 'scan-date': date };
+    const data = { board: [{ symbol: 'VISIBLE.US', status: 'focus', adr20: 5 }], dates: [],
+        preferences: { activeList: 'focus', sort: 'default', tags: [{ id: 'tag', name: 'Tag', filters: { adr20: { min: 10 } } }] } };
+    globalThis.document = { getElementById: id => nodes[id] };
+    try {
+        controls.update({ ...data, app_mode: 'scan' });
+        controls.activeTag = 'tag'; controls.resetDraft();
+        controls.draft.filters.adr20.min = 11;
+        controls.editorOpen = true;
+        assert.deepEqual(controls.visible(data.board), []);
+        controls.update({ ...data, app_mode: 'monitor' });
+        assert.equal(filter.hidden, true);
+        assert.equal(navigation.hidden, true);
+        assert.deepEqual(controls.visible(data.board), data.board);
+        controls.update({ ...data, app_mode: 'scan' });
+        assert.equal(controls.activeTag, null);
+        assert.equal(controls.editorOpen, false);
+        assert.deepEqual(controls.draft.filters, {});
+        assert.equal(controls.preferences.tags.length, 1);
+        assert.deepEqual(controls.visible(data.board), data.board);
+    } finally { delete globalThis.document; }
 });
 
 test('the Tag track is shared by both modes and MDV20 uses rounded compact amounts', () => {

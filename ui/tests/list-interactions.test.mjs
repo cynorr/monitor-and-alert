@@ -128,9 +128,9 @@ test('unread Focus navigation shares section order, includes folded and filtered
     const list = listFixture(), choices = [], scrolls = [];
     const scan = Object.create(ScanControls.prototype);
     const tags = ['surf', 'bounce'].map(id => ({ id, name: id, role: 'setup', filters: {} }));
-    Object.assign(scan, { enabled: true, holdingSymbols: new Set(['HELD.US']), preferences: { activeList: 'discover', activeTag: 'surf', sort: 'default', tags },
+    Object.assign(scan, { enabled: true, activeTag: 'surf', holdingSymbols: new Set(['HELD.US']), preferences: { activeList: 'discover', sort: 'default', tags },
         draft: { id: 'surf', filters: { adr20: { min: 99 } } }, useAssignedTags: () => true });
-    const draft = scan.draft, preferences = structuredClone(scan.preferences);
+    const draft = scan.draft, activeTag = scan.activeTag;
     scan.render = () => {};
     scan.persist = async () => {};
     list.scan = scan;
@@ -146,7 +146,7 @@ test('unread Focus navigation shares section order, includes folded and filtered
     assert.deepEqual(choices, ['PIN.US', 'UP.US', 'NORMAL.US']);
     assert.deepEqual(scrolls, ['PIN']);
     assert.equal(scan.activeList, 'focus');
-    assert.equal(scan.preferences.activeTag, preferences.activeTag);
+    assert.equal(scan.activeTag, activeTag);
     assert.equal(scan.draft, draft);
     assert.equal(list.collapsed.size, 0);
     assert.ok(list.attention.unread.has('HELD.US') && list.attention.unread.has('OTHER.US'));

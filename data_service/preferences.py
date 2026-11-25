@@ -5,7 +5,7 @@ from pathlib import Path
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'ui/src/filter-catalog.json'
 CATALOG = json.loads(CATALOG_PATH.read_text())
-INITIAL_PREFERENCES = {'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': []}
+INITIAL_PREFERENCES = {'activeList': 'discover', 'sort': 'default', 'tags': []}
 APPEARANCE_KEYS = {'icon', 'color', 'background', 'backgroundColor'}
 TAG_ICONS = {'surf', 'bounce', 'prior-run', 'orderly-pullback', 'extended', 'broken', 'under50', 'label'}
 
@@ -46,6 +46,5 @@ def validate_preferences(value):
         tag['name'] = name
         if 'appearance' in tag:
             validate_appearance(tag['appearance'])
-    if value['activeTag'] is not None and value['activeTag'] not in ids:
-        raise ValueError('Active Tag must exist')
+    value.pop('activeTag', None)
     return value

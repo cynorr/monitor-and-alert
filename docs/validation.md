@@ -1,5 +1,23 @@
 # 验证记录
 
+## 2026-11-25 · Monitor Focus 表头留白
+
+本机 macOS 正式 Monitor 页面实测 Focus 表头距卡片顶部 12 px，表头高度 24 px，仍为吸顶布局。`git diff --check` 通过。本轮浏览器验证覆盖 Monitor。
+
+## 2026-11-25 · Holdings 标题与名单工具栏
+
+本机 macOS 使用正式 Monitor 和 Scan 的真实数据验证。Holdings 展开和折叠时，标题在箭头右侧 5 px，账户净值完整可见，折叠后标题栏下方 12 px。Focus 使用 Symbol 列头旁的黑色计数，列头文字和行文字保持对齐。Scan 日期、未选中 Tag、折叠的 Filters 和计数均为 11 px 中性灰，展开 Filters 后文字及计数为黑色。工具栏下方留 6 px，两个模式按钮宽度一致。验证后恢复 Monitor 和原折叠状态。
+
+TypeScript 构建、25 项前端定向用例和 `git diff --check` 通过。验证只切换页面模式与折叠显示，未执行交易操作。
+
+## 2026-11-25 · Monitor 双卡与 Scan 准备进度
+
+本机 macOS 用正式服务约美东 02:28 的真实名单与 Schwab 数据核对。在默认、加宽及窄窗口下，Holdings 和 Focus 的行边界、ticker 与铃铛水平位置对齐，名单内无横向溢出。展开真实订单时 Holdings 按内容增高。Scan 的日期下拉透明，与 RFL 共用小 V。切出 Scan 后 Monitor 显示完整 Focus，切回时活动 Tag 已清除，8 个定义仍在。
+
+按当前 Scan 模式重启后，Longbridge 恢复 CONNECTED，Schwab 认证有效，偏好接口只返回名单、排序与 Tag 定义。真实 Massive 处于 Building daily bars 时，阶段文字在名单按钮与日期之间，1 px 原色进度线与左图分界高度差 0 px，轨道透明。空闲实线也在浏览器核对。验证使用盘前数据，未观察到 Regular 紧急颜色和未读波浪同时触发。
+
+TypeScript 构建、39 项前端定向用例与 `git diff --check` 通过。Scan 后端测试 10 项通过，旧有名单继承和分类断言共 3 项失败，用修改前的偏好实现复现相同结果。交易路径只读验证，未提交、修改或撤销订单。
+
 ## 2026-11-25 · Holdings 紧凑列宽
 
 本机 Safari 使用正式服务的真实 Regular 持仓及 Buy、Entry、Stop 明细。在 680 px 和 900 px 面板下，表头、主行、展开明细、Total 逐列对齐，数据列坐标一致。列间距为 14 px，价格区到量能列仍为 2 px，增宽的 220 px 全部由操作列吸收。铃铛与 Focus 中心偏差至多 0.02 px。用隔离预览中的 `99,999` 和 `399,996` 核对，最小宽度约 666 px。TypeScript 构建、Holdings 列配置用例和 `git diff --check` 通过。浏览器实测覆盖 Regular 布局。

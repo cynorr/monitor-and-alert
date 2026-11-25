@@ -10,6 +10,7 @@ import pytest
 from data_service import scan
 from data_service.calendar import TradingCalendar
 from data_service.massive.settings import load_config
+from data_service.preferences import validate_preferences
 from data_service.storage import BAR_SCHEMA, atomic_json
 from data_service.additional_info.symbol_directory import make_snapshot
 from data_service.workbench import Workbench
@@ -184,11 +185,17 @@ def test_publish_invalid_preferences_keeps_existing_day(tmp_path):
     folder = days / snapshot['date']
     before = {name: (folder / name).read_bytes() for name in ('workspace.json', 'scan.json')}
     (tmp_path / 'preferences.json').write_text(json.dumps({
-        'activeList': 'discover', 'sort': 'default', 'activeTag': None, 'tags': [{'id': str(i), 'name': str(i), 'filters': {}} for i in range(11)],
+        'activeList': 'discover', 'sort': 'default', 'tags': [{'id': str(i), 'name': str(i), 'filters': {}} for i in range(11)],
     }))
     with pytest.raises(ValueError, match='tags'):
         scan.publish_day(days, snapshot)
     assert before == {name: (folder / name).read_bytes() for name in before}
+
+
+def test_preferences_drop_legacy_scan_filter_and_keep_tag_definitions():
+    tag = {'id': 'surf', 'name': 'Surf', 'role': 'setup', 'filters': {'adr20': {'min': 5}}}
+    expected = {'activeList': 'focus', 'sort': 'rfl1m', 'tags': [tag]}
+    assert validate_preferences({**expected, 'activeTag': 'missing-old-selection'}) == expected
 
 
 def test_invalid_non_candidate_is_still_rejected(tmp_path):

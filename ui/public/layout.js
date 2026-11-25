@@ -7,12 +7,12 @@ const DIVIDER_WIDTH = 12;
 const WORKSPACE_PADDING = 20;
 export function initLayout() {
     const root = $('workspace');
-    let listRatio = null, holdingsWidth = LIST_MIN_WIDTH;
+    let listRatio = null, watchlistWidth = 0, holdingsWidth = 0;
     function widths() {
         const charts = Array.from(root.querySelectorAll('.chart-panel')).filter(panel => !panel.hidden);
         const count = charts.length;
         const chartMin = Math.max(CHART_MIN_WIDTH, ...charts.map(panel => Number(panel.dataset.minWidth ?? CHART_MIN_WIDTH)));
-        const listMin = Math.max(LIST_MIN_WIDTH, count > 1 ? holdingsWidth : 0);
+        const listMin = Math.max(LIST_MIN_WIDTH, watchlistWidth, count > 1 ? holdingsWidth : 0);
         const minimum = chartMin * count + listMin;
         const available = Math.max(minimum, root.clientWidth - WORKSPACE_PADDING - DIVIDER_WIDTH * count);
         const list = Math.max(listMin, Math.min(available * (listRatio ?? LIST_WIDTH_RATIO), available - chartMin * count));
@@ -54,6 +54,11 @@ export function initLayout() {
             listRatio = null;
             $('intraday-panel').dataset.minWidth = String(mode === 'monitor' ? 540 : CHART_MIN_WIDTH);
             handle.setAttribute('aria-label', 'Resize charts and watchlist');
+            paint();
+        }, setWatchlistWidth(width) {
+            if (watchlistWidth === width)
+                return;
+            watchlistWidth = width;
             paint();
         }, setHoldingsWidth(width) {
             if (holdingsWidth === width)

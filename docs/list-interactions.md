@@ -70,11 +70,11 @@ active symbol 指当前黑色实线边框选中、图表正在展示的观察名
 - 操作未选中的行、失败和无实际变化不自动跳转。自动候补选图与其他选图方式一样，标记该symbol的Alert已读。
 - 组内移动、拖动、Filter、折叠、Refresh、外部更新、搜索新增与 Alert 引起的入选不接入此流程，保持既有行为。Search 仍选中搜索目标，Alert 创建后仍停留该 symbol。
 
-## Refresh Scan
+## Refresh
 
 复用已有数据准备流程；Ready 数据跳过下载与特征构建，但每次用户点击 Refresh 都执行与新交易日首次分类共用的人工状态清理，再按保存的规则重新分类并打开最新可用日。
 
-保留范围、Focus 自动淘汰与 Hidden 到期规则只在 [List 每日规则](list-design.md#每日规则) 维护。普通报价更新、切页、浏览器刷新和服务重启不等同于点击 Refresh Scan。Refresh 引起的选择变化保持原实现，不接入自动下一只。
+保留范围、Focus 自动淘汰与 Hidden 到期规则只在 [List 每日规则](list-design.md#每日规则) 维护。普通报价更新、切页、浏览器刷新和服务重启不等同于点击 Refresh。Refresh 引起的选择变化保持原实现，不接入自动下一只。
 
 ## Search 与 Add
 

@@ -1,5 +1,5 @@
 import { $, money } from './types.js';
-import { adjacentSymbol, listCells, listHeader, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow } from './symbol-row.js';
+import { adjacentSymbol, listCells, listHeader, listMinimumWidth, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow } from './symbol-row.js';
 import { attentionState, autoAlertButton } from './attention.js';
 import { compareRank } from './intraday-state.js';
 import { numeric, openPercent, entryAmount, holdingTag, holdingDetails } from './schwab-data.js';
@@ -164,12 +164,7 @@ export class SchwabHoldings {
         if (signature === this.widthSignature)
             return;
         this.widthSignature = signature;
-        const scroll = this.grid.parentElement, { paddingLeft, paddingRight } = getComputedStyle(scroll);
-        // Read intrinsic width on the existing grid before restoring its assigned width.
-        this.grid.style.width = 'min-content';
-        const minimum = Math.ceil(this.grid.getBoundingClientRect().width + parseFloat(paddingLeft) + parseFloat(paddingRight));
-        this.grid.style.removeProperty('width');
-        this.minimumWidth = Math.max(this.minimumWidth, minimum);
+        this.minimumWidth = Math.max(this.minimumWidth, listMinimumWidth(this.grid));
         this.width(this.minimumWidth);
     }
     mainRow(item) {

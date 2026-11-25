@@ -21,8 +21,8 @@
 
 - Scan、Monitor Focus 和 Holdings 共用 `symbol-row.ts` 的 Grid 行、列和基础选股导航。Symbol 行的悬停、选中、价格／量能分区与未读波浪只按 [Symbol row template](docs/ui.md#symbol-row-template)。配色见 [Color palette](docs/ui.md#color-palette)，复用 `ui/src/palette.ts`。提醒复用 `attention.ts` 与 `AlertEngine.notify`，未读只保留最新一条，按来源处理暂停与 Focus ADR 失效，禁止叠加或保存通知历史。实时价格底色独立于边缘波浪。
 
-- Focus 与 Holdings 共用盘中字段显示。纯 Entry 的候选监控语义只在 [Intraday State](docs/intraday-state.md) 维护。Holdings 提供列配置、主行标记、订单明细和 Total，同一区域共享列轨道，详见 [Schwab 持仓 UI](docs/schwab.md)。
+- Focus 与 Holdings 共用盘中字段、行边界和最小宽度规则，各自平铺列轨道。布局见 [UI](docs/ui.md#list-ui)，持仓明细与 Total 见 [Schwab 持仓 UI](docs/schwab.md)。纯 Entry 的候选监控语义只在 [Intraday State](docs/intraday-state.md) 维护。
 
-- List 的逐股 Tag 由规则计算。Scan 与 Monitor 共用列宽和行内图标规则，前端美元金额格式见 [UI](docs/ui.md#金额格式)。
+- List 的逐股 Tag 由规则计算。Scan 与 Monitor 共用行内图标，Tag 筛选与草稿只在当前 Scan 会话内使用，切出即清空。美元金额格式见 [UI](docs/ui.md#金额格式)。
 
 - 全局Scan基础门槛只维护于`config/scan.json`，MDV20共用turnover中位数算子；Tag不含Market基础条件。后端凭证统一使用本机`config/credentials.json`，不进入Git或UI。小型展示阈值就近维护为前端常量；规则和职责见对应唯一文档。

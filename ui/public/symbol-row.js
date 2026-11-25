@@ -4,6 +4,14 @@ export function setListColumns(host, columns, priceEnd) {
     host.style.setProperty('--list-columns', columns.map(({ field, width }) => `[col-${field}] ${width}`).join(' '));
     host.style.setProperty('--price-end', `col-${priceEnd}`);
 }
+export function listMinimumWidth(grid, content = grid) {
+    const viewport = content.parentElement;
+    const { marginLeft, marginRight } = getComputedStyle(content);
+    grid.style.width = 'min-content';
+    const width = grid.getBoundingClientRect().width;
+    grid.style.removeProperty('width');
+    return Math.ceil(width + parseFloat(marginLeft) + parseFloat(marginRight) + viewport.offsetWidth - viewport.clientWidth);
+}
 function listCell(field) {
     const cell = document.createElement('div');
     cell.dataset.field = field;

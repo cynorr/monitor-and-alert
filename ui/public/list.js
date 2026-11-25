@@ -3,12 +3,13 @@ import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey } from './board.js';
 import { attentionState, autoAlertButton } from './attention.js';
-import { adjacentSymbol, listHeader, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow } from './symbol-row.js';
+import { adjacentSymbol, listHeader, listMinimumWidth, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow } from './symbol-row.js';
 import { rankedRows } from './intraday-state.js';
 export class Watchlist {
     onSelect;
     onUpdate;
     toggleAutoPause;
+    width;
     scan;
     tickers = [];
     selected = '';
@@ -29,6 +30,7 @@ export class Watchlist {
     suppressClick = false;
     regularSession = false;
     columnsKey = '';
+    focusCount = countBadge(0);
     intraday = { enabled: false, symbols: {} };
     attention = attentionState();
     get stateVisible() { return this.intraday.enabled && this.regularSession && (!this.scan?.enabled || this.scan.activeList === 'focus'); }
@@ -37,10 +39,11 @@ export class Watchlist {
     canPause(symbol) {
         return this.editable && this.attention.eligible.has(symbol) && this.tickers.some(t => t.symbol === symbol && t.status === 'focus');
     }
-    constructor(onSelect, onUpdate, toggleAutoPause) {
+    constructor(onSelect, onUpdate, toggleAutoPause, width) {
         this.onSelect = onSelect;
         this.onUpdate = onUpdate;
         this.toggleAutoPause = toggleAutoPause;
+        this.width = width;
         this.input.addEventListener('focus', () => { if (!this.search)
             this.beginSearch(); });
         this.input.addEventListener('input', () => this.changeSearch());
@@ -109,7 +112,7 @@ export class Watchlist {
                 row?.classList.add('dragging');
             }
             event.preventDefault();
-            const scroller = $('symbols').parentElement;
+            const scroller = $('list-body');
             const bounds = scroller.getBoundingClientRect();
             if (event.clientY < bounds.top + $('list-columns').offsetHeight + 24)
                 scroller.scrollTop -= 18;
@@ -602,19 +605,26 @@ export class Watchlist {
         const sections = this.sections(original);
         const visible = sections.flatMap(section => section.items);
         $('symbol-count').textContent = String(visible.length);
+        this.focusCount.textContent = String(visible.length);
         const scan = this.scan?.enabled === true;
         const columns = listColumns(scan, this.regularSession, this.stateVisible);
         const columnsKey = JSON.stringify(columns);
         const previousColumnsKey = this.columnsKey;
         if (columnsKey !== this.columnsKey) {
             this.columnsKey = columnsKey;
-            setListColumns(document.querySelector('.watchlist'), columns, this.priceEnd);
-            listHeader($('list-columns'), columns, (cell, column) => {
+            const content = $('list-content'), header = $('list-columns');
+            setListColumns(content, columns, this.priceEnd);
+            listHeader(header, columns, (cell, column) => {
                 if (column.field === 'growth') {
-                    cell.className = 'sort-column';
+                    cell.className = 'list-select';
                     cell.append(this.scan.sortControl);
                 }
+                else if (!scan && column.field === 'symbol') {
+                    cell.append(' ', this.focusCount);
+                }
             });
+            header.hidden = false;
+            this.width(listMinimumWidth(header, content));
         }
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.scan?.isHolding(candidate.ticker + '.US') && !this.tickers.some(t => t.ticker === candidate.ticker);
@@ -626,7 +636,7 @@ export class Watchlist {
         const key = JSON.stringify([visible.map(t => [this.rowKey(t), extracted.has(t.symbol)]), columnsKey,
             [...this.collapsed], this.editable, tags, this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
-            const scroller = $('symbols').parentElement, top = scroller.scrollTop, left = scroller.scrollLeft;
+            const scroller = $('list-body'), top = scroller.scrollTop;
             const focused = document.activeElement;
             const oldRows = new Map(this.rows), reuse = this.key && columnsKey === previousColumnsKey;
             this.key = key;
@@ -695,7 +705,6 @@ export class Watchlist {
             if (focused?.isConnected)
                 focused.focus({ preventScroll: true });
             scroller.scrollTop = top;
-            scroller.scrollLeft = left;
         }
         const result = $('symbols').querySelector('[data-candidate]');
         if (result)

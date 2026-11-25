@@ -20,7 +20,7 @@ let socket: WebSocket | null = null;
 let reconnectTimer: number | undefined, lastMessage = 0, reconnectDelay = 1000, currentView: View | null = null;
 let readyKey = '', readySince = 0, lastStage = '';
 let selectionSource: 'watchlist' | 'holdings' = 'watchlist', holdingKey = '';
-const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList, toggleAutoPause);
+const watchlist = new Watchlist(next => select(next, timeframe, 'watchlist', ''), applyList, toggleAutoPause, layout.setWatchlistWidth);
 let appMode: 'scan' | 'monitor' = 'monitor', scanDate = '', modePending = false;
 const trade = new TradeController([daily, intraday], () => appMode);
 const schwab = new SchwabHoldings((next, key) => select(next, timeframe, 'holdings', key), () => appMode === 'monitor' && selectionSource === 'holdings', id => void trade.cancel(id), width => { if (appMode === 'monitor') layout.setHoldingsWidth(width); }, toggleAutoPause);
@@ -49,15 +49,13 @@ function applyList(data: ListState) {
         button.disabled = modePending || data.mode === 'simulation';
     });
     $('mock-data').hidden = !data.mock;
-    const progress = $('scan-progress');
-    progress.hidden = !data.massive;
-    if (data.massive) {
-        const status = scanProgress(data.massive);
-        progress.hidden = !status.text;
-        progress.textContent = status.text;
-        progress.title = status.title;
-        progress.classList.toggle('error', status.error);
-    }
+    $('symbol-count').hidden = appMode === 'monitor';
+    const progress = $('scan-progress'), status = appMode === 'scan' && data.massive ? scanProgress(data.massive) : null;
+    progress.hidden = !status?.text;
+    if (progress.textContent !== (status?.text ?? '')) progress.textContent = status?.text ?? '';
+    progress.title = status?.title ?? '';
+    progress.classList.toggle('error', !!status?.error);
+    $('scan-divider').dataset.running = String(!!status?.running);
     scan.update(data);
     if (changed) { symbol = ''; watchlist.selected = ''; selectionSource = 'watchlist'; holdingKey = ''; schwab.selected = ''; ++epoch; }
     trade.update(data.schwab ?? null);

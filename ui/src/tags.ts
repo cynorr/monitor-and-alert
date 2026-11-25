@@ -7,7 +7,7 @@ export function tagRole(tag: Tag): TagRole {
     const name = tag.name.trim().toLowerCase();
     return name === 'extended' || name === 'broken' ? name : name === 'under-50' ? 'under50' : 'setup';
 }
-export type Preferences = { activeList: string; sort: string; activeTag: string | null; tags: Tag[] };
+export type Preferences = { activeList: string; sort: string; tags: Tag[] };
 export const tagFiltersChanged = (saved: Tag, draft: Tag) => saved.id !== draft.id || JSON.stringify(saved.filters) !== JSON.stringify(draft.filters);
 export const tagChanged = (saved: Tag, draft: Tag) => saved.name !== draft.name || tagRole(saved) !== tagRole(draft) || tagFiltersChanged(saved, draft) ||
     JSON.stringify(tagAppearance(saved)) !== JSON.stringify(tagAppearance(draft));

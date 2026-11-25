@@ -137,7 +137,7 @@ Alert 在 Scan/Monitor 的创建、选择、改价、删除与跨图同步只在
 
 ## Trade ticket
 
-Monitor uses Daily/Intraday and public chart APIs. Its aligned chart/List header is 192px high, with a 540px Intraday minimum; Scan stays at 120px. layout.ts owns panel sizing. Line appearance is in [UI / Trade 图形](ui.md#trade-图形), and strategy/Send semantics only in [Schwab 账户与交易](schwab.md).
+Monitor uses Daily/Intraday and public chart APIs. Both chart headers are 192px high, with a 540px Intraday minimum. Scan's chart and List divider align at 120px. layout.ts owns panel sizing. See [UI / Trade 图形](ui.md#trade-图形) for line appearance and [Schwab 账户与交易](schwab.md) for strategy and Send semantics.
 
 The ticket keeps its 12px right inset and uses max-content width determined only by the strategy row plus its reserved commit space. Quantity and preview use inline-size containment so changing numbers cannot affect ticket width. Quantity (34px), total/risk (34px) and actions (35px) form a bottom-aligned grid with row-gap:12px. Increasing the gap moves total up by d and quantity up by 2d; actions stay anchored above the header rule. Quotes/feedback are positioned independently. Quantity and total have an inset of half the strategy button height (15px) on both sides of the ticket. The rail therefore widens left to the Buy capsule's straight top-edge start, excluding its left semicircle; its right endpoint still aligns with Send's straight top-edge end. Auto and Send remain absolutely anchored at bottom right.
 

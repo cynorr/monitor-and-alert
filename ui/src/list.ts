@@ -6,7 +6,7 @@ import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey, type ListSection } from './board.js';
 import { attentionState, autoAlertButton } from './attention.js';
-import { adjacentSymbol, listHeader, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow, type ListColumn } from './symbol-row.js';
+import { adjacentSymbol, listHeader, listMinimumWidth, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow, type ListColumn } from './symbol-row.js';
 import { rankedRows, type IntradayState } from './intraday-state.js';
 
 export type ListState = { schwab?: import('./schwab-data.js').SchwabState | null; trading_enabled?: boolean; type?: string; board: Ticker[]; editable: boolean; mode?: string; app_mode?: 'scan' | 'monitor'; mock?: boolean; date?: string; dates?: string[]; preferences?: Preferences; workspace_error?: string | null; notice?: string; holding_symbols?: string[]; current_regular_session?: boolean; massive?: MassiveState | null; scan_running?: boolean; intraday?: IntradayState };
@@ -35,6 +35,7 @@ export class Watchlist {
     private suppressClick = false;
     private regularSession = false;
     private columnsKey = '';
+    private readonly focusCount = countBadge(0);
     private intraday: IntradayState = { enabled: false, symbols: {} };
     attention = attentionState();
     private get stateVisible() { return this.intraday.enabled && this.regularSession && (!this.scan?.enabled || this.scan.activeList === 'focus'); }
@@ -45,7 +46,7 @@ export class Watchlist {
     }
 
     constructor(private onSelect: (symbol: string) => void, private onUpdate: (data: ListState) => void,
-                private toggleAutoPause: (symbol: string) => void) {
+                private toggleAutoPause: (symbol: string) => void, private width: (value: number) => void) {
         this.input.addEventListener('focus', () => { if (!this.search) this.beginSearch(); });
         this.input.addEventListener('input', () => this.changeSearch());
         $('symbols').addEventListener('click', event => {
@@ -92,7 +93,7 @@ export class Watchlist {
                 row?.classList.add('dragging');
             }
             event.preventDefault();
-            const scroller = $('symbols').parentElement!;
+            const scroller = $('list-body');
             const bounds = scroller.getBoundingClientRect();
             if (event.clientY < bounds.top + $('list-columns').offsetHeight + 24) scroller.scrollTop -= 18;
             if (event.clientY > bounds.bottom - 24) scroller.scrollTop += 18;
@@ -509,19 +510,25 @@ export class Watchlist {
         const sections = this.sections(original);
         const visible = sections.flatMap(section => section.items);
         $('symbol-count').textContent = String(visible.length);
+        this.focusCount.textContent = String(visible.length);
         const scan = this.scan?.enabled === true;
         const columns = listColumns(scan, this.regularSession, this.stateVisible);
         const columnsKey = JSON.stringify(columns);
         const previousColumnsKey = this.columnsKey;
         if (columnsKey !== this.columnsKey) {
             this.columnsKey = columnsKey;
-            setListColumns(document.querySelector<HTMLElement>('.watchlist')!, columns, this.priceEnd);
-            listHeader($('list-columns'), columns, (cell, column) => {
+            const content = $('list-content'), header = $('list-columns');
+            setListColumns(content, columns, this.priceEnd);
+            listHeader(header, columns, (cell, column) => {
                 if (column.field === 'growth') {
-                    cell.className = 'sort-column';
+                    cell.className = 'list-select';
                     cell.append(this.scan!.sortControl);
+                } else if (!scan && column.field === 'symbol') {
+                    cell.append(' ', this.focusCount);
                 }
             });
+            header.hidden = false;
+            this.width(listMinimumWidth(header, content));
         }
         const candidate = this.search?.candidate;
         const showCandidate = candidate && !this.scan?.isHolding(candidate.ticker + '.US') && !this.tickers.some(t => t.ticker === candidate.ticker);
@@ -532,7 +539,7 @@ export class Watchlist {
         const key = JSON.stringify([visible.map(t => [this.rowKey(t), extracted.has(t.symbol)]), columnsKey,
             [...this.collapsed], this.editable, tags, this.search?.section, showCandidate ? candidate : null]);
         if (key !== this.key) {
-            const scroller = $('symbols').parentElement!, top = scroller.scrollTop, left = scroller.scrollLeft;
+            const scroller = $('list-body'), top = scroller.scrollTop;
             const focused = document.activeElement as HTMLElement | null;
             const oldRows = new Map(this.rows), reuse = this.key && columnsKey === previousColumnsKey;
             this.key = key; this.rows.clear();
@@ -575,7 +582,7 @@ export class Watchlist {
                 const empty = document.createElement('div'); empty.className = 'empty-list'; empty.textContent = 'No symbols'; $('symbols').append(empty);
             }
             if (focused?.isConnected) focused.focus({ preventScroll: true });
-            scroller.scrollTop = top; scroller.scrollLeft = left;
+            scroller.scrollTop = top;
         }
         const result = $('symbols').querySelector<HTMLButtonElement>('[data-candidate]');
         if (result) result.disabled = this.busy;
