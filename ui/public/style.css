@@ -193,10 +193,10 @@ button:focus-visible, input:focus-visible, .divider:focus-visible { outline: 2px
 .holdings-content { overflow: hidden; }
 .holdings-grid { display: grid; grid-template-columns: var(--list-columns); column-gap: var(--list-column-gap); font-size: var(--font-row); }
 .holdings-grid :is(.holdings-rows, .list-grid-row) { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; column-gap: inherit; }
-.holdings-grid .list-columns { border-top: 1px solid var(--border); padding-top: 3px; }
+.holdings-grid .list-columns { padding-top: 3px; }
 .holdings-trades { position: absolute; left: 3px; top: 50%; transform: translateY(-50%); width: 10px; padding: 0; font-size: 10px; line-height: 16px; color: #747c87; }
 .holdings-grid .holding-closed > [data-field] { color: #939ca8; }
-.holding-total { border-top: 3px double var(--border); font-weight: 600; padding-top: 8px; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
+.holding-total { border-top: 0.5px solid var(--color-pane-divider); padding-top: 8px; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
 
 /* Scan reuses the Daily panel and watchlist with completed-day data. */
 .mode-switch, .scan-pills { display: flex; gap: 3px; align-items: center; }

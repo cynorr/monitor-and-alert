@@ -49,7 +49,7 @@ export class Panel {
         this.daily = daily;
         this.chart = L.createChart($(id + '-chart'), {
             autoSize: true,
-            layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 12, attributionLogo: false, panes: { separatorColor: '#c6cbd1', separatorHoverColor: '#a8afb8' } },
+            layout: { background: { type: L.ColorType.Solid, color: '#ffffff' }, textColor: '#727b88', fontSize: 12, attributionLogo: false, panes: { separatorColor: palette.paneDivider, separatorHoverColor: '#a8afb8' } },
             grid: { vertLines: { visible: false }, horzLines: { visible: false } },
             rightPriceScale: { borderVisible: false, minimumWidth: 55, scaleMargins: { top: 0.07, bottom: 0.05 } },
             timeScale: { borderColor: '#171b20', timeVisible: !daily, secondsVisible: false, rightOffset: 1, rightBarStaysOnScroll: true, barSpacing: BAR_SPACING, fixLeftEdge: false, lockVisibleTimeRangeOnResize: false, tickMarkFormatter: (t, type) => (daily || type < 3 ? dateFormat : timeFormat).format(dateOf(t)) },

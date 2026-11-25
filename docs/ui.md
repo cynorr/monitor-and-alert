@@ -53,6 +53,7 @@ Focus、活动 Entry 和真实余仓共用 ADR、CumVol 与 LocalVol 显示规�
 | Ink / 黑 | `#000000` | 选中轮廓、Active Alert 线、Overnight 价格标签 |
 | White / 白 | `#ffffff` | 卡片底色、强状态底色上的文字 |
 | Muted / 已触发灰 | `#9ca3af` | Triggered Alert 线与操作控件 |
+| Pane Divider / 分隔线灰 | `#c6cbd1` | Chart pane 分界线和 Holdings Total 上沿 |
 
 “亮蓝”目前就是 Blue，没有独立的第二个高饱和蓝。主红、回撤深红、下跌文字红和下跌柱红是不同用途；讨论改色时使用上表的完整名字。涨跌文字在强蓝/深红状态底色上沿用白字，不能强行保留红绿而降低可读性。用户保存的 Tag 自定义颜色优先于默认值。
 

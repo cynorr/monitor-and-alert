@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-11-25 · Holdings 汇总细线
+
+本机 macOS 正式 Monitor 页面在 2× 像素密度下实测 Total 上沿为 0.5 px，颜色与 Chart pane 分界线一致。TypeScript 构建、7 项 Chart 和 Holdings 定向用例及 `git diff --check` 通过。浏览器验证覆盖展开的 Holdings。
+
+## 2026-11-25 · Holdings 分隔线
+
+本机 macOS 正式 Monitor 页面展开 Holdings 后核对计算样式。表头上沿为 0 px、下沿为 1 px，Total 上沿为 1 px 实线，字重为 400。Focus 表头上方为 12 px。`git diff --check` 通过。本轮验证限于展开状态的显示样式。
+
 ## 2026-11-25 · Monitor Focus 表头留白
 
 本机 macOS 正式 Monitor 页面实测 Focus 表头距卡片顶部 12 px，表头高度 24 px，仍为吸顶布局。`git diff --check` 通过。本轮浏览器验证覆盖 Monitor。
