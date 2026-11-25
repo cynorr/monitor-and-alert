@@ -36,7 +36,7 @@
 | Chg% / Ext | 共用 Longbridge Quote 与完成 Daily 修正基准 |
 | ADR / CumVol / LocalVol | 共用 Intraday State，沿用 Regular 显隐 |
 
-主行顺序为 Symbol、Sold、Net Liq、Days、P/L %、P/L、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。Sold 不显示列名，使用与历史日期一致的11px Muted灰色，保留列头区域的排序操作。金额取整数，P/L%与Chg%一位小数，Ext与成交价两位小数。Sold 为整数百分比，零留空，非零但四舍五入为零显示 <1%。主行、展开明细、账户值和 Total 的缺失数值留空。Regular 隐藏 Ext。ADR 与量比共用 [盘中字段显示规则](ui.md#intraday-state-ui)。排序只影响余仓，Entries 固定前部，纯 Sold Today 固定灰色尾部。
+主行顺序为 Symbol、Sold、Net Liq、Days、P/L %、P/L、Chg%、Ext、P/L Day、ADR、CumVol、LocalVol。Sold 不显示列名，使用与历史日期一致的11px Muted灰色，保留列头区域的排序操作。金额取整数，P/L%与Chg%一位小数，成交价两位小数。Sold 为整数百分比，零留空，非零但四舍五入为零显示 <1%。主行、展开明细、账户值和 Total 的缺失数值留空。Ext 复用 [名单字段格式](ui.md#行与格式)，ADR 与量比共用 [盘中字段显示规则](ui.md#intraday-state-ui)。排序只影响余仓，Entries 固定前部，纯 Sold Today 固定灰色尾部。
 
 Total Net Liq / P/L / P/L Day 仅汇总当前券商余仓；P/L Day Total 不合并已清仓交易，保持券商当前持仓口径。主行盈亏、账户净值和行情不等待历史整理成功；FIFO、Days、Sold 或明细成本不可用时只影响相应派生字段。账户、订单和历史分别保留自己的成功时间，不把视图生成时间当刷新时间。
 
@@ -85,7 +85,7 @@ Transactions 主动读取最近365天，启动和纽约跨日各读一次，复�
 - Entry：买单行显示股数、计划买入价和名义金额。保护 Stop 紧跟母单单独成行。母子单组由可撤母单提供一个圆形 ×，取消联动由券商处理。
 - Stop：每张真实活动 SELL STOP 显示股数、止损价和名义金额。P/L % 与 P/L 按止损价减成本基准估算，分别除以成本基准和乘以该 Stop 的股数。保护 Stop 用母单计划买入价，独立 Stop 用券商当前持仓均价。缺成本或价格时盈亏留空。独立 Stop 按 `cancelable` 显示圆形 ×。
 
-Buy、Sold、Entry、Stop 明细均使用透明背景，共用浅灰平级树线表达同一 symbol 的归属。已成交 Buy/Sold 按时间排列，使用实线。通往活动 Entry/Stop 的竖线从上一条分叉点开始用虚线，首条明细从主行下沿开始；当前横线也用虚线。横竖虚线均为 2px 线段、1px 间隔。树干对齐主行 ticker 首字母中心，Web 由 `--holding-tree-x` 定位在单元格左侧 21px。文字位于树干右侧 20px，分支连向圆点，树干在最后一条明细的分叉点结束。圆点含义和尺寸见 [Logo / Icon](ui.md#操作与状态图标)。
+Buy、Sold、Entry、Stop 明细均使用透明背景，共用平级树线表达同一 symbol 的归属，横竖线统一为 1 px。已成交 Buy/Sold 按时间排列，使用 Muted 灰实线。通往活动 Entry/Stop 的竖线从上一条分叉点开始用浅灰虚线，首条明细从主行下沿开始。活动订单的横线同样用虚线，线段 2 px，间隔 1 px。树干对齐主行 ticker 首字母中心，由 `--holding-tree-x` 控制。文字位于树干右侧 20px，分支连向圆点，树干在最后一条明细的分叉点结束。圆点含义和尺寸见 [Logo / Icon](ui.md#操作与状态图标)。
 
 明细类型使用 12px，位于 Symbol 单元格。数量与主行 Sold 百分比右对齐，使用 11px。金额、Days、P/L%、P/L 对齐主行同名列，价格位于 Chg% 列。历史日期在 P/L Day 列右对齐，使用 11px Muted 灰色。取消按钮在价格右侧，Regular 使用 P/L Day 列，扩展时段使用 Ext 列。
 

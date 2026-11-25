@@ -3,6 +3,12 @@ import { adrText, adrTitle, stateAppearance, volumeBadge, type SymbolState } fro
 
 export type ListColumn<Field extends string = string> = { field: Field; label: string; width: string };
 
+export function extendedPercentText(value: number | null) {
+    if (value == null) return '';
+    const magnitude = Math.abs(value).toFixed(2);
+    return magnitude === '0.00' ? '' : `${value < 0 ? '-' : '+'}${magnitude}%`;
+}
+
 export function setListColumns(host: HTMLElement, columns: readonly ListColumn[], priceEnd: string) {
     host.style.setProperty('--list-columns', columns.map(({ field, width }) => `[col-${field}] ${width}`).join(' '));
     host.style.setProperty('--price-end', `col-${priceEnd}`);

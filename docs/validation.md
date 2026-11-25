@@ -1,5 +1,15 @@
 # 验证记录
 
+## 2026-11-25 · Holdings 树线等宽
+
+本机 macOS 正式 Monitor 展开真实 Buy 和 Stop，浏览器实测两类分支的横竖线均为 1 px。Buy 为 Muted 灰实线，通往 Stop 的分支为浅灰虚线。本轮只核对展开样式。`git diff --check` 通过。
+
+## 2026-11-25 · Ext 零值和 Holdings 树线
+
+本机 macOS 正式 Monitor 在美东约 03:32 核对真实扩展报价。Focus 和 Holdings 的非零 Ext 保留两位小数，零值留空。展开真实 Buy 和 Stop，实测已成交横竖线为 2 px 灰色实线，通往活动 Stop 的分支为 1 px 浅灰虚线。Sold 和 Entry 无实盘样本，本轮以共用分支样式覆盖。
+
+TypeScript 构建、25 项名单和 Holdings 定向用例及 `git diff --check` 通过。浏览器只展开和收起订单明细。
+
 ## 2026-11-25 · Holdings 汇总细线
 
 本机 macOS 正式 Monitor 页面在 2× 像素密度下实测 Total 上沿为 0.5 px，颜色与 Chart pane 分界线一致。TypeScript 构建、7 项 Chart 和 Holdings 定向用例及 `git diff --check` 通过。浏览器验证覆盖展开的 Holdings。

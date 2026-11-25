@@ -1,5 +1,11 @@
 import { attentionAppearance } from './attention.js';
 import { adrText, adrTitle, stateAppearance, volumeBadge } from './intraday-state.js';
+export function extendedPercentText(value) {
+    if (value == null)
+        return '';
+    const magnitude = Math.abs(value).toFixed(2);
+    return magnitude === '0.00' ? '' : `${value < 0 ? '-' : '+'}${magnitude}%`;
+}
 export function setListColumns(host, columns, priceEnd) {
     host.style.setProperty('--list-columns', columns.map(({ field, width }) => `[col-${field}] ${width}`).join(' '));
     host.style.setProperty('--price-end', `col-${priceEnd}`);

@@ -1,5 +1,5 @@
 import { $, money } from './types.js';
-import { adjacentSymbol, listCells, listHeader, listMinimumWidth, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow, type ListColumn } from './symbol-row.js';
+import { adjacentSymbol, extendedPercentText, listCells, listHeader, listMinimumWidth, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow, type ListColumn } from './symbol-row.js';
 import { attentionState, autoAlertButton } from './attention.js';
 import { compareRank, type IntradayState } from './intraday-state.js';
 import { numeric, openPercent, entryAmount, holdingTag, holdingDetails, type SchwabState, type AccountRow, type Position, type HoldingDetail } from './schwab-data.js';
@@ -250,9 +250,10 @@ export class SchwabHoldings {
             for (const field of Object.keys(values) as (keyof typeof values)[]) {
                 const cell = cells[field], number = values[field];
                 const fromQuote = field === 'change_percent' || field === 'extended_percent';
-                cell.textContent = formatted(number, field === 'percent' || fromQuote);
-                cell.classList.toggle('positive', number != null && number > 0);
-                cell.classList.toggle('negative', number != null && number < 0);
+                const text = field === 'extended_percent' ? extendedPercentText(number) : formatted(number, field === 'percent' || fromQuote);
+                cell.textContent = text;
+                cell.classList.toggle('positive', !!text && number != null && number > 0);
+                cell.classList.toggle('negative', !!text && number != null && number < 0);
                 cell.title = fromQuote ? 'Longbridge quote' : 'Schwab account snapshot';
             }
             cells.holding_days.textContent = item.days_over_year ? '>1y' : item.holding_days == null ? '' : String(item.holding_days);

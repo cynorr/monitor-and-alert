@@ -3,7 +3,7 @@ import { tagLogo } from './tag-appearance.js';
 import { post } from './api.js';
 import { collapseKey, countBadge, growthValue, listColumns, listSections, rowTags, sectionKey } from './board.js';
 import { attentionState, autoAlertButton } from './attention.js';
-import { adjacentSymbol, listHeader, listMinimumWidth, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow } from './symbol-row.js';
+import { adjacentSymbol, extendedPercentText, listHeader, listMinimumWidth, revealSymbolRow, setListColumns, symbolRow, updateSymbolRow } from './symbol-row.js';
 import { rankedRows } from './intraday-state.js';
 export class Watchlist {
     onSelect;
@@ -577,10 +577,10 @@ export class Watchlist {
         const regular = ticker.quote?.regular, extended = extendedQuote(ticker.quote);
         const change = !regular?.prev_close ? null : (regular.last_price / regular.prev_close - 1) * 100;
         const ext = !extended || !regular?.last_price ? null : (extended.last_price / regular.last_price - 1) * 100;
-        const percent = (n, empty) => n == null ? empty : `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
         value('price', money(regular?.last_price), 'Regular last price');
-        value('change', percent(change, '—'), '', change);
-        value('ext', percent(ext, ''), extended ? `${extended.trade_session}: change from regular close` : '', ext);
+        value('change', change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`, '', change);
+        const extendedText = extendedPercentText(ext);
+        value('ext', extendedText, extended ? `${extended.trade_session}: change from regular close` : '', extendedText ? ext : null);
     }
     rowKey(ticker) {
         return JSON.stringify([ticker.symbol, ticker.status, ticker.section, ticker.pinned, rowTags(ticker), ticker.is_new]);

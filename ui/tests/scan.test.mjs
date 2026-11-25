@@ -7,6 +7,7 @@ import { scanProgress, selectionRequest, extendedQuote, mdvText } from '../publi
 import { collapseKey, growthValue, listColumns, listSections, sectionKey } from '../public/board.js';
 import { matchesTag, ScanControls } from '../public/scan.js';
 import { Watchlist } from '../public/list.js';
+import { extendedPercentText } from '../public/symbol-row.js';
 import { tagAppearance } from '../public/tag-appearance.js';
 const catalog = JSON.parse(readFileSync(new URL('../src/filter-catalog.json', import.meta.url)));
 
@@ -17,6 +18,13 @@ test('extended prices use the same server-selected latest quote as the chart', (
     for (const latest of [pre, post, overnight]) assert.equal(extendedQuote({ latest }), latest);
     assert.equal(extendedQuote({ latest: { last_price: 10, trade_session: 'Intraday' } }), undefined);
     assert.equal(extendedQuote({ latest: null }), undefined);
+});
+
+test('Ext hides missing and rounded zero values and keeps signed two-place percentages', () => {
+    for (const value of [null, 0, -0, 0.0049, -0.0049]) assert.equal(extendedPercentText(value), '');
+    assert.equal(extendedPercentText(0.005), '+0.01%');
+    assert.equal(extendedPercentText(-0.005), '-0.01%');
+    assert.equal(extendedPercentText(1.2), '+1.20%');
 });
 
 test('Scan global search reuses add into Discover; explicit Focus section targets remain unchanged', async () => {

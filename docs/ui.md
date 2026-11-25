@@ -184,7 +184,7 @@ Symbol 未读图形统一使用 [Symbol row template](#symbol-row-template)，�
 - 该列始终依次显示 **1m / 3m / 6m** 三个值，不随所选排序改变顺序，不显示周期 key。三个等宽子列右对齐，以浅色竖线分隔，所有数据行的竖线位置一致。原始 `rfl=(close/low-1)×100`：小于 100 显示最多一位小数的百分比、去掉 `.0`；大于等于 100 显示 `(1+rfl/100)`，保留一位小数和小写 `x`。例如 `65%`、`12.3%`、100% 显示 `2.0x`、130% 显示 `2.3x`。空值和非有限值显示 `—`；只改变显示，不改变原始数据、排序和筛选。
 - Scan 与 Monitor 共用 Tags 弹性列宽，最小 **80px**，伸展权重 **0.45fr**。列头留空。按规则结果顺序靠左平铺前四个只读图标，图标间隔 **3px**，距列左缘 **4px**。每行首个图标对齐，Ext 与首个图标之间留 **16px**。无 Tag 时留空。图标提供可访问名称，行内仅显示图标。图案、尺寸与配色见 [Logo / Icon](#logo--icon)。
 - NEW 使用 Symbol 旁的小标记，颜色与 EMA10 一致为蓝色 **#2962ff**。ticker 不显示 `.US`。不显示成员勾选框。
-- Scan Price 是完成日收盘价，ADR20/MDV20 用共用日线定义。Monitor Last 是 regular 价格，Chg% 使用前一完成交易日 regular 收盘价；Ext 使用更新的 extended 报价相对 regular 收盘价，regular 时段隐藏整列（含标题和行单元），离开后恢复；非 regular 缺数据时留空。时段与 Holdings 共用服务端交易日历状态，不依赖某只股票是否已有 Quote。
+- Scan Price 是完成日收盘价，ADR20/MDV20 用共用日线定义。Monitor Last 是 Regular 价格，Chg% 使用前一完成交易日 Regular 收盘价。Focus 和 Holdings 的 Ext 使用更新的扩展时段报价相对 Regular 收盘价，保留两位小数。缺数据或显示精度下为 0.00% 时留空。Regular 时段隐藏整列，时段由服务端交易日历决定。
 - 选中、hover 与价格区域外观共用 [Symbol row template](#symbol-row-template)。行操作在选中、悬停或获得焦点时可见，已置顶和已暂停自动报警的按钮持续显示。报价更新保留行结构，仅刷新值。
 
 ### Section、顺序与选择

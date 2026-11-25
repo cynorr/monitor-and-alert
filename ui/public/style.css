@@ -400,8 +400,8 @@ button:disabled { cursor: default; opacity: .45; }
 #schwab-holdings:has(#schwab-content[hidden]) { padding-bottom: 12px; }
 .holdings-grid {
     --holding-tree-x: calc(var(--list-symbol-indent) + 5px);
-    --holding-tree-color: color-mix(in srgb, var(--color-muted) 45%, var(--color-white));
-    --holding-dash-stops: var(--holding-tree-color) 0 2px, transparent 2px 3px;
+    --holding-tree-dash-color: color-mix(in srgb, var(--color-muted) 45%, var(--color-white));
+    --holding-dash-stops: var(--holding-tree-dash-color) 0 2px, transparent 2px 3px;
 }
 .holdings-grid [role="columnheader"][data-field="sold_percent"] button { width: 100%; min-width: 18px; min-height: 1em; }
 .holdings-rows [data-field="sold_percent"] { color: var(--color-muted); font-size: var(--font-small); }
@@ -411,16 +411,17 @@ button:disabled { cursor: default; opacity: .45; }
 .holding-trade .holding-detail-label { align-self: stretch; display: flex; align-items: center; padding-left: calc(var(--holding-tree-x) + 20px); }
 .holding-history [data-part="date"] { color: var(--color-muted); font-size: var(--font-small); }
 .holding-trade [data-part="kind"] { font-size: var(--font-row); }
-.holding-detail-label::before, .holding-detail-label::after, .holding-detail-outgoing { content: ""; position: absolute; pointer-events: none; left: var(--holding-tree-x); background: var(--holding-tree-color); }
-.holding-detail-label::before { top: -1px; bottom: 50%; width: 1px; }
+.holding-detail-label::before, .holding-detail-label::after, .holding-detail-outgoing { content: ""; position: absolute; pointer-events: none; left: var(--holding-tree-x); background: var(--color-muted); }
+.holding-detail-label::before, .holding-detail-outgoing { width: 1px; }
+.holding-detail-label::before { top: -1px; bottom: 50%; }
 .holding-detail-label::after { top: 50%; transform: translateY(-50%); width: 12px; height: 1px; }
-.holding-detail-outgoing { display: none; top: 50%; bottom: -1px; width: 1px; }
+.holding-detail-outgoing { display: none; top: 50%; bottom: -1px; }
 .holding-trade:has(+ .holding-trade) .holding-detail-outgoing { display: block; }
 .holding-trade:not(.holding-history) .holding-detail-label::before { background: repeating-linear-gradient(to bottom, var(--holding-dash-stops)); }
 .holding-trade:not(.holding-history) .holding-detail-label::after { background: repeating-linear-gradient(to right, var(--holding-dash-stops)); }
 .holding-trade:has(+ .holding-trade:not(.holding-history)) .holding-detail-outgoing {
     /* End with a gap at the row boundary, where the next dash starts. */
-    background: repeating-linear-gradient(to top, transparent 0 1px, var(--holding-tree-color) 1px 3px);
+    background: repeating-linear-gradient(to top, transparent 0 1px, var(--holding-tree-dash-color) 1px 3px);
 }
 .holding-detail-node { position: absolute; z-index: 1; left: calc(var(--holding-tree-x) + 10px); top: 50%; transform: translateY(-50%); width: 5px; height: 5px; border: 1px solid currentColor; border-radius: 50%; color: var(--color-muted); background: var(--color-white); pointer-events: none; }
 .holding-trade:is([data-detail-kind="Sold"], [data-detail-kind="Stop"]) .holding-detail-node { background: currentColor; }
